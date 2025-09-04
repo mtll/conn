@@ -12003,13 +12003,15 @@ Operates with the selected windows parent window."
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward
-  "J" 'conn-unpop-movement-ring
-  "L" 'conn-pop-movement-ring)
+  "J" 'conn-pop-movement-ring
+  "L" 'conn-unpop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
   :repeat t
-  "J" 'conn-unpop-movement-ring
-  "L" 'conn-pop-movement-ring)
+  "J" 'conn-pop-movement-ring
+  "L" 'conn-unpop-movement-ring
+  "j" 'conn-pop-movement-ring
+  "l" 'conn-unpop-movement-ring)
 
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
