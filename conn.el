@@ -3433,9 +3433,8 @@ order to mark the region that should be defined by any of COMMANDS."
   (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 (cl-defmethod conn-handle-thing-argument ((cmd (conn-thing recursive-edit)) arg)
-  (if (conn-thing-argument--recursive-edit arg)
-      (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg)))
-    (cl-call-next-method)))
+  (when (conn-thing-argument--recursive-edit arg)
+    (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg)))))
 
 (cl-defmethod conn-eval-argument ((arg conn-thing-argument))
   (conn-state-eval-argument-value arg))
