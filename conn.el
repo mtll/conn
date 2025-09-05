@@ -2048,15 +2048,15 @@ that has just been exited.")
 (defvar-local conn--state-defered-ids nil)
 
 (defun conn--state-defered-default (_)
-  (setf conn--state-defered (list 'conn--state-defered-default)
-        conn--state-defered-ids nil
-        cursor-type t)
+  (setq cursor-type t)
   (when conn-current-state
     (set (cl-shiftf conn-current-state nil) nil)))
 
 (defun conn--run-defered ()
-  (funcall (car conn--state-defered)
-           (cdr conn--state-defered)))
+  (unwind-protect
+      (funcall (car conn--state-defered) (cdr conn--state-defered))
+    (setq conn--state-defered (list 'conn--state-defered-default)
+          conn--state-defered-ids nil)))
 
 (defmacro conn-state-defer (&rest body)
   "Defer evaluation of BODY until the current state is exited.
@@ -3526,7 +3526,7 @@ words."))
      (if-let* ((transform (conn-state-eval-argument-value arg))
                (_(memq cmd transform)))
          (conn-set-argument arg (remq cmd transform))
-       (conn-set-argument arg (append transform (list cmd)))))
+       (conn-set-argument arg (cons cmd transform))))
     (_ arg)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-transform-argument)
@@ -3541,11 +3541,11 @@ words."))
      (propertize
       (mapconcat (lambda (tf)
                    (or (get tf :conn-transform-description) ""))
-                 ts " > ")
+                 ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
 (cl-defmethod conn-eval-argument ((arg conn-transform-argument))
-  (conn-state-eval-argument-value arg))
+  (nreverse (conn-state-eval-argument-value arg)))
 
 ;; (defvar conn-transform-argument-reference
 ;;   (conn-reference-page "Transform"
