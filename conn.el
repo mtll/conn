@@ -2048,7 +2048,6 @@ that has just been exited.")
 (defvar-local conn--state-defered-ids nil)
 
 (defun conn--state-defered-default (_)
-  (setq cursor-type t)
   (when conn-current-state
     (set (cl-shiftf conn-current-state nil) nil)))
 
@@ -3587,8 +3586,8 @@ words."))
 
 (cl-defstruct (conn-bounds
                (:constructor conn-bounds--make))
-  (thing nil :type symbol)
-  (arg nil :type (or nil integer))
+  (thing nil :type symbol :read-only t)
+  (arg nil :type (or nil integer) :read-only t)
   (whole nil :type cons)
   (properties nil :type list))
 
@@ -11228,6 +11227,25 @@ Currently selected window remains selected afterwards."
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
+(defvar-keymap conn-windmove-repeat-map
+  :repeat t
+  "M-<down>" 'windmove-swap-states-down
+  "M-<left>" 'windmove-swap-states-left
+  "M-<right>" 'windmove-swap-states-right
+  "M-<up>" 'windmove-swap-states-up
+  "<down>" 'conn-wincontrol-windmove-down
+  "<left>" 'conn-wincontrol-windmove-left
+  "<right>" 'conn-wincontrol-windmove-right
+  "<up>" 'conn-wincontrol-windmove-up
+  "M-I" 'windmove-swap-states-up
+  "M-J" 'windmove-swap-states-left
+  "M-K" 'windmove-swap-states-down
+  "M-L" 'windmove-swap-states-right
+  "M-i" 'conn-wincontrol-windmove-up
+  "M-j" 'conn-wincontrol-windmove-left
+  "M-k" 'conn-wincontrol-windmove-down
+  "M-l" 'conn-wincontrol-windmove-right)
+
 (defalias 'conn-next-buffer 'next-buffer)
 (defalias 'conn-previous-buffer 'previous-buffer)
 
@@ -11276,14 +11294,14 @@ Currently selected window remains selected afterwards."
   "M-k" 'conn-wincontrol-windmove-down
   "M-l" 'conn-wincontrol-windmove-right
   "M-o" 'other-frame
-  "<down>" 'conn-wincontrol-windmove-down
   "<escape>" 'conn-wincontrol-exit
+  "<down>" 'conn-wincontrol-windmove-down
   "<left>" 'conn-wincontrol-windmove-left
+  "<right>" 'conn-wincontrol-windmove-right
+  "<up>" 'conn-wincontrol-windmove-up
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "<return>" 'conn-other-place-prefix
-  "<right>" 'conn-wincontrol-windmove-right
-  "<up>" 'conn-wincontrol-windmove-up
   "B" 'tab-bar-move-window-to-tab
   "C" 'tab-bar-duplicate-tab
   "D" 'tab-bar-detach-tab
@@ -12360,6 +12378,7 @@ Operates with the selected windows parent window."
             (conn-push-state 'conn-emacs-state)))
     (conn--run-defered)
     (conn--clear-overlays)
+    (setq cursor-type t)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
       (remove-function (local 'query-replace-read-from-default)
