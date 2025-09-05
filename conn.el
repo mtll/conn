@@ -2042,27 +2042,21 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(oclosure-define (conn-defered) id car cdr)
-
-(defvar-local conn--state-defered
-  (conn-anaphoricate default
-    (oclosure-lambda (conn-defered) ()
-      (setq conn--state-defered default
-            cursor-type t)
-      (when conn-current-state
-        (set (cl-shiftf conn-current-state nil) nil))))
+(defvar-local conn--state-defered (list 'conn--state-defered-default)
   "Code to be run when the current state is exited.")
 
-(defun conn--push-defered (fn &optional id)
-  (when (or (null id)
-            (cl-loop for def = conn--state-defered
-                     then (conn-defered--cdr def)
-                     while def never (eq id (conn-defered--id def))))
-    (setq conn--state-defered
-          (oclosure-lambda (conn-defered
-                            (id id) (car fn) (cdr conn--state-defered))
-              ()
-            (unwind-protect (funcall car) (funcall cdr))))))
+(defvar-local conn--state-defered-ids nil)
+
+(defun conn--state-defered-default (_)
+  (setf conn--state-defered (list 'conn--state-defered-default)
+        conn--state-defered-ids nil
+        cursor-type t)
+  (when conn-current-state
+    (set (cl-shiftf conn-current-state nil) nil)))
+
+(defun conn--run-defered ()
+  (funcall (car conn--state-defered)
+           (cdr conn--state-defered)))
 
 (defmacro conn-state-defer (&rest body)
   "Defer evaluation of BODY until the current state is exited.
@@ -2075,15 +2069,26 @@ when the current state exits then use `conn-state-defer-once'.
 When BODY is evaluated `conn-next-state' will be bound to the state
 that is being entered after the current state has exited."
   (declare (indent 0))
-  `(conn--push-defered (lambda () ,@body)))
+  (cl-with-gensyms (rest)
+    `(push (lambda (,rest)
+             (unwind-protect
+                 ,(macroexp-progn body)
+               (funcall (car ,rest) (cdr ,rest))))
+           conn--state-defered)))
 
 (defmacro conn-state-defer-once (&rest body)
   "Like `conn-state-defer' but BODY will be evaluated only once per state.
 
 For more information see `conn-state-defer'."
   (declare (indent 0))
-  (cl-with-gensyms (id)
-    `(conn--push-defered (lambda () ,@body) ',id)))
+  (cl-with-gensyms (rest id)
+    `(unless (memq ',id conn--state-defered-ids)
+       (push ',id conn--state-defered-ids)
+       (push (lambda (,rest)
+               (unwind-protect
+                   ,(macroexp-progn body)
+                 (funcall (car ,rest) (cdr ,rest))))
+             conn--state-defered))))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -2156,7 +2161,7 @@ To execute code when a state is exiting use `conn-state-defer'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (funcall conn--state-defered))
+              (conn--run-defered))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties)
             (conn--setup-state-keymaps)
@@ -3047,7 +3052,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (with-demoted-errors "Error in Movement Ring: %s"
-          (conn-push-region (point) (mark t)))))))
+          (conn-push-movement-ring (point) (mark t)))))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -3547,7 +3552,7 @@ words."))
 ;;     "Trim excess characters at either end of the region. By default trims
 ;; whitespace characters. With a non-nil prefix argument this will prompt
 ;; for a custom trim regex."))
-;; 
+;;
 ;; (cl-defmethod conn-argument-reference ((_arg conn-transform-argument))
 ;;   (list conn-transform-argument-reference))
 
@@ -5118,7 +5123,7 @@ themselves once the selection process has concluded."
   (let ((map (make-keymap)))
     (set-char-table-range (nth 1 map)
                           (cons #x100 (max-char))
-		          'dispatch-character-event)
+                          'dispatch-character-event)
     (cl-loop for i from ?\s below 256
              do (define-key map (vector i) 'dispatch-character-event))
     map))
@@ -9626,7 +9631,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defvar conn-movement-ring-max 10
   "Maximum length of `conn-movement-ring'.")
 
-(defun conn-push-region (point mark &optional back)
+(defun conn-push-movement-ring (point mark &optional back)
   (unless (conn-ring-p conn-movement-ring)
     (setq conn-movement-ring
           (conn-make-ring conn-movement-ring-max
@@ -9663,7 +9668,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
         ((null conn-movement-ring)
          (message "Movement ring empty"))
         (t
-         (conn-push-region (point) (mark t))
+         (conn-push-movement-ring (point) (mark t))
          (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
            (conn-ring-rotate-backward conn-movement-ring))
          (pcase (conn-ring-head conn-movement-ring)
@@ -9680,7 +9685,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
         ((null conn-movement-ring)
          (message "Movement ring empty"))
         (t
-         (conn-push-region (point) (mark t))
+         (conn-push-movement-ring (point) (mark t))
          (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
            (conn-ring-rotate-forward conn-movement-ring))
          (pcase (conn-ring-head conn-movement-ring)
@@ -12353,7 +12358,7 @@ Operates with the selected windows parent window."
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (funcall conn--state-defered)
+    (conn--run-defered)
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
@@ -12518,7 +12523,6 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
   :suppress t
-  ;; TODO: write an insert heading command that works in this state
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol
