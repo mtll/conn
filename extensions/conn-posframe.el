@@ -511,11 +511,13 @@
               (define-keymap
                 "<remap> <backward-delete-char>" 'backspace)
               (lambda (cmd)
-                (when (eq cmd 'backspace)
-                  (when (length> so-far 0)
-                    (cl-callf substring so-far 0 -1)
-                    (setq narrowed collection)
-                    (throw 'backspace nil))))
+                (pcase cmd
+                  ('keyboard-quit (keyboard-quit))
+                  ('backspace
+                   (when (length> so-far 0)
+                     (cl-callf substring so-far 0 -1)
+                     (setq narrowed collection)
+                     (throw 'backspace nil)))))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-event prompt t nil)

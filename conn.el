@@ -5070,6 +5070,7 @@ themselves once the selection process has concluded."
           (conn-with-dispatch-event-handler 'mouse-click
               nil
               (lambda (cmd)
+                (when (eq cmd 'keyboard-quit) (keyboard-quit))
                 (when (or (and (eq cmd 'act)
                                (mouse-event-p last-input-event))
                           (eq 'dispatch-mouse-repeat
@@ -6062,8 +6063,6 @@ Target overlays may override this default by setting the
                                (conn--dispatch-read-event-prefix)
                                ":" prompt-suffix)
                        inherit-input-method))))
-            ('keyboard-quit
-             (keyboard-quit))
             (cmd
              (let ((unhandled nil))
                (unwind-protect
@@ -6202,8 +6201,9 @@ Target overlays may override this default by setting the
         (conn-make-string-target-overlays string predicate)
       (conn-with-input-method
         (let* ((prompt (if (> string-length 1)
-                           (propertize "Chars" 'face 'minibuffer-prompt)
-                         (propertize "Char" 'face 'minibuffer-prompt))))
+                           (propertize (format "%d Chars" string-length)
+                                       'face 'minibuffer-prompt)
+                         (propertize "1 Char" 'face 'minibuffer-prompt))))
           (while (length< string string-length)
             (when (length> string 0)
               (while-no-input
@@ -6278,7 +6278,7 @@ contain targets."
                             (goto-char (overlay-start tar))
                             (let ((beg (pos-bol (- 1 context-lines)))
                                   (end (pos-bol (+ 2 context-lines))))
-                              (cons (if (invisible-p end) (1- beg) beg)
+                              (cons (if (invisible-p end) (max 1 (1- beg)) beg)
                                     end))))
                       regions)))
             (cl-callf conn--merge-overlapping-regions regions t)
@@ -6298,8 +6298,7 @@ contain targets."
                               (format " %s\n"
                                       (when (memq display-line-numbers
                                                   '(nil relative visual))
-                                        (+ (line-number-at-pos end)
-                                           context-lines)))
+                                        (line-number-at-pos beg)))
                               'face 'conn-dispatch-context-separator-face))))
                      finally (thread-first
                                (push (make-overlay beg (point-max)) hidden)
@@ -6307,6 +6306,21 @@ contain targets."
           (recenter -1)))
       (setf (oref state hidden) hidden)
       (sit-for 0))))
+
+(defclass conn-dispatch-mark-ring (conn-dispatch-focus-targets)
+  ((context-lines :initform 1 :initarg :context-lines)
+   (window-predicate :initform (lambda (win) (eq win (selected-window))))))
+
+(cl-defmethod conn-dispatch-targets-other-end ((_ conn-dispatch-mark-ring))
+  :no-other-end)
+
+(cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-mark-ring))
+  (unless conn-targets
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (let ((points (conn-ring-list conn-mark-ring)))
+          (dolist (pt points)
+            (conn-make-target-overlay pt 0)))))))
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
   ((context-lines :initform 1 :initarg :context-lines)))
@@ -7756,7 +7770,12 @@ contain targets."
                            (&rest args)
                          (apply jump args)
                          (conn-push-state 'conn-emacs-state))))
-   :target-finder (lambda () (conn-dispatch-previous-emacs-state))))
+   :target-finder (lambda () (conn-dispatch-previous-emacs-state)))
+  "<remap> <conn-pop-mark-ring>"
+  (conn-anonymous-thing
+   'char
+   :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+   :target-finder (lambda () (conn-dispatch-mark-ring))))
 
 (put 'conn-dispatch-upcase :advertised-binding (key-parse "M-u"))
 (put 'conn-dispatch-downcase :advertised-binding (key-parse "M-l"))
@@ -7949,6 +7968,7 @@ contain targets."
   (throw 'dispatch-select-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
+  (setq dispatch-quit-flag t)
   (throw 'dispatch-select-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
@@ -8145,6 +8165,8 @@ contain targets."
 
 ;;;;; Dispatch Commands
 
+(defvar dispatch-quit-flag nil)
+
 (cl-defgeneric conn-perform-dispatch (action
                                       thing
                                       thing-arg
@@ -8173,7 +8195,8 @@ contain targets."
                                              other-end
                                              always-retarget
                                              &allow-other-keys)
-  (let* ((opoint (point-marker))
+  (let* ((dispatch-quit-flag)
+         (opoint (point-marker))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-state-eval-last-command nil)
@@ -8276,8 +8299,10 @@ contain targets."
         (conn-delete-targets))
       (ignore-errors
         (with-current-buffer (marker-buffer opoint)
-          (unless (= (point) opoint)
-            (conn--push-mark-ring opoint))))
+          (if dispatch-quit-flag
+              (goto-char opoint)
+            (unless (= (point) opoint)
+              (conn--push-mark-ring opoint)))))
       (set-marker opoint nil)
       (let ((inhibit-message conn-state-eval-inhibit-message))
         (message nil)))))
