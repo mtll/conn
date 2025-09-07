@@ -469,13 +469,13 @@ If ring is (1 2 3 4) 4 would be returned."
            (important-return-value t))
   (car (last (conn-ring-list ring))))
 
-(defun conn-ring-delq (ring elem)
+(defun conn-ring-delq (elem ring)
   (cl-callf2 delq elem (conn-ring-list ring))
   (cl-callf2 delq elem (conn-ring-history ring))
   (when-let* ((cleanup (conn-ring-cleanup ring)))
     (funcall cleanup elem)))
 
-(defun conn-ring-remove (ring elem &optional pred)
+(defun conn-ring-remove (elem ring &optional pred)
   (cl-loop with pred = (or pred #'equal)
            for l in (conn-ring-list ring)
            for h in (conn-ring-history ring)
@@ -2433,7 +2433,7 @@ argument may be supplied for the thing command."))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (conn-ring-remove conn-emacs-state-ring (point) #'=)
+    (conn-ring-remove (point) conn-emacs-state-ring #'=)
     (conn-ring-insert-front conn-emacs-state-ring (point-marker))
     (when conn-emacs-state-register
       (when-let* ((marker (get-register conn-emacs-state-register))
@@ -6760,8 +6760,6 @@ contain targets."
     (select-window window)
     (unless (= pt (point))
       (let ((forward (< (point) pt)))
-        (unless (region-active-p)
-          (push-mark nil t))
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
           ((conn-bounds-get :whole transform `(,beg . ,end))
@@ -7611,8 +7609,6 @@ contain targets."
       (window pt _thing _thing-arg _transform)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
-        (unless (region-active-p)
-          (push-mark nil t))
         (select-window window)
         (goto-char pt)))))
 
@@ -8063,7 +8059,7 @@ contain targets."
          (progn
            (conn-dispatch-ring-remove-stale)
            (conn-dispatch-error "Last dispatch action stale"))
-       (conn-ring-delq conn-dispatch-ring prev)
+       (conn-ring-delq prev conn-dispatch-ring)
        (conn-state-eval-handle)
        (cons (conn-state-eval-quote
               (conn-perform-dispatch
@@ -8117,7 +8113,7 @@ contain targets."
                            (conn-action-stale-p
                             (conn-previous-dispatch-action dispatch)))
                          (conn-ring-list conn-dispatch-ring))
-           do (conn-ring-delq conn-dispatch-ring stale)))
+           do (conn-ring-delq stale conn-dispatch-ring)))
 
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."
@@ -8301,7 +8297,7 @@ contain targets."
         (with-current-buffer (marker-buffer opoint)
           (if dispatch-quit-flag
               (goto-char opoint)
-            (unless (= (point) opoint)
+            (unless (eql (point) (marker-position opoint))
               (conn--push-mark-ring opoint)))))
       (set-marker opoint nil)
       (let ((inhibit-message conn-state-eval-inhibit-message))
@@ -8834,7 +8830,7 @@ Expansions and contractions are provided by functions in
           (guard (= (point-min) beg))
           (guard (= (point-max) end))
           narrowing)
-     (conn-ring-delq conn-narrow-ring narrowing)
+     (conn-ring-delq narrowing conn-narrow-ring)
      (pcase (conn-ring-head conn-narrow-ring)
        (`(,beg . ,end)
         (narrow-to-region beg end))
