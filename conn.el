@@ -1088,32 +1088,35 @@ of highlighting."
                       ((and (pred consp) col)
                        (push (process-col col keymap) result))))
                   (nreverse result))))
-    (conn--where-is-with-remaps
-      (while definition
-        (goto-char (point-max))
-        (pcase (pop definition)
-          ((and (pred stringp) row)
-           (let ((beg (point)))
-             (insert (with-current-buffer keymap-buffer
-                       (substitute-command-keys row))
-                     "\n")
-             (goto-char beg)
-             (while (search-forward "\n" nil 'move-to-end)
-               (replace-match " \n"))))
-          (`(:eval . ,fn)
-           (with-current-buffer keymap-buffer
-             (push (funcall fn) definition)))
-          (`(:splice . ,fn)
-           (with-current-buffer keymap-buffer
-             (cl-callf2 append (funcall fn) definition)))
-          ((and row (pred consp))
-           (make-vtable
-            :face `( :inherit default
-                     :height ,conn-quick-ref-text-scale)
-            :divider-width 2
-            :use-header-line nil
-            :objects (with-current-buffer keymap-buffer
-                       (transpose (process-row row))))))))))
+    (let ((ref-buffer (current-buffer)))
+      (with-current-buffer keymap-buffer
+        (conn--where-is-with-remaps
+          (while definition
+            (pcase (pop definition)
+              ((and (pred stringp) row)
+               (let ((str (substitute-command-keys row))
+                     beg)
+                 (with-current-buffer ref-buffer
+                   (setq beg (point))
+                   (insert str "\n")
+                   (goto-char beg)
+                   (while (search-forward "\n" nil 'move-to-end)
+                     (replace-match " \n"))
+                   (goto-char (point-max)))))
+              (`(:eval . ,fn)
+               (push (funcall fn) definition))
+              (`(:splice . ,fn)
+               (cl-callf2 append (funcall fn) definition))
+              ((and row (pred consp))
+               (let ((objs (transpose (process-row row))))
+                 (with-current-buffer ref-buffer
+                   (make-vtable
+                    :face `( :inherit default
+                             :height ,conn-quick-ref-text-scale)
+                    :divider-width 2
+                    :use-header-line nil
+                    :objects objs)
+                   (goto-char (point-max))))))))))))
 
 (defun conn-quick-ref-insert-page (page buffer)
   (pcase-let (((cl-struct conn-reference-page
@@ -3740,6 +3743,9 @@ words."))
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
   (conn-bounds cmd arg (cons (point-min) (point-max))))
 
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing visible)) arg)
+  (conn-bounds cmd arg (cons (window-start) (window-end))))
+
 (cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
@@ -5305,15 +5311,15 @@ themselves once the selection process has concluded."
       ("transpose" conn-dispatch-transpose)
       ("goto/over" conn-dispatch-over-or-goto)
       ("kapply" conn-dispatch-kapply))
-     (("kill/append/prepend"
+     (("kill/append/prepend from"
        conn-dispatch-kill
        conn-dispatch-kill-append
        conn-dispatch-kill-prepend)
-      ("copy/append/prepend"
+      ("copy/append/prepend from"
        conn-dispatch-copy
        conn-dispatch-copy-append
        conn-dispatch-copy-prepend)
-      ("register"
+      ("register load/replace"
        conn-dispatch-register-load
        conn-dispatch-register-replace)
       ("up/down/capital case"
@@ -6298,7 +6304,7 @@ contain targets."
                      finally (thread-first
                                (push (make-overlay beg (point-max)) hidden)
                                car (overlay-put 'invisible t))))
-          (recenter)))
+          (recenter -1)))
       (setf (oref state hidden) hidden)
       (sit-for 0))))
 
@@ -7289,6 +7295,34 @@ contain targets."
         (format "Kill Prepend Register <%c>" register))
     "Kill Prepend"))
 
+(oclosure-define (conn-dispatch-copy
+                  (:parent conn-action))
+  (register :type integer))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy)))
+  (oclosure-lambda (conn-dispatch-copy
+                    (register (when (conn-state-eval-consume-prefix-arg)
+                                (register-read-with-preview "Register: "))))
+      (window pt thing thing-arg transform)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (conn-bounds-of thing thing-arg)
+          ((conn-bounds-get :whole transform `(,beg . ,end))
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (set-register register str)
+               (kill-new str))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region beg end))))
+          (_ (user-error "Cannot find thing at point")))))))
+
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy) &optional short)
+  (if-let* ((register (conn-dispatch-copy-append--register action)))
+      (if short "Copy to Reg"
+        (format "Copy to Register <%c>" register))
+    "Copy"))
+
 (oclosure-define (conn-dispatch-copy-append
                   (:parent conn-action))
   (register :type integer))
@@ -7307,7 +7341,8 @@ contain targets."
              (if register
                  (append-to-register register beg end)
                (kill-append str nil))
-             (message "Copy Appended: %s" str)))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region beg end))))
           (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-append) &optional short)
@@ -7334,7 +7369,8 @@ contain targets."
              (if register
                  (prepend-to-register register beg end)
                (kill-append str t))
-             (message "Copy Prepended: %s" str)))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region beg end))))
           (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend) &optional short)
@@ -7671,6 +7707,7 @@ contain targets."
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "RET" 'conn-repeat-last-dispatch
+  "C" 'conn-dispatch-copy
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
@@ -12664,13 +12701,17 @@ Operates with the selected windows parent window."
 (conn-define-remap-keymap conn-dired-search-remap
     "Conn Dired Search Map"
   [conn-dired-search-map]
-  [conn--search-map]
+  [conn-search-map]
   "M-s")
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
   "C-q" 'conn-dired-quick-ref
   "SPC <t>" conn-demap-key
+  "<conn-dired-search-map> s" 'dired-do-isearch
+  "<conn-dired-search-map> c" 'dired-do-isearch-regexp
+  "<conn-dired-search-map> q" 'dired-do-find-regexp
+  "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'dired-find-alternate-file
@@ -12717,11 +12758,7 @@ Operates with the selected windows parent window."
   "% h" 'dired-do-hardlink-regexp
   "% s" 'dired-do-symlink-regexp
   "% y" 'dired-do-relsymlink-regexp
-  "% t" 'dired-flag-garbage-files
-  "<conn-dired-search-map> s" 'dired-do-isearch
-  "<conn-dired-search-map> c" 'dired-do-isearch-regexp
-  "<conn-dired-search-map> q" 'dired-do-find-regexp
-  "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace)
+  "% t" 'dired-flag-garbage-files)
 
 (defvar dired-subdir-alist)
 (defvar dired-movement-style)
@@ -12971,11 +13008,47 @@ Operates with the selected windows parent window."
             (ibuffer-mark-forward nil nil 1)
           (ibuffer-unmark-forward nil nil 1))))))
 
+(defvar conn-ibuffer-ref
+  (conn-reference-page "Ibuffer"
+    ((("next/prev line" ibuffer-forward-line ibuffer-backward-line)
+      ("next/prev group" ibuffer-forward-filter-group ibuffer-backward-filter-group)
+      ("jump to group" ibuffer-jump-to-filter-group)
+      ("jump to buffer" ibuffer-jump-to-buffer)
+      ("yank" ibuffer-yank)
+      ("copy filename" ibuffer-copy-filename-as-kill)
+      ("visit/other win" ibuffer-visit-buffer ibuffer-visit-buffer-other-window)
+      ("redisplay" ibuffer-redisplay))
+     ((:heading "Sort:")
+      ("invert" ibuffer-invert-sorting)
+      ("alphabetic" ibuffer-do-sort-by-alphabetic)
+      ("path" ibuffer-do-sort-by-filename/process)
+      ("mode" ibuffer-do-sort-by-major-mode)
+      ("size" ibuffer-do-sort-by-size)
+      ("recency" ibuffer-do-sort-by-recency)))))
+
+(defvar conn-ibuffer-mark-ref
+  (conn-reference-page "Ibuffer Mark"
+    ((("mark" ibuffer-mark-forward)
+      ("unmark next/prev" ibuffer-unmark-forward ibuffer-unmark-backward)
+      ("unmark all" ibuffer-unmark-all)
+      ("toggle" ibuffer-toggle-marks)
+      ("next/prev" ibuffer-forward-next-marked ibuffer-backwards-next-marked))
+     (("revert" ibuffer-do-revert)
+      ("hide" ibuffer-do-kill-lines)
+      ("kill" ibuffer-do-kill-on-deletion-marks)
+      ("isearch/regexp" ibuffer-do-isearch ibuffer-do-isearch-regexp)
+      ("occur" ibuffer-do-occur)))))
+
+(defun conn-ibuffer-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-ibuffer-ref conn-ibuffer-mark-ref)))
+
 (keymap-set (conn-get-major-mode-map 'conn-dispatch-state 'ibuffer-mode)
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+  "C-q" 'conn-ibuffer-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
