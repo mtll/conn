@@ -9776,6 +9776,13 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 (cl-defmethod conn-perform-transpose (cmd arg)
   (pcase cmd
+    ((guard (use-region-p))
+     (deactivate-mark t)
+     (pcase-let ((beg1 (region-beginning))
+                 (end1 (region-end))
+                 ((conn-bounds-get :whole nil `(,beg2 . ,end2))
+                  (conn-bounds-of cmd arg)))
+       (transpose-regions beg1 end1 beg2 end2)))
     ((let 0 arg)
      (deactivate-mark t)
      (pcase-let* ((thing (conn-command-thing cmd))
@@ -9869,7 +9876,7 @@ If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-eval-with-state 'conn-transpose-state
-       (list && (conn-thing-argument-dwim t))
+       (list && (conn-thing-argument t))
      :prompt "Transpose"
      :prefix current-prefix-arg))
   (when conn-transpose-recursive-edit-mode
