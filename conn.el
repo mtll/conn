@@ -2120,12 +2120,9 @@ If BUFFER is nil then use the current buffer."
       (setf conn--state-map nil
             conn--major-mode-map nil
             conn--minor-mode-maps nil)
-    (setf conn--state-map
-          `((conn-local-mode . ,(conn--compose-state-map)))
-          conn--major-mode-map
-          `((conn-local-mode . ,(conn--compose-major-mode-map)))
-          conn--minor-mode-maps
-          (conn-state-minor-mode-maps-alist conn-current-state))))
+    (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
+          conn--major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map)))
+          conn--minor-mode-maps (conn-state-minor-mode-maps-alist conn-current-state))))
 
 (defun conn--setup-state-properties ()
   (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
@@ -2738,7 +2735,9 @@ chooses to handle a command."
                      (cons (if (consp head)
                                ``(list ,(list 'nconc ,@(qt head)))
                              (qt head))
-                           (if (listp tail) (qt tail) (list `'',tail))))
+                           (if (listp tail)
+                               (qt tail)
+                             (list `'',tail))))
                     (_ ``(list ',',form)))))
       `(list 'nconc ,@(qt form)))))
 
@@ -3090,9 +3089,9 @@ order to mark the region that should be defined by any of COMMANDS."
          (`(,beg . ,end)
           (if ,(unless ignore-mark-active '(region-active-p))
               (pcase (car (read-multiple-choice
-                           "Mark to?"
-                           '((?e "end")
-                             (?a "beginning"))))
+                           "Mark"
+                           '((?a "after point")
+                             (?b "before point"))))
                 (?e (goto-char end))
                 (?b (goto-char beg)))
             (goto-char beg)
@@ -5165,12 +5164,13 @@ themselves once the selection process has concluded."
   "C-n" 'restrict-windows
   "DEL" 'backward-delete-arg
   "<backspace>" 'backward-delete-arg
-  "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
   "n" conn-end-of-defun-remap
-  "," conn-thing-remap)
+  "," conn-thing-remap
+  "<remap> <conn-bounds-after-point>" 'undefined
+  "<remap> <conn-bounds-before-point>" 'undefined)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state :override)
@@ -8655,16 +8655,20 @@ Expansions and contractions are provided by functions in
        & (oclosure-lambda (conn-state-eval-argument
                            (required t)
                            (name 'conn--read-expand-message))
-             (command self)
+             (self command)
            (pcase command
              ('conn-expand-exchange
-              (conn-expand-exchange))
+              (conn-expand-exchange)
+              self)
              ('conn-contract
-              (conn-contract (conn-state-eval-consume-prefix-arg)))
+              (conn-contract (conn-state-eval-consume-prefix-arg))
+              self)
              ('conn-expand
-              (conn-expand (conn-state-eval-consume-prefix-arg)))
+              (conn-expand (conn-state-eval-consume-prefix-arg))
+              self)
              ('conn-toggle-mark-command
-              (conn-toggle-mark-command))
+              (conn-toggle-mark-command)
+              self)
              ((or 'end 'exit-recursive-edit)
               (conn-set-argument self (cons (region-beginning)
                                             (region-end)))))))
@@ -9754,7 +9758,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                   (:parent conn-dispatch-transpose))
   (buffer :type buffer)
   (point :type marker)
-  (thing :type function))
+  (thing1 :type function))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
                                      thing
@@ -9822,14 +9826,21 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                         (no-history t)
                         (buffer (current-buffer))
                         (point (point))
-                        (thing (and (use-region-p) 'region))
+                        (thing1
+                         (conn-anonymous-thing
+                          'region
+                          :bounds-op (let ((bounds (conn-bounds
+                                                    'region nil
+                                                    (cons (region-beginning)
+                                                          (region-end)))))
+                                       (lambda (_) bounds))))
                         (window-predicate
                          (lambda (win)
                            (not (buffer-local-value 'buffer-read-only
                                                     (window-buffer win))))))
                        (window2 pt2 thing2 thing-arg)
                      (conn--dispatch-transpose-subr
-                      buffer point (or thing thing2)
+                      buffer point thing1
                       (window-buffer window2) pt2 thing2
                       thing-arg))
                  && (oclosure-lambda (conn-thing-argument
@@ -12148,6 +12159,8 @@ Operates with the selected windows parent window."
   "e" 'end-of-buffer
   "t l" 'conn-bounds-after-point
   "t j" 'conn-bounds-before-point
+  "a" 'conn-bounds-after-point
+  "b" 'conn-bounds-before-point
   "x" 'conn-bounds-trim
   "t x" 'conn-bounds-trim
   "X" 'conn-transform-reset
