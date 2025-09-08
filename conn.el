@@ -5070,7 +5070,6 @@ themselves once the selection process has concluded."
           (conn-with-dispatch-event-handler 'mouse-click
               nil
               (lambda (cmd)
-                (when (eq cmd 'keyboard-quit) (keyboard-quit))
                 (when (or (and (eq cmd 'act)
                                (mouse-event-p last-input-event))
                           (eq 'dispatch-mouse-repeat
@@ -5163,7 +5162,7 @@ themselves once the selection process has concluded."
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   :parent conn-dispatch-common-map
   "z" 'dispatch-other-end
-  "<escape>" 'keyboard-quit
+  "<escape>" 'finish
   "C-q" 'help
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
@@ -6071,7 +6070,9 @@ Target overlays may override this default by setting the
                               do (funcall handler cmd))
                      (setq unhandled t))
                  (unless unhandled
-                   (setf conn-state-eval-last-command cmd)))))))))))
+                   (setf conn-state-eval-last-command cmd)))
+               (when (and unhandled (eq cmd 'keyboard-quit))
+                 (keyboard-quit))))))))))
 
 (cl-defgeneric conn-dispatch-select-target ()
   (declare (important-return-value t)))
@@ -9908,14 +9909,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                       buffer point thing1
                       (window-buffer window2) pt2 thing2
                       thing-arg))
-                 && (oclosure-lambda (conn-thing-argument
-                                      (required t)
-                                      (recursive-edit t))
-                        (self cmd)
-                      (pcase cmd
-                        ((or 'conn-expand 'conn-contract))
-                        (_
-                         (conn-handle-thing-argument cmd self))))
+                 && (conn-thing-argument t)
                  nil
                  :other-end :no-other-end
                  :restrict-windows & (conn-dispatch-restrict-windows-argument))
