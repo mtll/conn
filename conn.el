@@ -6304,7 +6304,7 @@ contain targets."
                      finally (thread-first
                                (push (make-overlay beg (point-max)) hidden)
                                car (overlay-put 'invisible t))))
-          (recenter -1)))
+          (recenter nil)))
       (setf (oref state hidden) hidden)
       (sit-for 0))))
 
@@ -10981,22 +10981,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (pcase-let* ((`(,ov . ,prep-keys)
                     (conn-eval-with-state 'conn-change-surround-state
                         (conn-prepare-change-surround
-                         & (conn-change-surround-argument))
+                         && (conn-change-surround-argument))
                       :prompt "Change Surrounding"))
                    (cleanup (plist-get prep-keys :cleanup))
                    (keymap (plist-get prep-keys :keymap))
                    (success nil))
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
-                         (conn-with-overriding-map keymap
+                         (conn-with-overriding-map (plist-get prep-keys :keymap)
                            (conn-eval-with-state 'conn-surround-with-state
                                (list && (conn-surround-with-argument)
-                                     & (conn-surround-padding-argument))
+                                     :padding & (conn-surround-padding-argument))
                              :prompt "Surround With"))))
-              (goto-char (overlay-start ov))
-              (conn--push-ephemeral-mark (overlay-end ov) nil t)
               (apply #'conn-perform-surround
-                     `(,with ,with-arg ,@prep-keys ,@with-keys))
+                     `(,with ,with-arg :regions ,(list ov) ,@prep-keys ,@with-keys))
               (setq success t))
           (delete-overlay ov)
           (when cleanup
