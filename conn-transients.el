@@ -404,8 +404,9 @@ before each iteration."
             (conn-bounds-get :subregions
                              transform
                              (and sr (pred identity))))
-       (cl-loop for reg in sr collect (conn-bounds-whole reg)))
-      ((conn-bounds whole transform) whole))))
+       (cl-loop for reg in sr collect (conn-bounds-get reg :whole)))
+      ((conn-bounds whole transform)
+       (list whole)))))
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.

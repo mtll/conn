@@ -2199,8 +2199,8 @@ To execute code when a state is exiting use `conn-state-defer'."
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (progn
-        (conn-enter-state state)
-        (pop conn--state-stack))
+        (pop conn--state-stack)
+        (conn-enter-state state))
     (conn-push-state
      (conn-state-get conn-current-state :pop-alternate
                      t 'conn-command-state))))
@@ -3624,21 +3624,44 @@ words."))
 (defvar conn--last-perform-bounds nil)
 
 (cl-defstruct (conn-bounds
-               (:constructor conn-bounds--make))
+               (:constructor conn--make-bounds)
+               (:conc-name conn-bounds--))
   (thing nil :type symbol :read-only t)
   (arg nil :type (or nil integer) :read-only t)
   (whole nil :type cons)
   (properties nil :type list))
 
-(defun conn-bounds (thing arg whole &rest properties)
+(defalias 'conn-bounds-thing 'conn-bounds--thing)
+(defalias 'conn-bounds-arg 'conn-bounds--arg)
+
+(defun conn-bounds (bounds &optional transform)
+  (declare (gv-setter
+            (lambda (val)
+              (ignore transform)
+              `(setf (conn-bounds--whole ,bounds) ,val)))
+           (compiler-macro
+            (lambda (_exp)
+              (macroexp-let2 nil bounds bounds
+                `(let ((w (conn-bounds--whole
+                           ,(if transform
+                                `(conn-transform-bounds ,bounds ,transform)
+                              bounds))))
+                   (if (functionp w) (funcall w ,bounds) w))))))
+  (let ((w (conn-bounds--whole
+            (if transform
+                (conn-transform-bounds bounds transform)
+              bounds))))
+    (if (functionp w) (funcall w bounds) w)))
+
+(defun conn-make-bounds (thing arg whole &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
-              `(conn-bounds--make
+              `(conn--make-bounds
                 :thing ,thing
                 :arg ,arg
                 :whole ,whole
                 :properties (list ,@properties)))))
-  (conn-bounds--make
+  (conn--make-bounds
    :thing thing
    :arg arg
    :whole whole
@@ -3646,19 +3669,19 @@ words."))
 
 (cl-defstruct (conn-bounds-transform
                (:include conn-bounds)
-               (:constructor conn-bounds--transform))
+               (:constructor conn--make-bounds-transform))
   (parent nil :type conn-bounds :read-only t))
 
-(defun conn-bounds-transform (from to &rest properties)
+(defun conn-make-bounds-transform (from to &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
-              `(conn-bounds--transform
+              `(conn--make-bounds-transform
                 :thing (conn-bounds-thing ,from)
                 :arg (conn-bounds-arg ,from)
                 :whole ,to
                 :parent ,from
                 :properties (list ,@properties)))))
-  (conn-bounds--transform
+  (conn--make-bounds-transform
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)
    :whole to
@@ -3672,26 +3695,15 @@ words."))
            (conn-bounds-of-subr ,thing ,arg)))))
 
 (defun conn-bounds-set (bounds prop val)
-  (if (eq prop :whole)
-      (setf (conn-bounds-whole bounds) val)
-    (setf (plist-get (conn-bounds-properties bounds) prop) val)))
+  (setf (plist-get (conn-bounds--properties bounds) prop) val))
 
 (defun conn-bounds-get (bounds prop &optional transform)
   (declare (gv-setter conn-bounds-set))
   (when bounds
-    (pcase prop
-      (:thing (conn-bounds-thing bounds))
-      (:arg (conn-bounds-arg bounds))
-      (:whole
-       (pcase (conn-bounds-whole bounds)
-         ((and (pred functionp) fn)
-          (funcall fn bounds)))
-       (conn-bounds-whole (conn-transform-bounds bounds transform)))
-      (_
-       (let ((p (plist-get (conn-bounds-properties bounds) prop)))
-         (conn-transform-bounds
-          (if (functionp p) (funcall p bounds) p)
-          transform))))))
+    (let ((p (plist-get (conn-bounds--properties bounds) prop)))
+      (conn-transform-bounds
+       (if (functionp p) (funcall p bounds) p)
+       transform))))
 
 (pcase-defmacro conn-bounds-get (property &optional transform pat)
   (static-if (< emacs-major-version 30)
@@ -3705,12 +3717,10 @@ words."))
                      property)))))
 
 (pcase-defmacro conn-bounds (pattern &optional transform)
-  (if transform
-      `(app ,(static-if (< emacs-major-version 30)
-                 `(pcase--flip conn-transform-bounds ,transform)
-               `(conn-transform-bounds _ ,transform))
-            (cl-struct conn-bounds (whole ,pattern)))
-    `(cl-struct conn-bounds (whole ,pattern))))
+  `(app ,(static-if (< emacs-major-version 30)
+             `(pcase--flip conn-bounds ,transform)
+           `(conn-bounds _ ,transform))
+        ,pattern))
 
 (defun conn-transform-bounds (bounds transforms)
   (catch 'break
@@ -3742,7 +3752,7 @@ words."))
       (conn-bounds-of-subr (conn-anonymous-thing-parent cmd) arg))))
 
 (cl-defmethod conn-bounds-of-subr ((thing (conn-thing t)) arg)
-  (conn-bounds thing arg (bounds-of-thing-at-point thing)))
+  (conn-make-bounds thing arg (bounds-of-thing-at-point thing)))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing-command t)) arg)
   (deactivate-mark t)
@@ -3763,7 +3773,7 @@ words."))
                (funcall conn-this-command-handler conn-this-command-start))
              (unless (and (eql pt (point))
                           (eql mk (mark)))
-               (conn-bounds cmd 1 (cons (region-beginning) (region-end)))))
+               (conn-make-bounds cmd 1 (cons (region-beginning) (region-end)))))
          (set-marker conn-this-command-start nil))))
     (n
      (let (subregions)
@@ -3772,27 +3782,27 @@ words."))
            (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
                (push bound subregions)
              (throw 'break nil))))
-       (conn-bounds
+       (conn-make-bounds
         cmd arg
         (cl-loop for bound in subregions
-                 for (b . e) = (conn-bounds-whole bound)
+                 for (b . e) = (conn-bounds bound)
                  minimize b into beg
                  maximize e into end
                  finally return (cons beg end))
         :subregions (nreverse subregions))))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing region)) arg)
-  (conn-bounds
+  (conn-make-bounds
    cmd arg
    (cons (region-beginning) (region-end))
    :subregions (cl-loop for r in (region-bounds)
-                        collect (conn-bounds cmd arg r))))
+                        collect (conn-make-bounds cmd arg r))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
-  (conn-bounds cmd arg (cons (point-min) (point-max))))
+  (conn-make-bounds cmd arg (cons (point-min) (point-max))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing visible)) arg)
-  (conn-bounds cmd arg (cons (window-start) (window-end))))
+  (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
 (cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
@@ -3825,7 +3835,7 @@ words."))
                      (skip-chars-backward conn-bounds-trim-chars beg)
                      (point))))
     (unless (> tb te)
-      (conn-bounds-transform bounds (cons tb te)))))
+      (conn-make-bounds-transform bounds (cons tb te)))))
 
 
 ;;;;;; Bounds Before/After
@@ -3844,7 +3854,7 @@ words."))
 
 (cl-defmethod conn-bounds-after (_thing bounds point)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
-    (conn-bounds-transform bounds (cons (max beg point) end))))
+    (conn-make-bounds-transform bounds (cons (max beg point) end))))
 
 (put 'conn-bounds-before-point :conn-bounds-transform t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
@@ -3860,7 +3870,7 @@ words."))
 
 (cl-defmethod conn-bounds-before (_thing bounds point)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
-    (conn-bounds-transform bounds (cons beg (min point end)))))
+    (conn-make-bounds-transform bounds (cons beg (min point end)))))
 
 
 ;;;;; Perform Bounds
@@ -3906,7 +3916,7 @@ words."))
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
-    (conn-bounds cmd arg (cons (min pt mk) (max pt mk)))))
+    (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
   (let ((name (symbol-name cmd))
@@ -3946,7 +3956,7 @@ words."))
                                   (point))
                                 (point))
                  while (and bd (< (car bd) end))
-                 collect (conn-bounds thing nil bd)
+                 collect (conn-make-bounds thing nil bd)
                  while (and (< (point) end)
                             (ignore-errors
                               (forward-thing thing 1)
@@ -3971,12 +3981,12 @@ words."))
                     (while (< (point) end)
                       (forward-thing thing 1))))
                 (point))))
-    (conn-bounds
+    (conn-make-bounds
      thing nil
      (cons beg end)
      :subregions (lambda (bounds)
                    (pcase-let ((`(,beg . ,end)
-                                (conn-bounds-whole bounds)))
+                                (conn-bounds bounds)))
                      (setf (conn-bounds-get bounds :subregions)
                            (conn-get-things-in-region
                             (conn-bounds-thing bounds) beg end)))))))
@@ -4138,7 +4148,7 @@ Possibilities: \\<query-replace-map>
    (let ((regions
           (mapcan (pcase-lambda (`(,beg . ,end))
                     (cl-loop for b in (conn-get-things-in-region thing beg end)
-                             collect (conn-bounds-whole b)))
+                             collect (conn-bounds b)))
                   bounds)))
      (if (= (point) (region-end))
          (nreverse regions)
@@ -7649,13 +7659,17 @@ contain targets."
                (/= pt (point)))
       (unless (region-active-p)
         (push-mark nil t))
-      (pcase (cons (or (conn-bounds-get (conn-bounds-of thing thing-arg)
-                                        :whole transform)
+      (pcase (cons (or (conn-bounds
+                        (conn-transform-bounds
+                         (conn-bounds-of thing thing-arg)
+                         transform))
                        (point))
                    (progn
                      (goto-char pt)
-                     (conn-bounds-get (conn-bounds-of thing thing-arg)
-                                      :whole transform)))
+                     (conn-bounds
+                      (conn-transform-bounds
+                       (conn-bounds-of thing thing-arg)
+                       transform))))
         ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
               (or (guard (<= beg1 end1 beg2 end2))
                   (guard (>= end1 beg1 end2 beg2))
@@ -7744,14 +7758,14 @@ contain targets."
           (pcase-let ((`(,beg1 . ,end1)
                        (progn
                          (goto-char pt1)
-                         (or (conn-bounds-whole (conn-transform-bounds
+                         (or (conn-bounds (conn-transform-bounds
                                                  (conn-bounds-of thing1 thing-arg)
                                                  transform))
                              (user-error "Cannot find thing at point"))))
                       (`(,beg2 . ,end2)
                        (progn
                          (goto-char pt2)
-                         (or (conn-bounds-whole (conn-transform-bounds
+                         (or (conn-bounds (conn-transform-bounds
                                                  (conn-bounds-of thing2 thing-arg)
                                                  transform))
                              (user-error "Cannot find thing at point")))))
@@ -8483,18 +8497,18 @@ contain targets."
             :prompt "Bounds of Dispatch")
           (unless ovs (keyboard-quit))
           (cl-loop for bound in subregions
-                   for (b . e) = (conn-bounds-whole bound)
+                   for (b . e) = (conn-bounds bound)
                    minimize b into beg
                    maximize e into end
                    finally do
                    (setf whole (cons beg end)
-                         (conn-bounds-whole bounds) whole
+                         (conn-bounds bounds) whole
                          (conn-bounds-get bounds :subregions) subregions))
           (if repeat subregions whole))
       (mapc #'delete-overlay ovs))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
-  (conn-bounds
+  (conn-make-bounds
    cmd arg
    (lambda (bounds) (conn--dispatch-bounds bounds))
    :subregions (lambda (bounds) (conn--dispatch-bounds bounds t))))
@@ -8789,7 +8803,7 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
   (conn-eval-with-state 'conn-expand-state
-      (conn-bounds
+      (conn-make-bounds
        & cmd & arg
        & (oclosure-lambda (conn-state-eval-argument
                            (required t)
@@ -8839,7 +8853,7 @@ Expansions and contractions are provided by functions in
                            thing-transform
                            (and subregions (pred identity))))
      (cl-loop for bound in (reverse subregions)
-              for (b . e) = (conn-bounds-whole bound)
+              for (b . e) = (conn-bounds bound)
               do (conn--narrow-ring-record b e)))
     ((conn-bounds `(,beg . ,end) thing-transform)
      (conn--narrow-ring-record beg end))))
@@ -9320,8 +9334,8 @@ instances of from-string.")
                             ""))
                   nil (if (and subregions-p subregions)
                           (cl-loop for bound in subregions
-                                   collect (conn-bounds-whole bound))
-                        (list (conn-bounds-whole bounds))))))
+                                   collect (conn-bounds bound))
+                        (list (conn-bounds bounds))))))
      (append (list thing-mover arg) common
              (list (and subregions-p subregions t)))))
   (pcase-let* (((and bounds (conn-bounds `(,beg . ,end)))
@@ -9334,7 +9348,7 @@ instances of from-string.")
           (let* ((regions
                   (conn--merge-overlapping-regions
                    (cl-loop for bound in subregions
-                            collect (conn-bounds-whole bound))
+                            collect (conn-bounds bound))
                    t))
                  (region-extract-function
                   (lambda (method)
@@ -9379,8 +9393,8 @@ instances of from-string.")
                             ""))
                   t (if (and subregions-p subregions)
                         (cl-loop for bound in subregions
-                                 collect (conn-bounds-whole bound))
-                      (list (conn-bounds-whole bounds))))))
+                                 collect (conn-bounds bound))
+                      (list (conn-bounds bounds))))))
      (append (list thing-mover arg) common
              (list (and subregions-p subregions t)))))
   (pcase-let* (((and (conn-bounds `(,beg . ,end))
@@ -9394,7 +9408,7 @@ instances of from-string.")
           (let* ((regions
                   (conn--merge-overlapping-regions
                    (cl-loop for bound in subregions
-                            collect (conn-bounds-whole bound))
+                            collect (conn-bounds bound))
                    t))
                  (region-extract-function
                   (lambda (method)
@@ -9532,9 +9546,9 @@ Exiting the recursive edit will resume the isearch."
                         (or (if (and subregions-p (conn-bounds-get bounds :subregions))
                                 (conn--merge-overlapping-regions
                                  (cl-loop for bound in (conn-bounds-get bounds :subregions)
-                                          collect (conn-bounds-whole bound))
+                                          collect (conn-bounds bound))
                                  t)
-                              (list (conn-bounds-whole bounds))))))
+                              (list (conn-bounds bounds))))))
                (depth (recursion-depth))
                (in-regions-p (lambda (beg end)
                                (or (/= depth (recursion-depth))
@@ -9682,8 +9696,7 @@ With a prefix ARG activate `rectangle-mark-mode'.
 Immediately repeating this command pushes a mark."
   (interactive "P")
   (cond (arg
-         (rectangle-mark-mode 'toggle)
-         (conn-push-state 'conn-mark-state))
+         (rectangle-mark-mode 'toggle))
         ((eq last-command 'conn-set-mark-command)
          (if (region-active-p)
              (progn
@@ -9691,12 +9704,12 @@ Immediately repeating this command pushes a mark."
                (deactivate-mark)
                (message "Mark pushed and deactivated"))
            (activate-mark)
-           (conn-push-state 'conn-mark-state)
            (message "Mark activated")))
         (t
          (conn--push-ephemeral-mark)
-         (activate-mark)
-         (conn-push-state 'conn-mark-state))))
+         (activate-mark)))
+  (when (region-active-p)
+    (conn-push-state 'conn-mark-state)))
 
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' avoiding activating the mark.
@@ -9954,8 +9967,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                ((conn-bounds `(,beg1 . ,end1))
                 bounds)
                ((conn-bounds `(,beg2 . ,end2))
-                (conn-bounds-of (conn-bounds-get bounds :thing)
-                                (conn-bounds-get bounds :arg))))
+                (conn-bounds-of (conn-bounds-thing bounds)
+                                (conn-bounds-arg bounds))))
     (transpose-regions beg1 end1 beg2 end2)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit)) _arg)
@@ -9971,12 +9984,12 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
      buf (car bounds1) (conn-anonymous-thing
                         'region
                         :bounds-op (lambda (_)
-                                     (conn-bounds 'region nil bounds1)))
+                                     (conn-make-bounds 'region nil bounds1)))
      (current-buffer) (point) (let ((bounds2 (cons (region-beginning) (region-end))))
                                 (conn-anonymous-thing
                                  'region
                                  :bounds-op (lambda (_)
-                                              (conn-bounds 'region nil bounds2))))
+                                              (conn-make-bounds 'region nil bounds2))))
      nil)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
@@ -9994,7 +10007,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                         (thing1
                          (conn-anonymous-thing
                           'region
-                          :bounds-op (let ((bounds (conn-bounds
+                          :bounds-op (let ((bounds (conn-make-bounds
                                                     'region nil
                                                     (cons (region-beginning)
                                                           (region-end)))))
@@ -10111,8 +10124,8 @@ With arg N, insert N newlines."
                       (compat-call
                        sort subregions
                        :lessp (lambda (a b)
-                                (> (car (conn-bounds-whole a))
-                                   (car (conn-bounds-whole b))))))
+                                (> (car (conn-bounds a))
+                                   (car (conn-bounds b))))))
          (delete-indentation nil beg end)
          (indent-according-to-mode)))
       ((conn-bounds `(,beg . ,end) transform)
@@ -11040,7 +11053,7 @@ Interactively `region-beginning' and `region-end'."
 If KILL is non-nil add region to the `kill-ring'.  When in
 `rectangle-mark-mode' defer to `string-rectangle'."
   (interactive "P")
-  (conn-perform-change 'region nil kill))
+  (conn-perform-change 'region nil nil kill))
 
 
 ;;;;;; Change Surround
