@@ -404,8 +404,8 @@ before each iteration."
             (conn-bounds-get :subregions
                              transform
                              (and sr (pred identity))))
-       (cl-loop for reg in sr collect (conn-bounds-get reg :whole)))
-      ((conn-bounds-get :whole transform whole) whole))))
+       (cl-loop for reg in sr collect (conn-bounds-whole reg)))
+      ((conn-bounds whole transform) whole))))
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
@@ -731,10 +731,9 @@ A zero means repeat until error."
                  (conn--kapply-region-iterator
                   (save-excursion
                     (goto-char pt)
-                    (pcase (conn-bounds-of thing thing-arg)
-                      ('nil (user-error "Cannot find thing at point"))
-                      ((conn-bounds-get :whole)
-                       (list whole)))))
+                    (if-let* ((b (conn-bounds-of thing thing-arg)))
+                        (list b)
+                      (user-error "Cannot find thing at point"))))
                  `(conn--kapply-relocate-to-region
                    conn--kapply-pulse-region
                    ,@pipeline))))))
@@ -783,7 +782,7 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let (((conn-bounds-get :whole nil `(,beg . ,end))
+  (pcase-let (((conn-bounds `(,beg . ,end))
                (conn-eval-with-state 'conn-read-thing-state
                    (conn-bounds-of && (conn-thing-argument-dwim))
                  :prompt "Thing")))
