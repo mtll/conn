@@ -3642,16 +3642,19 @@ words."))
 (defun conn-bounds-get (bounds prop &optional transform)
   (declare (gv-setter conn-bounds-set))
   (when bounds
-    (if (eq :whole prop)
-        (progn
-          (pcase (conn-bounds-whole bounds)
-            ((and (pred functionp) fn)
-             (funcall fn bounds)))
-          (conn-bounds-whole (conn-transform-bounds bounds transform)))
-      (let ((p (plist-get (conn-bounds-properties bounds) prop)))
-        (conn-transform-bounds
-         (if (functionp p) (funcall p bounds) p)
-         transform)))))
+    (pcase prop
+      (:thing (conn-bounds-thing bounds))
+      (:arg (conn-bounds-arg bounds))
+      (:whole
+       (pcase (conn-bounds-whole bounds)
+         ((and (pred functionp) fn)
+          (funcall fn bounds)))
+       (conn-bounds-whole (conn-transform-bounds bounds transform)))
+      (_
+       (let ((p (plist-get (conn-bounds-properties bounds) prop)))
+         (conn-transform-bounds
+          (if (functionp p) (funcall p bounds) p)
+          transform))))))
 
 (pcase-defmacro conn-bounds-get (property &optional transform pat)
   (static-if (< emacs-major-version 30)
@@ -3865,14 +3868,16 @@ words."))
         (name (symbol-name cmd))
         (quit (lambda ()
                 (when isearch-mode-end-hook-quit
-                  (abort-recursive-edit)))))
+                  (abort-recursive-edit))))
+        (thing (conn-eval-with-state 'conn-read-thing-state
+                   (list && (conn-thing-argument)))))
     (add-hook 'isearch-mode-end-hook quit)
     (unwind-protect
         (isearch-mode (not (string-match-p "backward" name))
                       (string-match-p "regexp" name)
                       nil t)
       (remove-hook 'isearch-mode-end-hook quit))
-    (conn-bounds cmd arg (cons (min start (point)) (max start (point))))))
+    (apply #'conn-bounds-of thing)))
 
 
 ;;;; Bounds of Things in Region
@@ -9858,6 +9863,15 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
      (transpose-subr (lambda (N) (forward-thing thing N))
                      (prefix-numeric-value arg)))
     (_ (error "Invalid transpose mover"))))
+
+(cl-defmethod conn-perform-transpose ((cmd (conn-thing isearch)) arg)
+  (pcase-let* ((bounds (conn-bounds-of cmd arg))
+               ((conn-bounds-get :whole nil `(,beg1 . ,end1))
+                bounds)
+               ((conn-bounds-get :whole nil `(,beg2 . ,end2))
+                (conn-bounds-of (conn-bounds-get bounds :thing)
+                                (conn-bounds-get bounds :arg))))
+    (transpose-regions beg1 end1 beg2 end2)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit)) _arg)
   (deactivate-mark t)
