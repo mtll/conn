@@ -2514,7 +2514,7 @@ the state stays active if the previous command was a prefix command."
   :keymap (conn-get-state-map 'conn-mark-state)
   "v" 'rectangle-mark-mode
   "V" 'undefined
-  "SPC" 'undefined)
+  "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (unless (region-active-p)
@@ -3641,12 +3641,12 @@ words."))
               `(setf (conn-bounds--whole ,bounds) ,val)))
            (compiler-macro
             (lambda (_exp)
-              (macroexp-let2 nil bounds bounds
-                `(let ((w (conn-bounds--whole
-                           ,(if transform
-                                `(conn-transform-bounds ,bounds ,transform)
-                              bounds))))
-                   (if (functionp w) (funcall w ,bounds) w))))))
+              `(let* ((bounds ,bounds)
+                      (w (conn-bounds--whole
+                          ,(if transform
+                               `(conn-transform-bounds bounds ,transform)
+                             'bounds))))
+                 (if (functionp w) (funcall w bounds) w)))))
   (let ((w (conn-bounds--whole
             (if transform
                 (conn-transform-bounds bounds transform)
@@ -9722,6 +9722,10 @@ With a prefix ARG `push-mark' without activating it."
         (t
          (exchange-point-and-mark (not mark-active)))))
 
+(defun conn-push-mark-command ()
+  (interactive)
+  (push-mark))
+
 
 ;;;;;; Mark Ring
 
@@ -10449,6 +10453,7 @@ If ARG is a numeric prefix argument kill region to a register."
      :prompt "Thing"))
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end))
+     (goto-char beg)
      (save-mark-and-excursion
        (if (>= (point) end)
            (progn
