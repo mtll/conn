@@ -12559,7 +12559,7 @@ Operates with the selected windows parent window."
   "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
-  "SPC" 'conn-set-mark-command
+  "SPC" (conn-remap-key conn-delete-char-keys t)
   "M-y" 'conn-completing-yank-replace
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window
@@ -12577,6 +12577,7 @@ Operates with the selected windows parent window."
   "r" conn-region-remap
   "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
+  "V" 'conn-set-mark-command
   "d" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
