@@ -5316,12 +5316,12 @@ themselves once the selection process has concluded."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
-  "o" (conn-anonymous-thing
+  "O" (conn-anonymous-thing
        'forward-word
        :description "all-words"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'word)))
-  "u" (conn-anonymous-thing
+  "U" (conn-anonymous-thing
        'forward-symbol
        :description "all-symbols"
        :target-finder (lambda ()
