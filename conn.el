@@ -42,7 +42,7 @@
 (defvar conn-mode)
 (defvar conn-local-mode)
 
-(defvar-local conn--hide-mark-cursor nil)
+(defvar-local conn--disable-mark-cursor nil)
 
 (defvar conn-lighter " Conn")
 
@@ -2134,15 +2134,15 @@ If BUFFER is nil then use the current buffer."
           conn--minor-mode-maps (conn-state-minor-mode-maps-alist conn-current-state))))
 
 (defun conn--setup-state-properties ()
-  (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
-                                                      :hide-mark-cursor)))
-                                     (if (eq hide t) t
-                                       (alist-get conn-current-state hide)))
-                                   (when-let* ((hide (conn-get-mode-property
-                                                      major-mode :hide-mark-cursor)))
-                                     (if (eq hide t) t
-                                       (alist-get conn-current-state hide)))
-                                   (conn-state-get conn-current-state :hide-mark-cursor))
+  (setf conn--disable-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
+                                                         :disable-mark-cursor)))
+                                        (if (eq hide t) t
+                                          (alist-get conn-current-state hide)))
+                                      (when-let* ((hide (conn-get-mode-property
+                                                         major-mode :disable-mark-cursor)))
+                                        (if (eq hide t) t
+                                          (alist-get conn-current-state hide)))
+                                      (conn-state-get conn-current-state :disable-mark-cursor))
         cursor-type (conn-state-get conn-current-state :cursor nil t)))
 
 (cl-defgeneric conn-enter-state (state)
@@ -2305,7 +2305,7 @@ The following properties have a special meaning:
 
 :LIGHTER is the mode-line lighter text for NAME.
 
-:HIDE-MARK-CURSOR if non-nil will hide the mark cursor in NAME.
+:DISABLE-MARK-CURSOR if non-nil will hide the mark cursor in NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
@@ -2352,7 +2352,7 @@ inherit from and should never be entered directly.
 For use in buffers that should not have any other state."
   :no-keymap t
   :lighter "Ø"
-  :hide-mark-cursor t
+  :disable-mark-cursor t
   :cursor '(bar . 4))
 
 (conn-define-state conn-command-state ()
@@ -2519,8 +2519,9 @@ the state stays active if the previous command was a prefix command."
   "C-j" 'conn-join-lines-in-region
   "v" 'rectangle-mark-mode
   "V" 'undefined
-  "g" 'conn-duplicate-region
-  "G" 'conn-duplicate-and-comment-region
+  "g" 'conn-surround
+  "RET" 'conn-duplicate
+  "S-<return>" 'conn-duplicate-and-comment-region
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
@@ -2572,7 +2573,7 @@ the state stays active if the previous command was a prefix command."
   "Setup `minibuffer-mode' buffer state."
   (when (eq major-mode 'minibuffer-mode)
     (setf (alist-get 'conn-emacs-state
-                     (conn-get-buffer-property :hide-mark-cursor))
+                     (conn-get-buffer-property :disable-mark-cursor))
           t)
     (conn-push-state 'conn-emacs-state)
     (add-hook 'minibuffer-setup-hook
@@ -2717,46 +2718,50 @@ chooses to handle a command."
                       (setq conn--state-eval-error-message "")
                       (setq arguments (cons next handler))))))
       (conn-with-recursive-stack state
-        (while (conn-argument-required-p (car arguments))
-          (when (and conn--state-eval-message-timeout
-                     (time-less-p conn--state-eval-message-timeout nil))
-            (setq conn--state-eval-message nil
-                  conn--state-eval-message-timeout nil))
-          (conn--state-eval-prompt prompt (car arguments))
-          (let ((cmd (key-binding (read-key-sequence nil) t)))
-            (setf conn--state-eval-error-message "")
-            (while (arrayp cmd) ; keyboard macro
-              (setq cmd (key-binding cmd t)))
-            (when pre (funcall pre cmd))
-            (pcase cmd
-              ('nil)
-              ('help
-               (conn-quick-reference
-                (or reference (conn-state-reference state (car arguments)))))
-              ('digit-argument
-               (let* ((char (if (integerp last-input-event)
-                                last-input-event
-                              (get last-input-event 'ascii-character)))
-                      (digit (- (logand char ?\177) ?0)))
-                 (setf conn--state-eval-prefix-mag
-                       (if (integerp conn--state-eval-prefix-mag)
-                           (+ (* 10 conn--state-eval-prefix-mag) digit)
-                         (when (/= 0 digit) digit)))))
-              ('backward-delete-arg
-               (when conn--state-eval-prefix-mag
-                 (cl-callf floor conn--state-eval-prefix-mag 10)))
-              ('reset-arg
-               (setf conn--state-eval-prefix-mag nil))
-              ('negative-argument
-               (cl-callf not conn--state-eval-prefix-sign))
-              ((or 'keyboard-quit 'quit)
-               (keyboard-quit))
-              ('execute-extended-command
-               (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
-                 (update-args cmd)))
-              (_ (update-args cmd)))
-            (setq conn-state-eval-last-command cmd)
-            (when post (funcall post cmd)))))
+        (let ((emulation-mode-map-alists
+               `(((t . ,(make-composed-keymap
+                         (delq nil (conn-argument-keymaps arguments)))))
+                 ,@emulation-mode-map-alists)))
+          (while (conn-argument-required-p (car arguments))
+            (when (and conn--state-eval-message-timeout
+                       (time-less-p conn--state-eval-message-timeout nil))
+              (setq conn--state-eval-message nil
+                    conn--state-eval-message-timeout nil))
+            (conn--state-eval-prompt prompt (car arguments))
+            (let ((cmd (key-binding (read-key-sequence nil) t)))
+              (setf conn--state-eval-error-message "")
+              (while (arrayp cmd) ; keyboard macro
+                (setq cmd (key-binding cmd t)))
+              (when pre (funcall pre cmd))
+              (pcase cmd
+                ('nil)
+                ('help
+                 (conn-quick-reference
+                  (or reference (conn-state-reference state (car arguments)))))
+                ('digit-argument
+                 (let* ((char (if (integerp last-input-event)
+                                  last-input-event
+                                (get last-input-event 'ascii-character)))
+                        (digit (- (logand char ?\177) ?0)))
+                   (setf conn--state-eval-prefix-mag
+                         (if (integerp conn--state-eval-prefix-mag)
+                             (+ (* 10 conn--state-eval-prefix-mag) digit)
+                           (when (/= 0 digit) digit)))))
+                ('backward-delete-arg
+                 (when conn--state-eval-prefix-mag
+                   (cl-callf floor conn--state-eval-prefix-mag 10)))
+                ('reset-arg
+                 (setf conn--state-eval-prefix-mag nil))
+                ('negative-argument
+                 (cl-callf not conn--state-eval-prefix-sign))
+                ((or 'keyboard-quit 'quit)
+                 (keyboard-quit))
+                ('execute-extended-command
+                 (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
+                   (update-args cmd)))
+                (_ (update-args cmd)))
+              (setq conn-state-eval-last-command cmd)
+              (when post (funcall post cmd))))))
       (let ((inhibit-message nil))
         (message nil)
         (eval (eval (conn-eval-argument (car arguments)) t) t)))))
@@ -2818,13 +2823,17 @@ chooses to handle a command."
   (set-flag :type boolean)
   (required :type boolean)
   (name :type (or nil string function))
-  (reference :type function))
+  (reference :type function)
+  (keymap :type keymap))
 
 (defalias 'conn-state-eval-argument-name
   'conn-state-eval-argument--name)
 
 (defalias 'conn-state-eval-argument-value
   'conn-state-eval-argument--value)
+
+(defalias 'conn-state-eval-argument-keymap
+  'conn-state-eval-argument--keymap)
 
 (cl-defgeneric conn-cancel-argument (argument)
   ( :method (_arg) nil)
@@ -2888,6 +2897,16 @@ chooses to handle a command."
   ( :method ((arg cons) sym)
     (or (conn-argument-completion-predicate (car arg) sym)
         (conn-argument-completion-predicate (cdr arg) sym))))
+
+(cl-defgeneric conn-argument-keymaps (argument)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (arg) nil)
+  ( :method ((arg cons))
+    (nconc (conn-argument-keymaps (car arg))
+           (conn-argument-keymaps (cdr arg))))
+  ( :method ((arg conn-state-eval-argument))
+    (list (conn-state-eval-argument-keymap arg))))
 
 
 ;;;;;; Argument Quick Ref
@@ -3008,11 +3027,11 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'overlay-after-string
      (propertize " " 'face 'conn-mark-face))
 
-(conn-set-mode-property 'special-mode :hide-mark-cursor t)
+(conn-set-mode-property 'special-mode :disable-mark-cursor t)
 
 (defun conn--mark-cursor-redisplay (win)
   (if (or (not conn-local-mode)
-          conn--hide-mark-cursor
+          conn--disable-mark-cursor
           (null (mark t))
           (and (window-minibuffer-p win)
                (not (eq win (active-minibuffer-window)))))
@@ -3065,7 +3084,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defvar conn--movement-mark nil)
 
 (defun conn--mark-pre-command-hook ()
-  (unless conn--hide-mark-cursor
+  (unless conn--disable-mark-cursor
     (set-marker conn-this-command-start (point))
     (setq conn--movement-tick (buffer-chars-modified-tick)
           conn--movement-mark (mark t)
@@ -3074,7 +3093,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           conn-this-command-handler nil)))
 
 (defun conn--mark-post-command-hook ()
-  (unless conn--hide-mark-cursor
+  (unless conn--disable-mark-cursor
     (cl-callf2 assq-delete-all (recursion-depth) conn--last-perform-bounds)
     (unless conn-this-command-thing
       (setq conn-this-command-thing (or (conn-command-thing this-command)
@@ -3495,13 +3514,17 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;;;; Subregions
 
+(defvar-keymap conn-subregions-map
+  "z" 'toggle-subregions)
+
 (oclosure-define (conn-subregions-argument
                   (:parent conn-state-eval-argument)))
 
 (defun conn-subregions-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-subregions-argument
-                    (value value))
+                    (value value)
+                    (keymap conn-subregions-map))
       (self cmd)
     (conn-handle-subregions-argument cmd self)))
 
@@ -3550,28 +3573,42 @@ words."))
 
 ;;;;;; Transform Argument
 
+(defvar-keymap conn-transform-map
+  "x" 'conn-bounds-trim
+  "a" 'conn-bounds-after-point
+  "b" 'conn-bounds-before-point
+  "SPC" 'conn-bounds-last
+  "X" 'conn-transform-reset)
+
 (oclosure-define (conn-transform-argument
                   (:parent conn-state-eval-argument)))
 
 (defun conn-transform-argument (&rest value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-transform-argument
-                    (value value))
+                    (value value)
+                    (keymap conn-transform-map))
       (self cmd)
     (conn-handle-transform-argument cmd self)))
 
 (cl-defgeneric conn-handle-transform-argument (cmd arg))
 
 (cl-defmethod conn-handle-transform-argument (cmd arg)
+  (cl-loop for tf in (conn-state-eval-argument-value arg)
+           for handler = (get tf :conn-transform-command-handler)
+           when handler do (setq arg (funcall handler cmd arg)))
   (pcase cmd
     ('conn-transform-reset
      (conn-set-argument arg nil))
-    ((guard (and (symbolp cmd)
-                 (get cmd :conn-bounds-transform)))
+    ((and (guard (symbolp cmd))
+          (let (and handler (pred identity))
+            (get cmd :conn-bounds-transform)))
      (if-let* ((transform (conn-state-eval-argument-value arg))
                (_(memq cmd transform)))
          (conn-set-argument arg (remq cmd transform))
-       (conn-set-argument arg (cons cmd transform))))
+       (if (functionp handler)
+           (funcall handler cmd arg)
+         (conn-set-argument arg (cons cmd transform)))))
     (_ arg)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-transform-argument)
@@ -3621,7 +3658,6 @@ words."))
   "C-q" 'help
   "," conn-thing-remap
   "r" 'recursive-edit
-  "z" 'toggle-subregions
   "c" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -3818,6 +3854,28 @@ words."))
 
 ;;;;; Bounds Transformations
 
+;;;;;; Last Bounds
+
+(put 'conn-bounds-last :conn-bounds-transform t)
+(put 'conn-bounds-last :conn-transform-description "last")
+(put 'conn-bounds-last :conn-transform-command-handler
+     (lambda (cmd arg)
+       (if (eq cmd 'toggle-subregions)
+           (conn-set-argument
+            arg (remq 'conn-bounds-last
+                      (conn-state-eval-argument-value arg)))
+         arg)))
+
+(defun conn-bounds-last (bounds)
+  (conn-bounds-last-subr (conn-bounds-thing bounds) bounds))
+
+(cl-defgeneric conn-bounds-last-subr (thing bounds)
+  ( :method (_thing bounds) bounds)
+  ( :method ((_thing (conn-thing-command t)) bounds)
+    (or (when-let* ((sr (conn-bounds-get bounds :subregions)))
+          (car (last sr)))
+        bounds)))
+
 ;;;;;; Trim Bounds
 
 (defvar conn-bounds-trim-chars " \t\r\n")
@@ -3825,10 +3883,8 @@ words."))
 (put 'conn-bounds-trim :conn-bounds-transform t)
 (put 'conn-bounds-trim :conn-transform-description "trim")
 
-(define-inline conn-bounds-trim (bounds)
-  (inline-letevals (bounds)
-    (inline-quote
-     (conn-bounds-trim-subr (conn-bounds-thing ,bounds) ,bounds))))
+(defun conn-bounds-trim (bounds)
+  (conn-bounds-trim-subr (conn-bounds-thing bounds) bounds))
 
 (cl-defgeneric conn-bounds-trim-subr (_thing bounds))
 
@@ -3929,6 +3985,8 @@ words."))
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
   (let ((name (symbol-name cmd))
         (quit (lambda ()
+                (when (> (point) isearch-other-end)
+                  (goto-char isearch-other-end))
                 (when isearch-mode-end-hook-quit
                   (abort-recursive-edit))))
         (thing (conn-eval-with-state 'conn-read-thing-state
@@ -10442,7 +10500,7 @@ If ARG is a numeric prefix argument kill region to a register."
             (conn--without-conn-maps
               (key-binding conn-kill-region-keys t))))))
 
-(defun conn-kill-thing (cmd arg &optional delete-or-register)
+(defun conn-kill-thing (cmd arg transform &optional delete-or-register)
   (interactive
    (conn-eval-with-state 'conn-change-state
        (list && (oclosure-lambda (conn-thing-argument
@@ -10456,10 +10514,11 @@ If ARG is a numeric prefix argument kill region to a register."
                      (conn-set-argument
                       self (list cmd (conn-state-eval-consume-prefix-arg))))
                     (_ (conn-handle-thing-argument cmd self))))
+             & (conn-transform-argument 'conn-bounds-last)
              & current-prefix-arg)
      :prompt "Thing"))
   (pcase (conn-bounds-of cmd arg)
-    ((conn-bounds `(,beg . ,end))
+    ((conn-bounds `(,beg . ,end) transform)
      (goto-char beg)
      (save-mark-and-excursion
        (if (>= (point) end)
@@ -10558,12 +10617,8 @@ With prefix arg N duplicate region N times."
              (len (- end beg))
              (start (point))
              (mark (mark t)))
-         (unwind-protect
-             (dotimes (_ N)
-               (conn--duplicate-region-1 beg end))
-           (goto-char (+ start (* len N)))
-           (conn--push-ephemeral-mark (+ mark (* len N)))
-           (set-marker end nil)))))))
+         (dotimes (_ N)
+           (conn--duplicate-region-1 beg end)))))))
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
   "Duplicate and comment the current region."
@@ -10574,13 +10629,12 @@ With prefix arg N duplicate region N times."
   (pcase-let* ((origin (point))
                (region (buffer-substring-no-properties beg end)))
     (comment-or-uncomment-region beg end)
-    (setq end (pos-eol))
+    (setq end (line-end-position))
     (dotimes (_ arg)
       (goto-char end)
       (newline)
       (insert region)
-      (setq end (point)))
-    (goto-char (+ origin (* (length region) arg) arg))))
+      (setq end (point)))))
 
 (defun conn-duplicate-and-comment (thing-mover thing-arg N)
   "Duplicate and comment the region defined by a thing command.
@@ -10603,9 +10657,7 @@ With prefix arg N duplicate region N times."
        (goto-char end)
        (newline)
        (insert region)
-       (setq end (point)))
-     (goto-char (+ (point) offset))
-     (conn--push-ephemeral-mark (- (point) mark-offset)))))
+       (setq end (point))))))
 
 
 ;;;;; Recenter
@@ -11052,7 +11104,7 @@ Interactively `region-beginning' and `region-end'."
                      (conn-set-argument
                       self (list cmd (conn-state-eval-consume-prefix-arg))))
                     (_ (conn-handle-thing-argument cmd self))))
-             & (conn-transform-argument)
+             & (conn-transform-argument 'conn-bounds-last)
              & current-prefix-arg)
      :prompt "Thing"))
   (conn-perform-change cmd arg transform kill))
@@ -12372,16 +12424,7 @@ Operates with the selected windows parent window."
   "h" 'conn-expand
   "p" 'forward-paragraph
   "," conn-thing-remap
-  "e" 'end-of-buffer
-  "t l" 'conn-bounds-after-point
-  "t j" 'conn-bounds-before-point
-  "a" 'conn-bounds-after-point
-  "b" 'conn-bounds-before-point
-  "x" 'conn-bounds-trim
-  "t x" 'conn-bounds-trim
-  "X" 'conn-transform-reset
-  "t X" 'conn-transform-reset
-  "t z" 'conn-transform-reset)
+  "e" 'end-of-buffer)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
@@ -12419,7 +12462,6 @@ Operates with the selected windows parent window."
   "G" 'conn-surround
   "<escape>" 'conn-pop-state
   "R" 'conn-emacs-state-overwrite
-  "S" 'conn-copy-thing
   "D" 'conn-duplicate
   "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-separator
@@ -12456,7 +12498,7 @@ Operates with the selected windows parent window."
   "r" conn-region-remap
   "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
-  "w" 'conn-kill-region
+  "w" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
@@ -12944,7 +12986,7 @@ Operates with the selected windows parent window."
 (declare-function dired-kill-subdir "dired-aux")
 (declare-function dired-kill-line "dired-aux")
 
-(conn-set-mode-property 'dired-mode :hide-mark-cursor t)
+(conn-set-mode-property 'dired-mode :disable-mark-cursor t)
 
 (defun conn--dispatch-dired-lines ()
   (let ((dired-movement-style 'bounded))
@@ -13066,7 +13108,7 @@ Operates with the selected windows parent window."
 
 ;;;; Magit
 
-(conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
+(conn-set-mode-property 'magit-section-mode :disable-mark-cursor t)
 
 (defvar conn-magit-ref
   (conn-reference-page "Magit"
@@ -13102,10 +13144,10 @@ Operates with the selected windows parent window."
 (conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-mover-state)
   "State for dispatch in `ibuffer-mode'."
   :cursor '(bar . 4)
-  :hide-mark-cursor t
+  :disable-mark-cursor t
   :suppress-input-method t)
 
-(conn-set-mode-property 'ibuffer-mode :hide-mark-cursor t)
+(conn-set-mode-property 'ibuffer-mode :disable-mark-cursor t)
 
 (defvar ibuffer-movement-cycle)
 (defvar ibuffer-marked-char)
@@ -13291,6 +13333,8 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
   "SPC <t>" conn-demap-key
+  "m" 'end-of-buffer
+  "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -13307,6 +13351,8 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
   "SPC <t>" conn-demap-key
+  "m" 'end-of-buffer
+  "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -13397,7 +13443,7 @@ Operates with the selected windows parent window."
 
 ;;;; Treemacs
 
-(conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
+(conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
   "SPC <t>" conn-demap-key
@@ -13413,7 +13459,7 @@ Operates with the selected windows parent window."
 
 ;;;; Messages
 
-(conn-set-mode-property 'messages-buffer-mode :hide-mark-cursor t)
+(conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
   "SPC <t>" conn-demap-key
@@ -13431,7 +13477,7 @@ Operates with the selected windows parent window."
 
 ;;;; Debugger mode
 
-(conn-set-mode-property 'debugger-mode :hide-mark-cursor t)
+(conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'debugger-mode)
   "SPC <t>" conn-demap-key
@@ -13447,8 +13493,8 @@ Operates with the selected windows parent window."
 
 ;;;; Occur mode
 
-(conn-set-mode-property 'occur-mode :hide-mark-cursor t)
-(conn-set-mode-property 'occur-edit-mode :hide-mark-cursor nil)
+(conn-set-mode-property 'occur-mode :disable-mark-cursor t)
+(conn-set-mode-property 'occur-edit-mode :disable-mark-cursor nil)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'occur-mode)
   "SPC <t>" conn-demap-key
@@ -13468,9 +13514,9 @@ Operates with the selected windows parent window."
 
 ;;;; Compile mode
 
-(conn-set-mode-property 'compilation-mode :hide-mark-cursor t)
+(conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
 (static-if (<= 31 emacs-major-version)
-    (conn-set-mode-property 'grep-edit-mode :hide-mark-cursor nil))
+    (conn-set-mode-property 'grep-edit-mode :disable-mark-cursor nil))
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
   "SPC <t>" conn-demap-key
