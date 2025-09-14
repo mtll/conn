@@ -2901,7 +2901,7 @@ chooses to handle a command."
 (cl-defgeneric conn-argument-keymaps (argument)
   (declare (important-return-value t)
            (side-effect-free t))
-  ( :method (arg) nil)
+  ( :method (_arg) nil)
   ( :method ((arg cons))
     (nconc (conn-argument-keymaps (car arg))
            (conn-argument-keymaps (cdr arg))))
@@ -3657,7 +3657,8 @@ words."))
   "M-<backspace>" 'reset-arg
   "C-q" 'help
   "," conn-thing-remap
-  "r" 'recursive-edit
+  "[" 'recursive-edit
+  "'" 'recursive-edit
   "c" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -3870,8 +3871,8 @@ words."))
   (conn-bounds-last-subr (conn-bounds-thing bounds) bounds))
 
 (cl-defgeneric conn-bounds-last-subr (thing bounds)
-  ( :method (_thing bounds) bounds)
-  ( :method ((_thing (conn-thing-command t)) bounds)
+  ( :method ((_thing (conn-thing dispatch)) bounds) bounds)
+  ( :method (_thing bounds)
     (or (when-let* ((sr (conn-bounds-get bounds :subregions)))
           (car (last sr)))
         bounds)))
@@ -9945,9 +9946,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "u" 'forward-symbol
   "f" 'conn-dispatch)
 
-(conn-define-state conn-dispatch-transpose-state
-    (conn-dispatch-mover-state))
-
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
   "TAB" 'repeat-dispatch
@@ -9961,7 +9959,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
    (substitute-command-keys
     (concat
      "Define region. "
-     "Press \\[exit-recursive-edit] to end and use current region."
+     "Press \\[exit-recursive-edit] to end and use current region. "
      "Press \\[abort-recursive-edit] to abort."))))
 
 (defvar conn--transpose-eldoc-prev-msg-fn)
@@ -10065,7 +10063,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   (while
       (condition-case err
           (progn
-            (conn-eval-with-state 'conn-dispatch-transpose-state
+            (conn-eval-with-state 'conn-dispatch-bounds-state
                 (conn-perform-dispatch
                  & (oclosure-lambda
                        (conn-transpose-command
@@ -10074,20 +10072,21 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                         (buffer (current-buffer))
                         (point (point))
                         (thing1
-                         (conn-anonymous-thing
-                          'region
-                          :bounds-op (let ((bounds (conn-make-bounds
-                                                    'region nil
-                                                    (cons (region-beginning)
-                                                          (region-end)))))
-                                       (lambda (_) bounds))))
+                         (when (use-region-p)
+                           (conn-anonymous-thing
+                            'region
+                            :bounds-op (let ((bounds (conn-make-bounds
+                                                      'region nil
+                                                      (cons (region-beginning)
+                                                            (region-end)))))
+                                         (lambda (_) bounds)))))
                         (window-predicate
                          (lambda (win)
                            (not (buffer-local-value 'buffer-read-only
                                                     (window-buffer win))))))
                        (window2 pt2 thing2 thing-arg)
                      (conn--dispatch-transpose-subr
-                      buffer point thing1
+                      buffer point (or thing1 thing2)
                       (window-buffer window2) pt2 thing2
                       thing-arg))
                  && (conn-thing-argument t)
@@ -10613,12 +10612,8 @@ With prefix arg N duplicate region N times."
     ((conn-bounds `(,beg . ,end) thing-transform)
      (if (use-region-p)
          (conn-duplicate-region (region-beginning) (region-end) N)
-       (let ((end (set-marker (make-marker) end))
-             (len (- end beg))
-             (start (point))
-             (mark (mark t)))
-         (dotimes (_ N)
-           (conn--duplicate-region-1 beg end)))))))
+       (dotimes (_ N)
+         (conn--duplicate-region-1 beg end))))))
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
   "Duplicate and comment the current region."
@@ -10626,8 +10621,7 @@ With prefix arg N duplicate region N times."
    (list (region-beginning)
          (region-end)
          (prefix-numeric-value current-prefix-arg)))
-  (pcase-let* ((origin (point))
-               (region (buffer-substring-no-properties beg end)))
+  (let ((region (buffer-substring-no-properties beg end)))
     (comment-or-uncomment-region beg end)
     (setq end (line-end-position))
     (dotimes (_ arg)
@@ -10647,8 +10641,6 @@ With prefix arg N duplicate region N times."
      :prompt "Thing"))
   (pcase (conn-bounds-of thing-mover thing-arg)
     ((and (conn-bounds `(,beg . ,end))
-          (let offset (- (point) end))
-          (let mark-offset (- (point) (mark t)))
           (let region (buffer-substring-no-properties beg end)))
      (goto-char end)
      (comment-or-uncomment-region beg end)
