@@ -2479,7 +2479,7 @@ the state stays active if the previous command was a prefix command."
                 (unless (or (cl-shiftf prefix-command nil)
                             (not (funcall pred))
                             (not (eq conn-current-state state)))
-                  (conn-pop-state)))))
+                  (conn-enter-state (conn-peek-state))))))
            (setup
             (lambda ()
               (remove-hook 'post-command-hook setup t)
@@ -2487,7 +2487,7 @@ the state stays active if the previous command was a prefix command."
               (when msg-fn (add-hook 'post-command-hook msg-fn 91 t))
               (add-hook 'post-command-hook pop-pred 90 t))))
     (conn-state-defer
-      (cl-callf2 delq state conn--state-stack)
+      (cl-callf2 remq state conn--state-stack)
       (when msg-fn (remove-hook 'post-command-hook msg-fn t))
       (remove-hook 'post-command-hook setup t)
       (remove-hook 'post-command-hook pop-pred t)
@@ -2512,15 +2512,22 @@ the state stays active if the previous command was a prefix command."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "TAB" 'indent-rigidly
+  "Y" 'conn-completing-yank-replace
+  "y" 'conn-yank-replace
+  "*" 'calc-grab-region
+  "C-j" 'conn-join-lines-in-region
   "v" 'rectangle-mark-mode
   "V" 'undefined
+  "g" 'conn-duplicate-region
+  "G" 'conn-duplicate-and-comment-region
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (unless (region-active-p)
     (activate-mark))
   (conn-state-defer
-    (deactivate-mark))
+    (setq deactivate-mark t))
   (cl-call-next-method))
 
 
@@ -3082,6 +3089,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (with-demoted-errors "Error in Mark Handler: %s"
           (funcall handler conn-this-command-start)))
       (unless (or conn--movement-ring-rotating
+                  mark-active
                   (null conn--movement-mark)
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
@@ -9877,8 +9885,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "i" 'conn-backward-line
   "k" 'forward-line
   "u" 'forward-symbol
-  "f" 'conn-dispatch
-  "n" conn-end-of-defun-remap)
+  "f" 'conn-dispatch)
 
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-mover-state))
@@ -10525,15 +10532,13 @@ With prefix arg N duplicate region N times."
    (list (region-beginning)
          (region-end)
          (prefix-numeric-value current-prefix-arg)))
-  (if (use-region-p)
-      (duplicate-dwim)
-    (let ((end (set-marker (make-marker) end)))
-      (unwind-protect
-          (dotimes (_ N)
-            (conn--duplicate-region-1 beg end))
-        (goto-char end)
-        (set-marker end nil)
-        (indent-region (region-beginning) (region-end))))))
+  (let ((end (set-marker (make-marker) end)))
+    (unwind-protect
+        (dotimes (_ N)
+          (conn--duplicate-region-1 beg end))
+      (indent-region (region-beginning) (region-end))
+      (goto-char end)
+      (set-marker end nil))))
 
 (defun conn-duplicate (thing-mover thing-arg thing-transform N)
   "Duplicate the region defined by a thing command.
@@ -10548,7 +10553,7 @@ With prefix arg N duplicate region N times."
   (pcase (conn-bounds-of thing-mover thing-arg)
     ((conn-bounds `(,beg . ,end) thing-transform)
      (if (use-region-p)
-         (duplicate-dwim)
+         (conn-duplicate-region (region-beginning) (region-end) N)
        (let ((end (set-marker (make-marker) end))
              (len (- end beg))
              (start (point))
@@ -11068,7 +11073,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")
 
-(keymap-set (conn-get-state-map 'conn-change-state) "s" 'conn-surround)
+(keymap-set (conn-get-state-map 'conn-change-state) "g" 'conn-surround)
 
 (oclosure-define (conn-change-surround-argument
                   (:parent conn-state-eval-argument)))
@@ -12356,6 +12361,7 @@ Operates with the selected windows parent window."
   "M-h" 'conn-mark-heading
   "C-s" 'isearch-forward
   "s" 'isearch-forward
+  "r" 'isearch-backward
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
@@ -12410,13 +12416,11 @@ Operates with the selected windows parent window."
   "x" (conn-remap-key "C-x" t)
   "C-4" (conn-remap-key "C-x 4" t)
   "C-5" (conn-remap-key "C-x 5" t)
-  "S" 'conn-surround
-  "C-<return>" 'conn-join-lines
+  "G" 'conn-surround
   "<escape>" 'conn-pop-state
-  "T" 'conn-change-thing
-  "t" 'conn-change
-  "G" 'conn-copy-thing
-  "D" 'conn-duplicate-region
+  "R" 'conn-emacs-state-overwrite
+  "S" 'conn-copy-thing
+  "D" 'conn-duplicate
   "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-separator
   "H" 'conn-expand
@@ -12442,7 +12446,8 @@ Operates with the selected windows parent window."
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "C" 'conn-copy-region
-  "d" (conn-remap-key conn-delete-char-keys t)
+  "t" 'conn-copy-thing
+  "d" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
@@ -12452,7 +12457,6 @@ Operates with the selected windows parent window."
   "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
-  ;; "w" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
@@ -12546,7 +12550,8 @@ Operates with the selected windows parent window."
   (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
         conn-movement-ring (conn-copy-ring conn-movement-ring)
         conn-mark-ring (conn-copy-ring conn-mark-ring)
-        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)))
+        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
+        conn--state-stack (copy-sequence conn--state-stack)))
 
 (defun conn--setup-keymaps ()
   (if conn-mode
