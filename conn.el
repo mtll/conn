@@ -12575,7 +12575,6 @@ Operates with the selected windows parent window."
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" conn-region-remap
-  "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
   "V" 'conn-set-mark-command
   "d" 'conn-kill-thing
