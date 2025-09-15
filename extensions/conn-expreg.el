@@ -25,7 +25,7 @@
 ;;
 ;;; Code:
 
-(require 'conn)
+(require 'conn-expand)
 (require 'expreg)
 
 ;;;###autoload

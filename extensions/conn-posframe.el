@@ -24,6 +24,7 @@
 (require 'conn)
 (require 'posframe)
 
+(defvar conn-read-pair-function)
 (defvar kmacro-counter)
 (defvar kmacro-initial-counter-value)
 (defvar kmacro-ring)

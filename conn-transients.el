@@ -20,8 +20,12 @@
 ;;; Code:
 
 (require 'conn)
+(require 'conn-states)
+(require 'conn-commands)
 (require 'transient)
 (require 'text-property-search)
+(eval-when-compile
+  (require 'map))
 
 ;;;; Declarations
 
@@ -246,6 +250,50 @@ the edit in the macro."
     (user-error "Invalid keyboard macro"))
   (kmacro-push-ring macro)
   (kmacro-swap-ring))
+
+(defun conn--read-from-with-preview (prompt bounds &optional regexp-flag)
+  "Read a from string with `minibuffer-lazy-highlight-setup' previews.
+
+PROMPT is used as the minibuffer prompt when reading.
+
+BOUNDS is a list of the form returned by `region-bounds' and defines the
+limits of the highlighting.
+
+REGEXP-FLAG means to treat the from string as a regexp for the purpose
+of highlighting."
+  (let ((default (conn-replace-read-default)))
+    (conn--with-region-emphasis bounds
+      (minibuffer-with-setup-hook
+          (minibuffer-lazy-highlight-setup
+           :case-fold case-fold-search
+           :filter (lambda (mb me)
+                     (cl-loop for (beg . end) in bounds
+                              when (<= beg mb me end) return t))
+           :highlight query-replace-lazy-highlight
+           :regexp regexp-flag
+           :regexp-function (or replace-regexp-function
+                                (and replace-char-fold
+                                     (not regexp-flag)
+                                     #'char-fold-to-regexp))
+           :transform (lambda (string)
+                        (when (and case-fold-search search-upper-case)
+                          (setq isearch-case-fold-search
+                                (isearch-no-upper-case-p string regexp-flag)))
+                        string))
+        (if regexp-flag
+            (read-regexp (format-prompt prompt default)
+                         (when default (regexp-quote default))
+                         'minibuffer-history)
+          (let ((from (read-string
+                       (format-prompt prompt default)
+                       nil nil
+                       (if default
+                           (delete-dups
+                            (cons default (query-replace-read-from-suggestions)))
+                         (query-replace-read-from-suggestions))
+                       t)))
+            (or (and (length= from 0) default)
+                from)))))))
 
 
 ;;;;; Kapply infixes

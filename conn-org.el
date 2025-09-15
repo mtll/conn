@@ -20,13 +20,19 @@
 ;;; Code:
 
 (require 'conn)
+(require 'conn-states)
+(require 'conn-commands)
 (require 'org)
 (require 'org-element)
 (require 'org-agenda)
 
+(cl-defmethod conn-perform-transpose ((_cmd (conn-thing org-element)) _arg)
+  (org-transpose-element))
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-state)
   :suppress t
+  "`" 'conn-wincontrol-mru-window
   "_" 'org-down-element
   "*" 'conn-org-insert-heading
   "<" 'org-drag-element-backward

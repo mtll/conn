@@ -25,7 +25,9 @@
 ;;
 ;;; Code:
 
-(require 'conn)
+(require 'conn-things)
+(require 'conn-mark)
+(require 'conn-expand)
 (require 'expand-region)
 (eval-when-compile
   (require 'cl-lib))

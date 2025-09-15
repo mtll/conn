@@ -20,6 +20,8 @@
 ;;; Code:
 
 (require 'conn)
+(require 'conn-commands)
+(require 'conn-surround)
 (require 'smartparens)
 (require 'thingatpt)
 
