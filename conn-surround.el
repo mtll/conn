@@ -13,9 +13,11 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;; A system similar to vim's surround
+
+;;; Code
 
 (require 'compat)
 (require 'conn-things)
@@ -26,7 +28,6 @@
 (eval-when-compile
   (require 'cl-lib))
 
-
 ;;;;; Surround
 
 (defface conn-read-surround-with-mode-line-face
@@ -74,7 +75,6 @@
            do (overlay-put ov 'category 'conn-surround-overlay)
            collect ov))
 
-
 ;;;;;; Surround With arg
 
 (oclosure-define (conn-surround-with-argument
@@ -97,7 +97,6 @@
                                                   arg)
   (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
-
 ;;;;;; Padding Arg
 
 (oclosure-define (conn-surround-padding-argument
@@ -122,7 +121,6 @@
                           'face 'eldoc-highlight-function-argument)
             "padding")))
 
-
 ;;;;;; Perform Surround
 
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
@@ -230,7 +228,6 @@
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
 
-
 ;;;;;; Surround Read Pair
 
 (defvar conn-read-pair-function 'conn-progressive-read-pair)
@@ -318,7 +315,6 @@
   (let ((conn--surround-current-pair nil))
     (cl-call-next-method)))
 
-
 ;;;;;; Change Surround
 
 (define-error 'conn-no-surround "No surround at point" 'user-error)
@@ -411,7 +407,6 @@
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
 
-
 ;;;;;; Delete Surround
 
 (conn-define-state conn-delete-surround-state (conn-surround-with-state)

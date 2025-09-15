@@ -15,6 +15,8 @@
 
 ;;; Commentary
 
+;; Implementation of conn states.
+
 ;;; Code
 
 (require 'conn-vars)
@@ -248,7 +250,6 @@ property from its parents."
                                conn--key-missing)
                       (eq conn--key-missing) not))))
 
-
 ;;;;; Keymaps
 
 (defvar-local conn--state-map nil)
@@ -330,7 +331,6 @@ The composed keymap is of the form:
         (unless dont-create
           (setf (conn-get-state-map state) (make-sparse-keymap))))))
 
-
 ;;;;;; Major Mode Maps
 
 (defvar-local conn-major-mode-maps nil)
@@ -406,7 +406,6 @@ return it."
      (cl-loop for sym in conn-major-mode-maps
               collect (conn--ensure-major-mode-map conn-current-state sym)))))
 
-
 ;;;;;; Minor Mode Maps
 
 (define-inline conn--mode-maps-sorted-p (state)
@@ -529,7 +528,6 @@ return it."
       (unless (get-map state)
         (setf (conn--mode-maps-sorted-p state) nil)))))
 
-
 ;;;;; Input Methods
 
 (defvar-local conn--input-method nil
@@ -642,7 +640,6 @@ mouse-3: Describe current input method")
            (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
            (conn--activate-input-method))))))
 
-
 ;;;;; Macros
 
 ;; Adapted from map pattern, we can't just use the map pattern on the
@@ -717,7 +714,6 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (setq conn--state-stack ,stack)
            (conn-enter-state (car ,stack)))))))
 
-
 ;;;;; Cl-Generic Specializers
 
 (cl-generic-define-generalizer conn--substate-generalizer
@@ -734,7 +730,6 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 These match if the argument is a substate of STATE."
   (list conn--substate-generalizer))
 
-
 ;;;;; Enter/Exit Functions
 
 (defvar conn-state-entry-functions nil
@@ -927,7 +922,6 @@ If there is not recursive stack an error is signaled."
         (conn-update-lighter))
     (error "Not in a recursive state")))
 
-
 ;;;;; Quick Ref
 
 (cl-defgeneric conn-state-reference (state &optional args)
@@ -935,7 +929,6 @@ If there is not recursive stack an error is signaled."
            (side-effect-free t))
   (:method (_state &optional _) nil))
 
-
 ;;;;; Definitions
 
 (defun conn--define-state (name docstring parents properties no-inherit-keymaps)
@@ -1085,7 +1078,6 @@ Causes the mode-line face to be remapped to the face specified by the
       (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
-
 ;;;;; Read Thing State
 
 (defface conn-read-thing-mode-line-face
@@ -1112,7 +1104,6 @@ argument may be supplied for the thing command."))
             (conn-argument-reference args)
             flatten-tree delete-dups)))
 
-
 ;;;;; Emacs State
 
 (defvar conn-emacs-state-register nil
@@ -1143,7 +1134,6 @@ argument may be supplied for the thing command."))
       (set-register conn-emacs-state-register (point-marker))))
   (cl-call-next-method))
 
-
 ;;;;; Autopop State
 
 (conn-define-state conn-autopop-state ()
@@ -1192,7 +1182,6 @@ the state stays active if the previous command was a prefix command."
   "Execute one command in `conn-command-state'."
   :lighter "1C")
 
-
 ;;;;; Mark State
 
 (conn-define-state conn-mark-state (conn-command-state
@@ -1503,7 +1492,6 @@ chooses to handle a command."
       (add-hook 'emacs-lisp-mode-hook 'conn--fontify-state-eval)
     (remove-hook 'emacs-lisp-mode-hook 'conn--fontify-state-eval)))
 
-
 ;;;;; Loop Arguments
 
 (oclosure-define (conn-state-eval-argument
@@ -1613,7 +1601,6 @@ chooses to handle a command."
   ( :method ((arg conn-state-eval-argument))
     (list (conn-state-eval-argument-keymap arg))))
 
-
 ;;;;;; Argument Quick Ref
 
 (cl-defgeneric conn-argument-reference (arg)

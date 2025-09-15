@@ -31,7 +31,6 @@
 
 (defvar sort-fold-case)
 
-
 ;;;; Utils
 
 (defmacro conn-transient-mode-suffix (name arglist description mode &rest properties)
@@ -102,7 +101,6 @@
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
 
-
 ;;;; Transient Classes
 
 ;;;;; Lisp Values
@@ -118,7 +116,6 @@
           (oref obj description))
         (oref obj value)))
 
-
 ;;;;;; Switch
 
 (defclass conn-transient-lisp-bool (conn-transient-lisp-value)
@@ -139,7 +136,6 @@
                         'transient-argument
                       'transient-inactive-value)))
 
-
 ;;;;;; Choices
 
 (defclass conn-transient-lisp-choices (conn-transient-lisp-value)
@@ -185,7 +181,6 @@
 (defclass conn-transient-kapply-pipeline (conn-transient-lisp-choices)
   ((keyword :initform :pipeline)))
 
-
 ;;;; Kapply Transients
 
 (defun conn--transient-kapply-pipeline-args (arglist)
@@ -295,7 +290,6 @@ of highlighting."
             (or (and (length= from 0) default)
                 from)))))))
 
-
 ;;;;; Kapply infixes
 
 (transient-define-argument conn--kapply-macro-infix ()
@@ -436,7 +430,6 @@ before each iteration."
   :choices '(nil
              ("save" . conn--kapply-save-windows)))
 
-
 ;;;;; Kapply suffixes
 
 (defun conn-read-thing-regions ()
@@ -907,7 +900,6 @@ A zero means repeat until error."
      conn--kapply-pulse-region
      ,@(conn--transient-kapply-pipeline-args args))))
 
-
 ;;;;; Kapply prefixes
 
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
@@ -1243,7 +1235,6 @@ A zero means repeat until error."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope callback))
 
-
 ;;;; Kmacro Prefix
 
 (transient-define-infix conn--set-counter-format-infix ()
@@ -1307,7 +1298,6 @@ A zero means repeat until error."
       ("+" "Add to Counter" kmacro-add-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)]])
 
-
 ;;;; Narrow Ring Prefix
 
 (defun conn--narrow-ring-save-state ()
@@ -1416,7 +1406,6 @@ A zero means repeat until error."
   (transient-setup 'conn-narrow-ring-prefix nil nil
                    :scope (conn--narrow-ring-save-state)))
 
-
 ;;;; Register Prefix
 
 ;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
@@ -1467,7 +1456,6 @@ A zero means repeat until error."
          (region-beginning) (region-end)
          (register-read-with-preview "Prepend to register: "))))]])
 
-
 ;;;; Fill Prefix
 
 (transient-define-infix conn--set-fill-column-infix ()
@@ -1508,7 +1496,6 @@ A zero means repeat until error."
       ("p" "Prefix" conn--set-fill-prefix-infix)
       ("a" conn-auto-fill-suffix)]])
 
-
 ;;;; Sort Prefix
 
 (transient-define-infix conn--case-fold-infix ()

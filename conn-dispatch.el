@@ -140,7 +140,6 @@ strings have `conn-dispatch-label-face'."
                          nil conn-target-window-predicate)
     (list (selected-window))))
 
-
 ;;;;; Label Reading
 
 (defvar conn--dispatch-event-handler-maps nil)
@@ -305,7 +304,6 @@ themselves once the selection process has concluded."
        (while-no-input
          (mapc #'conn-label-redisplay candidates))))))
 
-
 ;;;;; Window Header-line Labels
 
 (defface conn-window-label-face
@@ -398,7 +396,6 @@ themselves once the selection process has concluded."
             (conn-label-select labels #'conn-dispatch-read-event))
         (mapc #'conn-label-delete labels))))))
 
-
 ;;;; Dispatch State
 
 (defface conn-dispatch-mode-line-face
@@ -498,7 +495,6 @@ themselves once the selection process has concluded."
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
-
 ;;;;;; Dispatch Quick Ref
 
 (defvar conn-dispatch-thing-ref
@@ -600,7 +596,6 @@ themselves once the selection process has concluded."
   (list conn-dispatch-command-ref
         conn-dispatch-thing-ref))
 
-
 ;;;;;; Action
 
 (oclosure-define (conn-dispatch-action-argument
@@ -635,7 +630,6 @@ themselves once the selection process has concluded."
     (propertize (conn-describe-action action)
                 'face 'eldoc-highlight-function-argument)))
 
-
 ;;;;;; Other End
 
 (oclosure-define (conn-dispatch-other-end-argument
@@ -661,7 +655,6 @@ themselves once the selection process has concluded."
                       'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
-
 ;;;;;; Repeat
 
 (defvar conn-dispatch-autorepeat-actions (list 'conn-dispatch-kapply))
@@ -690,7 +683,6 @@ themselves once the selection process has concluded."
                       'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
-
 ;;;;;; Restrict Windows
 
 (oclosure-define (conn-dispatch-restrict-windows-argument
@@ -716,7 +708,6 @@ themselves once the selection process has concluded."
                       'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
-
 ;;;;;; Command Handler
 
 (cl-defgeneric conn-handle-dispatch-command (cmd arglist)
@@ -763,7 +754,6 @@ themselves once the selection process has concluded."
   (conn-state-eval-handle)
   arglist)
 
-
 ;;;;; Dispatch Window Filtering
 
 (defcustom conn-dispatch-thing-ignored-modes
@@ -781,7 +771,6 @@ with `conn-dispatch-thing-ignored-modes'."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-
 ;;;;; Dispatch Target Overlays
 
 (defcustom conn-read-string-timeout 0.5
@@ -905,7 +894,6 @@ Optionally the overlay may have an associated THING."
           string))
     (conn-delete-targets)))
 
-
 ;;;;; Dispatch Labels
 
 (defvar conn-dispatch-target-finder nil)
@@ -1346,7 +1334,6 @@ Target overlays may override this default by setting the
           (conn--target-label-payload)))
     (conn-delete-targets)))
 
-
 ;;;;; Dispatch Target Finders
 
 (defface conn-dispatch-context-separator-face
@@ -1874,7 +1861,6 @@ contain targets."
              :padding-function 'conn--right-justify-padding))
           (vertical-motion 1))))))
 
-
 ;;;;; Dispatch Actions
 
 (defvar conn-dispatch-looping nil)
@@ -2962,7 +2948,6 @@ contain targets."
 (put 'conn-dispatch-upcase :advertised-binding (key-parse "M-u"))
 (put 'conn-dispatch-downcase :advertised-binding (key-parse "M-l"))
 
-
 ;;;;; Perform Dispatch Loop
 
 (define-error 'conn-dispatch-error "Dispatch error" 'user-error)
@@ -3197,7 +3182,6 @@ contain targets."
                      & (conn-transform-argument))
              :prompt "New Targets"))))
 
-
 ;;;;; Dispatch Ring
 
 (cl-defstruct (conn-previous-dispatch
@@ -3346,7 +3330,6 @@ contain targets."
               :other-end ,other-end
               ,@keys))))
 
-
 ;;;;; Dispatch Commands
 
 (cl-defgeneric conn-perform-dispatch (action
@@ -3695,7 +3678,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    nil nil
    :other-end :no-other-end))
 
-
 ;;;;; Dispatch Registers
 
 (cl-defstruct (conn-dispatch-register

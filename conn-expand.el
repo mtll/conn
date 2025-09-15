@@ -170,7 +170,6 @@ Expansions and contractions are provided by functions in
               executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
-
 ;;;;; Bounds of expansion
 
 (conn-define-state conn-expand-state (conn-mode-line-face-state)

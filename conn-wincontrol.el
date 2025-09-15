@@ -13,9 +13,11 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;; A simple version of hyperbole's hycontrol-windows
+
+;;; Code
 
 (require 'conn-utils)
 (require 'conn-dispatch)
@@ -24,8 +26,6 @@
   (require 'cl-lib))
 
 ;;;; WinControl
-
-;; A simple version of hyperbole's hycontrol-windows
 
 (defgroup conn-wincontrol nil
   "Conn-mode WinControl."
@@ -50,7 +50,6 @@
 (defvar conn--wincontrol-error-message nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
-
 ;;;;; Wincontrol Internals
 
 (defvar-keymap conn-window-resize-map
@@ -365,7 +364,6 @@
   (setq conn--wincontrol-error-message (propertize "Invalid Command" 'face 'error)
         conn--wincontrol-preserve-arg t))
 
-
 ;;;;; Wincontrol Quick Ref
 
 (defvar conn-wincontrol-windows-1
@@ -467,7 +465,6 @@
      (append (drop page pages)
              (reverse (take page pages))))))
 
-
 ;;;;; Wincontrol Prefix Arg
 
 (defun conn-wincontrol-universal-arg ()
@@ -513,7 +510,6 @@
     (setq conn--wincontrol-preserve-arg t)
     (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
-
 ;;;;; Wincontrol Quiting
 
 (defun conn-wincontrol-exit ()
@@ -538,7 +534,6 @@
     (when (window-live-p conn--wincontrol-initial-window)
       (select-window conn--wincontrol-initial-window))))
 
-
 ;;;;; Wincontrol Isearch
 
 (defun conn-wincontrol-isearch (arg)
@@ -579,7 +574,6 @@
           (isearch-backward arg))
       (conn--wincontrol-setup t))))
 
-
 ;;;;; Window Selection
 
 (defun conn-wincontrol-next-window ()
@@ -609,7 +603,6 @@
   (when-let* ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
 
-
 ;;;;; Windmove
 
 (defun conn-wincontrol-windmove-up ()
@@ -638,7 +631,6 @@
   (with-selected-window (other-window-for-scrolling)
     (quit-window)))
 
-
 ;;;;; Window Scroll Commands
 
 (defun conn-wincontrol-other-window-scroll-down ()
@@ -679,7 +671,6 @@
                                        next-screen-context-lines)))
     (conn-scroll-up)))
 
-
 ;;;;; Window Configuration Commands
 
 (defun conn-wincontrol-widen-window ()

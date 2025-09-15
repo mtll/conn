@@ -13,9 +13,11 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;; The primary conn keymaps
+
+;;; Code
 
 (require 'compat)
 (require 'conn-states)
@@ -78,7 +80,6 @@
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
 
-
 ;;;;; Mode Keymaps
 
 (dolist (state '(conn-command-state conn-emacs-state))
@@ -119,7 +120,6 @@
   "C-," 'conn-dispatch-isearch
   "C-'" 'conn-isearch-open-recursive-edit)
 
-
 ;;;;; Top-level Command State Maps
 
 (defvar-keymap conn-default-region-map
@@ -213,7 +213,6 @@
   "l" 'previous-error
   "j" 'next-error)
 
-
 ;;;;; Misc Maps
 
 (defvar-keymap conn-indent-rigidly-map
@@ -222,7 +221,6 @@
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-
 ;;;;; Global Bindings
 
 (defvar-keymap conn-dispatch-cycle-map
@@ -285,20 +283,17 @@
       (keymap-global-set "<conn-edit-map> W" 'replace-regexp-as-diff)
       (keymap-global-set "<conn-edit-map> Q" 'multi-file-replace-regexp-as-diff)))
 
-(define-keymap
-  :keymap (or (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
-              (setf (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
-                    (make-sparse-keymap)))
-  "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
+(keymap-set
+ (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
+   (make-sparse-keymap))
+ "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
-
 ;;;;; State Keymaps
 
 ;;;;;; Emacs State
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-emacs-state)
-  "<escape>" 'conn-pop-state)
+(keymap-set (conn-get-state-map 'conn-emacs-state)
+            "<escape>" 'conn-pop-state)
 
 ;;;;;; Read Thing State
 

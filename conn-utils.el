@@ -150,7 +150,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
              restore))))
       (or restore t))))
 
-
 ;;;;; Buffer Properties
 
 (defvar-local conn--buffer-properties nil)
@@ -178,7 +177,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
     (cl-callf2 assq-delete-all
         property (buffer-local-value 'conn--buffer-properties buffer))))
 
-
 ;;;;; Rings
 
 (cl-defstruct (conn-ring
@@ -279,7 +277,6 @@ If ring is (1 2 3 4) 4 would be returned."
                            (conn-ring-history ring) hist)
                      (mapc (conn-ring-cleanup ring) remove))))
 
-
 ;;;;; Keymap Utils
 
 (defmacro conn--without-conn-maps (&rest body)
@@ -414,7 +411,6 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 (defvar conn-beginning-of-defun-remap (conn-remap-key conn-beginning-of-defun-keys t))
 (defvar conn-backward-sexp-remap (conn-remap-key conn-backward-sexp-keys t))
 
-
 ;;;;; Region Utils
 
 (defmacro conn--with-region-emphasis (regions &rest body)
@@ -512,7 +508,6 @@ the same form and contains disjoint (BEG . END) pairs."
         ('nil (push region merged))))
     (nreverse merged)))
 
-
 ;;;;; Derived Mode Utils
 
 (static-if (< emacs-major-version 30)
@@ -572,7 +567,6 @@ If BUFFER is nil check `current-buffer'."
   (when-let* ((table (get mode :conn-properties)))
     (remhash prop table)))
 
-
 ;;;;; Misc Utils
 
 (defun conn--create-marker (pos &optional buffer insertion-type)
@@ -661,7 +655,6 @@ be restricted to those before or after the current match inclusive."
             (push (cons (match-beginning 0) (match-end 0)) matches)))))
     (nreverse matches)))
 
-
 ;;;;; Overlay Utils
 
 (defun conn--clear-overlays ()
@@ -669,7 +662,6 @@ be restricted to those before or after the current match inclusive."
   (without-restriction
     (remove-overlays nil nil 'conn-overlay t)))
 
-
 ;;;;; Quick Reference
 
 (defgroup conn-quick-ref nil

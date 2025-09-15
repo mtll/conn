@@ -32,7 +32,6 @@
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
-
 ;;;; Completion
 
 (defun conn--exit-completion ()
@@ -40,7 +39,6 @@
     (completion-in-region-mode -1)))
 (add-hook 'completion-in-region-mode-hook 'conn--exit-completion)
 
-
 ;;;; Eldoc
 
 (with-eval-after-load 'eldoc
@@ -52,7 +50,6 @@
                      'conn-goto-char-forward
                      'conn-dispatch))
 
-
 ;;;; Edebug
 
 (with-eval-after-load 'edebug
@@ -63,7 +60,6 @@
       (conn-pop-state)))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
-
 ;;;; Outline
 
 (declare-function outline-mark-subtree "outline")
@@ -176,7 +172,6 @@
   "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)
 
-
 ;;;; Dired
 
 (conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
@@ -424,7 +419,6 @@
         (goto-char pt)
         (dired-kill-subdir)))))
 
-
 ;;;; Magit
 
 (conn-set-mode-property 'magit-section-mode :disable-mark-cursor t)
@@ -457,7 +451,6 @@
   "@" 'magit-am
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Ibuffer
 
 (conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-mover-state)
@@ -623,7 +616,6 @@
   "o" 'ibuffer-visit-buffer-other-window
   "RET" 'ibuffer-visit-buffer)
 
-
 ;;;; Markdown
 
 (conn-register-thing
@@ -637,7 +629,6 @@
 
 ;; TODO: other markdown things
 
-
 ;;;; Treesit
 
 (static-if (<= 30 emacs-major-version)
@@ -646,7 +637,6 @@
      'treesit-end-of-defun
      'treesit-beginning-of-defun))
 
-
 ;;;; Help
 
 (define-keymap
@@ -685,7 +675,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Info
 
 (declare-function Info-prev-reference "info")
@@ -759,7 +748,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Treemacs
 
 (conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
@@ -775,7 +763,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Messages
 
 (conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
@@ -793,7 +780,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Debugger mode
 
 (conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
@@ -809,7 +795,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;;; Occur mode
 
 (conn-set-mode-property 'occur-mode :disable-mark-cursor t)
@@ -830,7 +815,6 @@
   (setq conn-major-mode-maps (list 'occur-edit-mode)))
 (add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
 
-
 ;;;; Compile mode
 
 (conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
@@ -848,7 +832,6 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-
 ;;; Footer
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"

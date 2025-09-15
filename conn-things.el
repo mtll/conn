@@ -247,7 +247,6 @@ order to mark the region that should be defined by any of COMMANDS."
       (conn-command-thing sym)
       (cl-call-next-method)))
 
-
 ;;;;;; Subregions
 
 (defvar-keymap conn-subregions-map
@@ -306,7 +305,6 @@ words."))
 (cl-defmethod conn-argument-reference ((_arg conn-subregions-argument))
   (list conn-subregions-argument-reference))
 
-
 ;;;;;; Thing Transform Argument
 
 (defvar-keymap conn-transform-map
@@ -374,7 +372,6 @@ words."))
 ;; (cl-defmethod conn-argument-reference ((_arg conn-transform-argument))
 ;;   (list conn-transform-argument-reference))
 
-
 ;;;;; Read Mover State
 
 (conn-define-state conn-read-thing-state (conn-read-thing-common-state)
@@ -399,7 +396,6 @@ words."))
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
-
 ;;;; Bounds of Thing
 
 (cl-defstruct (conn-bounds
@@ -586,7 +582,6 @@ words."))
 (cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
-
 ;;;;; Bounds Transformations
 
 ;;;;;; Last Bounds
@@ -636,7 +631,6 @@ words."))
     (unless (> tb te)
       (conn-make-bounds-transform bounds (cons tb te)))))
 
-
 ;;;;;; Bounds Before/After
 
 (put 'conn-bounds-after-point :conn-bounds-transform t)
@@ -671,7 +665,6 @@ words."))
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (conn-make-bounds-transform bounds (cons beg (min point end)))))
 
-
 ;;;;; Perform Bounds
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
@@ -734,7 +727,6 @@ words."))
       (remove-hook 'isearch-mode-end-hook quit))
     (apply #'conn-bounds-of thing)))
 
-
 ;;;; Bounds of Things in Region
 
 (cl-defgeneric conn-get-things-in-region (thing beg end)
@@ -792,7 +784,6 @@ words."))
                            (conn-get-things-in-region
                             (conn-bounds-thing bounds) beg end)))))))
 
-
 ;;;; Thing Definitions
 
 (conn-define-mark-command conn-mark-email email)

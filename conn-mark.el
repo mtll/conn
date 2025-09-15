@@ -23,7 +23,6 @@
 
 (declare-function conn-command-thing "conn-things")
 
-
 ;;;;; Mark Variables
 
 (defvar conn-this-command-handler nil
@@ -112,7 +111,6 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
   (unless (= beg (point))
     (conn--push-ephemeral-mark beg)))
 
-
 ;;;; Mark Cursor
 
 (defcustom conn-mark-overlay-priority 2000
@@ -287,7 +285,6 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
         (conn-ring-insert-front conn-mark-ring
                                 (conn--create-marker location)))))))
 
-
 ;;;;; Movement Ring
 
 (defvar-local conn-movement-ring nil

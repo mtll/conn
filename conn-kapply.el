@@ -13,9 +13,9 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;;; Code
 
 (require 'conn-vars)
 (require 'conn-utils)
@@ -43,7 +43,6 @@
 (defvar conn-kmacro-apply-end-hook nil
   "Hook run after macro application has completed.")
 
-
 ;;;;; Kapply Query
 
 (defvar conn--kapply-automatic-flag nil)
@@ -119,7 +118,6 @@ Possibilities: \\<query-replace-map>
                  (help-mode))))
             (_ (ding)))))))))
 
-
 ;;;;; Iterators
 
 (defun conn--kapply-macro (applier iterator pipeline)
@@ -262,7 +260,6 @@ Possibilities: \\<query-replace-map>
         ((or :next :record)
          (pop matches))))))
 
-
 ;;;;; Pipeline Functions
 
 (defvar conn--kapply-pipeline-depths
@@ -733,7 +730,6 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-wconf conn--kapply-pipeline-depths))
      (name . kapply-wconf))))
 
-
 ;;;;; Applier Definitions
 
 (defvar conn-kapply-suppress-message nil)

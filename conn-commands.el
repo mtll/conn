@@ -13,9 +13,11 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;; Edit commands
+
+;;; Code
 
 (require 'compat)
 (require 'conn-vars)
@@ -133,7 +135,6 @@
         (narrow-to-region beg end))
        (_ (widen))))))
 
-
 ;;;;; Bounds of Narrow Ring
 
 (defun conn--bounds-of-narrowings (_cmd _arg)
@@ -152,7 +153,6 @@
  'conn-narrow-to-thing
  'conn-narrow-ring-prefix)
 
-
 ;;;; Commands
 
 (autoload 'kmacro-ring-head "kmacro")
@@ -190,7 +190,6 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-
 ;;;;; Movement
 
 (defun conn-goto-line (line)
@@ -391,7 +390,6 @@ of line proper."
   (backward-up-list nil t t)
   (down-list 1 t))
 
-
 ;;;;; Replace
 
 (defvar conn-query-flag nil
@@ -635,7 +633,6 @@ instances of from-string.")
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
 
-
 ;;;;; Command Registers
 
 (cl-defstruct (conn-command-register)
@@ -668,7 +665,6 @@ instances of from-string.")
                     (complete-with-action action cmds string pred)))
                 nil t)))))
 
-
 ;;;;; Tab Registers
 
 (cl-defstruct (conn-tab-register
@@ -718,7 +714,6 @@ instances of from-string.")
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-tab-register)))
 
-
 ;;;;; Isearch Commands
 
 (defun conn-isearch-dispatch-region ()
@@ -868,7 +863,6 @@ Interactively `region-beginning' and `region-end'."
     (isearch-repeat-forward))
   (isearch-done))
 
-
 ;;;;; Mark Commands
 
 (defun conn-rectangle-mark ()
@@ -930,7 +924,6 @@ With a prefix ARG `push-mark' without activating it."
   (interactive)
   (push-mark))
 
-
 ;;;;;; Mark Ring
 
 (defun conn-pop-mark-ring ()
@@ -955,7 +948,6 @@ With a prefix ARG `push-mark' without activating it."
     (goto-char (conn-ring-head conn-mark-ring)))
   (deactivate-mark))
 
-
 ;;;;; Transpose
 
 (conn-define-state conn-transpose-state (conn-read-thing-state)
@@ -1123,7 +1115,6 @@ region after a `recursive-edit'."
     (user-error "Recursive call to conn-transpose-regions"))
   (conn-perform-transpose mover arg))
 
-
 ;;;;;; Transpose Quick Ref
 
 (defvar conn-transpose-reference
@@ -1148,7 +1139,6 @@ within a recursive edit will be transposed."
                                     &optional _args)
   (list conn-transpose-reference))
 
-
 ;;;;; Line Commands
 
 (defun conn-open-line (arg)
@@ -1208,7 +1198,6 @@ With arg N, insert N newlines."
        (delete-indentation nil beg end)
        (indent-according-to-mode)))))
 
-
 ;;;;; Prepend/Append to Kill/Register
 
 (defun conn-append-region (beg end &optional register kill-flag prepend)
@@ -1303,7 +1292,6 @@ With a prefix arg prepend to a register instead."
     (unless executing-kbd-macro
       (pulse-momentary-highlight-region beg end))))
 
-
 ;;;;; Narrowing Commands
 
 (defun conn--narrow-to-region-1 (beg end &optional record)
@@ -1365,7 +1353,6 @@ associated with that command (see `conn-register-thing')."
   (when (called-interactively-p 'interactive)
     (message "Buffer narrowed")))
 
-
 ;;;;; Register Setting and Loading
 
 (defvar conn--separator-history nil
@@ -1416,7 +1403,6 @@ for the meaning of prefix ARG."
   (interactive (list (register-read-with-preview "Clear register: ")))
   (set-register register nil))
 
-
 ;;;;; Killing and Yanking Commands
 
 (defcustom conn-completion-region-quote-function 'regexp-quote
@@ -1599,7 +1585,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (delete-rectangle (region-beginning) (region-end))
     (yank-rectangle)))
 
-
 ;;;;; Duplicate Commands
 
 (defun conn--duplicate-region-1 (beg end)
@@ -1688,7 +1673,6 @@ With prefix arg N duplicate region N times."
        (insert region)
        (setq end (point))))))
 
-
 ;;;;; Recenter
 
 (defcustom conn-recenter-pulse t
@@ -1743,7 +1727,6 @@ of `conn-recenter-positions'."
   (with-selected-window (other-window-for-scrolling)
     (conn-recenter-on-region)))
 
-
 ;;;;; Misc Commands
 
 (defun conn-comment-or-uncomment (thing-mover arg)
@@ -1797,7 +1780,6 @@ Interactively `region-beginning' and `region-end'."
                       'grep-regexp-history)))
     (occur search-string)))
 
-
 ;;;;; Change
 
 (conn-define-state conn-change-state (conn-read-thing-state)
@@ -1855,7 +1837,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (interactive "P")
   (conn-perform-change 'region nil nil kill))
 
-
 ;;;;; Transition Functions
 
 (defvar conntext-state-hook nil)
@@ -1965,7 +1946,6 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive)
   (conn-emacs-state-overwrite 1))
 
-
 ;;;;; Window Commands
 
 (defun conn-other-buffer ()

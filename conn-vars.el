@@ -51,7 +51,6 @@
   :prefix "conn-"
   :group 'conn)
 
-
 ;;;;; Key Remapping
 
 (defcustom conn-undo-keys (key-parse "C-/")
