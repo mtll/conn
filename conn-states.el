@@ -13,9 +13,9 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary:
+;;; Commentary
 
-;;; Code:
+;;; Code
 
 (require 'conn-vars)
 (require 'conn-utils)
@@ -156,8 +156,7 @@ necessary state as well.")
   (inline-quote
    (memq ,parent (conn-state-all-parents ,state))))
 
-
-;;;;; State Properties
+;;;;; Properties
 
 (eval-and-compile
   (defun conn-declare-property-static (property)
@@ -242,15 +241,15 @@ property from its parents."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (property)
-    (inline-quote
-     (thread-first
-       (gethash ,property
-                (conn-state--properties (conn--find-state ,state))
-                conn--key-missing)
-       (eq conn--key-missing) not))))
+                   (inline-quote
+                    (thread-first
+                      (gethash ,property
+                               (conn-state--properties (conn--find-state ,state))
+                               conn--key-missing)
+                      (eq conn--key-missing) not))))
 
 
-;;;;; State Keymap Impl
+;;;;; Keymaps
 
 (defvar-local conn--state-map nil)
 (defvar-local conn--major-mode-map nil)
@@ -289,7 +288,6 @@ Called when the inheritance hierarchy for STATE changes."
                         when pmap collect pmap)))
        (conn-state--major-mode-maps state-obj)))))
 
-
 ;;;;;; State Maps
 
 (defun conn--compose-state-map ()
@@ -532,7 +530,7 @@ return it."
         (setf (conn--mode-maps-sorted-p state) nil)))))
 
 
-;;;;; State Input Methods
+;;;;; Input Methods
 
 (defvar-local conn--input-method nil
   "Input method for current buffer.")
@@ -645,7 +643,7 @@ mouse-3: Describe current input method")
            (conn--activate-input-method))))))
 
 
-;;;;; State Macros
+;;;;; Macros
 
 ;; Adapted from map pattern, we can't just use the map pattern on the
 ;; property table because of inheritance.
@@ -930,7 +928,7 @@ If there is not recursive stack an error is signaled."
     (error "Not in a recursive state")))
 
 
-;;;;; State Quick Ref
+;;;;; Quick Ref
 
 (cl-defgeneric conn-state-reference (state &optional args)
   (declare (important-return-value t)
@@ -938,7 +936,7 @@ If there is not recursive stack an error is signaled."
   (:method (_state &optional _) nil))
 
 
-;;;;; State Definitions
+;;;;; Definitions
 
 (defun conn--define-state (name docstring parents properties no-inherit-keymaps)
   (cl-labels ((setup-properties (table)
@@ -1146,7 +1144,7 @@ argument may be supplied for the thing command."))
   (cl-call-next-method))
 
 
-;;;;; Autopop
+;;;;; Autopop State
 
 (conn-define-state conn-autopop-state ()
   "Abstract state that automatically pops the state after executing a command.
@@ -1225,8 +1223,7 @@ the state stays active if the previous command was a prefix command."
     (setq deactivate-mark t))
   (cl-call-next-method))
 
-
-;;;;; State Setup Functions
+;;;;; Buffer State Setup
 
 (defun conn-setup-commit-state ()
   "Set the base state to `conn-emacs-state' in commit message buffers."

@@ -19,6 +19,7 @@
 
 (require 'compat)
 (require 'conn-states)
+(require 'conn-things)
 (require 'conn-commands)
 
 (define-keymap

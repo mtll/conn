@@ -1558,7 +1558,12 @@ If ARG is a numeric prefix argument kill region to a register."
                (conn--push-ephemeral-mark beg))
            (goto-char beg)
            (conn--push-ephemeral-mark end))
-         (conn-kill-region delete-or-register))))))
+         (conn-kill-region delete-or-register)))))
+  ( :method ((_cmd (conn-thing line)) _arg _transform &optional _)
+    (let ((col (current-column)))
+      (unwind-protect
+          (cl-call-next-method)
+        (move-to-column col)))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
