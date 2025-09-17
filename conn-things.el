@@ -590,7 +590,9 @@ words."))
 (put 'conn-bounds-last :conn-transform-description "last")
 
 (cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-last)) form)
-  (if (eq form 'toggle-subregions)
+  (if (memq form '(toggle-subregions
+                   conn-bounds-after-point
+                   conn-bounds-before-point))
       (conn-argument-remove)
     arg))
 
@@ -636,6 +638,11 @@ words."))
 (put 'conn-bounds-after-point :conn-bounds-transform t)
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
+(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point)) form)
+  (if (eq form 'conn-bounds-last)
+      (conn-argument-remove)
+    arg))
+
 (define-inline conn-bounds-after-point (bounds)
   (inline-letevals (bounds)
     (inline-quote
@@ -647,10 +654,17 @@ words."))
 
 (cl-defmethod conn-bounds-after (_thing bounds point)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
-    (conn-make-bounds-transform bounds (cons (max beg point) end))))
+    (if (<= point end)
+        (conn-make-bounds-transform bounds (cons point end))
+      (error "Invalid bounds"))))
 
 (put 'conn-bounds-before-point :conn-bounds-transform t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
+
+(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point)) form)
+  (if (eq form 'conn-bounds-last)
+      (conn-argument-remove)
+    arg))
 
 (define-inline conn-bounds-before-point (bounds)
   (inline-letevals (bounds)
@@ -663,7 +677,9 @@ words."))
 
 (cl-defmethod conn-bounds-before (_thing bounds point)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
-    (conn-make-bounds-transform bounds (cons beg (min point end)))))
+    (if (>= point beg)
+        (conn-make-bounds-transform bounds (cons beg point))
+      (error "Invalid bounds"))))
 
 ;;;;; Perform Bounds
 

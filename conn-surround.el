@@ -56,6 +56,7 @@
   "9" 'digit-argument
   "r" 'conn-read-pair
   "c" 'surround-comment
+  ";" 'surround-comment
   "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
   "C-q <t>" 'surround-self-insert
@@ -94,6 +95,10 @@
   (:method (_ arg) arg))
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql surround-self-insert))
+                                                  arg)
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+
+(cl-defmethod conn-handle-surround-with-argument ((cmd (eql surround-comment))
                                                   arg)
   (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 

@@ -21,11 +21,12 @@
 (require 'conn-utils)
 (require 'conn-states)
 (require 'conn-things)
-(require 'kmacro)
 (eval-when-compile
   (require 'cl-lib))
 
 (declare-function conn-exchange-mark-command "conn-commands")
+(declare-function kmacro-step-edit-macro "kmacro")
+(declare-function kmacro-p "kmacro")
 
 ;;;; Kapply
 

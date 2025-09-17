@@ -320,6 +320,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "." 'conn-other-window-prefix
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" conn-forward-word-remap
@@ -365,13 +366,12 @@
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-region
   "\\" 'conntext-state
-  "." 'conn-other-window-prefix
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
   "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
-  "SPC" (conn-remap-key conn-delete-char-keys t)
+  ;; "SPC" (conn-remap-key conn-delete-char-keys t)
   "M-y" 'conn-completing-yank-replace
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window
@@ -388,7 +388,7 @@
   "q" 'conn-transpose-regions
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
-  "V" 'conn-set-mark-command
+  "SPC" 'conn-set-mark-command
   "d" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
