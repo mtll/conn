@@ -1588,21 +1588,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 ;;;;; Duplicate Commands
 
 (defun conn--duplicate-region-1 (beg end)
-  (let* ((region (buffer-substring-no-properties beg end))
-         (multiline (seq-contains-p region ?\n))
-         (padding (if multiline "\n" " "))
-         (regexp (if multiline "\n" "[\t ]")))
-    (goto-char end)
-    (unless (save-excursion
-              (or (looking-back regexp 1)
-                  (progn
-                    (goto-char beg)
-                    (looking-at regexp))))
-      (insert padding)
-      (cl-incf end))
-    (insert region)
-    (goto-char end)
-    (conn--push-ephemeral-mark (+ (point) (length region)))))
+  (save-mark-and-excursion
+    (let* ((region (buffer-substring-no-properties beg end))
+           (multiline (seq-contains-p region ?\n))
+           (padding (if multiline "\n" " "))
+           (regexp (if multiline "\n" "[\t ]")))
+      (goto-char beg)
+      (insert-before-markers region)
+      (unless (looking-back regexp 1)
+        (insert-before-markers padding))
+      (goto-char beg))))
 
 (defun conn-duplicate-region (beg end N)
   "Duplicate the current region.
@@ -1889,21 +1884,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "Exchange point and mark then enter `conn-emacs-state'."
   (interactive)
   (conn-exchange-mark-command)
-  (conn-push-state 'conn-emacs-state))
-
-(defun conn-change-whole-line (&optional arg)
-  "`kill-whole-line' and enter `conn-emacs-state'."
-  (interactive "P")
-  (kill-whole-line arg)
-  (open-line 1)
-  (indent-according-to-mode)
-  (conn-push-state 'conn-emacs-state))
-
-(defun conn-change-line ()
-  "`kill-line' and enter `conn-emacs-state'."
-  (interactive)
-  (beginning-of-line)
-  (call-interactively (key-binding conn-kill-line-keys t))
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line-above (&optional arg)

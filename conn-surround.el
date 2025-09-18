@@ -143,7 +143,7 @@
 
 (cl-defmethod conn-perform-surround ((_with (eql surround-comment)) arg
                                      &key &allow-other-keys)
-  (comment-region (region-beginning) (region-end) arg))
+  (comment-or-uncomment-region (region-beginning) (region-end) arg))
 
 (cl-defmethod conn-perform-surround ((_with (eql surround-uncomment)) arg
                                      &key &allow-other-keys)

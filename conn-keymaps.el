@@ -151,6 +151,7 @@
   "L" 'conn-append-region)
 
 (defvar-keymap conn-default-edit-map
+  "." 'conn-register-prefix
   "l" 'duplicate-line
   "'" 'conn-kapply-on-thing-prefix
   "v" 'diff-buffer-with-file
@@ -158,11 +159,9 @@
   "SPC" 'whitespace-cleanup
   "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
-  "DEL" 'conn-change-whole-line
   "L" 'clone-indirect-buffer
-  "k" 'conn-change-line
-  "o" 'conn-emacs-state-open-line-above
-  "j" 'conn-emacs-state-open-line
+  "i" 'conn-emacs-state-open-line-above
+  "k" 'conn-emacs-state-open-line
   "g" 'conn-emacs-state-overwrite
   "d" 'conn-duplicate
   "D" 'conn-duplicate-and-comment
@@ -320,7 +319,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "." 'conn-other-window-prefix
+  "p" 'conn-other-window-prefix
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" conn-forward-word-remap
@@ -384,7 +383,7 @@
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
-  "p" 'conn-register-prefix
+  "." 'conn-register-load
   "q" 'conn-transpose-regions
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
