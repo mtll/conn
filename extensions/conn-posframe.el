@@ -22,6 +22,7 @@
 ;;; Code:
 
 (require 'conn)
+(require 'conn-quick-ref)
 (require 'posframe)
 
 (defvar conn-read-pair-function)

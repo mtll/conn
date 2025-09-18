@@ -16,6 +16,7 @@
 ;;; Commentary:
 
 (require 'conn)
+(require 'conn-quick-ref)
 (require 'conn-states)
 
 (declare-function outline-previous-visible-heading "outline")

@@ -3540,53 +3540,6 @@ contain targets."
                       (fboundp 'posframe-hide))
              (posframe-hide " *conn-list-posframe*")))))
 
-(defun conn--dispatch-bounds (bounds &optional repeat)
-  (let (ovs subregions)
-    (unwind-protect
-        (progn
-          (conn-eval-with-state 'conn-dispatch-bounds-state
-              (conn-perform-dispatch
-               & (oclosure-lambda (conn-action
-                                   (description "Bounds")
-                                   (window-predicate
-                                    (let ((win (selected-window)))
-                                      (lambda (window) (eq win window)))))
-                     (window pt thing thing-arg transform)
-                   (with-selected-window window
-                     (save-mark-and-excursion
-                       (goto-char pt)
-                       (pcase (conn-bounds-of-subr thing thing-arg)
-                         ((and (conn-bounds `(,beg . ,end) transform)
-                               bound)
-                          (unless executing-kbd-macro
-                            (push (make-overlay beg end) ovs)
-                            (overlay-put (car ovs) 'face 'region))
-                          (push bound subregions))
-                         (_
-                          (user-error "No %s found at point" thing))))))
-               && (conn-thing-argument t)
-               & (conn-transform-argument)
-               :repeat & (conn-dispatch-repeat-argument repeat)
-               :other-end :no-other-end)
-            :prefix (conn-bounds-arg bounds)
-            :prompt "Bounds of Dispatch")
-          (unless ovs (keyboard-quit))
-          (cl-loop for bound in subregions
-                   for (b . e) = (conn-bounds bound)
-                   minimize b into beg
-                   maximize e into end
-                   finally do
-                   (setf (conn-bounds bounds) (cons beg end)
-                         (conn-bounds-get bounds :subregions) subregions))
-          (if repeat subregions (conn-bounds bounds)))
-      (mapc #'delete-overlay ovs))))
-
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
-  (conn-make-bounds
-   cmd arg
-   (lambda (bounds) (conn--dispatch-bounds bounds))
-   :subregions (lambda (bounds) (conn--dispatch-bounds bounds t))))
-
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
 
@@ -3677,6 +3630,73 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-jump)
    nil nil
    :other-end :no-other-end))
+
+;;;;; Bounds of Dispatch
+
+(cl-defgeneric conn-dispatch-bounds-of (cmd arg pt)
+  ( :method (cmd arg pt)
+    (save-excursion
+      (goto-char pt)
+      (conn-bounds-of-subr cmd arg))))
+
+(cl-defmethod conn-dispatch-bounds-of ((_cmd (conn-thing region))
+                                       arg pt)
+  (conn-make-bounds
+   'region arg
+   (cons (min (point) pt)
+         (max (point) pt))))
+
+(cl-defmethod conn-dispatch-bounds-of ((_cmd (conn-thing char))
+                                       arg pt)
+  (conn-make-bounds
+   'region arg
+   (cons (min (point) pt)
+         (max (point) pt))))
+
+(defun conn--dispatch-bounds (bounds &optional repeat)
+  (let (ovs subregions)
+    (unwind-protect
+        (progn
+          (conn-eval-with-state 'conn-dispatch-bounds-state
+              (conn-perform-dispatch
+               & (oclosure-lambda (conn-action
+                                   (description "Bounds")
+                                   (window-predicate
+                                    (let ((win (selected-window)))
+                                      (lambda (window) (eq win window)))))
+                     (window pt thing thing-arg transform)
+                   (with-selected-window window
+                     (pcase (conn-dispatch-bounds-of thing thing-arg pt)
+                       ((and (conn-bounds `(,beg . ,end) transform)
+                             bound)
+                        (unless executing-kbd-macro
+                          (push (make-overlay beg end) ovs)
+                          (overlay-put (car ovs) 'face 'region))
+                        (push bound subregions))
+                       (_
+                        (user-error "No %s found at point" thing)))))
+               && (conn-thing-argument t)
+               & (conn-transform-argument)
+               :repeat & (conn-dispatch-repeat-argument repeat)
+               :other-end :no-other-end)
+            :prefix (conn-bounds-arg bounds)
+            :prompt "Bounds of Dispatch")
+          (unless ovs (keyboard-quit))
+          (cl-loop for bound in subregions
+                   for (b . e) = (conn-bounds bound)
+                   minimize b into beg
+                   maximize e into end
+                   finally do
+                   (setf (conn-bounds bounds) (cons beg end)
+                         (conn-bounds-get bounds :subregions) subregions))
+          (if repeat subregions (conn-bounds bounds)))
+      (mapc #'delete-overlay ovs))))
+
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
+  (conn-make-bounds
+   cmd arg
+   (lambda (bounds) (conn--dispatch-bounds bounds))
+   :subregions (lambda (bounds) (conn--dispatch-bounds bounds t))))
 
 ;;;;; Dispatch Registers
 

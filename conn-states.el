@@ -22,6 +22,7 @@
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-mark)
+(require 'conn-quick-ref)
 (eval-when-compile
   (require 'cl-lib))
 

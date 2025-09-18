@@ -1804,6 +1804,30 @@ Interactively `region-beginning' and `region-end'."
                (conn-pop-state)
              (conn-push-state 'conn-emacs-state))))))
 
+(cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite))
+                                   _arg _transform &optional _kill)
+  (conn-emacs-state-overwrite))
+
+(cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite-binary))
+                                   _arg _transform &optional _kill)
+  (conn-emacs-state-overwrite-binary))
+
+(cl-defgeneric conn-handle-change-argument (cmd arg)
+  (:method (cmd arg) (conn-handle-thing-argument cmd arg)))
+
+(cl-defmethod conn-handle-change-argument ((cmd (eql conn-emacs-state-overwrite-binary))
+                                           arg)
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+
+(cl-defmethod conn-handle-change-argument ((cmd (eql conn-emacs-state-overwrite))
+                                           arg)
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+
+(cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
+                                           arg)
+  (conn-set-argument
+   arg (list cmd (conn-state-eval-consume-prefix-arg))))
+
 (defun conn-change-thing (cmd arg transform &optional kill)
   "Change region defined by CMD and ARG."
   (interactive
@@ -1814,11 +1838,7 @@ Interactively `region-beginning' and `region-end'."
                                            (list 'region nil)))
                                   (set-flag (use-region-p)))
                     (self cmd)
-                  (pcase cmd
-                    ('conn-surround
-                     (conn-set-argument
-                      self (list cmd (conn-state-eval-consume-prefix-arg))))
-                    (_ (conn-handle-thing-argument cmd self))))
+                  (conn-handle-change-argument cmd self))
              & (conn-transform-argument 'conn-bounds-last)
              & current-prefix-arg)
      :prompt "Thing"))
