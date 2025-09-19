@@ -1293,14 +1293,13 @@ Resets the current prefix argument."
     (setf conn--state-eval-prefix-mag nil
           conn--state-eval-prefix-sign nil)))
 
-(defun conn-state-eval-handle (&optional form)
+(defun conn-state-eval-handle ()
   "Handle the current command.
 
 This function should be called from any function passed as the
 :command-handler argument to `conn-eval-with-state' when the function
 chooses to handle a command."
-  (setf conn--state-eval-error-message "")
-  form)
+  (setf conn--state-eval-error-message ""))
 
 (defun conn-state-eval-message (format-string &rest args)
   (let ((inhibit-message conn-state-eval-inhibit-message)
