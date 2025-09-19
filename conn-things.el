@@ -579,6 +579,17 @@ words."))
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing visible)) arg)
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
+(cl-defmethod conn-bounds-of-subr ((cmd (eql conn-composite-thing)) arg)
+  (if conn--last-composite-thing
+      (conn-make-bounds
+       cmd arg
+       (cons (point)
+             (save-mark-and-excursion
+               (conn-with-recursive-stack 'conn-mark-state
+                 (execute-kbd-macro conn--last-composite-thing))
+               (point))))
+    (error "No last composite thing")))
+
 (cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
@@ -839,6 +850,8 @@ words."))
 (conn-define-mark-command conn-mark-string string)
 (conn-define-mark-command conn-mark-filename filename)
 (conn-define-mark-command conn-mark-comment comment)
+
+(put 'conn-composite-thing :conn-thing t)
 
 (conn-register-thing
  'comment
