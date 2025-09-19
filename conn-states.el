@@ -1207,10 +1207,7 @@ the state stays active if the previous command was a prefix command."
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
-  (unless (region-active-p)
-    (activate-mark))
-  (conn-state-defer
-    (setq deactivate-mark t))
+  (conn-state-defer (setq deactivate-mark t))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
