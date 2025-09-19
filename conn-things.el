@@ -726,22 +726,54 @@ words."))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
+;;;;; Bounds of Remote Thing
+
+(cl-defgeneric conn-bounds-of-remote (cmd arg pt)
+  (declare (conn-anonymous-thing-property :bounds-op-remote)
+           (important-return-value t))
+  ( :method ((cmd (conn-thing anonymous-thing)) arg)
+    (if-let* ((remote (conn-anonymous-thing-property cmd :bounds-op-remote)))
+        (funcall remote arg)
+      (conn-bounds-of-remote (conn-anonymous-thing-parent cmd) arg)))
+  ( :method (cmd arg pt)
+    (save-excursion
+      (goto-char pt)
+      (conn-bounds-of-subr cmd arg))))
+
+(cl-defmethod conn-bounds-of-remote ((_cmd (conn-thing region))
+                                     arg pt)
+  (conn-make-bounds
+   'region arg
+   (cons (min (point) pt)
+         (max (point) pt))))
+
+(cl-defmethod conn-bounds-of-remote ((_cmd (conn-thing char))
+                                     arg pt)
+  (conn-make-bounds
+   'region arg
+   (cons (min (point) pt)
+         (max (point) pt))))
+
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
-  (let ((name (symbol-name cmd))
-        (quit (lambda ()
-                (when (> (point) isearch-other-end)
-                  (goto-char isearch-other-end))
-                (when isearch-mode-end-hook-quit
-                  (abort-recursive-edit))))
-        (thing (conn-eval-with-state 'conn-read-thing-state
-                   (list && (conn-thing-argument)))))
-    (add-hook 'isearch-mode-end-hook quit)
+  (pcase-let* ((name (symbol-name cmd))
+               (pt nil)
+               (quit (lambda ()
+                       (setq pt (min (point) isearch-other-end))
+                       (when isearch-mode-end-hook-quit
+                         (abort-recursive-edit))))
+               (`(,thing ,arg)
+                (conn-eval-with-state 'conn-read-thing-state
+                    (list && (conn-thing-argument)))))
     (unwind-protect
-        (isearch-mode (not (string-match-p "backward" name))
-                      (string-match-p "regexp" name)
-                      nil t)
+        (save-excursion
+          (add-hook 'isearch-mode-end-hook quit)
+          (isearch-mode (not (string-match-p "backward" name))
+                        (string-match-p "regexp" name)
+                        nil t))
       (remove-hook 'isearch-mode-end-hook quit))
-    (apply #'conn-bounds-of thing)))
+    (conn-make-bounds
+     thing arg
+     (cons (min (point) pt) (max (point) pt)))))
 
 ;;;; Bounds of Things in Region
 

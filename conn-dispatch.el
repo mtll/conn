@@ -3631,28 +3631,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    nil nil
    :other-end :no-other-end))
 
-;;;;; Bounds of Dispatch
-
-(cl-defgeneric conn-dispatch-bounds-of (cmd arg pt)
-  ( :method (cmd arg pt)
-    (save-excursion
-      (goto-char pt)
-      (conn-bounds-of-subr cmd arg))))
-
-(cl-defmethod conn-dispatch-bounds-of ((_cmd (conn-thing region))
-                                       arg pt)
-  (conn-make-bounds
-   'region arg
-   (cons (min (point) pt)
-         (max (point) pt))))
-
-(cl-defmethod conn-dispatch-bounds-of ((_cmd (conn-thing char))
-                                       arg pt)
-  (conn-make-bounds
-   'region arg
-   (cons (min (point) pt)
-         (max (point) pt))))
-
 (defun conn--dispatch-bounds (bounds &optional repeat)
   (let (ovs subregions)
     (unwind-protect
@@ -3666,7 +3644,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                       (lambda (window) (eq win window)))))
                      (window pt thing thing-arg transform)
                    (with-selected-window window
-                     (pcase (conn-dispatch-bounds-of thing thing-arg pt)
+                     (pcase (conn-bounds-of-remote thing thing-arg pt)
                        ((and (conn-bounds `(,beg . ,end) transform)
                              bound)
                         (unless executing-kbd-macro
