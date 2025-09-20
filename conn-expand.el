@@ -206,24 +206,32 @@ Expansions and contractions are provided by functions in
                            (required t)
                            (name 'conn--read-expand-message))
              (self command)
+           (message "test")
            (pcase command
              ('conn-expand-exchange
               (conn-expand-exchange)
+              (conn-state-eval-handle)
               self)
              ('conn-contract
-              (conn-contract (conn-state-eval-consume-prefix-arg))
+              (ignore-error user-error
+                (conn-contract (conn-state-eval-consume-prefix-arg)))
+              (conn-state-eval-handle)
               self)
              ('conn-expand
-              (conn-expand (conn-state-eval-consume-prefix-arg))
+              (ignore-error user-error
+                (conn-expand (conn-state-eval-consume-prefix-arg)))
+              (conn-state-eval-handle)
               self)
              ('conn-toggle-mark-command
               (if mark-active
                   (deactivate-mark)
                 (activate-mark))
+              (conn-state-eval-handle)
               self)
              ((or 'end 'exit-recursive-edit)
               (conn-set-argument self (cons (region-beginning)
-                                            (region-end)))))))
+                                            (region-end))))
+             (_ self))))
     :prompt "Expansion"
     :prefix arg))
 
