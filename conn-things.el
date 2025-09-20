@@ -650,7 +650,8 @@ words."))
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
 (cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point)) form)
-  (if (eq form 'conn-bounds-last)
+  (if (or (eq form 'conn-bounds-last)
+          (eq form 'conn-bounds-before-point))
       (conn-argument-remove)
     arg))
 
@@ -673,7 +674,8 @@ words."))
 (put 'conn-bounds-before-point :conn-transform-description "before")
 
 (cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point)) form)
-  (if (eq form 'conn-bounds-last)
+  (if (or (eq form 'conn-bounds-last)
+          (eq form 'conn-bounds-after-point))
       (conn-argument-remove)
     arg))
 
