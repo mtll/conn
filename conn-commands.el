@@ -1619,6 +1619,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (conn-perform-kill cmd arg transform delete-or-register))
 
 (cl-defgeneric conn-perform-kill (cmd arg transform &optional delete-or-register)
+  (declare (conn-anonymous-thing-property :kill-op))
+  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional delete-or-register)
+    (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
+        (funcall kill-op arg transform delete-or-register)
+      (conn-perform-change (conn-anonymous-thing-parent cmd) arg delete-or-register)))
   ( :method (cmd arg transform &optional delete-or-register)
     (pcase (conn-bounds-of cmd arg)
       ((conn-bounds `(,beg . ,end) transform)
