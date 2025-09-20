@@ -182,6 +182,7 @@ Expansions and contractions are provided by functions in
   "z" 'conn-expand-exchange
   "j" 'conn-contract
   "l" 'conn-expand
+  "h" 'conn-expand
   "v" 'conn-toggle-mark-command
   "e" 'end
   "<mouse-3>" 'end

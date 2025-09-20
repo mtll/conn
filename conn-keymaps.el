@@ -130,9 +130,6 @@
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "d" 'conn-duplicate-region
-  "D" 'conn-duplicate-and-comment-region
-  "b" 'conn-comment-or-uncomment
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "RET" 'conn-join-lines

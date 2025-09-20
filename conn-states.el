@@ -1262,7 +1262,7 @@ the state stays active if the previous command was a prefix command."
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
-;;;; State Command Loops
+;;;; Eval With State
 
 (defvar conn-state-eval-last-command nil
   "Last command read by `conn-eval-with-state'.")
