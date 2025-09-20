@@ -207,7 +207,7 @@
   (atomic-change-group
     (save-mark-and-excursion
       (pcase-let* ((`(,regions . ,prep-keys)
-                    (conn-eval-with-state 'conn-read-thing-state
+                    (conn-eval-with-state 'conn-surround-thing-state
                         (conn-prepare-surround
                          && (conn-thing-argument-dwim t)
                          & (conn-transform-argument)

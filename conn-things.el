@@ -767,16 +767,16 @@ words."))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
   (pcase-let* ((name (symbol-name cmd))
-               (pt nil)
+               (upto nil)
                (quit (lambda ()
-                       (setq pt (min (point) isearch-other-end))
+                       (setq upto (min (point) isearch-other-end))
                        (when isearch-mode-end-hook-quit
                          (abort-recursive-edit))))
                (`(,thing ,arg)
                 (conn-eval-with-state 'conn-read-thing-state
                     (list && (conn-thing-argument)))))
     (unwind-protect
-        (save-excursion
+        (save-mark-and-excursion
           (add-hook 'isearch-mode-end-hook quit)
           (isearch-mode (not (string-match-p "backward" name))
                         (string-match-p "regexp" name)
@@ -784,7 +784,7 @@ words."))
       (remove-hook 'isearch-mode-end-hook quit))
     (conn-make-bounds
      thing arg
-     (cons (min (point) pt) (max (point) pt)))))
+     (cons (min (point) upto) (max (point) upto)))))
 
 ;;;; Bounds of Things in Region
 

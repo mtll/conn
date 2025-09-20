@@ -1029,7 +1029,12 @@ With a prefix ARG `push-mark' without activating it."
                (or thing-override thing)
                thing-arg))))
 
-(cl-defgeneric conn-perform-transpose (cmd arg))
+(cl-defgeneric conn-perform-transpose (cmd arg)
+  (declare (conn-anonymous-thing-property :transpose-op))
+  ( :method ((cmd (conn-thing anonymous-thing)) arg)
+    (if-let* ((transpose-op (conn-anonymous-thing-property cmd :transpose-op)))
+        (funcall transpose-op arg)
+      (conn-perform-transpose (conn-anonymous-thing-parent cmd) arg))))
 
 (cl-defmethod conn-perform-transpose (cmd arg)
   (pcase cmd
@@ -1305,20 +1310,34 @@ With a prefix arg prepend to a register instead."
            (register-read-with-preview "Prepend to register: "))))
   (conn-prepend-region beg end register t))
 
-(defun conn-copy-thing (thing-mover arg &optional thing-transform register)
+;;;;; Copy Thing
+
+(conn-define-state conn-copy-state (conn-read-thing-state)
+  :lighter "COPY")
+
+(cl-defgeneric conn-perform-copy (cmd arg transform &optional register)
+  (declare (conn-anonymous-thing-property :copy-op))
+  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional register)
+    (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
+        (funcall copy-op arg transform register)
+      (conn-perform-copy (conn-anonymous-thing-parent cmd) arg transform register)))
+  ( :method (cmd arg transform &optional register)
+    (pcase-let (((conn-bounds `(,beg . ,end) transform)
+                 (conn-bounds-of cmd arg)))
+      (conn-copy-region beg end register)
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-region beg end)))))
+
+(defun conn-copy-thing (thing arg &optional transform register)
   "Copy THING at point."
   (interactive
-   (conn-eval-with-state 'conn-read-thing-state
+   (conn-eval-with-state 'conn-copy-state
        (list && (conn-thing-argument-dwim)
              & (conn-transform-argument)
              (when current-prefix-arg
                (register-read-with-preview "Register: ")))
      :prompt "Thing"))
-  (pcase-let (((conn-bounds `(,beg . ,end) thing-transform)
-               (conn-bounds-of thing-mover arg)))
-    (conn-copy-region beg end register)
-    (unless executing-kbd-macro
-      (pulse-momentary-highlight-region beg end))))
+  (conn-perform-copy thing arg transform register))
 
 ;;;;; Narrowing Commands
 
@@ -1541,9 +1560,48 @@ If ARG is a numeric prefix argument kill region to a register."
             (conn--without-conn-maps
               (key-binding conn-kill-region-keys t))))))
 
+(defun conn-completing-yank-replace (start end &optional arg)
+  "Replace region from START to END with result of `yank-from-kill-ring'.
+
+If ARG is non-nil `kill-region' instead of `delete-region'."
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         current-prefix-arg))
+  (let ((ov (make-overlay start end))
+        exchange)
+    (overlay-put ov 'conn-overlay t)
+    (unwind-protect
+        (progn
+          (when (setq exchange (= (point) start))
+            (exchange-point-and-mark (not mark-active)))
+          (overlay-put ov 'invisible t)
+          (call-interactively (or (command-remapping 'yank-from-kill-ring)
+                                  'yank-from-kill-ring))
+          (if arg
+              (kill-region (overlay-start ov) (overlay-end ov))
+            (delete-region (overlay-start ov) (overlay-end ov))))
+      (when exchange
+        (exchange-point-and-mark (not mark-active)))
+      (delete-overlay ov))))
+
+(defun conn-yank-replace-rectangle ()
+  "Delete the current rectangle and `yank-rectangle'."
+  (interactive)
+  (save-mark-and-excursion
+    (unless (>= (mark t) (point))
+      (conn-exchange-mark-command))
+    (delete-rectangle (region-beginning) (region-end))
+    (yank-rectangle)))
+
+;;;;;; Kill Thing
+
+(conn-define-state conn-kill-state (conn-read-thing-state)
+  :lighter "KILL")
+
 (defun conn-kill-thing (cmd arg transform &optional delete-or-register)
   (interactive
-   (conn-eval-with-state 'conn-change-state
+   (conn-eval-with-state 'conn-kill-state
        (list && (oclosure-lambda (conn-thing-argument
                                   (required t)
                                   (value (when (use-region-p)
@@ -1578,40 +1636,6 @@ If ARG is a numeric prefix argument kill region to a register."
       (unwind-protect
           (cl-call-next-method)
         (move-to-column col)))))
-
-(defun conn-completing-yank-replace (start end &optional arg)
-  "Replace region from START to END with result of `yank-from-kill-ring'.
-
-If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         current-prefix-arg))
-  (let ((ov (make-overlay start end))
-        exchange)
-    (overlay-put ov 'conn-overlay t)
-    (unwind-protect
-        (progn
-          (when (setq exchange (= (point) start))
-            (exchange-point-and-mark (not mark-active)))
-          (overlay-put ov 'invisible t)
-          (call-interactively (or (command-remapping 'yank-from-kill-ring)
-                                  'yank-from-kill-ring))
-          (if arg
-              (kill-region (overlay-start ov) (overlay-end ov))
-            (delete-region (overlay-start ov) (overlay-end ov))))
-      (when exchange
-        (exchange-point-and-mark (not mark-active)))
-      (delete-overlay ov))))
-
-(defun conn-yank-replace-rectangle ()
-  "Delete the current rectangle and `yank-rectangle'."
-  (interactive)
-  (save-mark-and-excursion
-    (unless (>= (mark t) (point))
-      (conn-exchange-mark-command))
-    (delete-rectangle (region-beginning) (region-end))
-    (yank-rectangle)))
 
 ;;;;; Duplicate Commands
 
@@ -1805,8 +1829,8 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Change
 
-(conn-define-state conn-change-state (conn-read-thing-state)
-  :lighter "CHG")
+(conn-define-state conn-change-state (conn-kill-state)
+  :lighter "CHANGE")
 
 (cl-defgeneric conn-perform-change (cmd arg transform &optional kill)
   (declare (conn-anonymous-thing-property :change-op))
