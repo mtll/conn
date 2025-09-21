@@ -349,13 +349,17 @@ BEFORE means only those matches before, and including, the current match."
              ("after" . after)
              ("before" . before)))
 
-(transient-define-argument conn--kapply-change-infix ()
+(transient-define-argument conn--kapply-state-infix ()
   "Dispatch in a specific state."
   :class 'conn-transient-kapply-pipeline
-  :description "Change"
+  :description "State"
   :key "w"
   :choices `((nil . ,(lambda (it) (conn--kapply-with-state it conn-current-state)))
-             ("change" . conn--kapply-change-region)))
+             ("change" . conn--kapply-change-region)
+             ("command" . ,(lambda (it)
+                             (conn--kapply-with-state it 'conn-command-state)))
+             ("emacs" . ,(lambda (it)
+                           (conn--kapply-with-state it 'conn-emacs-state)))))
 
 (transient-define-argument conn--kapply-region-infix ()
   "How to dispatch on each region.
@@ -435,7 +439,7 @@ before each iteration."
             (conn-bounds-get :subregions
                              transform
                              (and sr (pred identity))))
-       (cl-loop for reg in sr collect (conn-bounds-get reg :whole)))
+       (cl-loop for reg in sr collect (conn-bounds reg)))
       ((conn-bounds whole transform)
        (list whole)))))
 
@@ -663,19 +667,20 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let* ((`(,cmd ,arg)
-                (conn-eval-with-state 'conn-read-thing-state
-                    (list && (conn-thing-argument-dwim t))
-                  :prompt "Thing"))
-               ((map :whole :subregions)
-                (conn-bounds-of cmd arg)))
-    (conn--kapply-macro
-     (alist-get :kmacro args)
-     (conn--kapply-region-iterator (or subregions (list whole)))
-     `(conn--kapply-relocate-to-region
-       conn--kapply-skip-invisible-points
-       conn--kapply-pulse-region
-       ,@(conn--transient-kapply-pipeline-args args)))))
+  (conn--kapply-macro
+   (alist-get :kmacro args)
+   (conn--kapply-region-iterator
+    (mapcar #'conn-bounds
+            (conn-eval-with-state 'conn-read-thing-state
+                (conn-bounds-get
+                 (conn-bounds-of && (conn-thing-argument-dwim t))
+                 :subregions
+                 & (conn-transform-argument))
+              :prompt "Thing")))
+   `(conn--kapply-relocate-to-region
+     conn--kapply-skip-invisible-points
+     conn--kapply-pulse-region
+     ,@(conn--transient-kapply-pipeline-args args))))
 
 (transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
@@ -920,12 +925,12 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
-    [ (conn--kapply-change-infix)
+    [ (conn--kapply-state-infix)
       (conn--kapply-macro-infix)]]
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-sort-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)
@@ -982,12 +987,12 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
-    [ (conn--kapply-change-infix)
+    [ (conn--kapply-state-infix)
       (conn--kapply-macro-infix)]]
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-query-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
@@ -1076,7 +1081,7 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-sort-infix)
       (conn--kapply-highlights-in-thing)]
     [ (conn--kapply-macro-infix)
@@ -1122,7 +1127,7 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-sort-infix)
       (conn--kapply-query-infix)]
     [ (conn--kapply-matches-infix)
@@ -1167,7 +1172,7 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-query-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
@@ -1211,7 +1216,7 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ [ :description "Options:"
       (conn--kapply-macro-infix)
-      (conn--kapply-change-infix)
+      (conn--kapply-state-infix)
       (conn--kapply-region-infix)]
     [ :description "Save State:"
       (conn--kapply-save-restriction-infix)

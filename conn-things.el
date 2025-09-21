@@ -421,7 +421,8 @@ words."))
                           ,(if transform
                                `(conn-transform-bounds bounds ,transform)
                              'bounds))))
-                 (if (functionp w) (funcall w bounds) w)))))
+                 (if (functionp w) (funcall w bounds) w))))
+           (important-return-value t))
   (let ((w (conn-bounds--whole
             (if transform
                 (conn-transform-bounds bounds transform)
@@ -612,7 +613,7 @@ words."))
 
 (cl-defgeneric conn-bounds-last-subr (thing bounds)
   ( :method ((_thing (conn-thing dispatch)) bounds)
-    (conn-bounds bounds)
+    (ignore (conn-bounds bounds))
     (or (car (conn-bounds-get bounds :subregions))
         bounds))
   ( :method (_thing bounds)
