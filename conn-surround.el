@@ -59,7 +59,7 @@
   ";" 'surround-comment
   "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
-  "C-q <t>" 'surround-self-insert
+  "SPC <t>" 'surround-self-insert
   "RET" 'conn-padding-flag
   "DEL" 'backward-delete-arg
   "<backspace>" 'backward-delete-arg
