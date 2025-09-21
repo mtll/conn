@@ -769,9 +769,9 @@ words."))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
   (pcase-let* ((name (symbol-name cmd))
-               (upto nil)
+               (at nil)
                (quit (lambda ()
-                       (setq upto (min (point) isearch-other-end))
+                       (setq at (min (point) isearch-other-end))
                        (when isearch-mode-end-hook-quit
                          (abort-recursive-edit))))
                (`(,thing ,arg)
@@ -784,9 +784,7 @@ words."))
                         (string-match-p "regexp" name)
                         nil t))
       (remove-hook 'isearch-mode-end-hook quit))
-    (conn-make-bounds
-     thing arg
-     (cons (min (point) upto) (max (point) upto)))))
+    (conn-bounds-of-remote thing arg at)))
 
 ;;;; Bounds of Things in Region
 
