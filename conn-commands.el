@@ -800,28 +800,34 @@ Immediately repeating this command pushes a mark."
 (defun conn-record-composite-thing ()
   (interactive)
   (conn--push-ephemeral-mark nil nil t)
-  (letrec ((last-kbd-macro nil)
-           (hook (lambda ()
-                   (unless conn-mark-state
-                     (exit-recursive-edit))
-                   (unless (or (conn-command-thing this-command)
-                               (eq this-command 'conn-exchange-mark-command))
-                     (remove-hook 'post-command-hook hook t)
-                     (end-kbd-macro))))
-           (setup (lambda ()
-                    (add-hook 'post-command-hook hook 99 t)
-                    (remove-hook 'post-command-hook setup t))))
-    (conn-with-recursive-stack 'conn-mark-state
-      (add-hook 'pre-command-hook setup nil t)
-      (unwind-protect
-          (progn
-            (start-kbd-macro nil)
-            (recursive-edit))
-        (remove-hook 'pre-command-hook setup t)
-        (remove-hook 'post-command-hook hook t)
-        (when defining-kbd-macro
-          (end-kbd-macro)
-          (setq conn--last-composite-thing last-kbd-macro))))))
+  (if (or defining-kbd-macro executing-kbd-macro)
+      (user-error "Cannot record composite thing during kbd macro")
+    (letrec ((last-kbd-macro nil)
+             (hook
+              (lambda ()
+                (cond ((not defining-kbd-macro)
+                       (abort-recursive-edit))
+                      ((not conn-mark-state)
+                       (exit-recursive-edit))
+                      ((not (or (conn-command-thing this-command)
+                                (eq this-command 'conn-exchange-mark-command)))
+                       (remove-hook 'post-command-hook hook t)
+                       (end-kbd-macro)))))
+             (setup
+              (lambda ()
+                (add-hook 'post-command-hook hook 99 t)
+                (remove-hook 'post-command-hook setup t))))
+      (conn-with-recursive-stack 'conn-mark-state
+        (add-hook 'pre-command-hook setup nil t)
+        (unwind-protect
+            (progn
+              (start-kbd-macro nil)
+              (recursive-edit))
+          (remove-hook 'pre-command-hook setup t)
+          (remove-hook 'post-command-hook hook t)
+          (when defining-kbd-macro
+            (end-kbd-macro)
+            (setq conn--last-composite-thing last-kbd-macro)))))))
 
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' avoiding activating the mark.
