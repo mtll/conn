@@ -756,7 +756,7 @@ A zero means repeat until error."
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil))
-          (window pt thing thing-arg)
+          (window pt thing thing-arg thing-transform)
         (unless macro
           (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder))
         (conn-dispatch-loop-undo-boundary (window-buffer window))
@@ -774,7 +774,7 @@ A zero means repeat until error."
                   (save-excursion
                     (goto-char pt)
                     (if-let* ((b (conn-bounds-of thing thing-arg)))
-                        (list b)
+                        (list (conn-bounds (conn-transform-bounds b thing-transform)))
                       (user-error "Cannot find thing at point"))))
                  `(conn--kapply-relocate-to-region
                    conn--kapply-pulse-region
