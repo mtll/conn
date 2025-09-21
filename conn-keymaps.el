@@ -61,11 +61,6 @@
 
 ;;;;; Repeat Map
 
-(defvar-keymap conn-reb-navigation-repeat-map
-  :repeat t
-  "C-s" 'reb-next-match
-  "C-r" 'reb-prev-match)
-
 (defvar-keymap conn-pop-mark-repeat-map
   :repeat t
   "u" 'conn-pop-mark-ring

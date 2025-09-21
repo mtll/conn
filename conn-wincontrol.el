@@ -121,6 +121,11 @@
 (defalias 'conn-next-buffer 'next-buffer)
 (defalias 'conn-previous-buffer 'previous-buffer)
 
+(defvar-keymap conn-buffer-repeat-map
+  :repeat t
+  "l" 'conn-next-buffer
+  "j" 'conn-previous-buffer)
+
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
@@ -219,6 +224,7 @@
   "C-c" nil
   "M-g" nil
   "C-x" nil
+  "C-h" nil
   "<t>" 'conn-wincontrol-ignore)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
