@@ -139,8 +139,7 @@
 ;;;;;; Choices
 
 (defclass conn-transient-lisp-choices (conn-transient-lisp-value)
-  ((choices :initarg :choices :initform nil)
-   (value-transform :initarg :value-transform :initform #'identity)))
+  ((choices :initarg :choices :initform nil)))
 
 (cl-defmethod transient-init-value ((obj conn-transient-lisp-choices))
   (with-slots (value choices) obj
@@ -173,8 +172,7 @@
   (cons (if (slot-boundp obj 'keyword)
             (oref obj keyword)
           (oref obj description))
-        (funcall (oref obj value-transform)
-                 (cdr (oref obj value)))))
+        (cdr (oref obj value))))
 
 ;;;;; Kapply Pipeline Infix
 
@@ -356,15 +354,16 @@ BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-kapply-pipeline
   :description "In State"
   :key "g"
-  :choices '(("command" . conn-command-state)
-             ("emacs" . conn-emacs-state))
+  :choices `(("command" . ,(lambda (it)
+                             (conn--kapply-with-state it 'conn-command-state)))
+             ("emacs" . ,(lambda (it)
+                           (conn--kapply-with-state it 'conn-emacs-state)))
+             ("change" . conn--kapply-change-region))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
-                  (setf value (or (rassq conn-current-state choices)
-                                  (rassq 'conn-command-state choices)))))
-  :value-transform (lambda (val)
-                     (lambda (it)
-                       (conn--kapply-with-state it val))))
+                  (setf value (pcase conn-current-state
+                                ('conn-emacs-state (assoc "emacs" choices))
+                                (_ (assoc "command" choices)))))))
 
 (transient-define-argument conn--kapply-region-infix ()
   "How to dispatch on each region.
@@ -377,8 +376,7 @@ before each iteration."
   :key "t"
   :description "Regions"
   :choices '(("start" . nil)
-             ("end" . conn--kapply-at-end)
-             ("change" . conn--kapply-change-region)))
+             ("end" . conn--kapply-at-end)))
 
 (transient-define-argument conn--kapply-read-hl-patterns ()
   "Dispatch on regions from last to first."
