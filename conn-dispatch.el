@@ -424,6 +424,7 @@ themselves once the selection process has concluded."
                           'dispatch-character-event)
     (cl-loop for i from ?\s below 256
              do (define-key map (vector i) 'dispatch-character-event))
+    (keymap-set map "C-g" 'keyboard-quit)
     map))
 
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
