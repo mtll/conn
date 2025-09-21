@@ -315,6 +315,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
   ">" 'forward-line
   "<" 'conn-backward-line
