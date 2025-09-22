@@ -209,7 +209,8 @@ Possibilities: \\<query-replace-map>
            (set-marker beg nil)
            (set-marker end nil))))
       ((or :record :next)
-       (pop regions)))))
+       (pop regions))
+      (_ state))))
 
 (defun conn--kapply-point-iterator (points &optional sort-function)
   (declare (important-return-value t))
@@ -284,10 +285,49 @@ Possibilities: \\<query-replace-map>
            (side-effect-free t))
   (when each-iteration
     (add-function
-     :after (var iterator)
-     (lambda (state)
-       (when (eq state :record)
-         (push 'conn-kbd-macro-query unread-command-events)))
+     :around (var iterator)
+     (lambda (iterator state)
+       (let ((msg (substitute-command-keys
+                   "Proceed with macro?\\<query-replace-map>\
+ (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
+         (pcase state
+           (:next
+            (catch 'end
+              (let ((res (funcall iterator state)))
+                (when conn--kapply-automatic-flag
+                  (throw 'end res))
+                (while res
+                  (pcase (let ((executing-kbd-macro nil)
+                               (defining-kbd-macro nil))
+                           (message "%s" msg)
+                           (lookup-key query-replace-map (vector (read-event))))
+                    ('act (throw 'end res))
+                    ('skip (setq res (funcall iterator state)))
+                    ('exit (throw 'end nil))
+                    ('recenter (recenter nil))
+                    ('edit
+                     (let (executing-kbd-macro defining-kbd-macro)
+                       (recursive-edit)))
+                    ('quit (signal 'quit nil))
+                    ('automatic
+                     (setq conn--kapply-automatic-flag t)
+                     (throw 'end res))
+                    ('help
+                     (with-output-to-temp-buffer "*Help*"
+                       (princ
+                        (substitute-command-keys
+                         "Specify how to proceed with keyboard macro execution.
+Possibilities: \\<query-replace-map>
+\\[act]	Finish this iteration normally and continue with the next.
+\\[skip]	Skip the rest of this iteration, and start the next.
+\\[exit]	Stop the macro entirely right now.
+\\[recenter]	Redisplay the screen, then ask again.
+\\[edit]	Enter recursive edit; ask again when you exit from that.
+\\[automatic]   Apply keyboard macro to rest."))
+                       (with-current-buffer standard-output
+                         (help-mode))))
+                    (_ (ding)))))))
+           (_ (funcall iterator state)))))
      `((depth . ,(alist-get 'kapply-query-per-iteration
                             conn--kapply-pipeline-depths))
        (name . kapply-query-per-iteration))))
@@ -313,8 +353,7 @@ Possibilities: \\<query-replace-map>
                            (y-or-n-p (format "Record here?"))))
                finally return val)
             (delete-overlay hl))))
-       ((or :cleanup :next)
-        (funcall iterator state))))
+       (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-query-record
                           conn--kapply-pipeline-depths))
      (name . kapply-query-record))))
@@ -326,8 +365,6 @@ Possibilities: \\<query-replace-map>
    :around (var iterator)
    (lambda (iterator state)
      (pcase state
-       (:cleanup
-        (funcall iterator state))
        ((or :next :record)
         (catch 'non-empty
           (while-let ((region (funcall iterator state)))
@@ -338,7 +375,8 @@ Possibilities: \\<query-replace-map>
                (throw 'non-empty region))
               (`(,beg . ,end)
                (when (markerp beg) (set-marker beg nil))
-               (when (markerp end) (set-marker end nil)))))))))
+               (when (markerp end) (set-marker end nil)))))))
+       (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-skip-empty
                           conn--kapply-pipeline-depths))
      (name . kapply-skip-empty))))
@@ -350,15 +388,14 @@ Possibilities: \\<query-replace-map>
    :around (var iterator)
    (lambda (iterator state)
      (pcase state
-       (:cleanup
-        (funcall iterator state))
        ((or :next :record)
         (dotimes (_ (1- N))
           (pcase (funcall iterator state)
             (`(,beg . ,end)
              (when (markerp beg) (set-marker beg nil))
              (when (markerp end) (set-marker end nil)))))
-        (funcall iterator state))))
+        (funcall iterator state))
+       (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-nth conn--kapply-pipeline-depths))
      (name . kapply-nth))))
 
@@ -375,7 +412,7 @@ Possibilities: \\<query-replace-map>
                            (not (invisible-p (car ret))))
                  when (markerp ret) do (set-marker ret nil)
                  finally return ret))
-       (:cleanup (funcall iterator state))))
+       (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
@@ -394,7 +431,7 @@ Possibilities: \\<query-replace-map>
                       (when (markerp beg) (set-marker beg nil))
                       (when (markerp end) (set-marker end nil)))
                  finally return ret))
-       (:cleanup (funcall iterator state))))
+       (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
@@ -419,7 +456,8 @@ Possibilities: \\<query-replace-map>
                                       (setq restore (nconc res restore))))))
          (:cleanup
           (funcall iterator state)
-          (mapc #'funcall restore)))))
+          (mapc #'funcall restore))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
@@ -467,7 +505,8 @@ Possibilities: \\<query-replace-map>
                         (eq buffer-undo-list t))
               (activate-change-group
                (setf (alist-get (current-buffer) undo-handles)
-                     (prepare-change-group)))))))))
+                     (prepare-change-group))))))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
@@ -493,7 +532,8 @@ Possibilities: \\<query-replace-map>
                         (eq buffer-undo-list t))
               (activate-change-group
                (setf (alist-get (current-buffer) undo-handles)
-                     (prepare-change-group)))))))))
+                     (prepare-change-group))))))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
@@ -526,7 +566,8 @@ Possibilities: \\<query-replace-map>
                 (setq handle nil)
               (undo-boundary)
               (setq handle (prepare-change-group))
-              (activate-change-group handle)))))))
+              (activate-change-group handle))))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
@@ -617,7 +658,8 @@ Possibilities: \\<query-replace-map>
                         (cons (point-marker) (save-mark-and-excursion--save)))))
             (setf (alist-get (current-buffer) saved-excursions)
                   (cons (point-marker) (save-mark-and-excursion--save)))
-            (funcall iterator state))))))
+            (funcall iterator state)))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-excursions conn--kapply-pipeline-depths))
      (name . kapply-excursions))))
 
@@ -651,7 +693,8 @@ Possibilities: \\<query-replace-map>
               (`(,beg . ,end)
                (widen)
                (narrow-to-region (or beg (point-min))
-                                 (or end (point-max))))))))))
+                                 (or end (point-max)))))))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-restrictions conn--kapply-pipeline-depths))
      (name . kapply-restrictions))))
 
@@ -659,10 +702,13 @@ Possibilities: \\<query-replace-map>
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
-   :after (var iterator)
-   (lambda (state)
-     (unless (eq state :cleanup)
-       (delete-region (region-beginning) (region-end))))
+   :around (var iterator)
+   (lambda (iterator state)
+     (let ((ret (funcall iterator state)))
+       (when (and ret (or (eq state :next)
+                          (eq state :record)))
+         (delete-region (region-beginning) (region-end)))
+       ret))
    `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region)))
   (conn--kapply-with-state iterator 'conn-emacs-state))
@@ -682,23 +728,26 @@ Possibilities: \\<query-replace-map>
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
-   :after (var iterator)
+   :around (var iterator)
    (let (buffer-stacks)
-     (lambda (state)
-       (pcase state
-         (:cleanup
-          (pcase-dolist (`(,buf . ,stack) buffer-stacks)
-            (with-current-buffer buf
-              (setq conn--state-stack stack
-                    conn-lighter nil)
-              (conn-enter-state (car stack)))))
-         ((or :record :next)
-          (when conn-local-mode
-            (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
-                (setf conn--state-stack stack)
-              (setf (alist-get (current-buffer) buffer-stacks)
-                    conn--state-stack))
-            (conn-enter-recursive-stack conn-state))))))
+     (lambda (iterator state)
+       (let ((ret (funcall iterator state)))
+         (pcase state
+           (:cleanup
+            (pcase-dolist (`(,buf . ,stack) buffer-stacks)
+              (with-current-buffer buf
+                (setq conn--state-stack stack
+                      conn-lighter nil)
+                (conn-enter-state (car stack)))))
+           ((and (or :record :next)
+                 (guard ret))
+            (when conn-local-mode
+              (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
+                  (setf conn--state-stack stack)
+                (setf (alist-get (current-buffer) buffer-stacks)
+                      conn--state-stack))
+              (conn-enter-recursive-stack conn-state))))
+         ret)))
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))
 
@@ -728,7 +777,8 @@ Possibilities: \\<query-replace-map>
           (set-window-configuration wconf))
          ((or :record :next)
           (unless wconf (setq wconf (current-window-configuration)))
-          (funcall iterator state)))))
+          (funcall iterator state))
+         (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-wconf conn--kapply-pipeline-depths))
      (name . kapply-wconf))))
 
@@ -766,15 +816,16 @@ The iterator must be the first argument in ARGLIST.
                                   (when (markerp beg) (set-marker beg nil))
                                   (when (markerp end) (set-marker end nil))))
                                (cl-incf ,iterations)))))
-           (run-hooks 'conn-kmacro-apply-start-hook)
            (deactivate-mark)
            (unwind-protect
                (cl-letf (((symbol-function 'kmacro-loop-setup-function)))
                  (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
+                 (run-hooks 'conn-kmacro-apply-start-hook)
                  ,@body
                  (setq success t)
                  (unless conn-kapply-suppress-message
-                   (message "Kapply completed successfully after %s iterations" ,iterations)))
+                   (message "Kapply completed successfully after %s iterations"
+                            ,iterations)))
              (let ((conn-kmacro-apply-error (not success)))
                (funcall ,iterator :cleanup)
                (run-hooks 'conn-kmacro-apply-end-hook))))))))

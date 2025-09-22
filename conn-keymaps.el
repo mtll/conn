@@ -226,7 +226,6 @@
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
 
 (defvar-keymap conn-local-mode-map
-  "<conn-kbd-macro-query>" 'conn-kapply-kbd-macro-query
   "C-<escape>" 'exit-recursive-edit
   "C-x y" conn-dispatch-cycle-map
   "M-g u" 'conn-pop-mark-ring
@@ -349,7 +348,7 @@
   "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-separator
   "H" 'conn-expand
-  "b" conn-edit-remap
+  "SPC" conn-edit-remap
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
@@ -379,7 +378,7 @@
   "q" 'conn-transpose-regions
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
-  "SPC" 'conn-set-mark-command
+  "b" 'conn-set-mark-command
   "C-SPC" 'conn-record-composite-thing
   "d" 'conn-kill-thing
   "W" 'widen

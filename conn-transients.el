@@ -354,7 +354,8 @@ BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-kapply-pipeline
   :description "State"
   :key "w"
-  :choices `((nil . ,(lambda (it) (conn--kapply-with-state it conn-current-state)))
+  :choices `((nil . ,(lambda (it)
+                       (conn--kapply-with-state it conn-current-state)))
              ("change" . conn--kapply-change-region)
              ("command" . ,(lambda (it)
                              (conn--kapply-with-state it 'conn-command-state)))
@@ -467,11 +468,9 @@ Begins the keyboard macro by deleting the string at each match."
      ,(if (eq search-invisible 'open)
           'conn--kapply-open-invisible
         'conn--kapply-skip-invisible-regions)
-     conn--kapply-change-region
      conn--kapply-pulse-region
      ,@(conn--transient-kapply-pipeline-args args)
-     ,(lambda (iterator)
-        (conn--kapply-with-state iterator 'conn-emacs-state)))))
+     conn--kapply-change-region)))
 
 (transient-define-suffix conn--kapply-emacs-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
@@ -543,11 +542,9 @@ Begins the keyboard macro in `conn-command-state'."
      (conn--kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
-       conn--kapply-change-region
        conn--kapply-pulse-region
        ,@(conn--transient-kapply-pipeline-args args)
-       ,(lambda (iterator)
-          (conn--kapply-with-state iterator 'conn-emacs-state))))))
+       conn--kapply-change-region))))
 
 (transient-define-suffix conn--kapply-emacs-rectangle-suffix (args)
   "Apply keyboard macro in `conn-emacs-state' to a rectangle."
