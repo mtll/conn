@@ -1519,10 +1519,10 @@ contain targets."
             (cl-loop for beg = (point-min) then next-beg
                      for (end . next-beg) in regions
                      while end
-                     do (progn
-                          (thread-first
-                            (push (make-overlay beg end) hidden)
-                            car (overlay-put 'invisible t))
+                     do (let ((ov (make-overlay beg end)))
+                          (push ov hidden)
+                          (overlay-put ov 'invisible t)
+                          (overlay-put ov 'window win)
                           (when (and separator-p (/= end (point-max)))
                             (overlay-put
                              (car hidden)
@@ -1533,14 +1533,16 @@ contain targets."
                                                   '(nil relative visual))
                                         (line-number-at-pos beg)))
                               'face 'conn-dispatch-context-separator-face))))
-                     finally (thread-first
-                               (push (make-overlay beg (point-max)) hidden)
-                               car (overlay-put 'invisible t))))
+                     finally (let ((ov (make-overlay beg (point-max))))
+                               (push ov hidden)
+                               (overlay-put ov 'window win)
+                               (overlay-put ov 'invisible t))))
           (recenter nil)))
       (setf (oref state hidden) hidden)
       (sit-for 0))))
 
-(defclass conn-dispatch-mark-ring (conn-dispatch-focus-targets)
+(defclass conn-dispatch-mark-ring (conn-dispatch-focus-targets
+                                   conn-dispatch-target-window-predicate)
   ((context-lines :initform 1 :initarg :context-lines)
    (window-predicate :initform (lambda (win) (eq win (selected-window))))))
 
@@ -1555,8 +1557,10 @@ contain targets."
           (dolist (pt points)
             (conn-make-target-overlay pt 0)))))))
 
-(defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
-  ((context-lines :initform 1 :initarg :context-lines)))
+(defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets
+                                              conn-dispatch-target-window-predicate)
+  ((context-lines :initform 1 :initarg :context-lines)
+   (window-predicate :initform (lambda (win) (eq win (selected-window))))))
 
 (cl-defmethod conn-dispatch-targets-other-end ((_ conn-dispatch-previous-emacs-state))
   :no-other-end)
@@ -1638,7 +1642,7 @@ contain targets."
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-all-defuns))
   (dolist (win (conn--get-target-windows))
     (with-current-buffer (window-buffer win)
-      (funcall conn-extract-defuns-function))))
+      (funcall conn-extract-defuns-function win))))
 
 (defun conn-dispatch-all-things (thing)
   (declare (important-return-value t))
