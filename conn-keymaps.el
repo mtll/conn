@@ -533,18 +533,17 @@
   "C-d" 'conn-dispatch-kill-prepend
   "T" 'conn-dispatch-copy-append
   "C-t" 'conn-dispatch-copy-prepend
-  "<remap> <conn-previous-emacs-state>"
-  (conn-anonymous-thing
-   'char
-   :default-action (lambda ()
-                     (let ((jump (conn-make-action 'conn-dispatch-jump)))
-                       (oclosure-lambda (conn-action
-                                         (description "Previous Emacs State")
-                                         (no-history t))
-                           (&rest args)
-                         (apply jump args)
-                         (conn-push-state 'conn-emacs-state))))
-   :target-finder (lambda () (conn-dispatch-previous-emacs-state)))
+  "e" (conn-anonymous-thing
+       'char
+       :default-action (lambda ()
+                         (let ((jump (conn-make-action 'conn-dispatch-jump)))
+                           (oclosure-lambda (conn-action
+                                             (description "Previous Emacs State")
+                                             (no-history t))
+                               (&rest args)
+                             (apply jump args)
+                             (conn-push-state 'conn-emacs-state))))
+       :target-finder (lambda () (conn-dispatch-previous-emacs-state)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
    'char
