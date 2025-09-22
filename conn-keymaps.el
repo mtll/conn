@@ -517,7 +517,7 @@
   "g" 'conn-dispatch-grab
   "d" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
-  "C-SPC" 'conn-dispatch-jump
+  "SPC" 'conn-dispatch-jump
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-replace
   "<remap> <downcase-word>" 'conn-dispatch-downcase

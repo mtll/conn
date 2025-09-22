@@ -496,6 +496,19 @@ themselves once the selection process has concluded."
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
+(defvar-keymap conn-dispatch-transform-map
+  "x" 'conn-bounds-trim
+  "a" 'conn-bounds-after-point
+  "b" 'conn-bounds-before-point
+  "X" 'conn-transform-reset)
+
+(defun conn-dispatch-transform-argument ()
+  (declare (important-return-value t))
+  (oclosure-lambda (conn-transform-argument
+                    (keymap conn-dispatch-transform-map))
+      (self cmd)
+    (conn-handle-transform-argument cmd self)))
+
 ;;;;;; Dispatch Quick Ref
 
 (defvar conn-dispatch-thing-ref
@@ -3180,7 +3193,7 @@ contain targets."
          (conn-with-dispatch-suspended
            (conn-eval-with-state 'conn-dispatch-mover-state
                (list && (conn-thing-argument-dwim t)
-                     & (conn-transform-argument))
+                     & (conn-dispatch-transform-argument))
              :prompt "New Targets"))))
 
 ;;;;; Dispatch Ring
@@ -3529,7 +3542,7 @@ contain targets."
       (conn-perform-dispatch
        & (conn-dispatch-action-argument)
        && (conn-thing-argument t)
-       & (conn-transform-argument)
+       & (conn-dispatch-transform-argument)
        :repeat & (conn-dispatch-repeat-argument)
        :other-end & (conn-dispatch-other-end-argument nil)
        :restrict-windows & (conn-dispatch-restrict-windows-argument))
@@ -3655,7 +3668,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                        (_
                         (user-error "No %s found at point" thing)))))
                && (conn-thing-argument t)
-               & (conn-transform-argument)
+               & (conn-dispatch-transform-argument)
                :repeat & (conn-dispatch-repeat-argument repeat)
                :other-end :no-other-end)
             :prefix (conn-bounds-arg bounds)
