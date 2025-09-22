@@ -502,7 +502,7 @@
   "M-f" 'conn-dispatch-ring-describe-head
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-replace-to
-  "v" 'conn-dispatch-over-or-goto
+  "v" 'conn-dispatch-over
   "x" 'conn-dispatch-yank-replace
   "X" 'conn-dispatch-yank-read-replace
   "C-y" 'conn-dispatch-yank-replace
