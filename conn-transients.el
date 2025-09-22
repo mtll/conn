@@ -236,8 +236,7 @@ the edit in the macro."
 (defun conn--push-macro-ring (macro)
   (interactive
    (list (get-register (register-read-with-preview "Kmacro: "))))
-  (unless (or (null macro)
-              (stringp macro)
+  (unless (or (stringp macro)
               (vectorp macro)
               (kmacro-p macro))
     (user-error "Invalid keyboard macro"))
