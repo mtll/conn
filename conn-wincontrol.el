@@ -179,6 +179,8 @@
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "<return>" 'conn-other-place-prefix
+  "<tab>" 'other-window
+  "TAB" 'other-window
   "B" 'tab-bar-move-window-to-tab
   "C" 'tab-bar-duplicate-tab
   "D" 'tab-bar-detach-tab
