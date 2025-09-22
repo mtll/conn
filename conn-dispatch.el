@@ -514,15 +514,15 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
-    ((("yank from/replace"
-       conn-dispatch-yank-from
-       conn-dispatch-yank-from-replace)
+    ((("copy from/replace"
+       conn-dispatch-copy-from
+       conn-dispatch-copy-from-replace)
       ("yank to/replace"
-       conn-dispatch-yank-to
-       conn-dispatch-yank-replace-to)
+       conn-dispatch-yank
+       conn-dispatch-yank-replace)
       ("yank read/replace"
        conn-dispatch-reading-yank-to
-       conn-dispatch-yank-read-replace-to)
+       conn-dispatch-yank-read-replace)
       ("send/replace"
        conn-dispatch-send
        conn-dispatch-send-replace)
@@ -2079,12 +2079,12 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(oclosure-define (conn-dispatch-yank-replace-to
+(oclosure-define (conn-dispatch-yank-replace
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
-  (oclosure-lambda (conn-dispatch-yank-replace-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace)))
+  (oclosure-lambda (conn-dispatch-yank-replace
                     (description "Yank and Replace To")
                     (str (current-kill 0))
                     (window-predicate
@@ -2107,12 +2107,12 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(oclosure-define (conn-dispatch-yank-read-replace-to
+(oclosure-define (conn-dispatch-yank-read-replace
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace-to)))
-  (oclosure-lambda (conn-dispatch-yank-read-replace-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace)))
+  (oclosure-lambda (conn-dispatch-yank-read-replace
                     (description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
                     (window-predicate
@@ -2133,13 +2133,13 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(oclosure-define (conn-dispatch-yank-to
+(oclosure-define (conn-dispatch-yank
                   (:parent conn-action))
   (str :type string)
   (separator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
-  (oclosure-lambda (conn-dispatch-yank-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank)))
+  (oclosure-lambda (conn-dispatch-yank
                     (str (current-kill 0))
                     (separator (when (conn-state-eval-consume-prefix-arg)
                                  (read-string "Separator: " nil nil nil t)))
@@ -2169,8 +2169,8 @@ contain targets."
                                                      (length separator)))
                                                (point)))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
-  (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
+(cl-defmethod conn-describe-action ((action conn-dispatch-yank) &optional short)
+  (if-let* ((sep (and (not short) (conn-dispatch-yank--separator action))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
@@ -2617,27 +2617,27 @@ contain targets."
         (format "Copy Prepend to Register <%c>" register))
     "Copy Prepend to Kill"))
 
-(oclosure-define (conn-dispatch-yank-from
+(oclosure-define (conn-dispatch-copy-from
                   (:parent conn-action)
-                  (:copier conn-dispatch-yank-from-copy (opoint)))
+                  (:copier conn-dispatch-copy-from-copy (opoint)))
   (opoint :type marker))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-yank-from))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
   (thread-first
-    (conn-dispatch-yank-from--opoint action)
+    (conn-dispatch-copy-from--opoint action)
     marker-buffer buffer-live-p not))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-yank-from))
-  (set-marker (conn-dispatch-yank-from--opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from))
+  (set-marker (conn-dispatch-copy-from--opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-yank-from))
-  (conn-dispatch-yank-from-copy
+(cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
+  (conn-dispatch-copy-from-copy
    action
-   (copy-marker (conn-dispatch-yank-from--opoint action) t)))
+   (copy-marker (conn-dispatch-copy-from--opoint action) t)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
-  (oclosure-lambda (conn-dispatch-yank-from
-                    (description "Yank From")
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from)))
+  (oclosure-lambda (conn-dispatch-copy-from
+                    (description "Copy From")
                     (opoint (copy-marker (point) t)))
       (window pt thing thing-arg transform)
     (let (str)
@@ -2660,15 +2660,15 @@ contain targets."
                (goto-char opoint)
                (insert-for-yank str)))))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-yank-from))
-  (set-marker (conn-dispatch-yank-from--opoint action) nil))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from))
+  (set-marker (conn-dispatch-copy-from--opoint action) nil))
 
-(oclosure-define (conn-dispatch-yank-from-replace
+(oclosure-define (conn-dispatch-copy-from-replace
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
-  (oclosure-lambda (conn-dispatch-yank-from-replace
-                    (description "Yank From and Replace"))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from-replace)))
+  (oclosure-lambda (conn-dispatch-copy-from-replace
+                    (description "Copy From and Replace"))
       (window pt thing thing-arg transform)
     (with-selected-window window
       (save-excursion

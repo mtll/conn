@@ -503,14 +503,14 @@
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
-  "x" 'conn-dispatch-yank-replace-to
-  "X" 'conn-dispatch-yank-read-replace-to
-  "C-y" 'conn-dispatch-yank-replace-to
-  "M-y" 'conn-dispatch-yank-read-replace-to
-  "y" 'conn-dispatch-yank-to
+  "x" 'conn-dispatch-yank-replace
+  "X" 'conn-dispatch-yank-read-replace
+  "C-y" 'conn-dispatch-yank-replace
+  "M-y" 'conn-dispatch-yank-read-replace
+  "y" 'conn-dispatch-yank
   "Y" 'conn-dispatch-reading-yank-to
-  "F" 'conn-dispatch-yank-from-replace
-  "f" 'conn-dispatch-yank-from
+  "F" 'conn-dispatch-copy-from-replace
+  "f" 'conn-dispatch-copy-from
   "s" 'conn-dispatch-send
   "S" 'conn-dispatch-send-replace
   "G" 'conn-dispatch-grab-replace
