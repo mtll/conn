@@ -123,13 +123,11 @@
          (next-buffers (window-next-buffers window))
          (pred (frame-parameter frame 'buffer-predicate))
          (skip
-          (cond
-           ((or (functionp switch-to-prev-buffer-skip)
-                (memq switch-to-prev-buffer-skip '(t visible 0)))
-            switch-to-prev-buffer-skip)
-           ((or switch-to-prev-buffer-skip
-                (not switch-to-visible-buffer))
-            frame)))
+          (cond ((or (functionp switch-to-prev-buffer-skip)
+                     (memq switch-to-prev-buffer-skip '(t visible 0)))
+                 switch-to-prev-buffer-skip)
+                (switch-to-prev-buffer-skip
+                 frame)))
          found-buffers new-buffer killed-buffers skipped)
 
     (catch 'found
@@ -203,13 +201,11 @@
          (next-buffers (window-next-buffers window))
          (pred (frame-parameter frame 'buffer-predicate))
          (skip
-          (cond
-           ((or (functionp switch-to-prev-buffer-skip)
-                (memq switch-to-prev-buffer-skip '(t visible 0)))
-            switch-to-prev-buffer-skip)
-           ((or switch-to-prev-buffer-skip
-                (not switch-to-visible-buffer))
-            frame)))
+          (cond ((or (functionp switch-to-prev-buffer-skip)
+                     (memq switch-to-prev-buffer-skip '(t visible 0)))
+                 switch-to-prev-buffer-skip)
+                (switch-to-prev-buffer-skip
+                 frame)))
          found-buffers new-buffer killed-buffers skipped)
 
     (catch 'found
@@ -441,6 +437,8 @@
                     'conn-posframe--switch-buffer-display)
         (advice-add 'unbury-buffer :after
                     'conn-posframe--switch-buffer-display)
+        (advice-add 'conn-kill-this-buffer :after
+                    'conn-posframe--switch-buffer-display)
         (advice-add 'tab-bar-new-tab :after
                     'conn-posframe--switch-tab-display)
         (advice-add 'tab-bar-switch-to-next-tab :after
@@ -462,6 +460,7 @@
     (advice-remove 'next-buffer 'conn-posframe--switch-buffer-display)
     (advice-remove 'bury-buffer 'conn-posframe--switch-buffer-display)
     (advice-remove 'unbury-buffer 'conn-posframe--switch-buffer-display)
+    (advice-remove 'conn-kill-this-buffer 'conn-posframe--switch-buffer-display)
     (advice-remove 'tab-bar-new-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
