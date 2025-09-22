@@ -1831,6 +1831,11 @@ Interactively `region-beginning' and `region-end'."
                (conn-pop-state)
              (conn-push-state 'conn-emacs-state))))))
 
+(cl-defmethod conn-perform-change :extra "rectangle" ((_cmd (conn-thing region)) _arg _transform &optional _kill)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (call-interactively #'string-rectangle)
+    (cl-call-next-method)))
+
 (cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite))
                                    _arg _transform &optional _kill)
   (conn-emacs-state-overwrite))
