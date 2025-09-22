@@ -371,15 +371,16 @@
                                        (conn--expand-create-expansions)))
           (when (and (save-excursion
                        (goto-char beg)
-                       (= n (skip-chars-forward (string open) (+ beg n))))
+                       (= 1 (skip-chars-forward (string open) (1+ beg))))
                      (save-excursion
                        (goto-char end)
-                       (= (- n) (skip-chars-backward (string close) (- end n)))))
+                       (= -1 (skip-chars-backward (string close) (1- end))))
+                     (>= 0 (cl-decf n)))
             (goto-char beg)
             (conn--push-ephemeral-mark end)
-            (delete-char n)
+            (delete-char 1)
             (exchange-point-and-mark)
-            (delete-char (- n))
+            (delete-char -1)
             (exchange-point-and-mark)
             (throw 'return (list (conn--make-surround-region
                                   (region-beginning)
