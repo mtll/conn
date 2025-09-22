@@ -358,29 +358,6 @@ Possibilities: \\<query-replace-map>
                           conn--kapply-pipeline-depths))
      (name . kapply-query-record))))
 
-(defun conn--kapply-skip-empty (iterator)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (add-function
-   :around (var iterator)
-   (lambda (iterator state)
-     (pcase state
-       ((or :next :record)
-        (catch 'non-empty
-          (while-let ((region (funcall iterator state)))
-            (pcase region
-              ((and `(,beg . ,end)
-                    (guard (/= beg end))
-                    region)
-               (throw 'non-empty region))
-              (`(,beg . ,end)
-               (when (markerp beg) (set-marker beg nil))
-               (when (markerp end) (set-marker end nil)))))))
-       (_ (funcall iterator state))))
-   `((depth . ,(alist-get 'kapply-skip-empty
-                          conn--kapply-pipeline-depths))
-     (name . kapply-skip-empty))))
-
 (defun conn--kapply-every-nth (iterator N)
   (declare (important-return-value t)
            (side-effect-free t))
