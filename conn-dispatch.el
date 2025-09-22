@@ -1531,7 +1531,7 @@ contain targets."
                               (format " %s\n"
                                       (when (memq display-line-numbers
                                                   '(nil relative visual))
-                                        (line-number-at-pos beg)))
+                                        (line-number-at-pos end)))
                               'face 'conn-dispatch-context-separator-face))))
                      finally (let ((ov (make-overlay beg (point-max))))
                                (push ov hidden)
