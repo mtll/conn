@@ -482,12 +482,6 @@
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
-  "." (conn-anonymous-thing
-       'forward-sexp
-       :description "list"
-       :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix
-                         'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-anonymous-thing
        'sexp
        :description "inner-list"
@@ -501,13 +495,13 @@
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "'" 'conn-dispatch-kapply
   "RET" 'conn-repeat-last-dispatch
-  "C" 'conn-dispatch-copy
+  "t" 'conn-dispatch-copy
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "d" 'conn-dispatch-copy-to
-  "D" 'conn-dispatch-copy-replace-to
+  "w" 'conn-dispatch-copy-to
+  "W" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
   "x" 'conn-dispatch-yank-replace-to
   "X" 'conn-dispatch-yank-read-replace-to
@@ -519,13 +513,13 @@
   "f" 'conn-dispatch-yank-from
   "s" 'conn-dispatch-send
   "S" 'conn-dispatch-send-replace
-  "T" 'conn-dispatch-take-replace
-  "t" 'conn-dispatch-take
-  "P" 'conn-dispatch-register-replace
-  "w" 'conn-dispatch-kill
+  "G" 'conn-dispatch-grab-replace
+  "g" 'conn-dispatch-grab
+  "d" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
   "C-SPC" 'conn-dispatch-jump
-  "R" 'conn-dispatch-register-load
+  "." 'conn-dispatch-register-load
+  ">" 'conn-dispatch-register-replace
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -535,11 +529,10 @@
   "<remap> <capitalize-word>" 'conn-dispatch-capitalize
   "<remap> <capitalize-region>" 'conn-dispatch-capitalize
   "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
-  ;; TODO: find bindings
-  ;; "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
-  ;; "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
-  ;; "<remap> <conn-append-region>" 'conn-dispatch-copy-append
-  ;; "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
+  "D" 'conn-dispatch-kill-append
+  "C-d" 'conn-dispatch-kill-prepend
+  "T" 'conn-dispatch-copy-append
+  "C-t" 'conn-dispatch-copy-prepend
   "<remap> <conn-previous-emacs-state>"
   (conn-anonymous-thing
    'char

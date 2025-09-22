@@ -526,9 +526,9 @@ themselves once the selection process has concluded."
       ("send/replace"
        conn-dispatch-send
        conn-dispatch-send-replace)
-      ("take/replace"
-       conn-dispatch-take
-       conn-dispatch-take-replace))
+      ("grab/replace"
+       conn-dispatch-grab
+       conn-dispatch-grab-replace))
      (("copy to"
        conn-dispatch-copy-to
        conn-dispatch-copy-replace-to)
@@ -2683,31 +2683,31 @@ contain targets."
     (delete-region (region-beginning) (region-end))
     (yank)))
 
-(oclosure-define (conn-dispatch-take-replace
+(oclosure-define (conn-dispatch-grab-replace
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-replace-copy (opoint)))
+                  (:copier conn-dispatch-grab-replace-copy (opoint)))
   (opoint :type marker)
   (change-group))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-grab-replace))
   (thread-first
-    (conn-dispatch-take-replace--opoint action)
+    (conn-dispatch-grab-replace--opoint action)
     marker-buffer buffer-live-p not))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-grab-replace))
+  (set-marker (conn-dispatch-grab-replace--opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
+(cl-defmethod conn-action-copy ((action conn-dispatch-grab-replace))
   (thread-first
-    (conn-dispatch-take-replace--opoint action)
+    (conn-dispatch-grab-replace--opoint action)
     (copy-marker t)
-    (conn--flip-last conn-dispatch-take-replace-copy action)))
+    (conn--flip-last conn-dispatch-grab-replace-copy action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-grab-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
-    (oclosure-lambda (conn-dispatch-take-replace
-                      (description "Take From and Replace")
+    (oclosure-lambda (conn-dispatch-grab-replace
+                      (description "Grab From and Replace")
                       (change-group cg)
                       (opoint (copy-marker (point) t))
                       (window-predicate
@@ -2730,37 +2730,37 @@ contain targets."
           (goto-char opoint)
           (yank))))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--opoint action) nil)
+(cl-defmethod conn-cancel-action ((action conn-dispatch-grab-replace))
+  (set-marker (conn-dispatch-grab-replace--opoint action) nil)
   (conn--action-cancel-change-group
-   (conn-dispatch-take-replace--change-group action)))
+   (conn-dispatch-grab-replace--change-group action)))
 
-(cl-defmethod conn-accept-action ((action conn-dispatch-take-replace))
+(cl-defmethod conn-accept-action ((action conn-dispatch-grab-replace))
   (conn--action-accept-change-group
-   (conn-dispatch-take-replace--change-group action)))
+   (conn-dispatch-grab-replace--change-group action)))
 
-(oclosure-define (conn-dispatch-take
+(oclosure-define (conn-dispatch-grab
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-copy (opoint)))
+                  (:copier conn-dispatch-grab-copy (opoint)))
   (opoint :type marker))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-grab))
   (thread-first
-    (conn-dispatch-take--opoint action)
+    (conn-dispatch-grab--opoint action)
     marker-buffer buffer-live-p not))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-grab))
+  (set-marker (conn-dispatch-grab--opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-take))
+(cl-defmethod conn-action-copy ((action conn-dispatch-grab))
   (thread-first
-    (conn-dispatch-take--opoint action)
+    (conn-dispatch-grab--opoint action)
     (copy-marker t)
-    (conn--flip-last conn-dispatch-take-copy action)))
+    (conn--flip-last conn-dispatch-grab-copy action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
-  (oclosure-lambda (conn-dispatch-take
-                    (description "Take From")
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-grab)))
+  (oclosure-lambda (conn-dispatch-grab
+                    (description "Grab From")
                     (opoint (copy-marker (point) t))
                     (window-predicate
                      (lambda (win)
@@ -2780,8 +2780,8 @@ contain targets."
     (with-current-buffer (marker-buffer opoint)
       (yank))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--opoint action) nil))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-grab))
+  (set-marker (conn-dispatch-grab--opoint action) nil))
 
 (oclosure-define (conn-dispatch-over
                   (:parent conn-action)))
