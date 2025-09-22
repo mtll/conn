@@ -117,7 +117,7 @@ Possibilities: \\<query-replace-map>
 \\[automatic]   Apply keyboard macro to rest."))
                (with-current-buffer standard-output
                  (help-mode))))
-            (_ (ding)))))))))
+            (_ (ding t)))))))))
 
 ;;;;; Iterators
 
@@ -326,7 +326,7 @@ Possibilities: \\<query-replace-map>
 \\[automatic]   Apply keyboard macro to rest."))
                        (with-current-buffer standard-output
                          (help-mode))))
-                    (_ (ding)))))))
+                    (_ (ding t)))))))
            (_ (funcall iterator state)))))
      `((depth . ,(alist-get 'kapply-query-per-iteration
                             conn--kapply-pipeline-depths))
