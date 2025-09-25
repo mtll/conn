@@ -318,7 +318,8 @@ words."))
                   (:parent conn-state-eval-argument)))
 
 (defun conn-transform-argument (&rest value)
-  (declare (important-return-value t))
+  (declare (important-return-value t)
+           (side-effect-free t))
   (oclosure-lambda (conn-transform-argument
                     (value value)
                     (keymap conn-transform-map))
