@@ -1654,11 +1654,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     ('nil)
     ('append
      (propertize
-      "Append Kill"
+      "append"
       'face 'eldoc-highlight-function-argument))
     ('prepend
      (propertize
-      "Prepend Kill"
+      "prepend"
       'face 'eldoc-highlight-function-argument))))
 
 (oclosure-define (conn-delete-argument
@@ -1684,7 +1684,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-display-argument ((arg conn-delete-argument))
   (when-let* ((ts (conn-state-eval-argument-value arg)))
     (propertize
-     "Delete"
+     "delete"
      'face 'eldoc-highlight-function-argument)))
 
 (oclosure-define (conn-register-argument
@@ -1713,7 +1713,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-display-argument ((arg conn-register-argument))
   (when-let* ((ts (conn-state-eval-argument-value arg)))
     (propertize
-     (format "Register <%c>" ts)
+     (format "register <%c>" ts)
      'face 'eldoc-highlight-function-argument)))
 
 (defun conn-kill-thing (cmd arg transform &optional append delete register)
@@ -1744,12 +1744,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional append delete register)
     (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
         (funcall kill-op arg transform append delete register)
-      (conn-perform-kill (conn-anonymous-thing-parent cmd) arg append delete register)))
-  ( :method ((_cmd (conn-thing line)) _arg _transform &optional _ _ _)
-    (let ((col (current-column)))
-      (unwind-protect
-          (cl-call-next-method)
-        (move-to-column col)))))
+      (conn-perform-kill (conn-anonymous-thing-parent cmd) arg append delete register))))
+
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing line)) _arg _transform &optional _ _ _)
+  (let ((col (current-column)))
+    (unwind-protect
+        (cl-call-next-method)
+      (move-to-column col))))
 
 (cl-defmethod conn-perform-kill (cmd arg transform &optional append delete register)
   (pcase (conn-bounds-of cmd arg)
