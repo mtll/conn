@@ -1754,8 +1754,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-perform-kill (cmd arg transform &optional append delete register)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
+     (goto-char beg)
      (save-mark-and-excursion
-       (goto-char beg)
        (conn--push-ephemeral-mark end)
        (cond (delete
               (call-interactively
@@ -1771,7 +1771,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                  (prepend-to-register register beg end t))))
              (t
               (when (eq append 'prepend)
-                (conn-exchange-mark-command))
+                (let ((omark (mark t)))
+                  (set-mark (point))
+                  (goto-char omark)))
               (let ((last-command (if append
                                       'kill-region
                                     last-command)))
