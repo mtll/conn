@@ -1559,7 +1559,11 @@ If ARG is a numeric prefix argument kill region to a register."
          (if (consp arg)
              (delete-rectangle (region-beginning) (region-end))
            (kill-rectangle (region-beginning) (region-end))))
-        ((numberp arg)
+        ((consp arg)
+         (call-interactively
+          (conn--without-conn-maps
+            (key-binding conn-delete-region-keys t))))
+        (arg
          (thread-first
            (concat "Kill "
                    (if (bound-and-true-p rectangle-mark-mode)
@@ -1568,10 +1572,6 @@ If ARG is a numeric prefix argument kill region to a register."
                    "to register:")
            (register-read-with-preview)
            (copy-to-register nil nil t t)))
-        ((consp arg)
-         (call-interactively
-          (conn--without-conn-maps
-            (key-binding conn-delete-region-keys t))))
         (t (call-interactively
             (conn--without-conn-maps
               (key-binding conn-kill-region-keys t))))))
@@ -1615,7 +1615,108 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
-(defun conn-kill-thing (cmd arg transform &optional delete-or-register)
+(define-keymap
+  :keymap (conn-get-state-map 'conn-kill-state)
+  "@" 'append-next-kill
+  "." 'register
+  "d" 'delete)
+
+(oclosure-define (conn-kill-append-argument
+                  (:parent conn-state-eval-argument)))
+
+(defun conn-kill-append-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-kill-append-argument
+                    (value value))
+      (self cmd)
+    (pcase cmd
+      ('append-next-kill
+       (cond (value
+              (conn-unset-argument self nil))
+             ((> (prefix-numeric-value
+                  (conn-state-eval-consume-prefix-arg))
+                 0)
+              (conn-set-argument self 'append))
+             (t
+              (conn-set-argument self 'prepend))))
+      ('delete
+       (conn-unset-argument self nil))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-kill-append-argument)
+                                                  sym)
+  (or (eq sym 'append-next-kill)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-kill-append-argument))
+  (pcase (conn-state-eval-argument-value arg)
+    ('nil)
+    ('append
+     (propertize
+      "Append Kill"
+      'face 'eldoc-highlight-function-argument))
+    ('prepend
+     (propertize
+      "Prepend Kill"
+      'face 'eldoc-highlight-function-argument))))
+
+(oclosure-define (conn-delete-argument
+                  (:parent conn-state-eval-argument)))
+
+(defun conn-delete-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-delete-argument
+                    (value value))
+      (self cmd)
+    (pcase cmd
+      ('delete (conn-set-argument self (null value)))
+      ((or 'register 'append-next-kill)
+       (conn-unset-argument self nil))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-delete-argument)
+                                                  sym)
+  (or (eq sym 'delete)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-delete-argument))
+  (when-let* ((ts (conn-state-eval-argument-value arg)))
+    (propertize
+     "Delete"
+     'face 'eldoc-highlight-function-argument)))
+
+(oclosure-define (conn-register-argument
+                  (:parent conn-state-eval-argument)))
+
+(defun conn-register-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-register-argument
+                    (value value))
+      (self cmd)
+    (pcase cmd
+      ('register
+       (if value
+           (conn-unset-argument self nil)
+         (conn-set-argument self (register-read-with-preview "Register:"))))
+      ('delete
+       (conn-unset-argument self nil))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-register-argument)
+                                                  sym)
+  (or (eq sym 'register)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-register-argument))
+  (when-let* ((ts (conn-state-eval-argument-value arg)))
+    (propertize
+     (format "Register <%c>" ts)
+     'face 'eldoc-highlight-function-argument)))
+
+(defun conn-kill-thing (cmd arg transform &optional append delete register)
   (interactive
    (conn-eval-with-state 'conn-kill-state
        (list && (oclosure-lambda (conn-thing-argument
@@ -1630,33 +1731,53 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                       self (list cmd (conn-state-eval-consume-prefix-arg))))
                     (_ (conn-handle-thing-argument cmd self))))
              & (conn-transform-argument)
-             & current-prefix-arg)
+             & (conn-kill-append-argument)
+             & (conn-delete-argument)
+             & (conn-register-argument
+                (when current-prefix-arg
+                  (register-read-with-preview "Register:"))))
      :prompt "Thing"))
-  (conn-perform-kill cmd arg transform delete-or-register))
+  (conn-perform-kill cmd arg transform append delete register))
 
-(cl-defgeneric conn-perform-kill (cmd arg transform &optional delete-or-register)
+(cl-defgeneric conn-perform-kill (cmd arg transform &optional append delete register)
   (declare (conn-anonymous-thing-property :kill-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional delete-or-register)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional append delete register)
     (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
-        (funcall kill-op arg transform delete-or-register)
-      (conn-perform-change (conn-anonymous-thing-parent cmd) arg delete-or-register)))
-  ( :method (cmd arg transform &optional delete-or-register)
-    (pcase (conn-bounds-of cmd arg)
-      ((conn-bounds `(,beg . ,end) transform)
-       (goto-char beg)
-       (save-mark-and-excursion
-         (if (>= (point) end)
-             (progn
-               (goto-char end)
-               (conn--push-ephemeral-mark beg))
-           (goto-char beg)
-           (conn--push-ephemeral-mark end))
-         (conn-kill-region delete-or-register)))))
-  ( :method ((_cmd (conn-thing line)) _arg _transform &optional _)
+        (funcall kill-op arg transform append delete register)
+      (conn-perform-kill (conn-anonymous-thing-parent cmd) arg append delete register)))
+  ( :method ((_cmd (conn-thing line)) _arg _transform &optional _ _ _)
     (let ((col (current-column)))
       (unwind-protect
           (cl-call-next-method)
         (move-to-column col)))))
+
+(cl-defmethod conn-perform-kill (cmd arg transform &optional append delete register)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (save-mark-and-excursion
+       (goto-char beg)
+       (conn--push-ephemeral-mark end)
+       (cond (delete
+              (call-interactively
+               (conn--without-conn-maps
+                 (key-binding conn-delete-region-keys t))))
+             (register
+              (pcase append
+                ('nil
+                 (copy-to-register register beg end t t))
+                ('append
+                 (append-to-register register beg end t))
+                ('prepend
+                 (prepend-to-register register beg end t))))
+             (t
+              (when (eq append 'prepend)
+                (conn-exchange-mark-command))
+              (let ((last-command (if append
+                                      'kill-region
+                                    last-command)))
+                (call-interactively
+                 (conn--without-conn-maps
+                   (key-binding conn-kill-region-keys t))))))))))
 
 ;;;;; Duplicate Thing
 

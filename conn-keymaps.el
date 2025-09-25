@@ -26,6 +26,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "@" 'append-next-kill
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace
