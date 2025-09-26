@@ -696,6 +696,22 @@ words."))
         (conn-make-bounds-transform bounds (cons beg point))
       (error "Invalid bounds"))))
 
+;;;;;; Check Region
+
+(put 'conn-check-bounds :conn-bounds-transform t)
+(put 'conn-check-bounds :conn-transform-description "check")
+
+(defvar conn-check-bounds-hook nil)
+
+(define-inline conn-check-bounds (bounds)
+  (inline-letevals (bounds)
+    (inline-quote
+     (progn
+       (run-hook-with-args 'conn-check-bounds-hook
+                           (conn-bounds-thing ,bounds)
+                           ,bounds)
+       ,bounds))))
+
 ;;;;; Perform Bounds
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)

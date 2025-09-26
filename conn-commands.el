@@ -1126,114 +1126,6 @@ With arg N, insert N newlines."
        (delete-indentation nil beg end)
        (indent-according-to-mode)))))
 
-;;;;; Prepend/Append to Kill/Register
-
-(defun conn-append-region (beg end &optional register kill-flag prepend)
-  "Append region from BEG to END to most recent kill.
-
-Optionally if REGISTER is specified append to REGISTER instead.
-When called interactively with a non-nil prefix argument read register
-interactively.
-
-When KILL-FLAG is non-nil kill the region as well."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (when current-prefix-arg
-           (register-read-with-preview "Append kill to register: "))))
-  (let ((separator (and register-separator (get-register register-separator)))
-        (text (filter-buffer-substring beg end kill-flag)))
-    (pcase (and register (get-register register))
-      ('nil (kill-append (concat separator text) prepend))
-      ((and reg (cl-type marker))
-       (let ((marker-type (marker-insertion-type reg)))
-         (set-marker-insertion-type reg (not prepend))
-         (unwind-protect
-             (with-current-buffer (marker-buffer reg)
-               (save-excursion
-                 (goto-char reg)
-                 (insert-for-yank (if prepend
-                                      (concat text separator)
-                                    (concat separator text))))
-               (setq deactivate-mark t))
-           (set-marker-insertion-type reg marker-type))))
-      ((guard prepend)
-       (prepend-to-register register beg end kill-flag))
-      (_
-       (append-to-register register beg end kill-flag))))
-  (when (and (null kill-flag)
-             (called-interactively-p 'interactive))
-    (pulse-momentary-highlight-region beg end)))
-
-(defun conn-prepend-region (beg end &optional register kill-flag)
-  "Prepend region from BEG to END to most recent kill.
-
-Optionally if REGISTER is specified prepend to REGISTER instead.
-When called interactively with a non-nil prefix argument read register
-interactively.
-
-When KILL-FLAG is non-nil kill the region as well."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (when current-prefix-arg
-           (register-read-with-preview "Prepend to register: "))))
-  (conn-append-region beg end register kill-flag t)
-  (when (and (null kill-flag)
-             (called-interactively-p 'interactive))
-    (pulse-momentary-highlight-region beg end)))
-
-(defun conn-kill-append-region (beg end &optional register)
-  "Kill current region and append it to the last kill.
-
-With a prefix arg append to a register instead."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (when current-prefix-arg
-           (register-read-with-preview "Append to register: "))))
-  (conn-append-region beg end register t))
-
-(defun conn-kill-prepend-region (beg end &optional register)
-  "Kill current region and prepend it to the last kill.
-
-With a prefix arg prepend to a register instead."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (when current-prefix-arg
-           (register-read-with-preview "Prepend to register: "))))
-  (conn-prepend-region beg end register t))
-
-;;;;; Copy Thing
-
-(conn-define-state conn-copy-state (conn-read-thing-state)
-  :lighter "COPY")
-
-(cl-defgeneric conn-perform-copy (cmd arg transform &optional register)
-  (declare (conn-anonymous-thing-property :copy-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional register)
-    (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
-        (funcall copy-op arg transform register)
-      (conn-perform-copy (conn-anonymous-thing-parent cmd) arg transform register)))
-  ( :method (cmd arg transform &optional register)
-    (pcase-let (((conn-bounds `(,beg . ,end) transform)
-                 (conn-bounds-of cmd arg)))
-      (conn-copy-region beg end register)
-      (unless executing-kbd-macro
-        (pulse-momentary-highlight-region beg end)))))
-
-(defun conn-copy-thing (thing arg &optional transform register)
-  "Copy THING at point."
-  (interactive
-   (conn-eval-with-state 'conn-copy-state
-       (list && (conn-thing-argument-dwim)
-             & (conn-transform-argument)
-             (when current-prefix-arg
-               (register-read-with-preview "Register: ")))
-     :prompt "Thing"))
-  (conn-perform-copy thing arg transform register))
-
 ;;;;; Narrowing Commands
 
 (defvar-local conn-narrow-ring nil
@@ -1501,25 +1393,25 @@ for the meaning of prefix ARG."
                  (filter-buffer-substring beg end))))
      (_ (user-error "No region in buffer")))))
 
-(defun conn-yank-replace (start end &optional kill-region)
+(defun conn-yank-replace (&optional kill-region)
   "`yank' replacing region between START and END.
 
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (atomic-change-group
-    (conn--without-conn-maps
-      (if kill-region
-          (let ((str (filter-buffer-substring start end t)))
-            (funcall (key-binding conn-yank-keys t))
-            (kill-new str))
-        (funcall (or (key-binding conn-delete-region-keys t)
-                     'delete-region)
-                 start end)
-        (funcall (key-binding conn-yank-keys t))))))
+  (interactive "p")
+  (pcase (conn-bounds-of 'region nil)
+    ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
+     (atomic-change-group
+       (conn--without-conn-maps
+         (if kill-region
+             (let ((str (filter-buffer-substring beg end t)))
+               (yank)
+               (kill-new str))
+           (delete-region beg end)
+           (yank))
+         ;; yank changes this-command to 'yank, fix that
+         (setq this-command 'conn-yank-replace))))))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
@@ -1542,64 +1434,29 @@ If REGISTER is given copy to REGISTER instead."
       (when (called-interactively-p 'interactive)
         (pulse-momentary-highlight-region start end)))))
 
-(defun conn-kill-region (&optional arg)
-  "Kill region between START and END.
-
-If START and END are equal delete char backward.
-
-If ARG is an ordinary prefix argument (\\[universal-argument]) delete
-the region instead of killing it.
-
-If ARG is a numeric prefix argument kill region to a register."
-  (interactive (list current-prefix-arg))
-  (cond ((= (point) (mark t))
-         (call-interactively (conn--without-conn-maps
-                               (key-binding conn-backward-delete-char-keys t))))
-        ((bound-and-true-p rectangle-mark-mode)
-         (if (consp arg)
-             (delete-rectangle (region-beginning) (region-end))
-           (kill-rectangle (region-beginning) (region-end))))
-        ((consp arg)
-         (call-interactively
-          (conn--without-conn-maps
-            (key-binding conn-delete-region-keys t))))
-        (arg
-         (thread-first
-           (concat "Kill "
-                   (if (bound-and-true-p rectangle-mark-mode)
-                       "Rectangle "
-                     "")
-                   "to register:")
-           (register-read-with-preview)
-           (copy-to-register nil nil t t)))
-        (t (call-interactively
-            (conn--without-conn-maps
-              (key-binding conn-kill-region-keys t))))))
-
-(defun conn-completing-yank-replace (start end &optional arg)
-  "Replace region from START to END with result of `yank-from-kill-ring'.
+(defun conn-completing-yank-replace (&optional arg)
+  "Replace region with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         current-prefix-arg))
-  (let ((ov (make-overlay start end))
-        exchange)
-    (overlay-put ov 'conn-overlay t)
-    (unwind-protect
-        (progn
-          (when (setq exchange (= (point) start))
-            (exchange-point-and-mark (not mark-active)))
-          (overlay-put ov 'invisible t)
-          (call-interactively (or (command-remapping 'yank-from-kill-ring)
-                                  'yank-from-kill-ring))
-          (if arg
-              (kill-region (overlay-start ov) (overlay-end ov))
-            (delete-region (overlay-start ov) (overlay-end ov))))
-      (when exchange
-        (exchange-point-and-mark (not mark-active)))
-      (delete-overlay ov))))
+  (interactive "p")
+  (pcase (conn-bounds-of 'region nil)
+    ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
+     (let ((ov (make-overlay beg end))
+           exchange)
+       (overlay-put ov 'conn-overlay t)
+       (unwind-protect
+           (progn
+             (when (setq exchange (= (point) beg))
+               (exchange-point-and-mark (not mark-active)))
+             (overlay-put ov 'invisible t)
+             (call-interactively (or (command-remapping 'yank-from-kill-ring)
+                                     'yank-from-kill-ring))
+             (if arg
+                 (kill-region (overlay-start ov) (overlay-end ov))
+               (delete-region (overlay-start ov) (overlay-end ov))))
+         (when exchange
+           (exchange-point-and-mark (not mark-active)))
+         (delete-overlay ov))))))
 
 (defun conn-yank-replace-rectangle ()
   "Delete the current rectangle and `yank-rectangle'."
@@ -1615,20 +1472,18 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-kill-state)
-  "@" 'append-next-kill
-  "." 'register
-  "d" 'delete)
-
 (oclosure-define (conn-kill-append-argument
                   (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-kill-append-map
+  "@" 'append-next-kill)
 
 (defun conn-kill-append-argument (&optional value)
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-kill-append-argument
-                    (value value))
+                    (value value)
+                    (keymap conn-kill-append-map))
       (self cmd)
     (pcase cmd
       ('append-next-kill
@@ -1637,7 +1492,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              ((> (prefix-numeric-value
                   (conn-state-eval-consume-prefix-arg))
                  0)
-              (conn-set-argument self 'append))
+              (conn-set-argument self t))
              (t
               (conn-set-argument self 'prepend))))
       ('delete
@@ -1650,25 +1505,32 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (cl-call-next-method)))
 
 (cl-defmethod conn-display-argument ((arg conn-kill-append-argument))
-  (pcase (conn-state-eval-argument-value arg)
-    ('nil)
-    ('append
-     (propertize
-      "append"
-      'face 'eldoc-highlight-function-argument))
-    ('prepend
-     (propertize
-      "prepend"
-      'face 'eldoc-highlight-function-argument))))
+  (substitute-command-keys
+   (concat
+    "\\[append-next-kill] "
+    (pcase (conn-state-eval-argument-value arg)
+      ('nil "append")
+      ('prepend
+       (propertize
+        "prepend"
+        'face 'eldoc-highlight-function-argument))
+      (_
+       (propertize
+        "append"
+        'face 'eldoc-highlight-function-argument))))))
 
 (oclosure-define (conn-delete-argument
                   (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-delete-argument-map
+  "d" 'delete)
 
 (defun conn-delete-argument (&optional value)
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-delete-argument
-                    (value value))
+                    (value value)
+                    (keymap conn-delete-argument-map))
       (self cmd)
     (pcase cmd
       ('delete (conn-set-argument self (null value)))
@@ -1682,19 +1544,27 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (cl-call-next-method)))
 
 (cl-defmethod conn-display-argument ((arg conn-delete-argument))
-  (when-let* ((ts (conn-state-eval-argument-value arg)))
-    (propertize
-     "delete"
-     'face 'eldoc-highlight-function-argument)))
+  (substitute-command-keys
+   (concat
+    "\\[delete]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         "del"
+         'face 'eldoc-highlight-function-argument)
+      "del"))))
 
 (oclosure-define (conn-register-argument
                   (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-register-argument-map
+  "." 'register)
 
 (defun conn-register-argument (&optional value)
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-register-argument
-                    (value value))
+                    (value value)
+                    (keymap conn-register-argument-map))
       (self cmd)
     (pcase cmd
       ('register
@@ -1711,12 +1581,88 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (cl-call-next-method)))
 
 (cl-defmethod conn-display-argument ((arg conn-register-argument))
-  (when-let* ((ts (conn-state-eval-argument-value arg)))
-    (propertize
-     (format "register <%c>" ts)
-     'face 'eldoc-highlight-function-argument)))
+  (substitute-command-keys
+   (concat
+    "\\[register]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         (format "reg <%c>" ts)
+         'face 'eldoc-highlight-function-argument)
+      "reg"))))
 
-(defun conn-kill-thing (cmd arg transform &optional append delete register)
+(oclosure-define (conn-fixup-whitespace-argument
+                  (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-fixup-whitespace-argument-map
+  "q" 'fixup-whitespace)
+
+(defun conn-fixup-whitespace-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-fixup-whitespace-argument
+                    (value value)
+                    (keymap conn-fixup-whitespace-argument-map))
+      (self cmd)
+    (pcase cmd
+      ('fixup-whitespace
+       (conn-set-argument self (null value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-fixup-whitespace-argument)
+                                                  sym)
+  (or (eq sym 'fixup-whitespace)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-fixup-whitespace-argument))
+  (substitute-command-keys
+   (concat
+    "\\[fixup-whitespace]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         "fixup"
+         'face 'eldoc-highlight-function-argument)
+      "fixup"))))
+
+(oclosure-define (conn-check-bounds-argument
+                  (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-check-bounds-argument-map
+  "C-u" 'check-bounds)
+
+(defun conn-check-bounds-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-check-bounds-argument
+                    (value value)
+                    (keymap conn-check-bounds-argument-map))
+      (self cmd)
+    (pcase cmd
+      ('check-bounds
+       (conn-set-argument self (null value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-check-bounds-argument)
+                                                  sym)
+  (or (eq sym 'check-bounds)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-check-bounds-argument))
+  (substitute-command-keys
+   (concat
+    "\\[check-bounds]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         "check region"
+         'face 'eldoc-highlight-function-argument)
+      "check region"))))
+
+(defun conn-kill-thing ( cmd arg transform
+                         &optional
+                         append
+                         delete
+                         register
+                         fixup-whitespace
+                         check-bounds)
   (interactive
    (conn-eval-with-state 'conn-kill-state
        (list && (oclosure-lambda (conn-thing-argument
@@ -1734,10 +1680,57 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              & (conn-kill-append-argument)
              & (conn-delete-argument)
              & (conn-register-argument
-                (when current-prefix-arg
-                  (register-read-with-preview "Register:"))))
+                (when (and current-prefix-arg
+                           (not (equal '(4) current-prefix-arg)))
+                  (register-read-with-preview "Register:")))
+             & (conn-fixup-whitespace-argument
+                (unless (region-active-p)
+                  conn-dispatch-fixup-whitespace))
+             & (conn-check-bounds-argument (listp current-prefix-arg)))
      :prompt "Thing"))
-  (conn-perform-kill cmd arg transform append delete register))
+  (when check-bounds
+    (cl-callf2 cons 'conn-check-bounds transform))
+  (conn-perform-kill cmd arg transform append delete register)
+  (conn--kill-fixup-whitespace))
+
+(defun conn--kill-fixup-whitespace ()
+  (let ((goal-column (current-column))
+        (tab-always-indent t))
+    (when (or (looking-at " ") (looking-back " " 1))
+      (fixup-whitespace)
+      (if (save-excursion
+            (beginning-of-line)
+            (looking-at "\n"))
+          (progn
+            (join-line)
+            (line-move-1 1))
+        (indent-for-tab-command)))
+    (when (save-excursion
+            (beginning-of-line)
+            (looking-at "\\s)*\n"))
+      (progn
+        (join-line)
+        (line-move-1 1)))))
+
+(defun conn--kill-region (beg end &optional delete-flag append register)
+  (if register
+      (pcase append
+        ('nil
+         (copy-to-register register beg end delete-flag t))
+        ('prepend
+         (prepend-to-register register beg end delete-flag))
+        (_
+         (append-to-register register beg end delete-flag)))
+    (when (and append
+               (xor (eq append 'prepend)
+                    (< (point) (mark t))))
+      (let ((omark (mark t)))
+        (set-mark (point))
+        (goto-char omark)))
+    (let ((last-command (if append 'kill-region last-command)))
+      (if delete-flag
+          (kill-region (mark t) (point) t)
+        (copy-region-as-kill (mark t) (point) t)))))
 
 (cl-defgeneric conn-perform-kill (cmd arg transform &optional append delete register)
   (declare (conn-anonymous-thing-property :kill-op))
@@ -1748,9 +1741,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing line)) _arg _transform &optional _ _ _)
   (let ((col (current-column)))
-    (unwind-protect
-        (cl-call-next-method)
-      (move-to-column col))))
+    (cl-call-next-method)
+    (move-to-column col)))
 
 (cl-defmethod conn-perform-kill (cmd arg transform &optional append delete register)
   (pcase (conn-bounds-of cmd arg)
@@ -1758,29 +1750,44 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (goto-char beg)
      (save-mark-and-excursion
        (conn--push-ephemeral-mark end)
-       (cond (delete
-              (call-interactively
-               (conn--without-conn-maps
-                 (key-binding conn-delete-region-keys t))))
-             (register
-              (pcase append
-                ('nil
-                 (copy-to-register register beg end t t))
-                ('append
-                 (append-to-register register beg end t))
-                ('prepend
-                 (prepend-to-register register beg end t))))
-             (t
-              (when (eq append 'prepend)
-                (let ((omark (mark t)))
-                  (set-mark (point))
-                  (goto-char omark)))
-              (let ((last-command (if append
-                                      'kill-region
-                                    last-command)))
-                (call-interactively
-                 (conn--without-conn-maps
-                   (key-binding conn-kill-region-keys t))))))))))
+       (if delete
+           (delete-region beg end)
+         (conn--kill-region beg end t append register))))))
+
+;;;;; Copy Thing
+
+(conn-define-state conn-copy-state (conn-read-thing-state)
+  :lighter "COPY")
+
+(defun conn-copy-thing (thing arg &optional transform append register)
+  "Copy THING at point."
+  (interactive
+   (conn-eval-with-state 'conn-copy-state
+       (list && (conn-thing-argument-dwim)
+             & (conn-transform-argument)
+             & (conn-kill-append-argument)
+             & (conn-register-argument
+                (when current-prefix-arg
+                  (register-read-with-preview "Register:"))))
+     :prompt "Thing"))
+  (conn-perform-copy thing arg transform append register))
+
+(cl-defgeneric conn-perform-copy (cmd arg &optional transform append register)
+  (declare (conn-anonymous-thing-property :copy-op))
+  ( :method ((cmd (conn-thing anonymous-thing)) arg &optional transform append register)
+    (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
+        (funcall copy-op arg transform append register)
+      (conn-perform-copy (conn-anonymous-thing-parent cmd) arg transform append register))))
+
+(cl-defmethod conn-perform-copy (cmd arg &optional transform append register)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (save-mark-and-excursion
+       (goto-char beg)
+       (conn--push-ephemeral-mark end)
+       (conn--kill-region beg end nil append register))
+     (unless executing-kbd-macro
+       (pulse-momentary-highlight-region beg end)))))
 
 ;;;;; Duplicate Thing
 
@@ -1931,41 +1938,34 @@ Interactively `region-beginning' and `region-end'."
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
 
-(cl-defgeneric conn-perform-change (cmd arg transform &optional kill)
+(cl-defgeneric conn-perform-change (cmd arg transform)
   (declare (conn-anonymous-thing-property :change-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg transform &optional kill)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg transform)
     (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
-        (funcall change-op arg transform kill)
-      (conn-perform-change (conn-anonymous-thing-parent cmd) arg kill))))
+        (funcall change-op arg transform)
+      (conn-perform-change (conn-anonymous-thing-parent cmd) arg))))
 
-(cl-defmethod conn-perform-change (cmd arg transform &optional kill)
+(cl-defmethod conn-perform-change (cmd arg transform)
   (pcase-let (((conn-bounds `(,beg . ,end) transform)
                (conn-bounds-of cmd arg)))
     (goto-char beg)
-    (cond (kill
-           (funcall (conn--without-conn-maps
-                      (key-binding conn-kill-region-keys t))
-                    beg end)
-           (conn-push-state 'conn-emacs-state))
-          (t
-           (funcall (conn--without-conn-maps
-                      (key-binding conn-delete-region-keys t))
-                    beg end)
-           (if (eq 'conn-emacs-state (conn-peek-state))
-               (conn-pop-state)
-             (conn-push-state 'conn-emacs-state))))))
+    (delete-region beg end)
+    (if (eq 'conn-emacs-state (conn-peek-state))
+        (conn-pop-state)
+      (conn-push-state 'conn-emacs-state))))
 
-(cl-defmethod conn-perform-change :extra "rectangle" ((_cmd (conn-thing region)) _arg _transform &optional _kill)
+(cl-defmethod conn-perform-change :extra "rectangle" ((_cmd (conn-thing region))
+                                                      _arg _transform)
   (if (bound-and-true-p rectangle-mark-mode)
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
 
 (cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite))
-                                   _arg _transform &optional _kill)
+                                   _arg _transform)
   (conn-emacs-state-overwrite))
 
 (cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite-binary))
-                                   _arg _transform &optional _kill)
+                                   _arg _transform)
   (conn-emacs-state-overwrite-binary))
 
 (cl-defgeneric conn-handle-change-argument (cmd arg)
@@ -1984,7 +1984,7 @@ Interactively `region-beginning' and `region-end'."
   (conn-set-argument
    arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
-(defun conn-change-thing (cmd arg transform &optional kill)
+(defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD and ARG."
   (interactive
    (conn-eval-with-state 'conn-change-state
@@ -1995,18 +1995,9 @@ Interactively `region-beginning' and `region-end'."
                                   (set-flag (use-region-p)))
                     (self cmd)
                   (conn-handle-change-argument cmd self))
-             & (conn-transform-argument 'conn-bounds-last)
-             & current-prefix-arg)
+             & (conn-transform-argument 'conn-bounds-last))
      :prompt "Thing"))
-  (conn-perform-change cmd arg transform kill))
-
-(defun conn-change (&optional kill)
-  "Change region between START and END.
-
-If KILL is non-nil add region to the `kill-ring'.  When in
-`rectangle-mark-mode' defer to `string-rectangle'."
-  (interactive "P")
-  (conn-perform-change 'region nil nil kill))
+  (conn-perform-change cmd arg transform))
 
 ;;;;; Transition Functions
 

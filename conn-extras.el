@@ -148,8 +148,9 @@
   "A" 'execute-extended-command-for-buffer
   "b" 'outline-show-branches
   "c" (conn-remap-key "C-c" t)
-  "d h" 'outline-hide-by-heading-regexp
-  "d s" 'outline-show-by-heading-regexp
+  "d" 'conn-kill-thing
+  "w h" 'outline-hide-by-heading-regexp
+  "w s" 'outline-show-by-heading-regexp
   "e" 'conn-pop-state
   "f" 'conn-dispatch
   "g" (conn-remap-key "M-g" t)
@@ -168,7 +169,6 @@
   "t" 'outline-hide-body
   "u" 'outline-up-heading
   "v" 'conn-toggle-mark-command
-  "w" 'conn-kill-region
   "x" (conn-remap-key "C-x" t)
   "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)

@@ -137,11 +137,7 @@
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
   "N" 'conn-narrow-indirect
-  "n" 'conn-narrow-to-thing
-  "j" 'conn-kill-prepend-region
-  "l" 'conn-kill-append-region
-  "J" 'conn-prepend-region
-  "L" 'conn-append-region)
+  "n" 'conn-narrow-to-thing)
 
 (defvar-keymap conn-default-edit-map
   "." 'conn-register-prefix

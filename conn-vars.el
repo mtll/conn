@@ -63,21 +63,6 @@
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-yank-keys (key-parse "C-y")
-  "`yank' key binding."
-  :group 'conn-key-remapping
-  :type '(vector integer))
-
-(defcustom conn-kill-region-keys (key-parse "C-w")
-  "`kill-region' key binding."
-  :group 'conn-key-remapping
-  :type '(vector integer))
-
-(defcustom conn-delete-region-keys (key-parse "C-S-w")
-  "`delete-region' key binding."
-  :group 'conn-key-remapping
-  :type '(vector integer))
-
 (defcustom conn-forward-sexp-keys (key-parse "C-M-f")
   "`forward-sexp' key binding."
   :group 'conn-key-remapping
@@ -175,11 +160,6 @@
 
 (defcustom conn-backward-list-keys (key-parse "C-M-p")
   "`backward-list' key binding."
-  :group 'conn-key-remapping
-  :type '(vector integer))
-
-(defcustom conn-kill-line-keys (key-parse "C-k")
-  "`kill-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 

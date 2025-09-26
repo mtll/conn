@@ -231,36 +231,37 @@
          'conn-quick-ref-page-header t)))))
 
 (defun conn-quick-reference (pages)
-  (let ((buf (get-buffer-create " *conn-quick-ref*"))
-        (display-function conn-quick-ref-display-function)
-        (pages (copy-sequence pages))
-        (inhibit-message t))
-    (conn-quick-ref-insert-page (car pages) buf)
-    (funcall display-function buf nil)
-    (unwind-protect
-        (catch 'break
-          (conn-with-overriding-map conn-quick-ref-map
-            (while t
-              (let ((keys (read-key-sequence-vector nil)))
-                (pcase (key-binding keys)
-                  ('close
-                   (throw 'break nil))
-                  ('next
-                   (setq pages (nconc (cdr pages) (list (car pages))))
-                   (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall display-function buf nil))
-                  ('previous
-                   (setq pages (nconc (last pages) (butlast pages)))
-                   (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall display-function buf nil))
-                  ((or 'quit 'keyboard-quit)
-                   (keyboard-quit))
-                  (_ (setq unread-command-events
-                           (mapcar (lambda (key)
-                                     (cons 'no-record key))
-                                   (listify-key-sequence keys)))
-                     (throw 'break nil)))))))
-      (funcall display-function buf t))))
+  (when pages
+    (let ((buf (get-buffer-create " *conn-quick-ref*"))
+          (display-function conn-quick-ref-display-function)
+          (pages (copy-sequence pages))
+          (inhibit-message t))
+      (conn-quick-ref-insert-page (car pages) buf)
+      (funcall display-function buf nil)
+      (unwind-protect
+          (catch 'break
+            (conn-with-overriding-map conn-quick-ref-map
+              (while t
+                (let ((keys (read-key-sequence-vector nil)))
+                  (pcase (key-binding keys)
+                    ('close
+                     (throw 'break nil))
+                    ('next
+                     (setq pages (nconc (cdr pages) (list (car pages))))
+                     (conn-quick-ref-insert-page (car pages) buf)
+                     (funcall display-function buf nil))
+                    ('previous
+                     (setq pages (nconc (last pages) (butlast pages)))
+                     (conn-quick-ref-insert-page (car pages) buf)
+                     (funcall display-function buf nil))
+                    ((or 'quit 'keyboard-quit)
+                     (keyboard-quit))
+                    (_ (setq unread-command-events
+                             (mapcar (lambda (key)
+                                       (cons 'no-record key))
+                                     (listify-key-sequence keys)))
+                       (throw 'break nil)))))))
+        (funcall display-function buf t)))))
 
 (defun conn--quick-ref-minibuffer (buffer hide-p)
   (let (inhibit-message message-log-max)

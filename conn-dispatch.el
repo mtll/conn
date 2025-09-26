@@ -1979,18 +1979,21 @@ contain targets."
         (when cur-mark-active
           (run-hooks 'deactivate-mark-hook))))))
 
-(defun conn--dispatch-fixup-whitespace ()
-  (save-excursion
-    (when (or (looking-at " ") (looking-back " " 1))
-      (fixup-whitespace)
-      (if (progn (beginning-of-line)
-                 (looking-at "\n"))
-          (join-line)
-        (indent-for-tab-command)))
-    (when (progn
-            (beginning-of-line)
-            (looking-at "\\s)*\n"))
-      (join-line))))
+(defvar conn-dispatch-fixup-whitespace t)
+
+(defun conn--dispatch-maybe-fixup-whitespace ()
+  (when conn-dispatch-fixup-whitespace
+    (save-excursion
+      (when (or (looking-at " ") (looking-back " " 1))
+        (fixup-whitespace)
+        (if (progn (beginning-of-line)
+                   (looking-at "\n"))
+            (join-line)
+          (indent-for-tab-command)))
+      (when (progn
+              (beginning-of-line)
+              (looking-at "\\s)*\n"))
+        (join-line)))))
 
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
@@ -2249,7 +2252,7 @@ contain targets."
     (oclosure-lambda (conn-dispatch-send
                       (change-group cg)
                       (str (prog1 (funcall region-extract-function t)
-                             (conn--dispatch-fixup-whitespace)))
+                             (conn--dispatch-maybe-fixup-whitespace)))
                       (separator sep)
                       (window-predicate
                        (lambda (win)
@@ -2305,7 +2308,7 @@ contain targets."
                       (description "Send and Replace")
                       (change-group cg)
                       (str (prog1 (funcall region-extract-function t)
-                             (conn--dispatch-fixup-whitespace)))
+                             (conn--dispatch-maybe-fixup-whitespace)))
                       (window-predicate
                        (lambda (win)
                          (not
@@ -2471,7 +2474,7 @@ contain targets."
                   (copy-to-register register beg end t))
                  (t
                   (kill-region beg end)))
-           (conn--dispatch-fixup-whitespace)
+           (conn--dispatch-maybe-fixup-whitespace)
            (message "Killed thing"))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2505,7 +2508,7 @@ contain targets."
                  (copy-to-register register beg end t)
                (kill-append str nil)
                (delete-region beg end))
-             (conn--dispatch-fixup-whitespace)
+             (conn--dispatch-maybe-fixup-whitespace)
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2540,7 +2543,7 @@ contain targets."
                  (prepend-to-register register beg end t)
                (kill-append str t)
                (delete-region beg end))
-             (conn--dispatch-fixup-whitespace)
+             (conn--dispatch-maybe-fixup-whitespace)
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2694,7 +2697,7 @@ contain targets."
           ((conn-bounds `(,beg . ,end) transform)
            (pulse-momentary-highlight-region beg end)
            (copy-region-as-kill beg end)
-           (conn--dispatch-fixup-whitespace))
+           (conn--dispatch-maybe-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
     (conn-dispatch-loop-undo-boundary)
     (delete-region (region-beginning) (region-end))
@@ -2740,7 +2743,7 @@ contain targets."
           (pcase (conn-bounds-of thing thing-arg)
             ((conn-bounds `(,beg . ,end) transform)
              (kill-region beg end)
-             (conn--dispatch-fixup-whitespace))
+             (conn--dispatch-maybe-fixup-whitespace))
             (_ (user-error "Cannot find thing at point")))))
       (with-current-buffer (marker-buffer opoint)
         (save-excursion
@@ -2792,7 +2795,7 @@ contain targets."
         (pcase (conn-bounds-of thing thing-arg)
           ((conn-bounds `(,beg . ,end) transform)
            (kill-region beg end)
-           (conn--dispatch-fixup-whitespace))
+           (conn--dispatch-maybe-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
     (with-current-buffer (marker-buffer opoint)
       (yank))))

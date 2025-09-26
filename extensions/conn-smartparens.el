@@ -203,15 +203,6 @@
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
                                        (syntax string-quote))))))
-  "." (conn-anonymous-thing
-       'forward-sexp
-       :description "list"
-       :bounds-op (lambda (arg)
-                    (conn-bounds-of 'forward-sexp arg))
-       :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix
-                         'sexp (rx (or (syntax open-parenthesis)
-                                       (syntax string-quote))))))
   "]" (conn-anonymous-thing
        'sexp
        :description "inner-list"
@@ -244,6 +235,18 @@
 
 (keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
             "r" 'conn-sp-wrap-region)
+
+(defun conn-sp-region-ok-p (_thing bounds)
+  (pcase bounds
+    ((conn-bounds `(,beg . ,end))
+     (unless (sp-region-ok-p beg end)
+       (user-error (sp-message :unbalanced-region :return))))))
+
+(defun conn-smartparens-check-region ()
+  (if smartparens-mode
+      (add-hook 'conn-check-bounds-hook 'conn-sp-region-ok-p)
+    (remove-hook 'conn-check-bounds-hook 'conn-sp-region-ok-p)))
+(add-hook 'smartparens-mode-hook 'conn-smartparens-check-region)
 
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode

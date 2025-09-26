@@ -1419,33 +1419,7 @@ A zero means repeat until error."
      ("m" "Macro" kmacro-to-register)
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
-     ("5" "Frameset" frameset-to-register)]]
-  [[ :description "Kill"
-     ("w" "Append to Register"
-      (lambda ()
-        (interactive)
-        (conn-kill-append-region
-         (region-beginning) (region-end)
-         (register-read-with-preview "Prepend to register: "))))
-     ("d" "Prepend to Register"
-      (lambda ()
-        (interactive)
-        (conn-kill-prepend-region
-         (region-beginning) (region-end)
-         (register-read-with-preview "Prepend to register: "))))]
-   [ :description "Copy"
-     ("c" "Append to Register"
-      (lambda ()
-        (interactive)
-        (conn-append-region
-         (region-beginning) (region-end)
-         (register-read-with-preview "Prepend to register: "))))
-     ("x" "Prepend to Register"
-      (lambda ()
-        (interactive)
-        (conn-prepend-region
-         (region-beginning) (region-end)
-         (register-read-with-preview "Prepend to register: "))))]])
+     ("5" "Frameset" frameset-to-register)]])
 
 ;;;; Fill Prefix
 
