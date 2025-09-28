@@ -1684,7 +1684,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace))
 
-(defun conn--kill-fixup-whitespace ()
+(cl-defgeneric conn-kill-fixup-whitespace (thing &key &allow-other-keys))
+
+(cl-defmethod conn-kill-fixup-whitespace ((thing (conn-thing region))
+                                          &key &allow-other-keys)
+  "Noop" nil)
+
+(cl-defmethod conn-kill-fixup-whitespace (thing &key &allow-other-keys)
   (let ((goal-column (current-column))
         (tab-always-indent t))
     (when (or (looking-at " ") (looking-back " " 1))
@@ -1745,20 +1751,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn--push-ephemeral-mark end)
        (if delete
            (delete-region beg end)
-         (conn--kill-region beg end t append register)))
-     (when fixup-whitespace (conn--kill-fixup-whitespace)))))
-
-(cl-defmethod conn-perform-kill ((cmd (conn-thing region))
-                                 arg transform
-                                 &optional append delete register _fixup-whitespace)
-  (pcase (conn-bounds-of cmd arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (goto-char beg)
-     (save-mark-and-excursion
-       (conn--push-ephemeral-mark end)
-       (if delete
-           (delete-region beg end)
-         (conn--kill-region beg end t append register))))))
+         (conn--kill-region beg end t append register))
+       (when fixup-whitespace
+         (conn-kill-fixup-whitespace cmd))))))
 
 ;;;;; Copy Thing
 
