@@ -163,7 +163,7 @@
   "n" 'outline-hide-leaves
   "o" 'outline-hide-other
   "p" 'conn-register-prefix
-  "q" 'conn-transpose-regions
+  "q" 'conn-transpose-things
   "r" conn-region-remap
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body

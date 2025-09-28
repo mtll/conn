@@ -372,7 +372,7 @@
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
   "." 'conn-register-load
-  "q" 'conn-transpose-regions
+  "q" 'conn-transpose-things
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
   "b" 'conn-set-mark-command

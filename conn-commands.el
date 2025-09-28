@@ -829,6 +829,17 @@ Immediately repeating this command pushes a mark."
             (end-kbd-macro)
             (setq conn--last-composite-thing last-kbd-macro)))))))
 
+(defun conn-mark-thing (thing arg transform)
+  (interactive
+   (conn-eval-with-state 'conn-read-thing-state
+       (list && (conn-thing-argument)
+             & (conn-transform-argument))))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (goto-char beg)
+     (push-mark end t t)
+     (conn-push-state 'conn-mark-state))))
+
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' avoiding activating the mark.
 
@@ -1024,7 +1035,7 @@ With a prefix ARG `push-mark' without activating it."
         ;; TODO: make this display somehow
         (user-error (message "%s" (cadr err)) t))))
 
-(defun conn-transpose-regions (mover arg)
+(defun conn-transpose-things (mover arg)
   "Exchange regions defined by a thing command.
 
 With argument ARG 0, exchange the things at point and mark.
@@ -1037,7 +1048,7 @@ region after a `recursive-edit'."
      :prompt "Transpose"
      :prefix current-prefix-arg))
   (when conn-transpose-recursive-edit-mode
-    (user-error "Recursive call to conn-transpose-regions"))
+    (user-error "Recursive call to conn-transpose-things"))
   (conn-perform-transpose mover arg))
 
 ;;;;;; Transpose Quick Ref
@@ -1686,11 +1697,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defgeneric conn-kill-fixup-whitespace (thing &key &allow-other-keys))
 
-(cl-defmethod conn-kill-fixup-whitespace ((thing (conn-thing region))
+(cl-defmethod conn-kill-fixup-whitespace ((_thing (conn-thing region))
                                           &key &allow-other-keys)
   "Noop" nil)
 
-(cl-defmethod conn-kill-fixup-whitespace (thing &key &allow-other-keys)
+(cl-defmethod conn-kill-fixup-whitespace (_thing &key &allow-other-keys)
   (let ((goal-column (current-column))
         (tab-always-indent t))
     (when (or (looking-at " ") (looking-back " " 1))

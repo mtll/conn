@@ -222,6 +222,20 @@
         (keymap-unset minibuffer-mode-map "M-Y"))
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
+(define-minor-mode conn-emacs-state-operators-mode
+  "Bind conn operators in conn-emacs-state."
+  :global t
+  :group 'conn)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-emacs-state-operators-mode)
+  "C-w" 'conn-kill-thing
+  "M-w" 'conn-copy-thing
+  "M-n" 'conn-change-thing
+  "C-t" 'conn-transpose-things
+  "C-." 'conn-dispatch
+  "C-SPC" 'conn-mark-thing)
+
 (provide 'conn)
 
 ;;; Misc
