@@ -220,38 +220,36 @@
 (put 'conn-sp-pair :conn-thing t)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-sp-pair)) arg)
-  (catch 'return
-    (save-mark-and-excursion
-      (let* ((open (funcall conn-read-pair-function
-                            (cl-loop for pair in sp-local-pairs
-                                     collect (plist-get pair :open))))
-             (close (sp-get-pair open :close))
-             (n (prefix-numeric-value arg)))
-        (conn--push-ephemeral-mark)
-        (pcase-dolist (`(,beg . ,end)
-                       (seq-drop-while (pcase-lambda (`(,beg . ,end))
-                                         (or (>= beg (region-beginning))
-                                             (<= end (region-end))))
-                                       (conn--expand-create-expansions)))
-          (when (and (progn (goto-char beg)
-                            (looking-at-p open))
-                     (progn (goto-char end)
-                            (looking-back close (length close)))
-                     (>= 0 (cl-decf n)))
-            (throw 'return
-                   (conn-make-bounds
-                    'conn-surround arg (cons beg end)
-                    :open (conn-make-bounds
-                           'region nil
-                           (cons beg (+ (length open))))
-                    :close (conn-make-bounds
-                            'region nil
-                            (cons (- end (length close)) end))
-                    :inner (conn-make-bounds
-                            'region nil
-                            (cons (+ beg (length open))
-                                  (- end (length close))))))))))
-    (signal 'conn-no-surround nil)))
+  (save-mark-and-excursion
+    (let* ((open (funcall conn-read-pair-function
+                          (cl-loop for pair in sp-local-pairs
+                                   collect (plist-get pair :open))))
+           (close (sp-get-pair open :close))
+           (n (prefix-numeric-value arg)))
+      (conn--push-ephemeral-mark)
+      (pcase-dolist (`(,beg . ,end)
+                     (seq-drop-while (pcase-lambda (`(,beg . ,end))
+                                       (or (>= beg (region-beginning))
+                                           (<= end (region-end))))
+                                     (conn--expand-create-expansions)))
+        (when (and (progn (goto-char beg)
+                          (looking-at-p open))
+                   (progn (goto-char end)
+                          (looking-back close (length close)))
+                   (>= 0 (cl-decf n)))
+          (throw 'return
+                 (conn-make-bounds
+                  'conn-surround arg (cons beg end)
+                  :open (conn-make-bounds
+                         'region nil
+                         (cons beg (+ (length open))))
+                  :close (conn-make-bounds
+                          'region nil
+                          (cons (- end (length close)) end))
+                  :inner (conn-make-bounds
+                          'region nil
+                          (cons (+ beg (length open))
+                                (- end (length close)))))))))))
 
 (cl-defmethod conn-perform-surround ((_with (eql conn-sp-pair))
                                      _arg &key &allow-other-keys)
