@@ -1480,6 +1480,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;;; Kill Thing
 
+(defvar conn-kill-fixup-whitespace t)
+
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
@@ -1689,7 +1691,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (register-read-with-preview "Register:")))
              & (conn-fixup-whitespace-argument
                 (unless (region-active-p)
-                  conn-dispatch-fixup-whitespace))
+                  conn-kill-fixup-whitespace))
              & (conn-check-bounds-argument (listp current-prefix-arg)))
      :prompt "Thing"))
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
