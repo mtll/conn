@@ -279,8 +279,8 @@
 
 (defun conn-smartparens-check-region ()
   (if smartparens-mode
-      (add-hook 'conn-check-bounds-hook 'conn-sp-region-ok-p)
-    (remove-hook 'conn-check-bounds-hook 'conn-sp-region-ok-p)))
+      (cl-pushnew 'conn-sp-region-ok-p conn-check-bounds-functions)
+    (cl-callf2 deql 'conn-sp-region-ok-p conn-check-bounds-functions)))
 (add-hook 'smartparens-mode-hook 'conn-smartparens-check-region)
 
 ;;;###autoload

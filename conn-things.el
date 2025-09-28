@@ -729,11 +729,12 @@ words."))
 (put 'conn-check-bounds :conn-bounds-transform t)
 (put 'conn-check-bounds :conn-transform-description "check")
 
-(defvar conn-check-bounds-hook nil)
+(defvar-local conn-check-bounds-functions nil)
 
 (defun conn-check-bounds (bounds)
-  (run-hook-with-args 'conn-check-bounds-hook bounds)
-  bounds)
+  (cl-loop for fn in conn-check-bounds-functions
+           do (funcall fn bounds)
+           finally return bounds))
 
 ;;;;; Perform Bounds
 
