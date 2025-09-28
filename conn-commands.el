@@ -1410,7 +1410,7 @@ for the meaning of prefix ARG."
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
-  (interactive "p")
+  (interactive "P")
   (pcase (conn-bounds-of 'region nil)
     ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
      (atomic-change-group
