@@ -219,9 +219,9 @@ order to mark the region that should be defined by any of COMMANDS."
             (cons 'thing-bounds (conn-thing-all-parents thing)))))
   (lambda (things &rest _)
     (when things
-      `(,@(cl-loop for thing in (cdr things)
+      `((conn-thing bounds)
+        ,@(cl-loop for thing in (cdr things)
                    collect `(conn-thing ,thing))
-        (conn-thing bounds)
         (conn-thing t)))))
 
 (cl-generic-define-generalizer conn--anonymous-thing-generalizer
@@ -699,12 +699,12 @@ words."))
       (conn-argument-remove)
     arg))
 
-(cl-defgeneric conn-bounds-after-point (bounds point))
+(cl-defgeneric conn-bounds-after-point (bounds))
 
-(cl-defmethod conn-bounds-after-point (bounds point)
+(cl-defmethod conn-bounds-after-point (bounds)
   (pcase-let (((conn-bounds `(,_beg . ,end)) bounds))
-    (if (<= point end)
-        (conn-make-bounds-transform bounds (cons point end))
+    (if (<= (point) end)
+        (conn-make-bounds-transform bounds (cons (point) end))
       (error "Invalid bounds"))))
 
 (put 'conn-bounds-before-point :conn-bounds-transform t)
@@ -716,12 +716,12 @@ words."))
       (conn-argument-remove)
     arg))
 
-(cl-defgeneric conn-bounds-before-point (bounds point))
+(cl-defgeneric conn-bounds-before-point (bounds))
 
-(cl-defmethod conn-bounds-before-point (bounds point)
+(cl-defmethod conn-bounds-before-point (bounds)
   (pcase-let (((conn-bounds `(,beg . ,_end)) bounds))
-    (if (>= point beg)
-        (conn-make-bounds-transform bounds (cons beg point))
+    (if (>= (point) beg)
+        (conn-make-bounds-transform bounds (cons beg (point)))
       (error "Invalid bounds"))))
 
 ;;;;;; Check Region

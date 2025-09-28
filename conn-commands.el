@@ -1681,7 +1681,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   conn-dispatch-fixup-whitespace))
              & (conn-check-bounds-argument (listp current-prefix-arg)))
      :prompt "Thing"))
-  (when check-bounds (cl-callf2 cons 'conn-check-bounds transform))
+  (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace))
 
 (defun conn--kill-fixup-whitespace ()
