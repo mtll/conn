@@ -47,15 +47,31 @@
            (important-return-value t))
   (inline-letevals (thing)
     (inline-quote
-     (when (symbolp ,thing)
-       (or (get ,thing :conn-thing)
-           (get ,thing 'forward-op)
-           (intern-soft (format "forward-%s" ,thing))
-           (get ,thing 'end-op)
-           (get ,thing 'bounds-of-thing-at-point))))))
+     (and (symbolp ,thing)
+          (or (get ,thing :conn-thing)
+              (get ,thing 'forward-op)
+              (intern-soft (format "forward-%s" ,thing))
+              (get ,thing 'end-op)
+              (get ,thing 'bounds-of-thing-at-point))
+          ,thing))))
 
-(cl-defun conn-register-thing (thing &key forward-op beg-op end-op bounds-op)
+(defconst conn--thing-all-parents-cache (make-hash-table :test 'eq))
+
+(defun conn-thing-all-parents (thing)
+  (declare (important-return-value t))
+  (with-memoization (gethash thing conn--thing-all-parents-cache)
+    (cons thing (merge-ordered-lists
+                 (mapcar #'conn-thing-all-parents
+                         (get thing :conn--thing-parents))))))
+
+(defun conn-anonymous-thing-all-parents (thing)
+  (declare (important-return-value t))
+  (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
+
+(cl-defun conn-register-thing (thing &key parents forward-op beg-op end-op bounds-op)
   (put thing :conn-thing t)
+  (when parents
+    (put thing :conn--thing-parents parents))
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -164,43 +180,67 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
 
+(cl-generic-define-generalizer conn--thing-generalizer
+  70 (lambda (thing &rest _)
+       `(and (conn-thing-p ,thing)
+             (conn-thing-all-parents ,thing)))
+  (lambda (things &rest _)
+    (when things
+      `(,@(cl-loop for thing in things
+                   collect `(conn-thing ,thing))
+        (conn-thing thing)
+        (conn-thing t)))))
+
+(defconst conn--thing-command-tag-cache (make-hash-table :test 'eq))
+
 (cl-generic-define-generalizer conn--thing-command-generalizer
   70 (lambda (cmd &rest _)
        `(when-let* ((thing (conn-command-thing ,cmd)))
-          (with-memoization (gethash thing conn--thing-cmd-tag-cache)
-            (cons 'command thing))))
-  (lambda (thing &rest _)
-    (when thing
-      `((conn-thing-command ,(cdr thing))
-        (conn-thing ,(cdr thing))
-        (conn-thing-command t)
+          (with-memoization
+              (gethash (conn-thing-all-parents thing)
+                       conn--thing-command-tag-cache)
+            (cons 'thing-command (conn-thing-all-parents thing)))))
+  (lambda (things &rest _)
+    (when things
+      `(,@(cl-loop for thing in (cdr things)
+                   collect `(conn-thing ,thing))
+        (conn-thing command)
+        (conn-thing t)))))
+
+(defconst conn--thing-bounds-tag-cache (make-hash-table :test 'eq))
+
+(cl-generic-define-generalizer conn--thing-bounds-generalizer
+  70 (lambda (bounds &rest _)
+       `(when-let* ((thing (and (conn-bounds-p ,bounds)
+                                (conn-bounds-thing ,bounds))))
+          (with-memoization
+              (gethash (conn-thing-all-parents thing)
+                       conn--thing-bounds-tag-cache)
+            (cons 'thing-bounds (conn-thing-all-parents thing)))))
+  (lambda (things &rest _)
+    (when things
+      `(,@(cl-loop for thing in (cdr things)
+                   collect `(conn-thing ,thing))
+        (conn-thing bounds)
         (conn-thing t)))))
 
 (cl-generic-define-generalizer conn--anonymous-thing-generalizer
-  70 (lambda (cmd &rest _)
-       `(when (conn-anonymous-thing-p ,cmd)
-          'conn-anonymous-thing))
-  (lambda (thing &rest _)
-    (when thing
+  70 (lambda (thing &rest _)
+       `(when (conn-anonymous-thing-p ,thing)
+          (conn-anonymous-thing-all-parents ,thing)))
+  (lambda (things &rest _)
+    (when things
       `((conn-thing anonymous-thing)
-        (conn-thing t)))))
-
-(cl-generic-define-generalizer conn--thing-generalizer
-  70 (lambda (cmd &rest _) `(and (conn-thing-p ,cmd) ,cmd))
-  (lambda (thing &rest _)
-    (when thing
-      `((conn-thing ,thing)
+        (cl-loop for thing in things
+                 collect `(conn-thing ,thing))
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for (conn-thing THING) specializers."
-  (list conn--thing-command-generalizer
-        conn--anonymous-thing-generalizer
+  (list conn--anonymous-thing-generalizer
+        conn--thing-bounds-generalizer
+        conn--thing-command-generalizer
         conn--thing-generalizer))
-
-(cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing-command)))
-  "Support for conn-thing specializers."
-  (list conn--thing-command-generalizer))
 
 ;;;; Read Things
 
@@ -465,12 +505,6 @@ words."))
    :parent from
    :properties properties))
 
-(define-inline conn-bounds-of (thing arg)
-  (inline-quote
-   (setf (alist-get (recursion-depth) conn--last-perform-bounds)
-         (save-mark-and-excursion
-           (conn-bounds-of-subr ,thing ,arg)))))
-
 (defun conn-bounds-set (bounds prop val)
   (setf (plist-get (conn-bounds--properties bounds) prop) val))
 
@@ -520,68 +554,82 @@ words."))
       `(app (pcase--flip conn-transform-bounds ,transform) ,pat)
     `(app (conn-transform-bounds _ ,transform) ,pat)))
 
-(cl-defgeneric conn-bounds-of-subr (cmd arg)
+(defvar conn--bounds-of-in-progress nil)
+
+(cl-defgeneric conn-bounds-of (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t))
   ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
-      (conn-bounds-of-subr (conn-anonymous-thing-parent cmd) arg))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
 
-(cl-defmethod conn-bounds-of-subr ((thing (conn-thing t)) arg)
+(cl-defmethod conn-bounds-of :around (cmd arg)
+  (if conn--bounds-of-in-progress
+      (cl-call-next-method cmd arg)
+    (setf (alist-get (recursion-depth) conn--last-perform-bounds)
+          (let ((conn--bounds-of-in-progress t))
+            (save-mark-and-excursion
+              (cl-call-next-method cmd arg))))))
+
+(cl-defmethod conn-bounds-of ((thing (conn-thing command)) arg)
+  (let (conn--last-perform-bounds)
+    (deactivate-mark t)
+    (pcase (prefix-numeric-value arg)
+      (0 nil)
+      ((and n (or 1 -1))
+       (let ((pt (point))
+             (mk (mark))
+             (current-prefix-arg n)
+             (conn-this-command-handler (conn-command-mark-handler thing))
+             (conn-this-command-thing (conn-command-thing thing))
+             (conn-this-command-start (point-marker))
+             (this-command thing))
+         (unwind-protect
+             (progn
+               (ignore-errors
+                 (call-interactively thing)
+                 (funcall conn-this-command-handler conn-this-command-start))
+               (unless (and (eql pt (point))
+                            (eql mk (mark)))
+                 (conn-make-bounds
+                  thing 1
+                  (cons (region-beginning)
+                        (region-end)))))
+           (set-marker conn-this-command-start nil))))
+      (n
+       (let (subregions)
+         (catch 'break
+           (dotimes (_ (abs n))
+             (if-let* ((bound (conn-bounds-of thing (cl-signum arg))))
+                 (push bound subregions)
+               (throw 'break nil))))
+         (conn-make-bounds
+          thing arg
+          (cl-loop for bound in subregions
+                   for (b . e) = (conn-bounds bound)
+                   minimize b into beg
+                   maximize e into end
+                   finally return (cons beg end))
+          :subregions (nreverse subregions)))))))
+
+(cl-defmethod conn-bounds-of ((thing (conn-thing thing)) arg)
   (conn-make-bounds thing arg (bounds-of-thing-at-point thing)))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing-command t)) arg)
-  (deactivate-mark t)
-  (pcase (prefix-numeric-value arg)
-    (0 nil)
-    ((and n (or 1 -1))
-     (let ((pt (point))
-           (mk (mark))
-           (current-prefix-arg n)
-           (conn-this-command-handler (conn-command-mark-handler cmd))
-           (conn-this-command-thing (conn-command-thing cmd))
-           (conn-this-command-start (point-marker))
-           (this-command cmd))
-       (unwind-protect
-           (progn
-             (ignore-errors
-               (call-interactively cmd)
-               (funcall conn-this-command-handler conn-this-command-start))
-             (unless (and (eql pt (point))
-                          (eql mk (mark)))
-               (conn-make-bounds cmd 1 (cons (region-beginning) (region-end)))))
-         (set-marker conn-this-command-start nil))))
-    (n
-     (let (subregions)
-       (catch 'break
-         (dotimes (_ (abs n))
-           (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
-               (push bound subregions)
-             (throw 'break nil))))
-       (conn-make-bounds
-        cmd arg
-        (cl-loop for bound in subregions
-                 for (b . e) = (conn-bounds bound)
-                 minimize b into beg
-                 maximize e into end
-                 finally return (cons beg end))
-        :subregions (nreverse subregions))))))
-
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing region)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing region)) arg)
   (conn-make-bounds
    cmd arg
    (cons (region-beginning) (region-end))
    :subregions (cl-loop for r in (region-bounds)
                         collect (conn-make-bounds cmd arg r))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing buffer)) arg)
   (conn-make-bounds cmd arg (cons (point-min) (point-max))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing visible)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing visible)) arg)
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (eql conn-composite-thing)) arg)
+(cl-defmethod conn-bounds-of ((cmd (eql conn-composite-thing)) arg)
   (if conn--last-composite-thing
       (conn-make-bounds
        cmd arg
@@ -592,7 +640,7 @@ words."))
                (point))))
     (error "No last composite thing")))
 
-(cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
 ;;;;; Bounds Transformations
@@ -609,15 +657,12 @@ words."))
       (conn-argument-remove)
     arg))
 
-(defun conn-bounds-last (bounds)
-  (conn-bounds-last-subr (conn-bounds-thing bounds) bounds))
-
-(cl-defgeneric conn-bounds-last-subr (thing bounds)
-  ( :method ((_thing (conn-thing dispatch)) bounds)
+(cl-defgeneric conn-bounds-last (bounds)
+  ( :method ((bounds (conn-thing dispatch)))
     (ignore (conn-bounds bounds))
     (or (car (conn-bounds-get bounds :subregions))
         bounds))
-  ( :method (_thing bounds)
+  ( :method (bounds)
     (or (car (last (conn-bounds-get bounds :subregions)))
         bounds)))
 
@@ -628,12 +673,9 @@ words."))
 (put 'conn-bounds-trim :conn-bounds-transform t)
 (put 'conn-bounds-trim :conn-transform-description "trim")
 
-(defun conn-bounds-trim (bounds)
-  (conn-bounds-trim-subr (conn-bounds-thing bounds) bounds))
+(cl-defgeneric conn-bounds-trim (bounds))
 
-(cl-defgeneric conn-bounds-trim-subr (_thing bounds))
-
-(cl-defmethod conn-bounds-trim-subr (_thing bounds)
+(cl-defmethod conn-bounds-trim (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
                (tb (save-excursion
                      (goto-char beg)
@@ -657,16 +699,9 @@ words."))
       (conn-argument-remove)
     arg))
 
-(define-inline conn-bounds-after-point (bounds)
-  (inline-letevals (bounds)
-    (inline-quote
-     (conn-bounds-after (conn-bounds-thing ,bounds)
-                        ,bounds
-                        (point)))))
+(cl-defgeneric conn-bounds-after-point (bounds point))
 
-(cl-defgeneric conn-bounds-after (_thing bounds point))
-
-(cl-defmethod conn-bounds-after (_thing bounds point)
+(cl-defmethod conn-bounds-after-point (bounds point)
   (pcase-let (((conn-bounds `(,_beg . ,end)) bounds))
     (if (<= point end)
         (conn-make-bounds-transform bounds (cons point end))
@@ -681,16 +716,9 @@ words."))
       (conn-argument-remove)
     arg))
 
-(define-inline conn-bounds-before-point (bounds)
-  (inline-letevals (bounds)
-    (inline-quote
-     (conn-bounds-before (conn-bounds-thing ,bounds)
-                         ,bounds
-                         (point)))))
+(cl-defgeneric conn-bounds-before-point (bounds point))
 
-(cl-defgeneric conn-bounds-before (_thing bounds point))
-
-(cl-defmethod conn-bounds-before (_thing bounds point)
+(cl-defmethod conn-bounds-before-point (bounds point)
   (pcase-let (((conn-bounds `(,beg . ,_end)) bounds))
     (if (>= point beg)
         (conn-make-bounds-transform bounds (cons beg point))
@@ -703,14 +731,9 @@ words."))
 
 (defvar conn-check-bounds-hook nil)
 
-(define-inline conn-check-bounds (bounds)
-  (inline-letevals (bounds)
-    (inline-quote
-     (progn
-       (run-hook-with-args 'conn-check-bounds-hook
-                           (conn-bounds-thing ,bounds)
-                           ,bounds)
-       ,bounds))))
+(defun conn-check-bounds (bounds)
+  (run-hook-with-args 'conn-check-bounds-hook bounds)
+  bounds)
 
 ;;;;; Perform Bounds
 
@@ -730,7 +753,7 @@ words."))
   "C-]" 'abort-recursive-edit
   "q" 'abort-recursive-edit)
 
-(cl-defmethod conn-bounds-of-subr ((_cmd (conn-thing recursive-edit)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit)) _arg)
   (let* ((eldoc-message-function 'ignore)
          (pre (lambda ()
                 (message
@@ -744,10 +767,10 @@ words."))
           (conn-with-recursive-stack 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
-          (conn-bounds-of-subr 'region nil))
+          (conn-bounds-of 'region nil))
       (remove-hook 'pre-command-hook pre))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing emacs-state)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state)) arg)
   (setq arg (prefix-numeric-value arg))
   (when (> arg 0) (cl-decf arg))
   (when (eq cmd 'conn-next-emacs-state)
@@ -765,11 +788,11 @@ words."))
   ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((remote (conn-anonymous-thing-property cmd :bounds-op-remote)))
         (funcall remote arg)
-      (conn-bounds-of-remote (conn-anonymous-thing-parent cmd) arg)))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg)))
   ( :method (cmd arg pt)
     (save-excursion
       (goto-char pt)
-      (conn-bounds-of-subr cmd arg))))
+      (conn-bounds-of cmd arg))))
 
 (cl-defmethod conn-bounds-of-remote ((_cmd (conn-thing region))
                                      arg pt)
@@ -785,7 +808,7 @@ words."))
    (cons (min (point) pt)
          (max (point) pt))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) _arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing isearch)) _arg)
   (pcase-let* ((name (symbol-name cmd))
                (at nil)
                (quit (lambda ()
@@ -812,9 +835,9 @@ words."))
   ( :method ((cmd (conn-thing anonymous-thing)) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :things-in-region)))
         (funcall op beg end)
-      (conn-get-things-in-region (conn-anonymous-thing-parent cmd) beg end))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) beg end))))
 
-(cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
+(cl-defmethod conn-get-things-in-region ((thing (conn-thing thing))
                                          beg end)
   (save-excursion
     (let ((thing (conn-get-thing thing)))
@@ -834,7 +857,7 @@ words."))
 
 (conn-register-thing 'conn-things-in-region)
 
-(cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-things-in-region)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
   (let* ((thing (conn-eval-with-state 'conn-read-thing-state
                     (conn-get-thing (car & (conn-thing-argument-dwim)))
                   :prompt "Things in Region"))

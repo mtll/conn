@@ -28,6 +28,87 @@
 (eval-when-compile
   (require 'cl-lib))
 
+;;;;; Bounds
+
+(keymap-set (conn-get-state-map 'conn-read-thing-state)
+            "g" 'conn-surround)
+
+(put 'conn-surround :conn-thing t)
+(put 'surround-self-insert :conn-thing t)
+
+(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
+  :lighter "WITH"
+  :mode-line-face 'conn-read-surround-with-mode-line-face)
+
+(conn-define-state conn-surrounding-state (conn-surround-with-state)
+  :lighter "SURROUNDING")
+
+(defun conn-surround-property-argument (&optional value)
+  (oclosure-lambda (conn-state-eval-argument
+                    (value (or value :whole))
+                    (keymap (define-keymap
+                              "w" :whole
+                              "e" :inner)))
+      (self cmd)
+    (if (memq cmd '(:whole :inner))
+        (conn-set-argument self cmd)
+      self)))
+
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-surround)) arg)
+  (pcase-let* ((`(,bounds ,property)
+                (conn-eval-with-state 'conn-surround-with-state
+                    (list (conn-bounds-of && (conn-surround-with-argument))
+                          & (conn-surround-property-argument))
+                  :prompt "Surround"
+                  :prefix arg)))
+    (if (eq property :whole)
+        bounds
+      (conn-bounds-get bounds property))))
+
+(cl-defmethod conn-bounds-of ((_cmd (eql surround-self-insert)) arg)
+  (catch 'return
+    (save-mark-and-excursion
+      (pcase-let* (((or `(,_cmd ,open ,close)
+                        `(,open ,close))
+                    (or (assoc last-input-event insert-pair-alist)
+                        (list last-input-event last-input-event)))
+                   (n (prefix-numeric-value arg)))
+        (conn--push-ephemeral-mark)
+        (pcase-dolist (`(,beg . ,end)
+                       (seq-drop-while (pcase-lambda (`(,beg . ,end))
+                                         (or (>= beg (region-beginning))
+                                             (<= end (region-end))))
+                                       (conn--expand-create-expansions)))
+          (when (and (eql open (char-after beg))
+                     (eql close (char-before end))
+                     (> (- end beg) 1)
+                     (>= 0 (cl-decf n)))
+            (throw 'return
+                   (conn-make-bounds
+                    'conn-surround arg (cons beg end)
+                    :open (conn-make-bounds 'region nil (cons beg (1+ beg)))
+                    :close (conn-make-bounds 'region nil (cons (1- end) end))
+                    :inner (conn-make-bounds 'region nil (cons (1+ beg) (1- end)))))))))
+    (signal 'conn-no-surround nil)))
+
+;;;;; Delete
+
+(cl-defgeneric conn-delete-surround (cmd arg))
+
+(cl-defmethod conn-delete-surround (cmd arg)
+  (pcase-exhaustive (conn-bounds-of cmd arg)
+    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
+          (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend))))
+     (delete-region cbeg cend)
+     (delete-region obeg oend))))
+
+(cl-defmethod conn-perform-kill ((_cmd (eql conn-surround))
+                                 arg _transform &optional _append _delete _register)
+  (conn-eval-with-state 'conn-surround-with-state
+      (conn-delete-surround && (conn-surround-with-argument))
+    :prompt "Surrounding"
+    :prefix arg))
+
 ;;;;; Surround
 
 (defface conn-read-surround-with-mode-line-face
@@ -37,10 +118,6 @@
 
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
   :lighter "SURROUND")
-
-(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
-  :lighter "WITH"
-  :mode-line-face 'conn-read-surround-with-mode-line-face)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-with-state)
@@ -184,7 +261,7 @@
              arg transform &rest keys &key &allow-other-keys)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (apply op arg transform keys)
-      (apply #'conn-prepare-surround
+      (apply #'cl-call-next-method
              (conn-anonymous-thing-parent cmd)
              arg transform keys))))
 
@@ -329,6 +406,11 @@
 
 (keymap-set (conn-get-state-map 'conn-change-state) "g" 'conn-surround)
 
+(cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
+                                           arg)
+  (conn-set-argument
+   arg (list cmd (conn-state-eval-consume-prefix-arg))))
+
 (oclosure-define (conn-change-surround-argument
                   (:parent conn-state-eval-argument)))
 
@@ -353,39 +435,16 @@
   ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
         (funcall op arg)
-      (conn-prepare-change-surround (conn-anonymous-thing-parent cmd)))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
 
-(cl-defmethod conn-prepare-change-surround ((_cmd (eql surround-self-insert)) arg)
-  (catch 'return
-    (save-mark-and-excursion
-      (pcase-let* (((or `(,_cmd ,open ,close)
-                        `(,open ,close))
-                    (or (assoc last-input-event insert-pair-alist)
-                        (list last-input-event last-input-event)))
-                   (n (prefix-numeric-value arg)))
-        (conn--push-ephemeral-mark)
-        (pcase-dolist (`(,beg . ,end)
-                       (seq-drop-while (pcase-lambda (`(,beg . ,end))
-                                         (or (>= beg (region-beginning))
-                                             (<= end (region-end))))
-                                       (conn--expand-create-expansions)))
-          (when (and (save-excursion
-                       (goto-char beg)
-                       (= 1 (skip-chars-forward (string open) (1+ beg))))
-                     (save-excursion
-                       (goto-char end)
-                       (= -1 (skip-chars-backward (string close) (1- end))))
-                     (>= 0 (cl-decf n)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (delete-char 1)
-            (exchange-point-and-mark)
-            (delete-char -1)
-            (exchange-point-and-mark)
-            (throw 'return (list (conn--make-surround-region
-                                  (region-beginning)
-                                  (region-end))))))))
-    (signal 'conn-no-surround nil)))
+(cl-defmethod conn-prepare-change-surround (cmd arg)
+  (pcase (conn-bounds-of cmd arg)
+    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
+          (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend)))
+          (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend))))
+     (prog1 (list (conn--make-surround-region ibeg iend))
+       (delete-region cbeg cend)
+       (delete-region obeg oend)))))
 
 (cl-defmethod conn-perform-change ((_cmd (eql conn-surround))
                                    _arg _transform
@@ -412,68 +471,5 @@
           (delete-overlay ov)
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
-
-;;;;;; Delete Surround
-
-(conn-define-state conn-delete-surround-state (conn-surround-with-state)
-  :lighter "DEL-SURROUND")
-
-(oclosure-define (conn-delete-surround-argument
-                  (:parent conn-state-eval-argument)))
-
-(defun conn-delete-surround-argument ()
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-delete-surround-argument
-                    (required t))
-      (self cmd)
-    (conn-handle-delete-surround-argument cmd self)))
-
-(cl-defgeneric conn-handle-delete-surround-argument (cmd arg))
-
-(cl-defmethod conn-handle-delete-surround-argument (_cmd arg)
-  arg)
-
-(cl-defmethod conn-handle-delete-surround-argument ((cmd (eql surround-self-insert)) arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
-
-(cl-defgeneric conn-delete-surround (cmd arg))
-
-(cl-defmethod conn-delete-surround ((_cmd (eql surround-self-insert)) arg)
-  (catch 'return
-    (save-mark-and-excursion
-      (pcase-let* (((or `(,_cmd ,open ,close)
-                        `(,open ,close))
-                    (or (assoc last-input-event insert-pair-alist)
-                        (list last-input-event last-input-event)))
-                   (n (prefix-numeric-value arg)))
-        (conn--push-ephemeral-mark)
-        (pcase-dolist (`(,beg . ,end)
-                       (seq-drop-while (pcase-lambda (`(,beg . ,end))
-                                         (or (>= beg (region-beginning))
-                                             (<= end (region-end))))
-                                       (conn--expand-create-expansions)))
-          (when (and (save-excursion
-                       (goto-char beg)
-                       (= n (skip-chars-forward (string open) (+ beg n))))
-                     (save-excursion
-                       (goto-char end)
-                       (= (- n) (skip-chars-backward (string close) (- end n)))))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (delete-char n)
-            (exchange-point-and-mark)
-            (delete-char (- n))
-            (exchange-point-and-mark)
-            (throw 'return nil)))))
-    (signal 'conn-no-surround nil)))
-
-(cl-defmethod conn-perform-kill ((_cmd (eql conn-surround))
-                                 arg _transform
-                                 &optional _delete-or-register)
-  (conn-eval-with-state 'conn-delete-surround-state
-      (conn-delete-surround
-       && (conn-delete-surround-argument))
-    :prompt "Surrounding"
-    :prefix arg))
 
 (provide 'conn-surround)

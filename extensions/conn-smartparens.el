@@ -222,7 +222,9 @@
   (sp-wrap-with-pair
    (with-memoization conn--surround-current-pair
      (funcall conn-read-pair-function
-              (mapcar #'car sp-pair-list)))))
+              (cl-loop for pair in (append sp-pair-list sp-local-pairs)
+                       collect (or (plist-get pair :open)
+                                   (car pair)))))))
 
 (cl-defmethod conn-perform-surround :around ((_with (eql conn-sp-wrap-region))
                                              _arg &key &allow-other-keys)
@@ -236,7 +238,7 @@
 (keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
             "r" 'conn-sp-wrap-region)
 
-(defun conn-sp-region-ok-p (_thing bounds)
+(defun conn-sp-region-ok-p (bounds)
   (pcase bounds
     ((conn-bounds `(,beg . ,end))
      (unless (sp-region-ok-p beg end)

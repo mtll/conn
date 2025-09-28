@@ -198,7 +198,7 @@ Expansions and contractions are provided by functions in
     "\\[conn-toggle-mark-command] toggle mark; "
     "\\[end] finish")))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
   (conn-eval-with-state 'conn-expand-state
       (conn-make-bounds

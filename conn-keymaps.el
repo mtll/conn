@@ -454,7 +454,7 @@
                            'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
-                                        (conn-bounds-of-subr 'conn-expand arg)))
+                                        (conn-bounds-of 'conn-expand arg)))
   "m" 'forward-sexp
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
@@ -483,7 +483,7 @@
        'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
-                    (conn-bounds-of-subr 'down-list arg))
+                    (conn-bounds-of 'down-list arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))

@@ -93,8 +93,8 @@
  'outline-forward-same-level
  'outline-backward-same-level)
 
-(cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-outline-state-prev-heading)) arg)
-  (conn-bounds-of-subr 'outline-previous-visible-heading arg))
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-prev-heading)) arg)
+  (conn-bounds-of 'outline-previous-visible-heading arg))
 
 ;;;###autoload
 (define-minor-mode conntext-outline-mode

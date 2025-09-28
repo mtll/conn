@@ -459,7 +459,7 @@ themselves once the selection process has concluded."
   ( :method ((cmd (conn-thing anonymous-thing)))
     (if-let* ((action (conn-anonymous-thing-property cmd :default-action)))
         (funcall action)
-      (conn-make-default-action (conn-anonymous-thing-parent cmd)))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd)))))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
   (conn-make-action 'conn-dispatch-goto))
@@ -470,7 +470,7 @@ themselves once the selection process has concluded."
   ( :method ((cmd (conn-thing anonymous-thing)))
     (if-let* ((tf (conn-anonymous-thing-property cmd :target-finder)))
         (funcall tf)
-      (conn-get-target-finder (conn-anonymous-thing-parent cmd)))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd)))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
   (conn-dispatch-read-n-chars :string-length 2))
@@ -1812,7 +1812,7 @@ contain targets."
                 (lambda (arg)
                   (save-excursion
                     (goto-char (pos-bol))
-                    (conn-bounds-of-subr 'conn-forward-inner-line arg))))))
+                    (conn-bounds-of 'conn-forward-inner-line arg))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -1835,7 +1835,7 @@ contain targets."
                 (lambda (arg)
                   (save-excursion
                     (goto-char (pos-bol))
-                    (conn-bounds-of-subr 'conn-forward-inner-line arg))))))
+                    (conn-bounds-of 'conn-forward-inner-line arg))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -3691,7 +3691,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
           (if repeat subregions (conn-bounds bounds)))
       (mapc #'delete-overlay ovs))))
 
-(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing dispatch)) arg)
   (conn-make-bounds
    cmd arg
    (lambda (bounds) (conn--dispatch-bounds bounds))
