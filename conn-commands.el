@@ -1697,13 +1697,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace))
 
-(cl-defgeneric conn-kill-fixup-whitespace (thing &key &allow-other-keys))
-
-(cl-defmethod conn-kill-fixup-whitespace ((_thing (conn-thing region))
-                                          &key &allow-other-keys)
-  "Noop" nil)
-
-(cl-defmethod conn-kill-fixup-whitespace (_thing &key &allow-other-keys)
+(defun conn--kill-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
     (fixup-whitespace))
   (when (save-excursion
@@ -1747,7 +1741,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (kill-region (mark t) (point) t)
         (copy-region-as-kill (mark t) (point) t)))))
 
-(cl-defgeneric conn-perform-kill (cmd arg transform &optional append delete register fixup-whitespace)
+(cl-defgeneric conn-perform-kill ( cmd arg transform
+                                   &optional
+                                   append
+                                   delete
+                                   register
+                                   fixup-whitespace)
   (declare (conn-anonymous-thing-property :kill-op))
   ( :method ((cmd (conn-thing anonymous-thing)) arg transform
              &optional append delete register fixup-whitespace)
@@ -1756,12 +1755,29 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (cl-call-next-method (conn-anonymous-thing-parent cmd)
                            arg transform append delete register fixup-whitespace))))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing line)) _arg _transform &optional _ _ _ _)
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
+                                 _arg _transform
+                                 &optional _ _ _ _)
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
 
-(cl-defmethod conn-perform-kill (cmd arg transform &optional append delete register fixup-whitespace)
+(cl-defmethod conn-perform-kill ((cmd (conn-thing region))
+                                 arg
+                                 transform
+                                 &optional
+                                 append
+                                 delete
+                                 register
+                                 _fixup-whitespace)
+  (cl-call-next-method cmd arg transform append delete register nil))
+
+(cl-defmethod conn-perform-kill ( cmd arg transform
+                                  &optional
+                                  append
+                                  delete
+                                  register
+                                  fixup-whitespace)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
      (save-mark-and-excursion
@@ -1771,7 +1787,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
            (delete-region beg end)
          (conn--kill-region beg end t append register))
        (when fixup-whitespace
-         (conn-kill-fixup-whitespace cmd))))))
+         (conn--kill-fixup-whitespace))))))
 
 ;;;;; Copy Thing
 
