@@ -1702,34 +1702,27 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Noop" nil)
 
 (cl-defmethod conn-kill-fixup-whitespace (_thing &key &allow-other-keys)
-  (let ((goal-column
-         (current-column))
-        (tab-always-indent t))
-    (when (or (looking-at " ") (looking-back " " 1))
-      (fixup-whitespace))
-    (cond ((save-excursion
-             (beginning-of-line)
-             (looking-at-p (rx (seq (* (syntax whitespace))
-                                    (* (syntax close-parenthesis))
-                                    eol))))
-           (join-line)
-           (line-move-1 1))
-          ((save-excursion
-             (beginning-of-line)
-             (and (looking-at-p "\n")
-                  (progn
-                    (forward-char -1)
-                    (looking-at-p "\n"))))
-           (save-excursion
-             (beginning-of-line)
-             (forward-char -1)
-             (delete-region (save-excursion
-                              (skip-chars-backward "\n")
-                              (point))
-                            (point)))))
-    (unless (save-excursion
-              (beginning-of-line)
-              (looking-at "\n"))
+  (when (or (looking-at " ") (looking-back " " 1))
+    (fixup-whitespace))
+  (when (save-excursion
+          (beginning-of-line)
+          (looking-at-p (rx (seq (* (syntax whitespace))
+                                 (* (syntax close-parenthesis))
+                                 eol))))
+    (join-line))
+  (save-excursion
+    (when (and (looking-at-p (rx eol))
+               (progn
+                 (forward-char -1)
+                 (looking-at-p (rx eol))))
+      (delete-region (point)
+                     (progn
+                       (skip-chars-backward "\n")
+                       (point)))))
+  (unless (save-excursion
+            (beginning-of-line)
+            (looking-at (rx eol)))
+    (let ((tab-always-indent t))
       (indent-for-tab-command))))
 
 (defun conn--kill-region (beg end &optional delete-flag append register)
