@@ -2259,6 +2259,7 @@ contain targets."
                   :prompt "Send Thing")
                 (car kill-ring))))
     (oclosure-lambda (conn-dispatch-send
+                      (description "Send")
                       (change-group cg)
                       (str str)
                       (separator
@@ -2274,36 +2275,30 @@ contain targets."
         (window pt thing thing-arg transform)
       (with-selected-window window
         (conn-dispatch-loop-undo-boundary)
-        (with-undo-amalgamate
-          (save-excursion
-            (goto-char pt)
-            (pcase (conn-bounds-of thing thing-arg)
-              ((conn-transform-bounds
-                transform
-                (conn-bounds `(,beg . ,end) transform))
-               (goto-char (if conn-dispatch-other-end end beg))
-               (when (and separator conn-dispatch-other-end)
-                 (insert separator)
-                 (fixup-whitespace))
-               (insert-for-yank str)
-               (when (and separator (not conn-dispatch-other-end))
-                 (insert separator)
-                 (fixup-whitespace))
-               (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point)
-                                                      (+ (length str)
-                                                         (length separator)))
-                                                   (point)))))
-            (unless executing-kbd-macro
-              (pulse-momentary-highlight-region (- (point)
-                                                   (+ (length str)
-                                                      (length separator)))
-                                                (point)))))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-send) &optional short)
-  (if-let* ((sep (and (not short) (conn-dispatch-send--separator action))))
-      (format "Send <%s>" sep)
-    "Send"))
+        (save-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((conn-transform-bounds
+              transform
+              (conn-bounds `(,beg . ,end) transform))
+             (goto-char (if conn-dispatch-other-end end beg))
+             (when (and separator conn-dispatch-other-end)
+               (insert separator)
+               (fixup-whitespace))
+             (insert-for-yank str)
+             (when (and separator (not conn-dispatch-other-end))
+               (insert separator)
+               (fixup-whitespace))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point)
+                                                    (+ (length str)
+                                                       (length separator)))
+                                                 (point)))))
+          (unless executing-kbd-macro
+            (pulse-momentary-highlight-region (- (point)
+                                                 (+ (length str)
+                                                    (length separator)))
+                                              (point))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (conn-dispatch-send--change-group action))
@@ -2342,16 +2337,15 @@ contain targets."
         (window pt thing thing-arg transform)
       (with-selected-window window
         (conn-dispatch-loop-undo-boundary)
-        (with-undo-amalgamate
-          (save-excursion
-            (goto-char pt)
-            (pcase (conn-bounds-of thing thing-arg)
-              ((conn-bounds `(,beg . ,end) transform)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-              (_ (user-error "Cannot find thing at point")))))))))
+        (save-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((conn-bounds `(,beg . ,end) transform)
+             (delete-region beg end)
+             (insert-for-yank str)
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (conn-dispatch-send-replace--change-group action))
@@ -2437,13 +2431,12 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
-      (with-undo-amalgamate
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
-             (goto-char (if conn-dispatch-other-end end beg))
-             (conn-register-load register))))))))
+      (save-excursion
+        (goto-char pt)
+        (pcase (conn-bounds-of thing thing-arg)
+          ((conn-bounds `(,beg . ,end) transform)
+           (goto-char (if conn-dispatch-other-end end beg))
+           (conn-register-load register)))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-register-load) &optional short)
   (if short "Register"
@@ -2461,14 +2454,13 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
-      (with-undo-amalgamate
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
-             (delete-region beg end)
-             (conn-register-load register))
-            (_ (user-error "Cannot find thing at point"))))))))
+      (save-excursion
+        (goto-char pt)
+        (pcase (conn-bounds-of thing thing-arg)
+          ((conn-bounds `(,beg . ,end) transform)
+           (delete-region beg end)
+           (conn-register-load register))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-register-replace) &optional short)
   (if short "Register Replace"
