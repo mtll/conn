@@ -1482,8 +1482,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defvar conn-kill-fixup-whitespace-default t)
 
-(defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
-
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 

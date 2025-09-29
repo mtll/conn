@@ -1979,9 +1979,6 @@ contain targets."
         (when cur-mark-active
           (run-hooks 'deactivate-mark-hook))))))
 
-(defvar conn-dispatch-kill-fixup-whitespace-function
-  'conn-kill-fixup-whitespace)
-
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
 
@@ -2503,7 +2500,7 @@ contain targets."
                   (copy-to-register register beg end t))
                  (t
                   (kill-region beg end)))
-           (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
+           (funcall conn-kill-fixup-whitespace-function bounds)
            (message "Killed thing"))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2537,7 +2534,7 @@ contain targets."
                  (copy-to-register register beg end t)
                (kill-append str nil)
                (delete-region beg end))
-             (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
+             (funcall conn-kill-fixup-whitespace-function bounds)
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2572,7 +2569,7 @@ contain targets."
                  (prepend-to-register register beg end t)
                (kill-append str t)
                (delete-region beg end))
-             (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
+             (funcall conn-kill-fixup-whitespace-function bounds)
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2771,7 +2768,7 @@ contain targets."
           (pcase (conn-bounds-of thing thing-arg)
             ((and bounds (conn-bounds `(,beg . ,end) transform))
              (kill-region beg end)
-             (funcall conn-dispatch-kill-fixup-whitespace-function bounds))
+             (funcall conn-kill-fixup-whitespace-function bounds))
             (_ (user-error "Cannot find thing at point")))))
       (with-current-buffer (marker-buffer opoint)
         (save-excursion
@@ -2823,7 +2820,7 @@ contain targets."
         (pcase (conn-bounds-of thing thing-arg)
           ((and bounds (conn-bounds `(,beg . ,end) transform))
            (kill-region beg end)
-           (funcall conn-dispatch-kill-fixup-whitespace-function bounds))
+           (funcall conn-kill-fixup-whitespace-function bounds))
           (_ (user-error "Cannot find thing at point")))))
     (with-current-buffer (marker-buffer opoint)
       (yank))))
