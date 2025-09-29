@@ -1623,7 +1623,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
    (conn-eval-with-state 'conn-kill-state
        (list && (conn-thing-argument-dwim)
              & (conn-transform-argument)
-             & (conn-kill-append-argument)
+             & (conn-kill-append-argument
+                (and (eq last-command 'conn-kill-thing)
+                     'prepend))
              & (conn-delete-argument)
              & (conn-register-argument
                 (when (and current-prefix-arg
@@ -1634,8 +1636,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   conn-kill-fixup-whitespace-default))
              & (conn-check-bounds-argument (listp current-prefix-arg)))
      :prompt "Thing"))
+  (when (and (null append)
+             (repeat-is-really-this-command)
+             (eq last-command 'conn-kill-thing))
+    (setq append 'append))
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
-  (conn-perform-kill cmd arg transform append delete register fixup-whitespace))
+  (conn-perform-kill cmd arg transform append delete register fixup-whitespace)
+  (setq this-command 'conn-kill-thing))
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
 
