@@ -77,6 +77,7 @@
                 (mapcar #'conn-thing-all-parents parents))))))))
 
 (defun conn-set-thing-parents (thing parents)
+  (remhash thing conn--thing-all-parents-cache)
   (put thing :conn--thing-parents parents))
 
 (define-inline conn-get-thing-parents (thing)
@@ -351,6 +352,76 @@ words."))
 
 (cl-defmethod conn-argument-reference ((_arg conn-subregions-argument))
   (list conn-subregions-argument-reference))
+
+;;;;;; Fixup Whitespace Argument
+
+(oclosure-define (conn-fixup-whitespace-argument
+                  (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-fixup-whitespace-argument-map
+  "q" 'fixup-whitespace)
+
+(defun conn-fixup-whitespace-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-fixup-whitespace-argument
+                    (value value)
+                    (keymap conn-fixup-whitespace-argument-map))
+      (self cmd)
+    (pcase cmd
+      ('fixup-whitespace
+       (conn-set-argument self (null value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-fixup-whitespace-argument)
+                                                  sym)
+  (or (eq sym 'fixup-whitespace)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-fixup-whitespace-argument))
+  (substitute-command-keys
+   (concat
+    "\\[fixup-whitespace]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         "fixup"
+         'face 'eldoc-highlight-function-argument)
+      "fixup"))))
+
+;;;;;; Check Bounds Argument
+
+(oclosure-define (conn-check-bounds-argument
+                  (:parent conn-state-eval-argument)))
+
+(defvar-keymap conn-check-bounds-argument-map
+  "C-u" 'check-bounds)
+
+(defun conn-check-bounds-argument (&optional value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-check-bounds-argument
+                    (value value)
+                    (keymap conn-check-bounds-argument-map))
+      (self cmd)
+    (pcase cmd
+      ('check-bounds
+       (conn-set-argument self (null value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-completion-predicate ((_arg conn-check-bounds-argument)
+                                                  sym)
+  (or (eq sym 'check-bounds)
+      (cl-call-next-method)))
+
+(cl-defmethod conn-display-argument ((arg conn-check-bounds-argument))
+  (substitute-command-keys
+   (concat
+    "\\[check-bounds]: "
+    (if-let* ((ts (conn-state-eval-argument-value arg)))
+        (propertize
+         "check region"
+         'face 'eldoc-highlight-function-argument)
+      "check region"))))
 
 ;;;;;; Thing Transform Argument
 
@@ -820,9 +891,10 @@ words."))
   (pcase-let* ((name (symbol-name cmd))
                (at nil)
                (quit (lambda ()
-                       (setq at (min (point) isearch-other-end))
-                       (when isearch-mode-end-hook-quit
-                         (abort-recursive-edit))))
+                       (when (or isearch-mode-end-hook-quit
+                                 (null isearch-other-end))
+                         (abort-recursive-edit))
+                       (setq at (min (point) isearch-other-end))))
                (`(,thing ,arg)
                 (conn-eval-with-state 'conn-read-thing-state
                     (list && (conn-thing-argument)))))

@@ -1979,21 +1979,8 @@ contain targets."
         (when cur-mark-active
           (run-hooks 'deactivate-mark-hook))))))
 
-(defvar conn-dispatch-fixup-whitespace t)
-
-(defun conn--dispatch-maybe-fixup-whitespace ()
-  (when conn-dispatch-fixup-whitespace
-    (save-excursion
-      (when (or (looking-at " ") (looking-back " " 1))
-        (fixup-whitespace)
-        (if (progn (beginning-of-line)
-                   (looking-at "\n"))
-            (join-line)
-          (indent-for-tab-command)))
-      (when (progn
-              (beginning-of-line)
-              (looking-at "\\s)*\n"))
-        (join-line)))))
+(defvar conn-dispatch-kill-fixup-whitespace-function
+  'conn-kill-fixup-whitespace)
 
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
@@ -2037,35 +2024,40 @@ contain targets."
   (separator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
-  (oclosure-lambda (conn-dispatch-copy-to
-                    (str (funcall region-extract-function nil))
-                    (separator (when (conn-state-eval-consume-prefix-arg)
-                                 (read-string "Separator: " nil nil nil t)))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-transform-bounds
-            transform
-            (conn-bounds `(,beg . ,end) nil))
-           (goto-char (if conn-dispatch-other-end end beg))
-           (when (and separator conn-dispatch-other-end)
-             (insert separator))
-           (insert-for-yank str)
-           (when (and separator (not conn-dispatch-other-end))
-             (insert separator))
-           (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point)
-                                                  (+ (length str)
-                                                     (length separator)))
-                                               (point)))))))))
+  (let ((str (funcall region-extract-function nil)))
+    (oclosure-lambda (conn-dispatch-copy-to
+                      (str str)
+                      (separator
+                       (cond ((conn-state-eval-consume-prefix-arg)
+                              (read-string "Separator: " nil nil nil t))
+                             ((string-match-p "\n" str) "\n")
+                             (t " ")))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt thing thing-arg transform)
+      (with-selected-window window
+        (conn-dispatch-loop-undo-boundary)
+        (save-mark-and-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((conn-bounds `(,beg . ,end) transform)
+             (goto-char (if conn-dispatch-other-end end beg))
+             (when (and separator conn-dispatch-other-end)
+               (insert separator)
+               (fixup-whitespace))
+             (conn--push-ephemeral-mark)
+             (insert-for-yank str)
+             (when (and separator (not conn-dispatch-other-end))
+               (insert separator)
+               (fixup-whitespace))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point)
+                                                    (+ (length str)
+                                                       (length separator)))
+                                                 (point))))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -2161,8 +2153,11 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank)))
   (oclosure-lambda (conn-dispatch-yank
                     (str (current-kill 0))
-                    (separator (when (conn-state-eval-consume-prefix-arg)
-                                 (read-string "Separator: " nil nil nil t)))
+                    (separator
+                     (cond ((conn-state-eval-consume-prefix-arg)
+                            (read-string "Separator: " nil nil nil t))
+                           ((string-match-p "\n" (current-kill 0)) "\n")
+                           (t " ")))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -2179,10 +2174,12 @@ contain targets."
             (conn-bounds `(,beg . ,end)))
            (goto-char (if conn-dispatch-other-end end beg))
            (when (and separator conn-dispatch-other-end)
-             (insert separator))
+             (insert separator)
+             (fixup-whitespace))
            (insert-for-yank str)
            (when (and separator (not conn-dispatch-other-end))
-             (insert separator))
+             (insert separator)
+             (fixup-whitespace))
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point)
                                                   (+ (length str)
@@ -2200,38 +2197,44 @@ contain targets."
   (separator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
-  (oclosure-lambda (conn-dispatch-reading-yank-to
-                    (str (read-from-kill-ring "Yank To: "))
-                    (separator (when (conn-state-eval-consume-prefix-arg)
-                                 (read-string "Separator: " nil nil nil t)))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (goto-char (if conn-dispatch-other-end end beg))
-           (when (and separator conn-dispatch-other-end)
-             (insert separator))
-           (insert-for-yank str)
-           (when (and separator (not conn-dispatch-other-end))
-             (insert separator))
-           (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point)
-                                                  (+ (length str)
-                                                     (length separator)))
-                                               (point)))))
-        (unless executing-kbd-macro
-          (pulse-momentary-highlight-region (- (point)
-                                               (+ (length str)
-                                                  (length separator)))
-                                            (point)))))))
+  (let ((str (read-from-kill-ring "Yank To: ")))
+    (oclosure-lambda (conn-dispatch-reading-yank-to
+                      (str str)
+                      (separator
+                       (cond ((conn-state-eval-consume-prefix-arg)
+                              (read-string "Separator: " nil nil nil t))
+                             ((string-match-p "\n" str) "\n")
+                             (t " ")))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt thing thing-arg transform)
+      (with-selected-window window
+        (conn-dispatch-loop-undo-boundary)
+        (save-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((conn-bounds `(,beg . ,end) transform)
+             (goto-char (if conn-dispatch-other-end end beg))
+             (when (and separator conn-dispatch-other-end)
+               (insert separator)
+               (fixup-whitespace))
+             (insert-for-yank str)
+             (when (and separator (not conn-dispatch-other-end))
+               (insert separator)
+               (fixup-whitespace))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point)
+                                                    (+ (length str)
+                                                       (length separator)))
+                                                 (point)))))
+          (unless executing-kbd-macro
+            (pulse-momentary-highlight-region (- (point)
+                                                 (+ (length str)
+                                                    (length separator)))
+                                              (point))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -2246,14 +2249,26 @@ contain targets."
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
-  (let ((sep (when (conn-state-eval-consume-prefix-arg)
-               (read-string "Separator: " nil nil nil t)))
-        (cg (conn--action-buffer-change-group)))
+  (let* ((cg (conn--action-buffer-change-group))
+         (str (let (kill-ring)
+                (conn-eval-with-state 'conn-kill-state
+                    (conn-kill-thing
+                     && (conn-thing-argument-dwim)
+                     & (conn-transform-argument)
+                     nil nil nil
+                     & (conn-fixup-whitespace-argument
+                        (not (region-active-p)))
+                     & (conn-check-bounds-argument))
+                  :prompt "Send Thing")
+                (car kill-ring))))
     (oclosure-lambda (conn-dispatch-send
                       (change-group cg)
-                      (str (prog1 (funcall region-extract-function t)
-                             (conn--dispatch-maybe-fixup-whitespace)))
-                      (separator sep)
+                      (str str)
+                      (separator
+                       (cond ((conn-state-eval-consume-prefix-arg)
+                              (read-string "Separator: " nil nil nil t))
+                             ((string-match-p "\n" str) "\n")
+                             (t " ")))
                       (window-predicate
                        (lambda (win)
                          (not
@@ -2262,28 +2277,31 @@ contain targets."
         (window pt thing thing-arg transform)
       (with-selected-window window
         (conn-dispatch-loop-undo-boundary)
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing thing-arg)
-            ((conn-transform-bounds
-              transform
-              (conn-bounds `(,beg . ,end) transform))
-             (goto-char (if conn-dispatch-other-end end beg))
-             (when (and separator conn-dispatch-other-end)
-               (insert separator))
-             (insert-for-yank str)
-             (when (and separator (not conn-dispatch-other-end))
-               (insert separator))
-             (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point)
-                                                    (+ (length str)
-                                                       (length separator)))
-                                                 (point)))))
-          (unless executing-kbd-macro
-            (pulse-momentary-highlight-region (- (point)
-                                                 (+ (length str)
-                                                    (length separator)))
-                                              (point))))))))
+        (with-undo-amalgamate
+          (save-excursion
+            (goto-char pt)
+            (pcase (conn-bounds-of thing thing-arg)
+              ((conn-transform-bounds
+                transform
+                (conn-bounds `(,beg . ,end) transform))
+               (goto-char (if conn-dispatch-other-end end beg))
+               (when (and separator conn-dispatch-other-end)
+                 (insert separator)
+                 (fixup-whitespace))
+               (insert-for-yank str)
+               (when (and separator (not conn-dispatch-other-end))
+                 (insert separator)
+                 (fixup-whitespace))
+               (unless executing-kbd-macro
+                 (pulse-momentary-highlight-region (- (point)
+                                                      (+ (length str)
+                                                         (length separator)))
+                                                   (point)))))
+            (unless executing-kbd-macro
+              (pulse-momentary-highlight-region (- (point)
+                                                   (+ (length str)
+                                                      (length separator)))
+                                                (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-send) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-send--separator action))))
@@ -2307,8 +2325,18 @@ contain targets."
     (oclosure-lambda (conn-dispatch-send-replace
                       (description "Send and Replace")
                       (change-group cg)
-                      (str (prog1 (funcall region-extract-function t)
-                             (conn--dispatch-maybe-fixup-whitespace)))
+                      (str
+                       (let (kill-ring)
+                         (conn-eval-with-state 'conn-kill-state
+                             (conn-kill-thing
+                              && (conn-thing-argument-dwim)
+                              & (conn-transform-argument)
+                              nil nil nil
+                              & (conn-fixup-whitespace-argument
+                                 (not (region-active-p)))
+                              & (conn-check-bounds-argument t))
+                           :prompt "Send Thing")
+                         (car kill-ring)))
                       (window-predicate
                        (lambda (win)
                          (not
@@ -2317,15 +2345,16 @@ contain targets."
         (window pt thing thing-arg transform)
       (with-selected-window window
         (conn-dispatch-loop-undo-boundary)
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
-             (delete-region beg end)
-             (insert-for-yank str)
-             (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-            (_ (user-error "Cannot find thing at point"))))))))
+        (with-undo-amalgamate
+          (save-excursion
+            (goto-char pt)
+            (pcase (conn-bounds-of thing thing-arg)
+              ((conn-bounds `(,beg . ,end) transform)
+               (delete-region beg end)
+               (insert-for-yank str)
+               (unless executing-kbd-macro
+                 (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (conn-dispatch-send-replace--change-group action))
@@ -2467,14 +2496,14 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
+          ((and bounds (conn-bounds `(,beg . ,end) transform))
            (cond ((> conn-dispatch-repeat-count 0)
                   (conn-append-region beg end register t))
                  (register
                   (copy-to-register register beg end t))
                  (t
                   (kill-region beg end)))
-           (conn--dispatch-maybe-fixup-whitespace)
+           (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
            (message "Killed thing"))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2502,13 +2531,13 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
+          ((and bounds (conn-bounds `(,beg . ,end) transform))
            (let ((str (filter-buffer-substring beg end)))
              (if register
                  (copy-to-register register beg end t)
                (kill-append str nil)
                (delete-region beg end))
-             (conn--dispatch-maybe-fixup-whitespace)
+             (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2537,13 +2566,13 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
+          ((and bounds (conn-bounds `(,beg . ,end) transform))
            (let ((str (filter-buffer-substring beg end)))
              (if register
                  (prepend-to-register register beg end t)
                (kill-append str t)
                (delete-region beg end))
-             (conn--dispatch-maybe-fixup-whitespace)
+             (funcall conn-dispatch-kill-fixup-whitespace-function bounds)
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -2696,8 +2725,7 @@ contain targets."
         (pcase (conn-bounds-of thing thing-arg)
           ((conn-bounds `(,beg . ,end) transform)
            (pulse-momentary-highlight-region beg end)
-           (copy-region-as-kill beg end)
-           (conn--dispatch-maybe-fixup-whitespace))
+           (copy-region-as-kill beg end))
           (_ (user-error "Cannot find thing at point")))))
     (conn-dispatch-loop-undo-boundary)
     (delete-region (region-beginning) (region-end))
@@ -2741,9 +2769,9 @@ contain targets."
         (save-excursion
           (goto-char pt)
           (pcase (conn-bounds-of thing thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
+            ((and bounds (conn-bounds `(,beg . ,end) transform))
              (kill-region beg end)
-             (conn--dispatch-maybe-fixup-whitespace))
+             (funcall conn-dispatch-kill-fixup-whitespace-function bounds))
             (_ (user-error "Cannot find thing at point")))))
       (with-current-buffer (marker-buffer opoint)
         (save-excursion
@@ -2793,9 +2821,9 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
+          ((and bounds (conn-bounds `(,beg . ,end) transform))
            (kill-region beg end)
-           (conn--dispatch-maybe-fixup-whitespace))
+           (funcall conn-dispatch-kill-fixup-whitespace-function bounds))
           (_ (user-error "Cannot find thing at point")))))
     (with-current-buffer (marker-buffer opoint)
       (yank))))

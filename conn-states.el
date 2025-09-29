@@ -1455,9 +1455,10 @@ chooses to handle a command."
                     (`(&& ,exp . ,tail)
                      (cons ``(mapcar 'macroexp-quote ',,exp) (qt tail)))
                     (`(,head . ,tail)
-                     (cons (if (consp head)
-                               ``(list ,(list 'nconc ,@(qt head)))
-                             (qt head))
+                     (cons (pcase head
+                             ((pred consp) ``(list ,(list 'nconc ,@(qt head))))
+                             ((pred null) ``(list nil))
+                             (_ (qt head)))
                            (if (listp tail)
                                (qt tail)
                              (list `'',tail))))
