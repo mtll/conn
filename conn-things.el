@@ -59,19 +59,36 @@
 
 (defun conn-thing-all-parents (thing)
   (declare (important-return-value t))
-  (with-memoization (gethash thing conn--thing-all-parents-cache)
-    (cons thing (merge-ordered-lists
-                 (mapcar #'conn-thing-all-parents
-                         (get thing :conn--thing-parents))))))
+  (pcase thing
+    ((let (and command-thing (pred identity))
+       (conn-command-thing thing))
+     (with-memoization (gethash thing conn--thing-all-parents-cache)
+       (cons thing (conn-thing-all-parents command-thing))))
+    ((pred conn-bounds-p)
+     (conn-thing-all-parents (conn-bounds-thing thing)))
+    ((pred conn-anonymous-thing-p)
+     (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
+    (_
+     (let ((parents (conn-get-thing-parents thing)))
+       (with-memoization (gethash (or parents thing)
+                                  conn--thing-all-parents-cache)
+         (cons thing
+               (merge-ordered-lists
+                (mapcar #'conn-thing-all-parents parents))))))))
 
-(defun conn-anonymous-thing-all-parents (thing)
-  (declare (important-return-value t))
-  (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
+(defun conn-set-thing-parents (thing parents)
+  (put thing :conn--thing-parents parents))
+
+(define-inline conn-get-thing-parents (thing)
+  (declare (gv-setter conn-set-thing-parents)
+           (important-return-value t)
+           (side-effect-free t))
+  (inline-quote (get ,thing :conn--thing-parents)))
 
 (cl-defun conn-register-thing (thing &key parents forward-op beg-op end-op bounds-op)
   (put thing :conn-thing t)
   (when parents
-    (put thing :conn--thing-parents parents))
+    (setf (conn-get-thing-parents thing) parents))
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -178,8 +195,6 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;; Specializers
 
-(defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
-
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
        `(and (conn-thing-p ,thing)
@@ -191,48 +206,40 @@ order to mark the region that should be defined by any of COMMANDS."
         (conn-thing thing)
         (conn-thing t)))))
 
-(defconst conn--thing-command-tag-cache (make-hash-table :test 'eq))
-
 (cl-generic-define-generalizer conn--thing-command-generalizer
   70 (lambda (cmd &rest _)
-       `(when-let* ((thing (conn-command-thing ,cmd)))
-          (with-memoization
-              (gethash (conn-thing-all-parents thing)
-                       conn--thing-command-tag-cache)
-            (cons 'thing-command (conn-thing-all-parents thing)))))
+       `(and (conn-command-thing ,cmd)
+             (conn-thing-all-parents ,cmd)))
   (lambda (things &rest _)
     (when things
-      `(,@(cl-loop for thing in (cdr things)
+      `((conn-thing command-override)
+        ,@(cl-loop for thing in things
                    collect `(conn-thing ,thing))
         (conn-thing command)
         (conn-thing t)))))
 
-(defconst conn--thing-bounds-tag-cache (make-hash-table :test 'eq))
-
 (cl-generic-define-generalizer conn--thing-bounds-generalizer
   70 (lambda (bounds &rest _)
-       `(when-let* ((thing (and (conn-bounds-p ,bounds)
-                                (conn-bounds-thing ,bounds))))
-          (with-memoization
-              (gethash (conn-thing-all-parents thing)
-                       conn--thing-bounds-tag-cache)
-            (cons 'thing-bounds (conn-thing-all-parents thing)))))
+       `(and (conn-bounds-p ,bounds)
+             (conn-thing-all-parents ,bounds)))
   (lambda (things &rest _)
     (when things
-      `((conn-thing bounds)
-        ,@(cl-loop for thing in (cdr things)
+      `((conn-thing bounds-override)
+        ,@(cl-loop for thing in things
                    collect `(conn-thing ,thing))
+        (conn-thing bounds)
         (conn-thing t)))))
 
 (cl-generic-define-generalizer conn--anonymous-thing-generalizer
   70 (lambda (thing &rest _)
-       `(when (conn-anonymous-thing-p ,thing)
-          (conn-anonymous-thing-all-parents ,thing)))
+       `(and (conn-anonymous-thing-p ,thing)
+             (conn-thing-all-parents ,thing)))
   (lambda (things &rest _)
     (when things
-      `((conn-thing anonymous-thing)
-        (cl-loop for thing in things
-                 collect `(conn-thing ,thing))
+      `((conn-thing anonymous-thing-override)
+        ,@(cl-loop for thing in things
+                   collect `(conn-thing ,thing))
+        (conn-thing anonymous-thing)
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -559,7 +566,7 @@ words."))
 (cl-defgeneric conn-bounds-of (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
@@ -786,7 +793,7 @@ words."))
 (cl-defgeneric conn-bounds-of-remote (cmd arg pt)
   (declare (conn-anonymous-thing-property :bounds-op-remote)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((remote (conn-anonymous-thing-property cmd :bounds-op-remote)))
         (funcall remote arg)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) arg)))
@@ -833,7 +840,7 @@ words."))
 (cl-defgeneric conn-get-things-in-region (thing beg end)
   (declare (conn-anonymous-thing-property :things-in-region)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing)) beg end)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :things-in-region)))
         (funcall op beg end)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) beg end))))

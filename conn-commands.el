@@ -934,7 +934,7 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defgeneric conn-perform-transpose (cmd arg)
   (declare (conn-anonymous-thing-property :transpose-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((transpose-op (conn-anonymous-thing-property cmd :transpose-op)))
         (funcall transpose-op arg)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
@@ -1480,7 +1480,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;;; Kill Thing
 
-(defvar conn-kill-fixup-whitespace t)
+(defvar conn-kill-fixup-whitespace-default t)
+
+(defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
 
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
@@ -1691,35 +1693,104 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (register-read-with-preview "Register:")))
              & (conn-fixup-whitespace-argument
                 (unless (region-active-p)
-                  conn-kill-fixup-whitespace))
+                  conn-kill-fixup-whitespace-default))
              & (conn-check-bounds-argument (listp current-prefix-arg)))
      :prompt "Thing"))
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace))
 
-(defun conn--kill-fixup-whitespace ()
-  (when (or (looking-at " ") (looking-back " " 1))
-    (fixup-whitespace))
-  (when (save-excursion
-          (beginning-of-line)
-          (looking-at-p (rx (seq (* (syntax whitespace))
-                                 (* (syntax close-parenthesis))
-                                 eol))))
-    (join-line))
-  (save-excursion
-    (when (and (looking-at-p (rx eol))
-               (progn
-                 (forward-char -1)
-                 (looking-at-p (rx eol))))
-      (delete-region (point)
-                     (progn
-                       (skip-chars-backward "\n")
-                       (point)))))
-  (unless (save-excursion
-            (beginning-of-line)
-            (looking-at (rx eol)))
-    (let ((tab-always-indent t))
+(cl-defgeneric conn-kill-fixup-whitespace (bounds))
+
+(cl-defmethod conn-kill-fixup-whitespace :after (_bounds)
+  (let ((tab-always-indent t))
+    (unless (save-excursion
+              (beginning-of-line)
+              (looking-at-p (rx eol)))
       (indent-for-tab-command))))
+
+(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing sexp)))
+  (pcase bounds
+    ((conn-bounds `(,beg . ,_end))
+     (if (save-excursion
+           (goto-char beg)
+           (beginning-of-line)
+           (and (looking-at-p (rx (seq (* (syntax whitespace))
+                                       eol)))
+                (> (nth 0 (syntax-ppss)) 0)))
+         (progn
+           (cl-call-next-method)
+           (forward-line)
+           (join-line))
+       (cl-call-next-method)
+       (save-excursion
+         (beginning-of-line)
+         (when (looking-at-p (rx eol))
+           (delete-char 1)))))))
+
+(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing symbol)))
+  (pcase bounds
+    ((conn-bounds `(,beg . ,_end))
+     (if (save-excursion
+           (goto-char beg)
+           (beginning-of-line)
+           (and (looking-at-p (rx eol))
+                (> (nth 0 (syntax-ppss)) 0)))
+         (progn
+           (cl-call-next-method)
+           (forward-line)
+           (join-line))
+       (cl-call-next-method)))))
+
+(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing list)))
+  (pcase bounds
+    ((conn-bounds `(,beg . ,_end))
+     (if (save-excursion
+           (goto-char beg)
+           (beginning-of-line)
+           (and (looking-at-p (rx eol))
+                (> (nth 0 (syntax-ppss)) 0)))
+         (progn
+           (cl-call-next-method)
+           (forward-line)
+           (join-line))
+       (cl-call-next-method)
+       (save-excursion
+         (beginning-of-line)
+         (when (looking-at-p (rx eol))
+           (delete-char 1)))))))
+
+(cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing region)))
+  "Noop" nil)
+
+(cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing char)))
+  "Noop" nil)
+
+(cl-defmethod conn-kill-fixup-whitespace (bounds)
+  (cl-flet ((empty-lines (&optional backward)
+              (save-excursion
+                (when backward (forward-line -1))
+                (cl-loop for i from 0
+                         while (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
+                         do (forward-line (if backward -1 1))
+                         finally return i))))
+    (pcase bounds
+      ((conn-bounds `(,beg . ,_end))
+       (save-excursion
+         (goto-char beg)
+         (when (or (looking-at (rx (syntax whitespace)))
+                   (looking-back (rx (syntax whitespace)) 1))
+           (fixup-whitespace))
+         (save-excursion
+           (when (progn
+                   (beginning-of-line)
+                   (looking-at-p (rx (seq (* (syntax whitespace))
+                                          (+ (syntax close-parenthesis))
+                                          eol))))
+             (join-line)))
+         (beginning-of-line)
+         (when (looking-at-p (rx eol))
+           (dotimes (_ (min (empty-lines) (empty-lines t)))
+             (join-line))))))))
 
 (defun conn--kill-region (beg end &optional delete-flag append register)
   (if register
@@ -1748,7 +1819,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                    register
                                    fixup-whitespace)
   (declare (conn-anonymous-thing-property :kill-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg transform
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg transform
              &optional append delete register fixup-whitespace)
     (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
         (funcall kill-op arg transform append delete register fixup-whitespace)
@@ -1762,15 +1833,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (cl-call-next-method)
     (move-to-column col)))
 
-(cl-defmethod conn-perform-kill ((cmd (conn-thing region))
-                                 arg
-                                 transform
+(cl-defmethod conn-perform-kill ((cmd (conn-thing char))
+                                 arg transform
                                  &optional
                                  append
-                                 delete
+                                 _delete
                                  register
-                                 _fixup-whitespace)
-  (cl-call-next-method cmd arg transform append delete register nil))
+                                 fixup-whitespace)
+  (cl-call-next-method cmd arg transform append t register fixup-whitespace))
 
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
@@ -1778,16 +1848,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   delete
                                   register
                                   fixup-whitespace)
-  (pcase (conn-bounds-of cmd arg)
-    ((conn-bounds `(,beg . ,end) transform)
+  (pcase (conn-transform-bounds (conn-bounds-of cmd arg) transform)
+    ((and (conn-bounds `(,beg . ,end))
+          bounds)
+     (goto-char beg)
      (save-mark-and-excursion
-       (goto-char beg)
        (conn--push-ephemeral-mark end)
        (if delete
            (delete-region beg end)
-         (conn--kill-region beg end t append register))
-       (when fixup-whitespace
-         (conn--kill-fixup-whitespace))))))
+         (conn--kill-region beg end t append register)))
+     (when fixup-whitespace
+       (funcall conn-kill-fixup-whitespace-function bounds)))))
 
 ;;;;; Copy Thing
 
@@ -1809,7 +1880,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defgeneric conn-perform-copy (cmd arg &optional transform append register)
   (declare (conn-anonymous-thing-property :copy-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg &optional transform append register)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg &optional transform append register)
     (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
         (funcall copy-op arg transform append register)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) arg transform append register))))
@@ -1975,7 +2046,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defgeneric conn-perform-change (cmd arg transform)
   (declare (conn-anonymous-thing-property :change-op))
-  ( :method ((cmd (conn-thing anonymous-thing)) arg transform)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg transform)
     (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
         (funcall change-op arg transform)
       (cl-call-next-method (conn-anonymous-thing-parent cmd) arg transform))))
