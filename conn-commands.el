@@ -1716,7 +1716,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (save-excursion
                 (when backward (forward-line -1))
                 (cl-loop for i from 0
-                         while (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
+                         while (and (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
+                                    (not (bobp))
+                                    (not (eobp)))
                          do (forward-line (if backward -1 1))
                          finally return i))))
     (pcase bounds
