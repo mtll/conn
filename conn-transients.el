@@ -678,32 +678,6 @@ apply to each contiguous component of the region."
      conn--kapply-pulse-region
      ,@(conn--transient-kapply-pipeline-args args))))
 
-(transient-define-suffix conn--kapply-things-in-region-suffix (args)
-  "Apply keyboard macro on the current region.
-
-If the region is discontinuous (e.g. a rectangular region) then
-apply to each contiguous component of the region."
-  :if (lambda () conn-local-mode)
-  :transient 'transient--do-exit
-  :key "y"
-  :description "Things in Region"
-  (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,cmd ,n)
-               (conn-eval-with-state 'conn-read-thing-state
-                   (list && (conn-thing-argument t))
-                 :prompt "Thing"))
-              (pipeline (conn--transient-kapply-pipeline-args args)))
-    (conn--kapply-macro
-     (alist-get :kmacro args)
-     (conn--kapply-thing-iterator cmd (region-bounds))
-     `(conn--kapply-relocate-to-region
-       conn--kapply-skip-invisible-points
-       ,(lambda (it)
-          (conn--kapply-every-nth it (prefix-numeric-value n)))
-       ,(when (> (point) (mark t)) 'conn--kapply-at-end)
-       conn--kapply-pulse-region
-       ,@pipeline))))
-
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times.
 
@@ -933,7 +907,6 @@ A zero means repeat until error."
       (conn--kapply-query-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "With State:"
-      (conn--kapply-things-in-region-suffix)
       (conn--kapply-replace-rectangle-suffix)
       (conn--kapply-emacs-rectangle-suffix)
       (conn--kapply-command-rectangle-suffix)]
@@ -943,7 +916,6 @@ A zero means repeat until error."
       (conn--kapply-string-suffix)
       (conn--kapply-regexp-suffix)
       (conn--kapply-things-suffix)
-      (conn--kapply-things-in-region-suffix)
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
     [ :description "Save State:"
@@ -993,7 +965,6 @@ A zero means repeat until error."
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :description "With State:"
-      (conn--kapply-things-in-region-suffix)
       (conn--kapply-replace-rectangle-suffix)
       (conn--kapply-emacs-rectangle-suffix)
       (conn--kapply-command-rectangle-suffix)]

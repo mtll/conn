@@ -175,19 +175,6 @@ Possibilities: \\<query-replace-map>
         ((or :record :next)
          (pop matches))))))
 
-(defun conn--kapply-thing-iterator (thing bounds)
-  (declare (important-return-value t))
-  (deactivate-mark t)
-  (conn--kapply-region-iterator
-   (let ((regions
-          (mapcan (pcase-lambda (`(,beg . ,end))
-                    (cl-loop for b in (conn-get-things-in-region thing beg end)
-                             collect (conn-bounds b)))
-                  bounds)))
-     (if (= (point) (region-end))
-         (nreverse regions)
-       regions))))
-
 (defun conn--kapply-region-iterator (regions &optional sort-function)
   (declare (important-return-value t))
   (unless regions

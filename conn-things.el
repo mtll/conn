@@ -123,16 +123,6 @@
    :parent parent
    :properties properties))
 
-(define-inline conn-get-thing (thing)
-  (declare (side-effect-free t)
-           (important-return-value t))
-  (inline-letevals (thing)
-    (inline-quote
-     (or (when (conn-anonymous-thing-p ,thing)
-           (conn-anonymous-thing-parent ,thing))
-         (conn-command-thing ,thing)
-         ,thing))))
-
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
   (let* ((main (documentation (symbol-function 'conn-anonymous-thing) 'raw))
@@ -194,6 +184,18 @@ order to mark the region that should be defined by any of COMMANDS."
             (conn--push-ephemeral-mark end)))))
      (conn-register-thing-commands ',thing 'ignore ',name)))
 
+(defun conn-get-thing (thing)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (pcase thing
+    ((pred conn-bounds-p)
+     (conn-bounds-thing thing))
+    ((pred conn-anonymous-thing-p)
+     (conn-anonymous-thing-parent thing))
+    ((or (pred conn-thing-p)
+         (pred conn-command-thing))
+     thing)))
+
 ;;;; Specializers
 
 (cl-generic-define-generalizer conn--thing-generalizer
@@ -213,34 +215,48 @@ order to mark the region that should be defined by any of COMMANDS."
              (conn-thing-all-parents ,cmd)))
   (lambda (things &rest _)
     (when things
-      `((conn-thing command-override)
-        ,@(cl-loop for thing in things
+      `(,@(cl-loop for thing in things
                    collect `(conn-thing ,thing))
         (conn-thing command)
         (conn-thing t)))))
 
+(defconst conn--thing-bounds-tag-cache (make-hash-table :test 'eq))
+
 (cl-generic-define-generalizer conn--thing-bounds-generalizer
   70 (lambda (bounds &rest _)
        `(and (conn-bounds-p ,bounds)
-             (conn-thing-all-parents ,bounds)))
+             (with-memoization
+                 (gethash (conn-bounds-thing ,bounds)
+                          conn--thing-bounds-tag-cache)
+               (cons 'thing-bounds
+                     (conn-thing-all-parents ,bounds)))))
   (lambda (things &rest _)
     (when things
-      `((conn-thing bounds-override)
-        ,@(cl-loop for thing in things
+      `(,@(cl-loop for thing in (cdr things)
                    collect `(conn-thing ,thing))
-        (conn-thing bounds)
+        ,(if (conn-command-thing (cadr things))
+             `(conn-thing command)
+           `(conn-thing thing))
         (conn-thing t)))))
+
+(defconst conn--anonymous-thing-tag-cache (make-hash-table :test 'eq))
 
 (cl-generic-define-generalizer conn--anonymous-thing-generalizer
   70 (lambda (thing &rest _)
        `(and (conn-anonymous-thing-p ,thing)
-             (conn-thing-all-parents ,thing)))
+             (with-memoization
+                 (gethash (conn-anonymous-thing-parent ,thing)
+                          conn--anonymous-thing-tag-cache)
+               (cons 'anonymous-thing
+                     (conn-thing-all-parents ,thing)))))
   (lambda (things &rest _)
     (when things
       `((conn-thing anonymous-thing-override)
-        ,@(cl-loop for thing in things
+        ,@(cl-loop for thing in (cdr things)
                    collect `(conn-thing ,thing))
-        (conn-thing anonymous-thing)
+        ,(if (conn-command-thing (cadr things))
+             `(conn-thing command)
+           `(conn-thing thing))
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -640,18 +656,19 @@ words."))
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
+      (cl-call-next-method))))
 
-(cl-defmethod conn-bounds-of :around (cmd arg)
+(cl-defmethod conn-bounds-of :around (_cmd _arg)
   (if conn--bounds-of-in-progress
-      (cl-call-next-method cmd arg)
+      (cl-call-next-method)
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
           (let ((conn--bounds-of-in-progress t))
             (save-mark-and-excursion
-              (cl-call-next-method cmd arg))))))
+              (cl-call-next-method))))))
 
 (cl-defmethod conn-bounds-of ((thing (conn-thing command)) arg)
-  (let (conn--last-perform-bounds)
+  (let ((thing (conn-get-thing thing))
+        conn--last-perform-bounds)
     (deactivate-mark t)
     (pcase (prefix-numeric-value arg)
       (0 nil)
@@ -692,7 +709,7 @@ words."))
           :subregions (nreverse subregions)))))))
 
 (cl-defmethod conn-bounds-of ((thing (conn-thing thing)) arg)
-  (conn-make-bounds thing arg (bounds-of-thing-at-point thing)))
+  (conn-make-bounds thing arg (bounds-of-thing-at-point (conn-get-thing thing))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region)) arg)
   (conn-make-bounds
@@ -867,7 +884,7 @@ words."))
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((remote (conn-anonymous-thing-property cmd :bounds-op-remote)))
         (funcall remote arg)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg)))
+      (cl-call-next-method)))
   ( :method (cmd arg pt)
     (save-excursion
       (goto-char pt)
@@ -915,54 +932,42 @@ words."))
   ( :method ((cmd (conn-thing anonymous-thing-override)) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :things-in-region)))
         (funcall op beg end)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) beg end))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing thing))
                                          beg end)
   (save-excursion
-    (let ((thing (conn-get-thing thing)))
-      (ignore-errors
-        (goto-char beg)
-        (forward-thing thing 1)
-        (cl-loop for bd = (cons (save-excursion
-                                  (forward-thing thing -1)
-                                  (point))
-                                (point))
-                 while (and bd (< (car bd) end))
-                 collect (conn-make-bounds thing nil bd)
-                 while (and (< (point) end)
-                            (ignore-errors
-                              (forward-thing thing 1)
-                              t)))))))
+    (goto-char beg)
+    (forward-thing thing 1)
+    (cl-loop for bd = (cons (save-excursion
+                              (forward-thing thing -1)
+                              (point))
+                            (point))
+             while (and bd (< (car bd) end))
+             collect (conn-make-bounds thing nil bd) into sr
+             minimize (car bd) into b
+             maximize (cdr bd) into e
+             while (and (< (point) end)
+                        (ignore-errors
+                          (forward-thing thing 1)
+                          t))
+             finally return (conn-make-bounds
+                             thing nil
+                             (cons b e)
+                             :subregions sr))))
 
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
   (let* ((thing (conn-eval-with-state 'conn-read-thing-state
-                    (conn-get-thing (car & (conn-thing-argument-dwim)))
+                    (car & (conn-thing-argument-dwim))
                   :prompt "Things in Region"))
-         (beg (save-excursion
-                (goto-char (region-beginning))
-                (forward-thing thing 1)
-                (forward-thing thing -1)
-                (point)))
-         (end (save-excursion
-                (let ((end (region-end)))
-                  (goto-char end)
-                  (forward-thing thing -1)
-                  (ignore-errors
-                    (while (< (point) end)
-                      (forward-thing thing 1))))
-                (point))))
-    (conn-make-bounds
-     thing nil
-     (cons beg end)
-     :subregions (lambda (bounds)
-                   (pcase-let ((`(,beg . ,end)
-                                (conn-bounds bounds)))
-                     (setf (conn-bounds-get bounds :subregions)
-                           (conn-get-things-in-region
-                            (conn-bounds-thing bounds) beg end)))))))
+         (thing (cl-loop for thing in (conn-thing-all-parents thing)
+                         when (conn-thing-p thing) return thing
+                         finally (user-error "Not a valid things in region thing"))))
+    (conn-get-things-in-region thing
+                               (region-beginning)
+                               (region-end))))
 
 ;;;; Thing Definitions
 

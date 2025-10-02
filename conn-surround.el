@@ -261,9 +261,7 @@
              arg transform &rest keys &key &allow-other-keys)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (apply op arg transform keys)
-      (apply #'cl-call-next-method
-             (conn-anonymous-thing-parent cmd)
-             arg transform keys))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-prepare-surround (cmd arg transform &key subregions &allow-other-keys)
   (let (regions)
@@ -435,7 +433,7 @@
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
         (funcall op arg)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-prepare-change-surround (cmd arg)
   (pcase (conn-bounds-of cmd arg)

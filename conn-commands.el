@@ -943,7 +943,7 @@ With a prefix ARG `push-mark' without activating it."
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((transpose-op (conn-anonymous-thing-property cmd :transpose-op)))
         (funcall transpose-op arg)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-perform-transpose (cmd arg)
   (pcase cmd
@@ -1717,8 +1717,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 (when backward (forward-line -1))
                 (cl-loop for i from 0
                          while (and (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
-                                    (not (bobp))
-                                    (not (eobp)))
+                                    (not (bobp)))
                          do (forward-line (if backward -1 1))
                          finally return i))))
     (pcase bounds
@@ -1771,8 +1770,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              &optional append delete register fixup-whitespace)
     (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
         (funcall kill-op arg transform append delete register fixup-whitespace)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd)
-                           arg transform append delete register fixup-whitespace))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
                                  _arg _transform
@@ -1831,7 +1829,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg &optional transform append register)
     (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
         (funcall copy-op arg transform append register)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg transform append register))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-perform-copy (cmd arg &optional transform append register)
   (pcase (conn-bounds-of cmd arg)
@@ -1853,7 +1851,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   ( :method (cmd arg transform)
     (if-let* ((dup-op (conn-anonymous-thing-property cmd :duplicate-op)))
         (funcall dup-op arg transform)
-      (conn-perform-duplicate (conn-anonymous-thing-parent cmd) arg transform)))
+      (conn-perform-duplicate)))
   ( :method (cmd arg transform)
     (pcase (conn-bounds-of cmd arg)
       ((conn-bounds `(,beg . ,end) transform)
@@ -1997,7 +1995,7 @@ Interactively `region-beginning' and `region-end'."
   ( :method ((cmd (conn-thing anonymous-thing-override)) arg transform)
     (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
         (funcall change-op arg transform)
-      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg transform))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-perform-change (cmd arg transform)
   (pcase-let (((conn-bounds `(,beg . ,end) transform)
