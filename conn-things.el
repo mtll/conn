@@ -729,7 +729,7 @@ words."))
       (rectangle-mark-mode 1))
     (cl-call-next-method)))
 
-(defvar conn--bounds-kbd-macro nil)
+(defvar conn--bounds-last-kbd-macro nil)
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing kbd-macro))
                               arg)
@@ -741,7 +741,7 @@ words."))
             (guard (not (and (fboundp 'repeat-is-really-this-command)
                              (repeat-is-really-this-command)))))
        (let ((buffer-read-only t)
-             (last-kbd-macro conn--bounds-kbd-macro))
+             (last-kbd-macro conn--bounds-last-kbd-macro))
          (start-kbd-macro arg)
          (unwind-protect
              (conn-with-recursive-stack 'conn-command-state
@@ -749,10 +749,10 @@ words."))
            (if defining-kbd-macro
                (end-kbd-macro)
              (error "Not defining kbd macro"))
-           (setq conn--bounds-kbd-macro last-kbd-macro))))
+           (setq conn--bounds-last-kbd-macro last-kbd-macro))))
       (_
        (conn-with-recursive-stack 'conn-command-state
-         (execute-kbd-macro conn--bounds-kbd-macro))))
+         (execute-kbd-macro conn--bounds-last-kbd-macro))))
     (conn-bounds-of 'region nil)))
 
 ;;;;; Bounds Transformations
