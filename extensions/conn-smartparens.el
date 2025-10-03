@@ -217,13 +217,15 @@
   (conn-push-state 'conntext-paren-state)
   t)
 
-(put 'sp-convolve-sexp :conn-transpose-command t)
+(keymap-set (conn-get-state-map 'conn-transpose-state)
+            "c" 'sp-convolve-sexp)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-transpose-argument)
+                                       (_sym (eql sp-convolve-sexp)))
+  t)
 
 (cl-defmethod conn-perform-transpose ((cmd (eql sp-convolve-sexp)) arg)
   (sp-convolute-sexp arg))
-
-(keymap-set (conn-get-state-map 'conn-transpose-state)
-            "c" 'sp-convolve-sexp)
 
 (put 'conn-sp-pair :conn-thing t)
 
