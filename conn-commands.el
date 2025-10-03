@@ -805,8 +805,8 @@ Immediately repeating this command pushes a mark."
   (interactive)
   (unless conn-previous-mark-state
     (user-error "No previous mark state"))
-  (goto-char (car conn-previous-mark-state))
-  (conn--push-ephemeral-mark (cadr conn-previous-mark-state)
+  (goto-char (nth 0 conn-previous-mark-state))
+  (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state)
                              nil t)
   (when (nth 2 conn-previous-mark-state)
     (rectangle-mark-mode 1))
