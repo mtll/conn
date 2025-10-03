@@ -43,8 +43,11 @@
 (conn-define-state conn-surrounding-state (conn-surround-with-state)
   :lighter "SURROUNDING")
 
+(oclosure-define (conn-surround-property-argument
+                  (:parent conn-state-eval-argument)))
+
 (defun conn-surround-property-argument (&optional value)
-  (oclosure-lambda (conn-state-eval-argument
+  (oclosure-lambda (conn-surround-property-argument
                     (value (or value :whole))
                     (keymap (define-keymap
                               "w" :whole
@@ -53,6 +56,11 @@
     (if (memq cmd '(:whole :inner))
         (conn-set-argument self cmd)
       self)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-surround-property-argument)
+                                       sym)
+  (or (eq sym :whole)
+      (eq sym :inner)))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-surround)) arg)
   (pcase-let* ((`(,bounds ,property)
@@ -163,21 +171,17 @@
   (oclosure-lambda (conn-surround-with-argument
                     (required t))
       (self cmd)
-    (conn-handle-surround-with-argument cmd self)))
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (conn-state-eval-consume-prefix-arg))
+      self)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
+                                       sym)
+  (memq sym '(surround-self-insert surround-command)))
 
 (cl-defmethod conn-eval-argument ((arg conn-surround-with-argument))
   (conn-state-eval-argument-value arg))
-
-(cl-defgeneric conn-handle-surround-with-argument (cmd arg)
-  (:method (_ arg) arg))
-
-(cl-defmethod conn-handle-surround-with-argument ((cmd (eql surround-self-insert))
-                                                  arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
-
-(cl-defmethod conn-handle-surround-with-argument ((cmd (eql surround-comment))
-                                                  arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 ;;;;;; Padding Arg
 
@@ -195,6 +199,10 @@
                     (read-string "Padding: ")
                   " ")))
       self)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-surround-padding-argument)
+                                       (_sym (eql conn-padding-flag)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-surround-padding-argument))
   (concat "\\[conn-padding-flag] "
@@ -369,10 +377,9 @@
       (remove-text-properties 0 (1- (length result)) '(face) result)
       result)))
 
-(cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-read-pair))
-                                                  arg)
-  (conn-set-argument
-   arg (list cmd (conn-state-eval-consume-prefix-arg))))
+(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
+                                       (_sym (eql conn-read-pair)))
+  t)
 
 (defvar conn--surround-current-pair nil)
 
@@ -417,15 +424,14 @@
   (oclosure-lambda (conn-change-surround-argument
                     (required t))
       (self cmd)
-    (conn-handle-change-surround-argument cmd self)))
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
 
-(cl-defgeneric conn-handle-change-surround-argument (cmd arg))
-
-(cl-defmethod conn-handle-change-surround-argument (_cmd arg)
-  arg)
-
-(cl-defmethod conn-handle-change-surround-argument ((cmd (eql surround-self-insert)) arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+(cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
+                                       (_sym (eql surround-self-insert)))
+  t)
 
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)

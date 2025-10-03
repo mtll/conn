@@ -217,6 +217,14 @@
   (conn-push-state 'conntext-paren-state)
   t)
 
+(put 'sp-convolve-sexp :conn-transpose-command t)
+
+(cl-defmethod conn-perform-transpose ((cmd (eql sp-convolve-sexp)) arg)
+  (sp-convolute-sexp arg))
+
+(keymap-set (conn-get-state-map 'conn-transpose-state)
+            "c" 'sp-convolve-sexp)
+
 (put 'conn-sp-pair :conn-thing t)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-sp-pair)) arg)
@@ -264,9 +272,9 @@
   (let ((conn--surround-current-pair nil))
     (cl-call-next-method)))
 
-(cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-sp-pair))
-                                                  arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
+                                       (_sym (eql conn-sp-pair)))
+  t)
 
 (keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
             "r" 'conn-sp-pair)

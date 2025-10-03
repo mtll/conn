@@ -207,7 +207,6 @@ Expansions and contractions are provided by functions in
                            (required t)
                            (name 'conn--read-expand-message))
              (self command)
-           (message "test")
            (pcase command
              ('conn-expand-exchange
               (conn-expand-exchange)

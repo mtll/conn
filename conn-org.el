@@ -290,8 +290,10 @@
   "E" 'org-export
   "e" 'org-example)
 
-(cl-defmethod conn-handle-surround-with-argument :extra "conn-org" (cmd arg)
-  (if (memq cmd '(org-quote
+
+(cl-defmethod conn-argument-predicate :extra "conn-org" ((_arg conn-surround-with-argument)
+                                                         sym)
+  (or (memq sym '(org-quote
                   org-center
                   org-comment
                   org-src
@@ -301,8 +303,7 @@
                   org-export-latex
                   org-export
                   org-example))
-      (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg)))
-    (cl-call-next-method)))
+      (cl-call-next-method)))
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
                                      &key &allow-other-keys)

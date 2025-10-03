@@ -505,10 +505,8 @@ themselves once the selection process has concluded."
 
 (defun conn-dispatch-transform-argument ()
   (declare (important-return-value t))
-  (oclosure-lambda (conn-transform-argument
-                    (keymap conn-dispatch-transform-map))
-      (self cmd)
-    (conn-handle-transform-argument cmd self)))
+  (let ((conn-transform-map conn-dispatch-transform-map))
+    (conn-transform-argument)))
 
 ;;;;;; Dispatch Quick Ref
 
@@ -620,7 +618,7 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-action-argument)
       (self type)
-    (if (conn--action-type-p type)
+    (if (conn-argument-predicate self type)
         (progn
           (conn-cancel-action value)
           (conn-set-argument
@@ -635,10 +633,9 @@ themselves once the selection process has concluded."
   (when-let* ((action (conn-state-eval-argument-value arg)))
     (conn-accept-action action)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-action-argument)
-                                                  sym)
-  (or (conn--action-type-p sym)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-action-argument)
+                                       sym)
+  (conn--action-type-p sym))
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-state-eval-argument-value arg)))
@@ -659,10 +656,9 @@ themselves once the selection process has concluded."
         (conn-set-argument self (not value))
       self)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-other-end-argument)
-                                                  sym)
-  (or (eq sym 'dispatch-other-end)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-other-end-argument)
+                                       (_sym (eql dispatch-other-end)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-other-end-argument))
   (concat "\\[dispatch-other-end] "
@@ -687,10 +683,9 @@ themselves once the selection process has concluded."
         (conn-set-argument self (not value))
       self)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-repeat-argument)
-                                                  sym)
-  (or (eq sym 'dispatch-repeat)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-repeat-argument)
+                                       (_sym (eql dispatch-repeat)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-repeat-argument))
   (concat "\\[repeat-dispatch] "
@@ -712,10 +707,9 @@ themselves once the selection process has concluded."
         (conn-set-argument self (not value))
       self)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-restrict-windows-argument)
-                                                  sym)
-  (or (eq sym 'restrict-windows)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-restrict-windows-argument)
+                                       (_sym (eql restrict-windows)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-restrict-windows-argument))
   (concat "\\[restrict-windows] "

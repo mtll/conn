@@ -264,7 +264,7 @@ order to mark the region that should be defined by any of COMMANDS."
       `((conn-thing anonymous-thing-override)
         ,@(cl-loop for thing in (conn-thing-all-parents (cdr thing))
                    collect `(conn-thing ,thing))
-        ,(if (conn-command-thing (cadr thing))
+        ,(if (conn-command-thing (cdr thing))
              `(conn-thing command)
            `(conn-thing thing))
         (conn-thing t)))))
@@ -290,7 +290,10 @@ order to mark the region that should be defined by any of COMMANDS."
                     (required t)
                     (recursive-edit recursive-edit))
       (self cmd)
-    (conn-handle-thing-argument cmd self)))
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
 
 (defun conn-thing-argument-dwim (&optional recursive-edit)
   (declare (important-return-value t))
@@ -301,25 +304,21 @@ order to mark the region that should be defined by any of COMMANDS."
                     (required t)
                     (recursive-edit recursive-edit))
       (self cmd)
-    (conn-handle-thing-argument cmd self)))
-
-(cl-defgeneric conn-handle-thing-argument (cmd arg)
-  ( :method (_ arg) arg))
-
-(cl-defmethod conn-handle-thing-argument ((cmd (conn-thing t)) arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
-
-(cl-defmethod conn-handle-thing-argument ((cmd (conn-thing recursive-edit)) arg)
-  (when (conn-thing-argument--recursive-edit arg)
-    (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg)))))
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
 
 (cl-defmethod conn-eval-argument ((arg conn-thing-argument))
   (conn-state-eval-argument-value arg))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-thing-argument) sym)
-  (or (conn-thing-p sym)
-      (conn-command-thing sym)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
+                                       (_sym (conn-thing t)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
+                                       (_sym (eql recursive-edit)))
+  (conn-thing-argument--recursive-edit arg))
 
 ;;;;;; Subregions
 
@@ -335,31 +334,29 @@ order to mark the region that should be defined by any of COMMANDS."
                     (value value)
                     (keymap conn-subregions-map))
       (self cmd)
-    (conn-handle-subregions-argument cmd self)))
+    (if (eq cmd 'toggle-subregions)
+        (conn-set-argument
+         self (not (conn-state-eval-argument-value self)))
+      (conn-subregions-default-value cmd self))))
 
-(cl-defgeneric conn-handle-subregions-argument (cmd arg)
+(cl-defgeneric conn-subregions-default-value (cmd arg)
   ( :method (_ arg) arg))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (eql toggle-subregions))
-                                               arg)
-  (conn-set-argument arg (not (conn-state-eval-argument-value arg))))
-
-(cl-defmethod conn-handle-subregions-argument ((_cmd (eql conn-things-in-region))
-                                               arg)
+(cl-defmethod conn-subregions-default-value ((_cmd (eql conn-things-in-region))
+                                             arg)
   (conn-set-argument arg t))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing region))
-                                               arg)
+(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
+                                             arg)
   (conn-set-argument arg t))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing recursive-edit))
-                                               arg)
+(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
+                                             arg)
   (conn-set-argument arg t))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-subregions-argument)
-                                                  sym)
-  (or (eq sym 'toggle-subregions)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
+                                       (_sym (eql toggle-subregions)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
@@ -394,15 +391,13 @@ words."))
                     (value value)
                     (keymap conn-fixup-whitespace-argument-map))
       (self cmd)
-    (pcase cmd
-      ('fixup-whitespace
-       (conn-set-argument self (null value)))
-      (_ self))))
+    (if (eq cmd 'fixup-whitespace)
+        (conn-set-argument self (null value))
+      self)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-fixup-whitespace-argument)
-                                                  sym)
-  (or (eq sym 'fixup-whitespace)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
+                                       (_sym (eql fixup-whitespace)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-fixup-whitespace-argument))
   (substitute-command-keys
@@ -429,15 +424,13 @@ words."))
                     (value value)
                     (keymap conn-check-bounds-argument-map))
       (self cmd)
-    (pcase cmd
-      ('check-bounds
-       (conn-set-argument self (null value)))
-      (_ self))))
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument self (null value))
+      self)))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-check-bounds-argument)
-                                                  sym)
-  (or (eq sym 'check-bounds)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-check-bounds-argument)
+                                       (_sym (eql check-bounds)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-check-bounds-argument))
   (substitute-command-keys
@@ -468,32 +461,23 @@ words."))
                     (value value)
                     (keymap conn-transform-map))
       (self cmd)
-    (conn-handle-transform-argument cmd self)))
+    (let ((val (conn-update-argument (conn-state-eval-argument-value self) cmd)))
+      (pcase cmd
+        ('conn-transform-reset
+         (conn-set-argument self nil))
+        ((and (guard (symbolp cmd))
+              (let (and handler (pred identity))
+                (get cmd :conn-bounds-transform)))
+         (cond ((memq cmd val)
+                (conn-set-argument self (remq cmd val)))
+               ((functionp handler)
+                (funcall handler cmd self))
+               (t (conn-set-argument self (cons cmd val)))))
+        (_ (conn-set-argument self val))))))
 
-(cl-defgeneric conn-handle-transform-argument (cmd arg))
-
-(cl-defmethod conn-handle-transform-argument (cmd arg)
-  (let ((val (conn-update-argument (conn-state-eval-argument-value arg) cmd)))
-    (pcase cmd
-      ('conn-transform-reset
-       (conn-set-argument arg nil))
-      ((and (guard (symbolp cmd))
-            (let (and handler (pred identity))
-              (get cmd :conn-bounds-transform)))
-       (if-let* ((_(memq cmd val)))
-           (conn-set-argument arg (remq cmd val))
-         (if (functionp handler)
-             (funcall handler cmd arg)
-           (conn-set-argument arg (cons cmd val)))))
-      (_
-       (if (equal val (conn-state-eval-argument-value arg))
-           arg
-         (conn-set-argument arg val))))))
-
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-transform-argument)
-                                                  sym)
-  (or (get sym :conn-bounds-transform)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
+                                       sym)
+  (get sym :conn-bounds-transform))
 
 (cl-defmethod conn-display-argument ((arg conn-transform-argument))
   (when-let* ((ts (conn-state-eval-argument-value arg)))
@@ -535,7 +519,6 @@ words."))
   "M-<backspace>" 'reset-arg
   "C-q" 'help
   "," conn-thing-remap
-  "[" 'recursive-edit
   "'" 'recursive-edit
   "c" 'conn-things-in-region)
 
@@ -832,6 +815,10 @@ words."))
 
 ;;;;; Perform Bounds
 
+(defvar conn--bounds-of-recursive-edit nil)
+
+(conn-set-mode-map-depth 'conn--bounds-of-recursive-edit -95)
+
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
   :lighter "R")
 
@@ -843,13 +830,19 @@ words."))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
-  "<escape>" 'exit-recursive-edit
-  "e" 'exit-recursive-edit
+  "d" 'exit-recursive-edit
   "C-]" 'abort-recursive-edit
   "q" 'abort-recursive-edit)
 
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit)) _arg)
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn--bounds-of-recursive-edit)
+  "d" 'exit-recursive-edit
+  "C-]" 'abort-recursive-edit
+  "q" 'abort-recursive-edit)
+
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
   (let* ((eldoc-message-function 'ignore)
+         (conn--bounds-of-recursive-edit t)
          (pre (lambda ()
                 (message
                  (substitute-command-keys
@@ -1030,8 +1023,12 @@ words."))
 
 (conn-define-mark-command conn-mark-visible visible)
 
+(conn-register-thing
+ 'recursive-edit-thing
+ :parent 'region)
+
 (conn-register-thing-commands
- 'recursive-edit nil
+ 'recursive-edit-thing nil
  'recursive-edit 'exit-recursive-edit)
 
 (conn-register-thing-commands

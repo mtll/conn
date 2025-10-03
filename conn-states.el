@@ -1346,10 +1346,15 @@ chooses to handle a command."
 (defun conn--state-eval-completing-read (state args)
   (when-let* ((metadata (conn-state-get state :loop-completion-metadata))
               (table
-               (cl-loop for sym in (mapcan #'conn--all-bindings
-                                           (current-active-maps))
-                        when (conn-argument-completion-predicate args sym)
-                        collect sym)))
+               (cl-labels ((pred (arg sym)
+                             (if (consp arg)
+                                 (or (pred (car arg) sym)
+                                     (pred (cdr arg) sym))
+                               (conn-argument-predicate arg sym))))
+                 (cl-loop for sym in (mapcan #'conn--all-bindings
+                                             (current-active-maps))
+                          when (pred args sym)
+                          collect sym))))
     (condition-case _
         (intern
          (completing-read
@@ -1582,13 +1587,10 @@ chooses to handle a command."
                   ((stringp str)))
          str)))))
 
-(cl-defgeneric conn-argument-completion-predicate (argument symbol)
+(cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
            (side-effect-free t))
-  ( :method (_arg _sym) nil)
-  ( :method ((arg cons) sym)
-    (or (conn-argument-completion-predicate (car arg) sym)
-        (conn-argument-completion-predicate (cdr arg) sym))))
+  ( :method (_arg _val) nil))
 
 (cl-defgeneric conn-argument-keymaps (argument)
   (declare (important-return-value t)

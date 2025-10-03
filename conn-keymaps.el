@@ -47,16 +47,8 @@
   "M-<backspace>" 'reset-arg
   "C-q" 'help
   "," conn-thing-remap
-  "[" 'recursive-edit
   "'" 'recursive-edit
   "c" 'conn-things-in-region)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
-  "<escape>" 'exit-recursive-edit
-  "e" 'exit-recursive-edit
-  "C-]" 'abort-recursive-edit
-  "q" 'abort-recursive-edit)
 
 ;;;; Keymaps
 
@@ -583,7 +575,7 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state
                                    'conn-transpose-recursive-edit-mode)
-  "e" 'exit-recursive-edit
+  "d" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
 
 (provide 'conn-keymaps)

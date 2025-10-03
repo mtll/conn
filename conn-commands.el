@@ -863,6 +863,20 @@ With a prefix ARG `push-mark' without activating it."
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
 
+(oclosure-define (conn-transpose-argument
+                  (:parent conn-thing-argument)))
+
+(defun conn-transpose-argument ()
+  (declare (important-return-value t))
+  (oclosure-lambda (conn-transpose-argument
+                    (required t)
+                    (recursive-edit t))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
+
 (defun conn--transpose-recursive-message ()
   (message
    (substitute-command-keys
@@ -946,7 +960,7 @@ With a prefix ARG `push-mark' without activating it."
                                 (conn-bounds-arg bounds))))
     (transpose-regions beg1 end1 beg2 end2)))
 
-(cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit)) _arg)
+(cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit-thing)) _arg)
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer)))
@@ -1016,7 +1030,7 @@ If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-eval-with-state 'conn-transpose-state
-       (list && (conn-thing-argument t))
+       (list && (conn-transpose-argument))
      :prompt "Transpose"
      :prefix current-prefix-arg))
   (when conn-transpose-recursive-edit-mode
@@ -1457,6 +1471,23 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
+(oclosure-define (conn-kill-argument
+                  (:parent conn-thing-argument)))
+
+(defun conn-kill-argument ()
+  (declare (important-return-value t))
+  (oclosure-lambda (conn-kill-argument
+                    (required t)
+                    (recursive-edit t)
+                    (value (when (use-region-p)
+                             (list 'region nil)))
+                    (set-flag (use-region-p)))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
+
 (oclosure-define (conn-kill-append-argument
                   (:parent conn-state-eval-argument)))
 
@@ -1484,10 +1515,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn-unset-argument self nil))
       (_ self))))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-kill-append-argument)
-                                                  sym)
-  (or (eq sym 'append-next-kill)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-append-argument)
+                                       (_sym (eql append-next-kill)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-kill-append-argument))
   (substitute-command-keys
@@ -1523,10 +1553,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn-unset-argument self nil))
       (_ self))))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-delete-argument)
-                                                  sym)
-  (or (eq sym 'delete)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-delete-argument)
+                                       (_sym (eql delete)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-delete-argument))
   (substitute-command-keys
@@ -1560,10 +1589,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn-unset-argument self nil))
       (_ self))))
 
-(cl-defmethod conn-argument-completion-predicate ((_arg conn-register-argument)
-                                                  sym)
-  (or (eq sym 'register)
-      (cl-call-next-method)))
+(cl-defmethod conn-argument-predicate ((_arg conn-register-argument)
+                                       (_sym (eql register)))
+  t)
 
 (cl-defmethod conn-display-argument ((arg conn-register-argument))
   (substitute-command-keys
@@ -1575,9 +1603,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          'face 'eldoc-highlight-function-argument)
       "reg"))))
 
-(cl-defgeneric conn-handle-delete-thing-argument (cmd self)
-  (:method (cmd self) (conn-handle-thing-argument cmd self)))
-
 (defun conn-kill-thing ( cmd arg transform
                          &optional
                          append
@@ -1587,7 +1612,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          check-bounds)
   (interactive
    (conn-eval-with-state 'conn-kill-state
-       (list && (conn-thing-argument-dwim)
+       (list && (conn-kill-argument)
              & (conn-transform-argument)
              & (conn-kill-append-argument
                 (and (eq last-command 'conn-kill-thing)
@@ -1638,7 +1663,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (when (or (looking-at (rx (syntax whitespace)))
               (looking-back (rx (syntax whitespace)) 1))
       (fixup-whitespace))
-    (cond ((save-excursion
+    (cond ((and (conn-get-thing-property bounds :linewise)
+                (save-excursion
+                  (beginning-of-line)
+                  (looking-at-p (rx eol))))
+           (dotimes (_ (min (empty-lines) (empty-lines t)))
+             (join-line)))
+          ((save-excursion
              (beginning-of-line)
              (looking-at-p (rx (seq (* (syntax whitespace))
                                     (+ (syntax close-parenthesis))
@@ -1651,14 +1682,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (not (conn-get-thing-property
                         (conn-bounds-thing bounds)
                         :linewise))
-                  (> (nth 0 (syntax-ppss)) 0)))
+                  (> (car (syntax-ppss)) 0)))
            (let ((col (current-column)))
              (join-line)
              (forward-line)
-             (move-to-column col))))
-    (when (looking-at-p (rx eol))
-      (dotimes (_ (min (empty-lines) (empty-lines t)))
-        (join-line)))))
+             (move-to-column col))))))
 
 (defun conn--kill-region (beg end &optional delete-flag append register)
   (if register
@@ -1941,28 +1969,29 @@ Interactively `region-beginning' and `region-end'."
                                    _arg _transform)
   (conn-emacs-state-overwrite-binary))
 
-(cl-defgeneric conn-handle-change-argument (cmd arg)
-  (:method (cmd arg) (conn-handle-thing-argument cmd arg)))
+(oclosure-define (conn-change-argument
+                  (:parent conn-thing-argument)))
 
-(cl-defmethod conn-handle-change-argument ((cmd (eql conn-emacs-state-overwrite-binary))
-                                           arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
-
-(cl-defmethod conn-handle-change-argument ((cmd (eql conn-emacs-state-overwrite))
-                                           arg)
-  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
+(cl-defmethod conn-argument-predicate ((_arg conn-change-argument)
+                                       sym)
+  (or (eq sym 'conn-emacs-state-overwrite-binary)
+      (eq sym 'conn-emacs-state-overwrite)
+      (cl-call-next-method)))
 
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD and ARG."
   (interactive
    (conn-eval-with-state 'conn-change-state
-       (list && (oclosure-lambda (conn-thing-argument
+       (list && (oclosure-lambda (conn-change-argument
                                   (required t)
                                   (value (when (use-region-p)
                                            (list 'region nil)))
                                   (set-flag (use-region-p)))
                     (self cmd)
-                  (conn-handle-change-argument cmd self))
+                  (if (conn-argument-predicate self cmd)
+                      (conn-set-argument
+                       self (list cmd (conn-state-eval-consume-prefix-arg)))
+                    self))
              & (conn-transform-argument 'conn-bounds-last))
      :prompt "Thing"))
   (conn-perform-change cmd arg transform))
