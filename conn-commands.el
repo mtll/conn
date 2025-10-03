@@ -801,6 +801,15 @@ Immediately repeating this command pushes a mark."
   (when (region-active-p)
     (conn-push-state 'conn-mark-state)))
 
+(defun conn-last-mark-command ()
+  (interactive)
+  (unless conn-previous-mark-state
+    (user-error "No previous mark state"))
+  (goto-char (car conn-previous-mark-state))
+  (conn--push-ephemeral-mark (cdr conn-previous-mark-state)
+                             nil t)
+  (conn-push-state 'conn-mark-state))
+
 (defun conn-mark-thing (thing arg transform)
   (interactive
    (conn-eval-with-state 'conn-read-thing-state

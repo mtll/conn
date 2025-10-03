@@ -1186,6 +1186,8 @@ the state stays active if the previous command was a prefix command."
 
 ;;;;; Mark State
 
+(defvar-local conn-previous-mark-state nil)
+
 (conn-define-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
   :lighter "M"
@@ -1208,7 +1210,13 @@ the state stays active if the previous command was a prefix command."
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
-  (conn-state-defer (setq deactivate-mark t))
+  (conn-state-defer
+    (setq deactivate-mark t)
+    (unless (eq this-command 'keyboard-quit)
+      (unless conn-previous-mark-state
+        (setq-local conn-previous-mark-state (cons (make-marker) (make-marker))))
+      (set-marker (car conn-previous-mark-state) (point))
+      (set-marker (cdr conn-previous-mark-state) (mark t))))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
