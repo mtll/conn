@@ -1662,6 +1662,33 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing char)))
   "Noop" nil)
 
+(cl-defmethod conn-kill-fixup-whitespace (bounds
+                                          &context
+                                          (major-mode (derived-mode lisp-data-mode)))
+  (cl-call-next-method)
+  (cond ((conn-get-thing-property (conn-bounds-thing bounds) :linewise))
+        ((save-excursion
+           (beginning-of-line)
+           (looking-at-p (rx (seq (* (syntax whitespace))
+                                  (+ (syntax close-parenthesis))
+                                  eol))))
+         (join-line))
+        ((and (looking-back (rx (seq (* (syntax whitespace))
+                                     (syntax open-parenthesis)))
+                            (pos-bol))
+              (looking-at-p (rx (seq (* (syntax whitespace)) eol))))
+         (forward-line)
+         (join-line))
+        ((save-excursion
+           (beginning-of-line)
+           (and (looking-at-p (rx (seq (* (syntax whitespace))
+                                       eol)))
+                (> (car (syntax-ppss)) 0)))
+         (let ((col (current-column)))
+           (join-line)
+           (forward-line)
+           (move-to-column col)))))
+
 (cl-defmethod conn-kill-fixup-whitespace (bounds)
   (cl-flet ((empty-lines (&optional backward)
               (save-excursion
@@ -1674,30 +1701,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (when (or (looking-at (rx (syntax whitespace)))
               (looking-back (rx (syntax whitespace)) 1))
       (fixup-whitespace))
-    (cond ((and (conn-get-thing-property bounds :linewise)
-                (save-excursion
-                  (beginning-of-line)
-                  (looking-at-p (rx eol))))
-           (dotimes (_ (min (empty-lines) (empty-lines t)))
-             (join-line)))
-          ((save-excursion
-             (beginning-of-line)
-             (looking-at-p (rx (seq (* (syntax whitespace))
-                                    (+ (syntax close-parenthesis))
-                                    eol))))
-           (join-line))
-          ((save-excursion
-             (beginning-of-line)
-             (and (looking-at-p (rx (seq (* (syntax whitespace))
-                                         eol)))
-                  (not (conn-get-thing-property
-                        (conn-bounds-thing bounds)
-                        :linewise))
-                  (> (car (syntax-ppss)) 0)))
-           (let ((col (current-column)))
-             (join-line)
-             (forward-line)
-             (move-to-column col))))))
+    (when (and (conn-get-thing-property bounds :linewise)
+               (save-excursion
+                 (beginning-of-line)
+                 (looking-at-p (rx eol))))
+      (dotimes (_ (min (empty-lines) (empty-lines t)))
+        (join-line)))))
 
 (defun conn--kill-region (beg end &optional delete-flag append register)
   (if register
