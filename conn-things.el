@@ -831,13 +831,11 @@ words."))
 (define-keymap
   :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
   "d" 'exit-recursive-edit
-  "C-]" 'abort-recursive-edit
   "q" 'abort-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn--bounds-of-recursive-edit)
   "d" 'exit-recursive-edit
-  "C-]" 'abort-recursive-edit
   "q" 'abort-recursive-edit)
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
