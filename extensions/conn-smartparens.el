@@ -124,7 +124,7 @@
 
 (conn-register-thing
  'sp-sexp
- :parents '(sexp)
+ :parent 'sexp
  :forward-op 'conn-sp-forward-sexp-op
  :bounds-op 'conn-sp-bounds-of-sexp)
 

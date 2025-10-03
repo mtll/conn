@@ -244,12 +244,12 @@ property from its parents."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (property)
-                   (inline-quote
-                    (thread-first
-                      (gethash ,property
-                               (conn-state--properties (conn--find-state ,state))
-                               conn--key-missing)
-                      (eq conn--key-missing) not))))
+    (inline-quote
+     (thread-first
+       (gethash ,property
+                (conn-state--properties (conn--find-state ,state))
+                conn--key-missing)
+       (eq conn--key-missing) not))))
 
 ;;;;; Keymaps
 

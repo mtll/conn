@@ -298,8 +298,7 @@
   "h" 'conn-expand
   "p" 'forward-paragraph
   "," conn-thing-remap
-  "e" 'end-of-buffer
-  "C-SPC" 'conn-composite-thing)
+  "e" 'end-of-buffer)
 
 ;;;;;; Command State
 
@@ -377,7 +376,6 @@
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
   "b" 'conn-set-mark-command
-  "C-SPC" 'conn-record-composite-thing
   "d" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix

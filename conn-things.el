@@ -62,34 +62,45 @@
   (pcase thing
     ((let (and command-thing (pred identity))
        (conn-command-thing thing))
-     (with-memoization (gethash thing conn--thing-all-parents-cache)
-       (cons thing (conn-thing-all-parents command-thing))))
+     (cons thing (conn-thing-all-parents command-thing)))
     ((pred conn-bounds-p)
      (conn-thing-all-parents (conn-bounds-thing thing)))
     ((pred conn-anonymous-thing-p)
      (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
-    (_
-     (let ((parents (conn-get-thing-parents thing)))
-       (with-memoization (gethash (or parents thing)
-                                  conn--thing-all-parents-cache)
-         (cons thing
-               (merge-ordered-lists
-                (mapcar #'conn-thing-all-parents parents))))))))
+    ((pred conn-thing-p)
+     (cl-loop for p = thing then (conn-get-thing-parent p)
+              while p collect p))))
 
-(defun conn-set-thing-parents (thing parents)
-  (remhash thing conn--thing-all-parents-cache)
-  (put thing :conn--thing-parents parents))
+(defun conn-set-thing-parent (thing parent)
+  (put thing :conn--thing-parent parent))
 
-(define-inline conn-get-thing-parents (thing)
-  (declare (gv-setter conn-set-thing-parents)
+(define-inline conn-get-thing-parent (thing)
+  (declare (gv-setter conn-set-thing-parent)
            (important-return-value t)
            (side-effect-free t))
-  (inline-quote (get ,thing :conn--thing-parents)))
+  (inline-quote (get ,thing :conn--thing-parent)))
 
-(cl-defun conn-register-thing (thing &key parents forward-op beg-op end-op bounds-op)
+(defconst conn--thing-property-table (make-hash-table :test 'equal))
+
+(defun conn-set-thing-property (thing property val)
+  (setf (gethash (cons thing property) conn--thing-property-table)
+        val))
+
+(defun conn-unset-thing-property (thing property)
+  (remhash (cons thing property) conn--thing-property-table))
+
+(defun conn-get-thing-property (thing property)
+  (declare (gv-setter conn-set-thing-property))
+  (cl-loop for thing in (conn-thing-all-parents thing)
+           for val = (gethash (cons thing property)
+                              conn--thing-property-table
+                              conn--key-missing)
+           unless (eq conn--key-missing val) return val))
+
+(cl-defun conn-register-thing (thing &key parent properties forward-op beg-op end-op bounds-op)
   (put thing :conn-thing t)
-  (when parents
-    (setf (conn-get-thing-parents thing) parents))
+  (when parent
+    (setf (conn-get-thing-parent thing) parent))
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -98,7 +109,9 @@
     (put thing 'beginning-op beg-op)
     (put thing 'end-op end-op))
   (when bounds-op
-    (put thing 'bounds-of-thing-at-point bounds-op)))
+    (put thing 'bounds-of-thing-at-point bounds-op))
+  (cl-loop for (prop val) on properties by #'cddr
+           do (conn-set-thing-property thing prop val)))
 
 (cl-defstruct (conn-anonymous-thing
                (:constructor nil)
@@ -200,22 +213,20 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(and (conn-thing-p ,thing)
-             (conn-thing-all-parents ,thing)))
-  (lambda (things &rest _)
-    (when things
-      `(,@(cl-loop for thing in things
+       `(and (conn-thing-p ,thing) ,thing))
+  (lambda (thing &rest _)
+    (when thing
+      `(,@(cl-loop for thing in (conn-thing-all-parents thing)
                    collect `(conn-thing ,thing))
         (conn-thing thing)
         (conn-thing t)))))
 
 (cl-generic-define-generalizer conn--thing-command-generalizer
   70 (lambda (cmd &rest _)
-       `(and (conn-command-thing ,cmd)
-             (conn-thing-all-parents ,cmd)))
-  (lambda (things &rest _)
-    (when things
-      `(,@(cl-loop for thing in things
+       `(conn-command-thing ,cmd))
+  (lambda (thing &rest _)
+    (when thing
+      `(,@(cl-loop for thing in (conn-thing-all-parents thing)
                    collect `(conn-thing ,thing))
         (conn-thing command)
         (conn-thing t)))))
@@ -228,13 +239,12 @@ order to mark the region that should be defined by any of COMMANDS."
              (with-memoization
                  (gethash (conn-bounds-thing ,bounds)
                           conn--thing-bounds-tag-cache)
-               (cons 'thing-bounds
-                     (conn-thing-all-parents ,bounds)))))
-  (lambda (things &rest _)
-    (when things
-      `(,@(cl-loop for thing in (cdr things)
+               (cons 'thing-bounds (conn-bounds-thing ,bounds)))))
+  (lambda (thing &rest _)
+    (when thing
+      `(,@(cl-loop for thing in (conn-thing-all-parents (cdr thing))
                    collect `(conn-thing ,thing))
-        ,(if (conn-command-thing (cadr things))
+        ,(if (conn-command-thing (cdr thing))
              `(conn-thing command)
            `(conn-thing thing))
         (conn-thing t)))))
@@ -248,13 +258,13 @@ order to mark the region that should be defined by any of COMMANDS."
                  (gethash (conn-anonymous-thing-parent ,thing)
                           conn--anonymous-thing-tag-cache)
                (cons 'anonymous-thing
-                     (conn-thing-all-parents ,thing)))))
-  (lambda (things &rest _)
-    (when things
+                     (conn-anonymous-thing-parent ,thing)))))
+  (lambda (thing &rest _)
+    (when thing
       `((conn-thing anonymous-thing-override)
-        ,@(cl-loop for thing in (cdr things)
+        ,@(cl-loop for thing in (conn-thing-all-parents (cdr thing))
                    collect `(conn-thing ,thing))
-        ,(if (conn-command-thing (cadr things))
+        ,(if (conn-command-thing (cadr thing))
              `(conn-thing command)
            `(conn-thing thing))
         (conn-thing t)))))
@@ -724,17 +734,6 @@ words."))
 (cl-defmethod conn-bounds-of ((cmd (conn-thing visible)) arg)
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
-(cl-defmethod conn-bounds-of ((cmd (eql conn-composite-thing)) arg)
-  (if conn--last-composite-thing
-      (conn-make-bounds
-       cmd arg
-       (cons (point)
-             (save-mark-and-excursion
-               (conn-with-recursive-stack 'conn-mark-state
-                 (execute-kbd-macro conn--last-composite-thing))
-               (point))))
-    (error "No last composite thing")))
-
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
@@ -977,8 +976,6 @@ words."))
 (conn-define-mark-command conn-mark-filename filename)
 (conn-define-mark-command conn-mark-comment comment)
 
-(put 'conn-composite-thing :conn-thing t)
-
 (conn-register-thing
  'comment
  :bounds-op (lambda ()
@@ -1000,7 +997,10 @@ words."))
                           (point)))
                 (error "Point not in comment"))))
 
-(conn-register-thing 'defun :forward-op 'conn-forward-defun)
+(conn-register-thing
+ 'defun
+ :forward-op 'conn-forward-defun
+ :properties '(:linewise t))
 
 (conn-register-thing
  'visual-line
@@ -1025,7 +1025,8 @@ words."))
 
 (conn-register-thing
  'visible
- :bounds-op (lambda () (cons (window-start) (window-end))))
+ :bounds-op (lambda () (cons (window-start) (window-end)))
+ :properties '(:linewise t))
 
 (conn-define-mark-command conn-mark-visible visible)
 
@@ -1061,7 +1062,10 @@ words."))
  'symbol 'conn-continuous-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
-(conn-register-thing 'page :forward-op 'forward-page)
+(conn-register-thing
+ 'page
+ :forward-op 'forward-page
+ :properties '(:linewise t))
 
 (conn-register-thing-commands
  'page 'conn-discrete-thing-handler
@@ -1145,7 +1149,10 @@ words."))
  'sentence 'conn-continuous-thing-handler
  'forward-sentence 'backward-sentence)
 
-(conn-register-thing 'paragraph :forward-op 'forward-paragraph)
+(conn-register-thing
+ 'paragraph
+ :forward-op 'forward-paragraph
+ :properties '(:linewise t))
 
 (conn-register-thing-commands
  'paragraph 'conn-continuous-thing-handler

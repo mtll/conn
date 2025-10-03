@@ -801,40 +801,6 @@ Immediately repeating this command pushes a mark."
   (when (region-active-p)
     (conn-push-state 'conn-mark-state)))
 
-(defvar conn--last-composite-thing nil)
-
-(defun conn-record-composite-thing ()
-  (interactive)
-  (conn--push-ephemeral-mark nil nil t)
-  (if (or defining-kbd-macro executing-kbd-macro)
-      (user-error "Cannot record composite thing during kbd macro")
-    (letrec ((last-kbd-macro nil)
-             (hook
-              (lambda ()
-                (cond ((not defining-kbd-macro)
-                       (abort-recursive-edit))
-                      ((not conn-mark-state)
-                       (exit-recursive-edit))
-                      ((not (or (conn-command-thing this-command)
-                                (eq this-command 'conn-exchange-mark-command)))
-                       (remove-hook 'post-command-hook hook t)
-                       (end-kbd-macro)))))
-             (setup
-              (lambda ()
-                (add-hook 'post-command-hook hook 99 t)
-                (remove-hook 'post-command-hook setup t))))
-      (conn-with-recursive-stack 'conn-mark-state
-        (add-hook 'pre-command-hook setup nil t)
-        (unwind-protect
-            (progn
-              (start-kbd-macro nil)
-              (recursive-edit))
-          (remove-hook 'pre-command-hook setup t)
-          (remove-hook 'post-command-hook hook t)
-          (when defining-kbd-macro
-            (end-kbd-macro)
-            (setq conn--last-composite-thing last-kbd-macro)))))))
-
 (defun conn-mark-thing (thing arg transform)
   (interactive
    (conn-eval-with-state 'conn-read-thing-state
@@ -1654,57 +1620,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (looking-at-p (rx eol)))
       (indent-for-tab-command))))
 
-(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing sexp)))
-  (pcase bounds
-    ((conn-bounds `(,beg . ,_end))
-     (if (save-excursion
-           (goto-char beg)
-           (beginning-of-line)
-           (and (looking-at-p (rx (seq (* (syntax whitespace))
-                                       eol)))
-                (> (nth 0 (syntax-ppss)) 0)))
-         (progn
-           (cl-call-next-method)
-           (forward-line)
-           (join-line))
-       (cl-call-next-method)
-       (save-excursion
-         (beginning-of-line)
-         (when (looking-at-p (rx eol))
-           (delete-char 1)))))))
-
-(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing symbol)))
-  (pcase bounds
-    ((conn-bounds `(,beg . ,_end))
-     (if (save-excursion
-           (goto-char beg)
-           (beginning-of-line)
-           (and (looking-at-p (rx eol))
-                (> (nth 0 (syntax-ppss)) 0)))
-         (progn
-           (cl-call-next-method)
-           (forward-line)
-           (join-line))
-       (cl-call-next-method)))))
-
-(cl-defmethod conn-kill-fixup-whitespace ((bounds (conn-thing list)))
-  (pcase bounds
-    ((conn-bounds `(,beg . ,_end))
-     (if (save-excursion
-           (goto-char beg)
-           (beginning-of-line)
-           (and (looking-at-p (rx eol))
-                (> (nth 0 (syntax-ppss)) 0)))
-         (progn
-           (cl-call-next-method)
-           (forward-line)
-           (join-line))
-       (cl-call-next-method)
-       (save-excursion
-         (beginning-of-line)
-         (when (looking-at-p (rx eol))
-           (delete-char 1)))))))
-
 (cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing region)))
   "Noop" nil)
 
@@ -1720,24 +1635,30 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                     (not (bobp)))
                          do (forward-line (if backward -1 1))
                          finally return i))))
-    (pcase bounds
-      ((conn-bounds `(,beg . ,_end))
-       (save-excursion
-         (goto-char beg)
-         (when (or (looking-at (rx (syntax whitespace)))
-                   (looking-back (rx (syntax whitespace)) 1))
-           (fixup-whitespace))
-         (save-excursion
-           (when (progn
-                   (beginning-of-line)
-                   (looking-at-p (rx (seq (* (syntax whitespace))
-                                          (+ (syntax close-parenthesis))
-                                          eol))))
-             (join-line)))
-         (beginning-of-line)
-         (when (looking-at-p (rx eol))
-           (dotimes (_ (min (empty-lines) (empty-lines t)))
-             (join-line))))))))
+    (when (or (looking-at (rx (syntax whitespace)))
+              (looking-back (rx (syntax whitespace)) 1))
+      (fixup-whitespace))
+    (cond ((save-excursion
+             (beginning-of-line)
+             (looking-at-p (rx (seq (* (syntax whitespace))
+                                    (+ (syntax close-parenthesis))
+                                    eol))))
+           (join-line))
+          ((save-excursion
+             (beginning-of-line)
+             (and (looking-at-p (rx (seq (* (syntax whitespace))
+                                         eol)))
+                  (not (conn-get-thing-property
+                        (conn-bounds-thing bounds)
+                        :linewise))
+                  (> (nth 0 (syntax-ppss)) 0)))
+           (let ((col (current-column)))
+             (join-line)
+             (forward-line)
+             (move-to-column col))))
+    (when (looking-at-p (rx eol))
+      (dotimes (_ (min (empty-lines) (empty-lines t)))
+        (join-line)))))
 
 (defun conn--kill-region (beg end &optional delete-flag append register)
   (if register
