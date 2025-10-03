@@ -367,7 +367,7 @@
   "q" 'conn-transpose-things
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
-  "V" 'conn-last-mark-command
+  "V" 'conn-previous-mark-command
   "b" 'conn-set-mark-command
   "d" 'conn-kill-thing
   "W" 'widen

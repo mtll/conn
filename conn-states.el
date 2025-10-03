@@ -1193,7 +1193,11 @@ the state stays active if the previous command was a prefix command."
   :lighter "M"
   :pop-predicate (lambda ()
                    (or (not (region-active-p))
-                       deactivate-mark)))
+                       deactivate-mark
+                       (progn
+                         (setf (nth 2 conn-previous-mark-state)
+                               (bound-and-true-p rectangle-mark-mode))
+                         nil))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
@@ -1210,13 +1214,14 @@ the state stays active if the previous command was a prefix command."
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
+  (unless conn-previous-mark-state
+    (setq-local conn-previous-mark-state (list (make-marker) (make-marker) nil)))
+  (setf (nth 2 conn-previous-mark-state) (bound-and-true-p rectangle-mark-mode))
   (conn-state-defer
     (setq deactivate-mark t)
     (unless (eq this-command 'keyboard-quit)
-      (unless conn-previous-mark-state
-        (setq-local conn-previous-mark-state (cons (make-marker) (make-marker))))
       (set-marker (car conn-previous-mark-state) (point))
-      (set-marker (cdr conn-previous-mark-state) (mark t))))
+      (set-marker (cadr conn-previous-mark-state) (mark t))))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup

@@ -720,6 +720,15 @@ words."))
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
+                              _arg)
+  (save-mark-and-excursion
+    (goto-char (car conn-previous-mark-state))
+    (conn--push-ephemeral-mark (cadr conn-previous-mark-state) nil t)
+    (when (nth 2 conn-previous-mark-state)
+      (rectangle-mark-mode 1))
+    (cl-call-next-method)))
+
 ;;;;; Bounds Transformations
 
 ;;;;;; Last Bounds
@@ -1048,6 +1057,7 @@ words."))
 
 (conn-register-thing-commands
  'region nil
+ 'conn-previous-mark-command
  'conn-toggle-mark-command
  'conn-set-mark-command)
 
