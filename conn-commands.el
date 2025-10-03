@@ -32,6 +32,8 @@
 
 (declare-function outline-insert-heading "outline")
 (declare-function project-files "project")
+(declare-function rectangle--reset-crutches "rect")
+(declare-function rectangle--col-pos "rect")
 
 ;;;; Commands
 
@@ -808,8 +810,14 @@ Immediately repeating this command pushes a mark."
   (goto-char (nth 0 conn-previous-mark-state))
   (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state)
                              nil t)
-  (when (nth 2 conn-previous-mark-state)
-    (rectangle-mark-mode 1))
+  (pcase (nth 2 conn-previous-mark-state)
+    (`(,pc . ,mc)
+     (rectangle-mark-mode 1)
+     (rectangle--reset-crutches)
+     (save-excursion
+       (goto-char (mark))
+       (rectangle--col-pos mc 'mark))
+     (rectangle--col-pos pc 'point)))
   (conn-push-state 'conn-mark-state))
 
 (defun conn-mark-thing (thing arg transform)

@@ -1198,7 +1198,9 @@ the state stays active if the previous command was a prefix command."
                        deactivate-mark
                        (progn
                          (setf conn--mark-state-rmm
-                               (bound-and-true-p rectangle-mark-mode))
+                               (and (bound-and-true-p rectangle-mark-mode)
+                                    (fboundp 'rectangle--pos-cols)
+                                    (rectangle--pos-cols (point) (mark))))
                          nil))))
 
 (define-keymap
@@ -1218,7 +1220,9 @@ the state stays active if the previous command was a prefix command."
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (unless conn-previous-mark-state
     (setq-local conn-previous-mark-state (list (make-marker) (make-marker) nil)))
-  (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
+  (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
+                                  (fboundp 'rectangle--pos-cols)
+                                  (rectangle--pos-cols (point) (mark))))
   (conn-state-defer
     (setq deactivate-mark t)
     (unless (eq this-command 'keyboard-quit)
