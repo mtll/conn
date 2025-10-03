@@ -217,7 +217,7 @@
   (conn-push-state 'conntext-paren-state)
   t)
 
-(keymap-set (conn-get-state-map 'conn-transpose-state)
+(keymap-set (conn-get-minor-mode-map 'conn-transpose-state 'smartparens-mode)
             "c" 'sp-convolve-sexp)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transpose-argument)
