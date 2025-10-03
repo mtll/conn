@@ -735,14 +735,16 @@ words."))
                               arg)
   (save-mark-and-excursion
     (pcase cmd
-      ((or 'start-kbd-macro
-           'kmacro-start-macro
-           'kmacro-start-macro-or-insert-counter)
+      ((and (or 'start-kbd-macro
+                'kmacro-start-macro
+                'kmacro-start-macro-or-insert-counter)
+            (guard (not (and (fboundp 'repeat-is-really-this-command)
+                             (repeat-is-really-this-command)))))
        (let ((buffer-read-only t)
              (last-kbd-macro conn--bounds-kbd-macro))
          (start-kbd-macro arg)
          (unwind-protect
-             (conn-with-recursive-stack 'conn-command
+             (conn-with-recursive-stack 'conn-command-state
                (recursive-edit))
            (if defining-kbd-macro
                (end-kbd-macro)
