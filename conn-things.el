@@ -729,6 +729,30 @@ words."))
       (rectangle-mark-mode 1))
     (cl-call-next-method)))
 
+(defvar conn--bounds-kbd-macro nil)
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing kbd-macro))
+                              arg)
+  (save-mark-and-excursion
+    (pcase cmd
+      ((or 'start-kbd-macro
+           'kmacro-start-macro
+           'kmacro-start-macro-or-insert-counter)
+       (let ((buffer-read-only t)
+             (last-kbd-macro conn--bounds-kbd-macro))
+         (start-kbd-macro arg)
+         (unwind-protect
+             (conn-with-recursive-stack 'conn-command
+               (recursive-edit))
+           (if defining-kbd-macro
+               (end-kbd-macro)
+             (error "Not defining kbd macro"))
+           (setq conn--bounds-kbd-macro last-kbd-macro))))
+      (_
+       (conn-with-recursive-stack 'conn-command-state
+         (execute-kbd-macro conn--bounds-kbd-macro))))
+    (conn-bounds-of 'region nil)))
+
 ;;;;; Bounds Transformations
 
 ;;;;;; Last Bounds
@@ -826,27 +850,6 @@ words."))
 
 (defvar conn--bounds-of-recursive-edit nil)
 
-(conn-set-mode-map-depth 'conn--bounds-of-recursive-edit -95)
-
-(conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
-  :lighter "R")
-
-(cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
-  (setq buffer-read-only t)
-  (conn-state-defer
-    (setq buffer-read-only nil))
-  (cl-call-next-method))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
-  "d" 'exit-recursive-edit
-  "q" 'abort-recursive-edit)
-
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn--bounds-of-recursive-edit)
-  "d" 'exit-recursive-edit
-  "q" 'abort-recursive-edit)
-
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
   (let* ((eldoc-message-function 'ignore)
          (conn--bounds-of-recursive-edit t)
@@ -859,7 +862,7 @@ words."))
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
-          (conn-with-recursive-stack 'conn-bounds-of-recursive-edit-state
+          (conn-with-recursive-stack 'conn-command-state
             (funcall pre)
             (recursive-edit))
           (conn-bounds-of 'region nil))
@@ -975,6 +978,18 @@ words."))
 (conn-define-mark-command conn-mark-string string)
 (conn-define-mark-command conn-mark-filename filename)
 (conn-define-mark-command conn-mark-comment comment)
+
+(conn-register-thing 'kbd-macro)
+
+(conn-register-thing-commands
+ 'kbd-macro nil
+ 'kmacro-start-macro
+ 'kmacro-start-macro-or-insert-counter
+ 'kmacro-end-and-call-macro
+ 'kmacro-end-macro
+ 'kmacro-call-macro
+ 'start-kbd-macro
+ 'end-kbd-macro)
 
 (conn-register-thing
  'comment

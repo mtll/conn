@@ -233,8 +233,7 @@
   "M-w" 'conn-copy-thing
   "C-," 'conn-change-thing
   "C-." 'conn-dispatch
-  "C-t" 'conn-transpose-things
-  "C-SPC" 'conn-mark-thing)
+  "C-t" 'conn-transpose-things)
 
 (provide 'conn)
 
