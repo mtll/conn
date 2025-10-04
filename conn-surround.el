@@ -173,7 +173,7 @@
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (conn-state-eval-consume-prefix-arg))
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)

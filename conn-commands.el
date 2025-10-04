@@ -627,7 +627,8 @@ Exiting the recursive edit will resume the isearch."
   (interactive)
   (save-selected-window
     (with-isearch-suspended
-     (recursive-edit))))
+     (atomic-change-group
+       (recursive-edit)))))
 
 (cl-defun conn--isearch-in-thing (thing-cmd thing-arg &key backward regexp subregions-p)
   (pcase-let* ((bounds
@@ -2000,6 +2001,18 @@ Interactively `region-beginning' and `region-end'."
 (oclosure-define (conn-change-argument
                   (:parent conn-thing-argument)))
 
+(defun conn-change-argument ()
+  (oclosure-lambda (conn-change-argument
+                    (required t)
+                    (value (when (use-region-p)
+                             (list 'region nil)))
+                    (set-flag (use-region-p)))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
+
 (cl-defmethod conn-argument-predicate ((_arg conn-change-argument)
                                        sym)
   (or (eq sym 'conn-emacs-state-overwrite-binary)
@@ -2010,16 +2023,7 @@ Interactively `region-beginning' and `region-end'."
   "Change region defined by CMD and ARG."
   (interactive
    (conn-eval-with-state 'conn-change-state
-       (list && (oclosure-lambda (conn-change-argument
-                                  (required t)
-                                  (value (when (use-region-p)
-                                           (list 'region nil)))
-                                  (set-flag (use-region-p)))
-                    (self cmd)
-                  (if (conn-argument-predicate self cmd)
-                      (conn-set-argument
-                       self (list cmd (conn-state-eval-consume-prefix-arg)))
-                    self))
+       (list && (conn-change-argument)
              & (conn-transform-argument 'conn-bounds-last))
      :prompt "Thing"))
   (conn-perform-change cmd arg transform))
