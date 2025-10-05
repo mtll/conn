@@ -1984,6 +1984,7 @@ Interactively `region-beginning' and `region-end'."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "w" 'quoted-insert
   "RET" 'conn-emacs-state-overwrite
   "M-RET" 'conn-emacs-state-overwrite-binary)
 
@@ -2013,6 +2014,13 @@ Interactively `region-beginning' and `region-end'."
                                    _arg _transform)
   (conn-emacs-state-overwrite))
 
+(cl-defmethod conn-perform-change ((_cmd (eql quoted-insert))
+                                   arg _transform)
+  (atomic-change-group
+    (delete-char 1)
+    (conn-with-recursive-stack 'conn-emacs-state
+      (quoted-insert (prefix-numeric-value arg)))))
+
 (cl-defmethod conn-perform-change ((_cmd (eql conn-emacs-state-overwrite-binary))
                                    _arg _transform)
   (conn-emacs-state-overwrite-binary))
@@ -2036,6 +2044,7 @@ Interactively `region-beginning' and `region-end'."
                                        sym)
   (or (eq sym 'conn-emacs-state-overwrite-binary)
       (eq sym 'conn-emacs-state-overwrite)
+      (eq sym 'quoted-insert)
       (cl-call-next-method)))
 
 (defun conn-change-thing (cmd arg transform)
