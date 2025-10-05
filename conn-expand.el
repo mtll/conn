@@ -179,6 +179,7 @@ Expansions and contractions are provided by functions in
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
+  "M-DEL" 'reset-arg
   "z" 'conn-expand-exchange
   "j" 'conn-contract
   "l" 'conn-expand
