@@ -594,16 +594,20 @@
   (interactive)
   (other-window -1))
 
+(defvar conn-goto-window-cycle-limit 3)
+
 (defun conn-goto-window ()
   "Prompt for a window and then select it."
   (interactive)
-  (if-let* ((window (conn-prompt-for-window
-                     (delq (selected-window)
-                           (conn--get-windows
-                            nil 'nomini
-                            (if current-prefix-arg 'visible))))))
-      (select-window window)
-    (user-error "No other windows available to select")))
+  (let ((windows (delq (selected-window)
+                       (conn--get-windows
+                        nil 'nomini
+                        (if current-prefix-arg 'visible)))))
+    (if (length< windows conn-goto-window-cycle-limit)
+        (other-window 1)
+      (if-let* ((window (conn-prompt-for-window windows)))
+          (select-window window)
+        (user-error "No other windows available to select")))))
 
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
