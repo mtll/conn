@@ -478,7 +478,10 @@ words."))
                ((functionp handler)
                 (funcall handler cmd self))
                (t (conn-set-argument self (cons cmd val)))))
-        (_ (conn-set-argument self val))))))
+        (_
+         (if (equal val value)
+             self
+           (conn-set-argument self val)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
