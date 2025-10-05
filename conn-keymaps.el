@@ -539,13 +539,6 @@
    :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
    :target-finder (lambda () (conn-dispatch-mark-ring))))
 
-;;;;;; Change State
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-change-state)
-  "RET" 'conn-emacs-state-overwrite
-  "M-RET" 'conn-emacs-state-overwrite-binary)
-
 ;;;;;; Transpose State
 
 (define-keymap

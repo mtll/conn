@@ -1041,6 +1041,24 @@ With a prefix ARG `push-mark' without activating it."
         ;; TODO: make this display somehow
         (user-error (message "%s" (cadr err)) t))))
 
+(defvar conn-transpose-reference
+  (list (conn-reference-page "Transpose"
+          (:eval
+           (string-join
+            '("Transpose reads a THING command and transposes two of those THINGs. If
+THING is `recursive-edit' then the current region and a region defined
+within a recursive edit will be transposed."
+              ""
+              "Transpose defines some addition thing bindings:"
+              "")
+            "\n"))
+          ((("line" conn-backward-line forward-line))
+           (("symbol" forward-symbol))
+           (("defun" (:eval (conn-quick-ref-find-remap
+                             conn-end-of-defun-remap
+                             (conn-get-state-map 'conn-transpose-state)))))
+           (("recursive-edit" recursive-edit))))))
+
 (defun conn-transpose-things (mover arg)
   "Exchange regions defined by a thing command.
 
@@ -1052,34 +1070,11 @@ region after a `recursive-edit'."
    (conn-eval-with-state 'conn-transpose-state
        (list && (conn-transpose-argument))
      :prompt "Transpose"
-     :prefix current-prefix-arg))
+     :prefix current-prefix-arg
+     :reference conn-transpose-reference))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
   (conn-perform-transpose mover arg))
-
-;;;;;; Transpose Quick Ref
-
-(defvar conn-transpose-reference
-  (conn-reference-page "Transpose"
-    (:eval
-     (string-join
-      '("Transpose reads a THING command and transposes two of those THINGs. If
-THING is `recursive-edit' then the current region and a region defined
-within a recursive edit will be transposed."
-        ""
-        "Transpose defines some addition thing bindings:"
-        "")
-      "\n"))
-    ((("line" conn-backward-line forward-line))
-     (("symbol" forward-symbol))
-     (("defun" (:eval (conn-quick-ref-find-remap
-                       conn-end-of-defun-remap
-                       (conn-get-state-map 'conn-transpose-state)))))
-     (("recursive-edit" recursive-edit)))))
-
-(cl-defmethod conn-state-reference ((_state (eql conn-transpose-state))
-                                    &optional _args)
-  (list conn-transpose-reference))
 
 ;;;;; Line Commands
 
@@ -1486,6 +1481,24 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;;; Kill Thing
 
+(defvar conn-kill-option-ref
+  (conn-reference-quote
+    (("append" append-next-kill)
+     ("delete" delete)
+     ("register" register)
+     ("fixup whitespace" fixup-whitespace)
+     ("check bounds" check-bounds))))
+
+(defvar conn-kill-reference
+  (list (conn-reference-page "Kill"
+          "Kill some things."
+          (:heading "Options")
+          (:eval (conn-quick-ref-to-cols
+                  conn-kill-option-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (defvar conn-kill-fixup-whitespace-default t)
 
 (conn-define-state conn-kill-state (conn-read-thing-state)
@@ -1646,7 +1659,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 (unless (region-active-p)
                   conn-kill-fixup-whitespace-default))
              & (conn-check-bounds-argument (listp current-prefix-arg)))
-     :prompt "Thing"))
+     :prompt "Thing"
+     :reference conn-kill-reference))
   (when (and (null append)
              (and (fboundp 'repeat-is-really-this-command)
                   (repeat-is-really-this-command))
@@ -1967,6 +1981,11 @@ Interactively `region-beginning' and `region-end'."
 
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-change-state)
+  "RET" 'conn-emacs-state-overwrite
+  "M-RET" 'conn-emacs-state-overwrite-binary)
 
 (cl-defgeneric conn-perform-change (cmd arg transform)
   (declare (conn-anonymous-thing-property :change-op))

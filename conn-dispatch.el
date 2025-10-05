@@ -510,19 +510,23 @@ themselves once the selection process has concluded."
 
 ;;;;;; Dispatch Quick Ref
 
+(defvar conn-dispatch-thing-ref-extras
+  (conn-reference-quote
+    (("symbol" forward-symbol)
+     ("line" forward-line)
+     ("column" next-line)
+     ("defun"
+      (:eval (conn-quick-ref-find-remap
+              conn-end-of-defun-remap
+              (conn-get-state-map 'conn-dispatch-mover-state)))))))
+
 (defvar conn-dispatch-thing-ref
   (conn-reference-page "Things"
     "Use a thing command to specify a region to operate on."
     "Dispatch state redefines some thing bindings:
 "
     ((:keymap (list (conn-get-state-map 'conn-dispatch-mover-state)))
-     (("symbol" forward-symbol))
-     (("line" forward-line))
-     (("column" next-line))
-     (("defun"
-       (:eval (conn-quick-ref-find-remap
-               conn-end-of-defun-remap
-               (conn-get-state-map 'conn-dispatch-mover-state))))))))
+     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-ref-extras)))))
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
@@ -598,14 +602,12 @@ themselves once the selection process has concluded."
       ("isearch forward" isearch-regexp-forward)
       ("isearch backward" isearch-regexp-backward)))))
 
-(cl-defmethod conn-state-reference ((_state (eql conn-dispatch-state))
-                                    &optional _args)
+(defvar conn-dispatch-reference
   (list conn-dispatch-action-ref
         conn-dispatch-command-ref
         conn-dispatch-thing-ref))
 
-(cl-defmethod conn-state-reference ((_state (conn-substate conn-dispatch-mover-state))
-                                    &optional _args)
+(defvar conn-dispatch-mover-reference
   (list conn-dispatch-command-ref
         conn-dispatch-thing-ref))
 
@@ -3225,7 +3227,8 @@ contain targets."
            (conn-eval-with-state 'conn-dispatch-mover-state
                (list && (conn-thing-argument-dwim t)
                      & (conn-dispatch-transform-argument))
-             :prompt "New Targets"))))
+             :prompt "New Targets"
+             :reference conn-dispatch-mover-reference))))
 
 ;;;;; Dispatch Ring
 
@@ -3580,6 +3583,7 @@ contain targets."
     :command-handler #'conn-handle-dispatch-command
     :prefix initial-arg
     :prompt "Dispatch"
+    :reference conn-dispatch-reference
     :pre (lambda (_)
            (when (and (bound-and-true-p conn-posframe-mode)
                       (fboundp 'posframe-hide))
@@ -3703,7 +3707,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                :repeat & (conn-dispatch-repeat-argument repeat)
                :other-end :no-other-end)
             :prefix (conn-bounds-arg bounds)
-            :prompt "Bounds of Dispatch")
+            :prompt "Bounds of Dispatch"
+            :reference conn-dispatch-mover-reference)
           (unless ovs (keyboard-quit))
           (cl-loop for bound in subregions
                    for (b . e) = (conn-bounds bound)

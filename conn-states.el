@@ -923,13 +923,6 @@ If there is not recursive stack an error is signaled."
         (conn-update-lighter))
     (error "Not in a recursive state")))
 
-;;;;; Quick Ref
-
-(cl-defgeneric conn-state-reference (state &optional args)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (:method (_state &optional _) nil))
-
 ;;;;; Definitions
 
 (defun conn--define-state (name docstring parents properties no-inherit-keymaps)
@@ -1094,16 +1087,9 @@ Causes the mode-line face to be remapped to the face specified by the
   :abstract t)
 
 (defvar conn-read-thing-reference
-  (conn-reference-page "Thing"
-    "The region to operate on will be defined by a thing command. A prefix
-argument may be supplied for the thing command."))
-
-(cl-defmethod conn-state-reference ((_state (eql conn-read-thing-state))
-                                    &optional args)
-  (append (list conn-read-thing-reference)
-          (thread-first
-            (conn-argument-reference args)
-            flatten-tree delete-dups)))
+  (list (conn-reference-page "Thing"
+          "The region to operate on will be defined by a thing command. A prefix
+argument may be supplied for the thing command.")))
 
 ;;;;; Emacs State
 
@@ -1438,8 +1424,8 @@ chooses to handle a command."
               (pcase cmd
                 ('nil)
                 ('help
-                 (conn-quick-reference
-                  (or reference (conn-state-reference state (car arguments)))))
+                 (when reference
+                   (conn-quick-reference reference)))
                 ('digit-argument
                  (let* ((char (if (integerp last-input-event)
                                   last-input-event
@@ -1621,16 +1607,5 @@ chooses to handle a command."
            (conn-argument-keymaps (cdr arg))))
   ( :method ((arg conn-state-eval-argument))
     (list (conn-state-eval-argument-keymap arg))))
-
-;;;;;; Argument Quick Ref
-
-(cl-defgeneric conn-argument-reference (arg)
-  ( :method (_) nil)
-  ( :method ((args cons))
-    (list (mapcan 'conn-argument-reference args)))
-  ( :method :around ((arg conn-state-eval-argument))
-    (if-let* ((ref (conn-state-eval-argument--reference arg)))
-        (funcall ref)
-      (cl-call-next-method))))
 
 (provide 'conn-states)

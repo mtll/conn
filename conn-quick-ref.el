@@ -45,10 +45,25 @@
   "Face for selection in Conn posframes."
   :group 'conn-quick-ref)
 
-(cl-defstruct (conn-reference-page
-                  (:constructor conn--make-reference-page (title definition)))
+(cl-defstruct (conn--reference-page
+               (:constructor conn--make-reference-page (title definition)))
   (title nil :type string :read-only t)
   (definition nil :type list :read-only t))
+
+(defmacro conn-reference-quote (form)
+  (declare (indent 0))
+  (cl-labels ((process-definition (def)
+                (pcase def
+                  (`(,(and (or :eval :splice :keymap) type) . ,form)
+                   (cons type (list '\, (cons 'lambda (cons nil form)))))
+                  ((pred consp)
+                   (mapcar #'process-definition def))
+                  (_ def))))
+    (list '\`
+          (cl-loop for elem in form
+                   if (listp elem)
+                   collect (process-definition elem)
+                   else collect elem))))
 
 (defmacro conn-reference-page (title &rest definition)
   (declare (indent 1))
@@ -168,6 +183,9 @@
                   (while row
                     (pcase (pop row)
                       ('nil)
+                      (`(:heading ,str)
+                       (push (list (propertize str 'face 'conn-quick-ref-heading-face))
+                             result))
                       (`(:keymap . ,fn) (setf keymap (funcall fn)))
                       (`(:eval . ,fn) (push (funcall fn) row))
                       (`(:splice . ,fn) (cl-callf2 append (funcall fn) row))
@@ -189,6 +207,16 @@
                    (while (search-forward "\n" nil 'move-to-end)
                      (replace-match " \n"))
                    (goto-char (point-max)))))
+              (`(:heading ,str)
+               (let (beg)
+                 (with-current-buffer ref-buffer
+                   (setq beg (point))
+                   (insert (propertize str 'face 'conn-quick-ref-heading-face)
+                           "\n")
+                   (goto-char beg)
+                   (while (search-forward "\n" nil 'move-to-end)
+                     (replace-match " \n"))
+                   (goto-char (point-max)))))
               (`(:eval . ,fn)
                (push (funcall fn) definition))
               (`(:splice . ,fn)
@@ -205,7 +233,7 @@
                    (goto-char (point-max))))))))))))
 
 (defun conn-quick-ref-insert-page (page buffer)
-  (pcase-let (((cl-struct conn-reference-page
+  (pcase-let (((cl-struct conn--reference-page
                           title
                           definition)
                page)
@@ -262,6 +290,14 @@
                                      (listify-key-sequence keys)))
                        (throw 'break nil)))))))
         (funcall display-function buf t)))))
+
+(defun conn-quick-ref-to-cols (list &optional col-count)
+  (cl-loop with col-count = (or col-count 4)
+           with cols = (cl-loop repeat col-count collect nil)
+           for elem in list
+           for i from 0
+           do (push elem (nth (mod i col-count) cols))
+           finally return (mapcar #'nreverse cols)))
 
 (defun conn--quick-ref-minibuffer (buffer hide-p)
   (let (inhibit-message message-log-max)

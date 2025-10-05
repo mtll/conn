@@ -373,9 +373,6 @@ individual things that are moved over. For example the subregions of
 the 3 individual words, as opposed to the single region containing all 3
 words."))
 
-(cl-defmethod conn-argument-reference ((_arg conn-subregions-argument))
-  (list conn-subregions-argument-reference))
-
 ;;;;;; Fixup Whitespace Argument
 
 (oclosure-define (conn-fixup-whitespace-argument
@@ -444,6 +441,14 @@ words."))
 
 ;;;;;; Thing Transform Argument
 
+(defvar conn-transformations-quick-ref
+  (conn-reference-quote
+    (("trim" conn-bounds-trim)
+     ("after point" conn-bounds-after-point)
+     ("before point" conn-bounds-before-point)
+     ("last" conn-bounds-last)
+     ("reset" conn-transform-reset))))
+
 (defvar-keymap conn-transform-map
   "x" 'conn-bounds-trim
   "a" 'conn-bounds-after-point
@@ -491,15 +496,6 @@ words."))
 
 (cl-defmethod conn-eval-argument ((arg conn-transform-argument))
   (nreverse (conn-state-eval-argument-value arg)))
-
-;; (defvar conn-transform-argument-reference
-;;   (conn-reference-page "Transform"
-;;     "Trim excess characters at either end of the region. By default trims
-;; whitespace characters. With a non-nil prefix argument this will prompt
-;; for a custom trim regex."))
-;;
-;; (cl-defmethod conn-argument-reference ((_arg conn-transform-argument))
-;;   (list conn-transform-argument-reference))
 
 ;;;;; Read Mover State
 
