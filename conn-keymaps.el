@@ -85,7 +85,6 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
-  "t" 'string-rectangle
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
@@ -489,8 +488,9 @@
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "w" 'conn-dispatch-copy-to
-  "W" 'conn-dispatch-copy-replace-to
+  "g" 'conn-dispatch-copy-to
+  "G" 'conn-dispatch-copy-replace-to
+  "w" 'conn-dispatch-change
   "v" 'conn-dispatch-over
   "x" 'conn-dispatch-yank-replace
   "X" 'conn-dispatch-yank-read-replace
@@ -498,12 +498,12 @@
   "M-y" 'conn-dispatch-yank-read-replace
   "y" 'conn-dispatch-yank
   "Y" 'conn-dispatch-reading-yank-to
-  "F" 'conn-dispatch-copy-from-replace
-  "f" 'conn-dispatch-copy-from
+  "c" 'conn-dispatch-copy-from
+  "C" 'conn-dispatch-copy-from-replace
   "s" 'conn-dispatch-send
   "S" 'conn-dispatch-send-replace
-  "G" 'conn-dispatch-grab-replace
-  "g" 'conn-dispatch-grab
+  "F" 'conn-dispatch-grab-replace
+  "f" 'conn-dispatch-grab
   "d" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
   "SPC" 'conn-dispatch-jump

@@ -412,7 +412,9 @@ themselves once the selection process has concluded."
 
 (defvar conn--dispatch-remap-cookies nil)
 
+(defvar conn-dispatch-repeating nil)
 (defvar conn-dispatch-repeat-count nil)
+
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
 
@@ -2475,6 +2477,38 @@ contain targets."
   (if short "Register Replace"
     (format "Register Replace <%c>" (conn-dispatch-register-replace--register action))))
 
+(oclosure-define (conn-dispatch-change
+                  (:parent conn-action)))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-change)))
+  (oclosure-lambda (conn-dispatch-change
+                    (description "Change")
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing thing-arg transform)
+    (with-selected-window window
+      (conn-dispatch-loop-undo-boundary)
+      (pcase (save-excursion
+               (goto-char pt)
+               (conn-bounds-of thing thing-arg))
+        ((and bounds (conn-bounds `(,beg . ,end) transform))
+         (push-mark nil t)
+         (if conn-dispatch-repeating
+             (save-excursion
+               (conn-with-dispatch-suspended
+                 (with-undo-amalgamate
+                   (goto-char beg)
+                   (delete-region beg end)
+                   (conn-with-recursive-stack 'conn-emacs-state
+                     (recursive-edit)))))
+           (goto-char beg)
+           (delete-region beg end)
+           (conn-push-state 'conn-emacs-state)))
+        (_ (user-error "Cannot find thing at point"))))))
+
 (oclosure-define (conn-dispatch-kill
                   (:parent conn-action))
   (register :type integer))
@@ -3031,6 +3065,7 @@ contain targets."
     `(catch 'dispatch-select-exit
        (let* ((,rep nil)
               (,display-always nil)
+              (conn-dispatch-repeating repeat)
               (conn-dispatch-looping t)
               (conn--dispatch-loop-change-groups nil)
               (conn--state-eval-error-message nil)
