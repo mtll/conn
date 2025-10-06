@@ -2494,7 +2494,7 @@ contain targets."
       (pcase (save-excursion
                (goto-char pt)
                (conn-bounds-of thing thing-arg))
-        ((and bounds (conn-bounds `(,beg . ,end) transform))
+        ((and (conn-bounds `(,beg . ,end) transform))
          (push-mark nil t)
          (if conn-dispatch-repeating
              (save-excursion
@@ -3065,7 +3065,7 @@ contain targets."
     `(catch 'dispatch-select-exit
        (let* ((,rep nil)
               (,display-always nil)
-              (conn-dispatch-repeating repeat)
+              (conn-dispatch-repeating ,repeat)
               (conn-dispatch-looping t)
               (conn--dispatch-loop-change-groups nil)
               (conn--state-eval-error-message nil)
