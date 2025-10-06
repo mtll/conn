@@ -1347,6 +1347,242 @@ Target overlays may override this default by setting the
           (conn--target-label-payload)))
     (conn-delete-targets)))
 
+;;;;; Perform Dispatch Loop
+
+(define-error 'conn-dispatch-error "Dispatch error" 'user-error)
+
+(defun conn-dispatch-error (string)
+  (setf conn--state-eval-error-message string)
+  (signal 'conn-dispatch-error nil))
+
+(define-minor-mode conn-dispatch-select-mode
+  "Mode for dispatch event reading"
+  :global t
+  :lighter " SELECT"
+  :group 'conn
+  (if conn-dispatch-select-mode
+      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+        (face-remap-add-relative
+         'mode-line
+         (conn-state-get 'conn-dispatch-state :mode-line-face)))
+    (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
+      (with-current-buffer buf
+        (face-remap-remove-relative cookie)))))
+
+(cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
+  (redisplay)
+  (setq conn--dispatch-must-prompt prompt)
+  (throw 'dispatch-redisplay nil))
+
+(defun conn-dispatch-handle ()
+  (throw 'dispatch-handle t))
+
+(defmacro conn-perform-dispatch-loop (repeat &rest body)
+  (declare (indent 1))
+  (cl-with-gensyms (rep display-always)
+    `(catch 'dispatch-select-exit
+       (let* ((,rep nil)
+              (,display-always nil)
+              (conn-dispatch-repeating ,repeat)
+              (conn-dispatch-looping t)
+              (conn--dispatch-loop-change-groups nil)
+              (conn--state-eval-error-message nil)
+              (conn--dispatch-read-event-message-prefixes
+               `(,(car conn--dispatch-read-event-message-prefixes)
+                 ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+                    (lambda ()
+                      (when-let* ((binding
+                                   (and (or ,rep
+                                            ,display-always
+                                            conn--dispatch-always-retarget)
+                                        (where-is-internal
+                                         'always-retarget
+                                         conn-dispatch-read-event-map
+                                         t))))
+                        (setf ,display-always t)
+                        (concat
+                         (propertize (key-description binding)
+                                     'face 'help-key-binding)
+                         " "
+                         (propertize "always retarget"
+                                     'face (when conn--dispatch-always-retarget
+                                             'eldoc-highlight-function-argument))))))
+                 ,@(cdr conn--dispatch-read-event-message-prefixes))))
+         (unwind-protect
+             (while (or (setq ,rep ,repeat)
+                        (< conn-dispatch-repeat-count 1))
+               (catch 'dispatch-redisplay
+                 (condition-case err
+                     (progn
+                       ,@body
+                       (cl-incf conn-dispatch-repeat-count))
+                   (user-error
+                    (conn-dispatch-error (error-message-string err))))))
+           (dolist (undo conn--dispatch-loop-change-groups)
+             (funcall undo :accept)))))))
+
+(defmacro conn-with-dispatch-suspended (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (select-mode)
+    `(pcase-let ((`(,conn-target-window-predicate
+                    ,conn-target-predicate
+                    ,conn-target-sort-function)
+                  conn--dispatch-init-state)
+                 (conn-dispatch-looping nil)
+                 (conn--dispatch-loop-change-groups nil)
+                 (inhibit-message nil)
+                 (recenter-last-op nil)
+                 (conn-dispatch-repeat-count nil)
+                 (conn-dispatch-other-end nil)
+                 (conn-state-eval-last-command nil)
+                 (conn--state-eval-prefix-mag nil)
+                 (conn--state-eval-prefix-sign nil)
+                 (conn--dispatch-read-event-handlers nil)
+                 (conn--dispatch-read-event-message-prefixes nil)
+                 (conn--dispatch-always-retarget nil)
+                 (,select-mode conn-dispatch-select-mode))
+       (conn-delete-targets)
+       (message nil)
+       (if ,select-mode (conn-dispatch-select-mode -1))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (if ,select-mode (conn-dispatch-select-mode 1))))))
+
+(cl-defgeneric conn-handle-dispatch-select-command (command)
+  (:method (_cmd) nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
+  (require 'conn-quick-ref)
+  (defvar conn-dispatch-select-ref)
+  (conn-with-overriding-map conn-dispatch-read-event-map
+    (conn-quick-reference (list conn-dispatch-select-ref)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
+  (require 'mwheel)
+  (mwheel-scroll last-input-event)
+  (goto-char (window-start (selected-window)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recursive-edit)))
+  (conn-with-dispatch-suspended
+    (recursive-edit))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((cmd (eql recenter-top-bottom)))
+  (let ((this-command cmd)
+        (last-command conn-state-eval-last-command))
+    (recenter-top-bottom (conn-state-eval-prefix-arg)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
+  (let ((inhibit-message nil))
+    (toggle-input-method))
+  (conn-dispatch-handle-and-redisplay :prompt nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
+  (let ((inhibit-message nil))
+    (call-interactively 'set-input-method))
+  (conn-dispatch-handle-and-redisplay :prompt nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
+  (conn-with-dispatch-suspended
+    (isearch-forward))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward)))
+  (conn-with-dispatch-suspended
+    (isearch-backward))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward-regexp)))
+  (conn-with-dispatch-suspended
+    (isearch-forward-regexp))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward-regexp)))
+  (conn-with-dispatch-suspended
+    (isearch-backward-regexp))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
+                                       next-screen-context-lines)))
+    (conn-scroll-up))
+  (goto-char (window-start (selected-window)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
+                                       next-screen-context-lines)))
+    (conn-scroll-down))
+  (goto-char (window-start (selected-window)))
+  (conn-dispatch-handle-and-redisplay))
+
+(defun conn-dispatch-goto-window (window)
+  (select-window window)
+  (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+    (face-remap-add-relative
+     'mode-line
+     (conn-state-get 'conn-dispatch-state :mode-line-face))))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql conn-goto-window)))
+  (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
+      (progn
+        (conn-dispatch-goto-window (conn-prompt-for-window windows))
+        (conn-dispatch-handle-and-redisplay :prompt nil))
+    (conn-dispatch-handle)))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
+  (throw 'dispatch-select-exit nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
+  (setq dispatch-quit-flag t)
+  (throw 'dispatch-select-exit nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
+  (unless conn-dispatch-no-other-end
+    (cl-callf not conn-dispatch-other-end)
+    (conn-dispatch-handle-and-redisplay :prompt nil)))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
+  (conn-dispatch-retarget conn-dispatch-target-finder)
+  (conn-dispatch-handle-and-redisplay :prompt nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
+  (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql restrict-windows)))
+  (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
+                                   conn-target-window-predicate)
+         (remove-function conn-target-window-predicate
+                          'conn--dispatch-restrict-windows)
+         (conn-dispatch-handle-and-redisplay))
+        ((length> conn-targets 1)
+         (add-function :after-while conn-target-window-predicate
+                       'conn--dispatch-restrict-windows)
+         (conn-dispatch-handle-and-redisplay))))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
+  (when conn--dispatch-loop-change-groups
+    (funcall (pop conn--dispatch-loop-change-groups) :cancel))
+  (conn-dispatch-handle-and-redisplay))
+
+(defun conn-dispatch-change-target (thing thing-arg thing-transform)
+  (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder)
+  (setq conn-dispatch-target-finder (conn-get-target-finder thing))
+  (throw 'dispatch-change-target (list thing thing-arg thing-transform)))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
+  (apply #'conn-dispatch-change-target
+         (conn-with-dispatch-suspended
+           (conn-eval-with-state 'conn-dispatch-mover-state
+               (list && (conn-thing-argument-dwim t)
+                     & (conn-dispatch-transform-argument))
+             :prompt "New Targets"
+             :reference conn-dispatch-mover-reference))))
+
 ;;;;; Dispatch Target Finders
 
 (defface conn-dispatch-context-separator-face
@@ -2494,7 +2730,7 @@ contain targets."
       (pcase (save-excursion
                (goto-char pt)
                (conn-bounds-of thing thing-arg))
-        ((and (conn-bounds `(,beg . ,end) transform))
+        ((conn-bounds `(,beg . ,end) transform)
          (push-mark nil t)
          (if conn-dispatch-repeating
              (save-excursion
@@ -3028,242 +3264,6 @@ contain targets."
 
 (put 'conn-dispatch-upcase :advertised-binding (key-parse "M-u"))
 (put 'conn-dispatch-downcase :advertised-binding (key-parse "M-l"))
-
-;;;;; Perform Dispatch Loop
-
-(define-error 'conn-dispatch-error "Dispatch error" 'user-error)
-
-(defun conn-dispatch-error (string)
-  (setf conn--state-eval-error-message string)
-  (signal 'conn-dispatch-error nil))
-
-(define-minor-mode conn-dispatch-select-mode
-  "Mode for dispatch event reading"
-  :global t
-  :lighter " SELECT"
-  :group 'conn
-  (if conn-dispatch-select-mode
-      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
-        (face-remap-add-relative
-         'mode-line
-         (conn-state-get 'conn-dispatch-state :mode-line-face)))
-    (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
-      (with-current-buffer buf
-        (face-remap-remove-relative cookie)))))
-
-(cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
-  (redisplay)
-  (setq conn--dispatch-must-prompt prompt)
-  (throw 'dispatch-redisplay nil))
-
-(defun conn-dispatch-handle ()
-  (throw 'dispatch-handle t))
-
-(defmacro conn-perform-dispatch-loop (repeat &rest body)
-  (declare (indent 1))
-  (cl-with-gensyms (rep display-always)
-    `(catch 'dispatch-select-exit
-       (let* ((,rep nil)
-              (,display-always nil)
-              (conn-dispatch-repeating ,repeat)
-              (conn-dispatch-looping t)
-              (conn--dispatch-loop-change-groups nil)
-              (conn--state-eval-error-message nil)
-              (conn--dispatch-read-event-message-prefixes
-               `(,(car conn--dispatch-read-event-message-prefixes)
-                 ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                    (lambda ()
-                      (when-let* ((binding
-                                   (and (or ,rep
-                                            ,display-always
-                                            conn--dispatch-always-retarget)
-                                        (where-is-internal
-                                         'always-retarget
-                                         conn-dispatch-read-event-map
-                                         t))))
-                        (setf ,display-always t)
-                        (concat
-                         (propertize (key-description binding)
-                                     'face 'help-key-binding)
-                         " "
-                         (propertize "always retarget"
-                                     'face (when conn--dispatch-always-retarget
-                                             'eldoc-highlight-function-argument))))))
-                 ,@(cdr conn--dispatch-read-event-message-prefixes))))
-         (unwind-protect
-             (while (or (setq ,rep ,repeat)
-                        (< conn-dispatch-repeat-count 1))
-               (catch 'dispatch-redisplay
-                 (condition-case err
-                     (progn
-                       ,@body
-                       (cl-incf conn-dispatch-repeat-count))
-                   (user-error
-                    (conn-dispatch-error (error-message-string err))))))
-           (dolist (undo conn--dispatch-loop-change-groups)
-             (funcall undo :accept)))))))
-
-(defmacro conn-with-dispatch-suspended (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (select-mode)
-    `(pcase-let ((`(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function)
-                  conn--dispatch-init-state)
-                 (conn-dispatch-looping nil)
-                 (conn--dispatch-loop-change-groups nil)
-                 (inhibit-message nil)
-                 (recenter-last-op nil)
-                 (conn-dispatch-repeat-count nil)
-                 (conn-dispatch-other-end nil)
-                 (conn-state-eval-last-command nil)
-                 (conn--state-eval-prefix-mag nil)
-                 (conn--state-eval-prefix-sign nil)
-                 (conn--dispatch-read-event-handlers nil)
-                 (conn--dispatch-read-event-message-prefixes nil)
-                 (conn--dispatch-always-retarget nil)
-                 (,select-mode conn-dispatch-select-mode))
-       (conn-delete-targets)
-       (message nil)
-       (if ,select-mode (conn-dispatch-select-mode -1))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (if ,select-mode (conn-dispatch-select-mode 1))))))
-
-(cl-defgeneric conn-handle-dispatch-select-command (command)
-  (:method (_cmd) nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
-  (require 'conn-quick-ref)
-  (defvar conn-dispatch-select-ref)
-  (conn-with-overriding-map conn-dispatch-read-event-map
-    (conn-quick-reference (list conn-dispatch-select-ref)))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
-  (require 'mwheel)
-  (mwheel-scroll last-input-event)
-  (goto-char (window-start (selected-window)))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recursive-edit)))
-  (conn-with-dispatch-suspended
-    (recursive-edit))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((cmd (eql recenter-top-bottom)))
-  (let ((this-command cmd)
-        (last-command conn-state-eval-last-command))
-    (recenter-top-bottom (conn-state-eval-prefix-arg)))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
-  (let ((inhibit-message nil))
-    (toggle-input-method))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
-  (let ((inhibit-message nil))
-    (call-interactively 'set-input-method))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
-  (conn-with-dispatch-suspended
-    (isearch-forward))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward)))
-  (conn-with-dispatch-suspended
-    (isearch-backward))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward-regexp)))
-  (conn-with-dispatch-suspended
-    (isearch-forward-regexp))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward-regexp)))
-  (conn-with-dispatch-suspended
-    (isearch-backward-regexp))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
-  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
-                                       next-screen-context-lines)))
-    (conn-scroll-up))
-  (goto-char (window-start (selected-window)))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
-  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
-                                       next-screen-context-lines)))
-    (conn-scroll-down))
-  (goto-char (window-start (selected-window)))
-  (conn-dispatch-handle-and-redisplay))
-
-(defun conn-dispatch-goto-window (window)
-  (select-window window)
-  (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
-    (face-remap-add-relative
-     'mode-line
-     (conn-state-get 'conn-dispatch-state :mode-line-face))))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql conn-goto-window)))
-  (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
-      (progn
-        (conn-dispatch-goto-window (conn-prompt-for-window windows))
-        (conn-dispatch-handle-and-redisplay :prompt nil))
-    (conn-dispatch-handle)))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
-  (throw 'dispatch-select-exit nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
-  (setq dispatch-quit-flag t)
-  (throw 'dispatch-select-exit nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
-  (unless conn-dispatch-no-other-end
-    (cl-callf not conn-dispatch-other-end)
-    (conn-dispatch-handle-and-redisplay :prompt nil)))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
-  (conn-dispatch-retarget conn-dispatch-target-finder)
-  (conn-dispatch-handle-and-redisplay :prompt nil))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
-  (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql restrict-windows)))
-  (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
-                                   conn-target-window-predicate)
-         (remove-function conn-target-window-predicate
-                          'conn--dispatch-restrict-windows)
-         (conn-dispatch-handle-and-redisplay))
-        ((length> conn-targets 1)
-         (add-function :after-while conn-target-window-predicate
-                       'conn--dispatch-restrict-windows)
-         (conn-dispatch-handle-and-redisplay))))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
-  (when conn--dispatch-loop-change-groups
-    (funcall (pop conn--dispatch-loop-change-groups) :cancel))
-  (conn-dispatch-handle-and-redisplay))
-
-(defun conn-dispatch-change-target (thing thing-arg thing-transform)
-  (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder)
-  (setq conn-dispatch-target-finder (conn-get-target-finder thing))
-  (throw 'dispatch-change-target (list thing thing-arg thing-transform)))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (apply #'conn-dispatch-change-target
-         (conn-with-dispatch-suspended
-           (conn-eval-with-state 'conn-dispatch-mover-state
-               (list && (conn-thing-argument-dwim t)
-                     & (conn-dispatch-transform-argument))
-             :prompt "New Targets"
-             :reference conn-dispatch-mover-reference))))
 
 ;;;;; Dispatch Ring
 
