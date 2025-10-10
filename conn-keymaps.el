@@ -488,9 +488,8 @@
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "g" 'conn-dispatch-copy-to
-  "G" 'conn-dispatch-copy-replace-to
-  "w" 'conn-dispatch-change
+  "w" 'conn-dispatch-copy-to
+  "W" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over
   "x" 'conn-dispatch-yank-replace
   "X" 'conn-dispatch-yank-read-replace

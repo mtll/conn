@@ -1176,6 +1176,8 @@ the state stays active if the previous command was a prefix command."
 
 (defvar conn--mark-state-rmm nil)
 
+(defvar-local conn-record-mark-state t)
+
 (conn-define-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
   :lighter "M"
@@ -1204,14 +1206,16 @@ the state stays active if the previous command was a prefix command."
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
-  (unless conn-previous-mark-state
-    (setq-local conn-previous-mark-state (list (make-marker) (make-marker) nil)))
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
                                   (fboundp 'rectangle--pos-cols)
-                                  (rectangle--pos-cols (point) (mark))))
+                                  (rectangle--pos-cols (point) (mark)))
+        conn-record-mark-state t)
   (conn-state-defer
     (setq deactivate-mark t)
-    (unless (eq this-command 'keyboard-quit)
+    (unless (or (null conn-record-mark-state)
+                (eq this-command 'keyboard-quit))
+      (unless conn-previous-mark-state
+        (setq conn-previous-mark-state (list (make-marker) (make-marker) nil)))
       (set-marker (nth 0 conn-previous-mark-state) (point))
       (set-marker (nth 1 conn-previous-mark-state) (mark t))
       (setf (nth 2 conn-previous-mark-state) conn--mark-state-rmm)))
@@ -1407,8 +1411,8 @@ chooses to handle a command."
                       (setq arguments (cons next handler))))))
       (conn-with-recursive-stack state
         (let ((emulation-mode-map-alists
-               `(((t . ,(make-composed-keymap
-                         (delq nil (conn-argument-keymaps arguments)))))
+               `(((,state . ,(make-composed-keymap
+                              (delq nil (conn-argument-keymaps arguments)))))
                  ,@emulation-mode-map-alists)))
           (while (conn-argument-required-p (car arguments))
             (when (and conn--state-eval-message-timeout
@@ -1467,8 +1471,8 @@ chooses to handle a command."
                      (cons ``(mapcar 'macroexp-quote ',,exp) (qt tail)))
                     (`(,head . ,tail)
                      (cons (pcase head
+                             ('nil ``(list nil))
                              ((pred consp) ``(list ,(list 'nconc ,@(qt head))))
-                             ((pred null) ``(list nil))
                              (_ (qt head)))
                            (if (listp tail)
                                (qt tail)

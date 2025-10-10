@@ -791,6 +791,7 @@ Immediately repeating this command pushes a mark."
   (cond (arg
          (rectangle-mark-mode 'toggle))
         ((eq last-command 'conn-set-mark-command)
+         (setq conn-record-mark-state nil)
          (if (region-active-p)
              (progn
                (push-mark nil t)
@@ -1043,15 +1044,12 @@ With a prefix ARG `push-mark' without activating it."
 
 (defvar conn-transpose-reference
   (list (conn-reference-page "Transpose"
-          (:eval
-           (string-join
-            '("Transpose reads a THING command and transposes two of those THINGs. If
+          "Transpose reads a THING command and transposes two of those THINGs. If
 THING is `recursive-edit' then the current region and a region defined
-within a recursive edit will be transposed."
-              ""
-              "Transpose defines some addition thing bindings:"
-              "")
-            "\n"))
+within a recursive edit will be transposed.
+
+Transpose defines some addition thing bindings:
+"
           ((("line" conn-backward-line forward-line))
            (("symbol" forward-symbol))
            (("defun" (:eval (conn-quick-ref-find-remap
