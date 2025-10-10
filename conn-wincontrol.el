@@ -596,6 +596,8 @@
 
 (defvar conn-goto-window-cycle-limit 3)
 
+(defalias 'conn-other-window 'other-window)
+
 (defun conn-goto-window ()
   "Prompt for a window and then select it."
   (interactive)
@@ -604,7 +606,15 @@
                         nil 'nomini
                         (if current-prefix-arg 'visible)))))
     (if (length< windows conn-goto-window-cycle-limit)
-        (other-window 1)
+        (progn
+          (setq this-command 'conn-other-window)
+          (put 'conn-other-window 'repeat-map
+               (let ((map (make-sparse-keymap)))
+                 (define-key map
+                             (vector last-command-event)
+                             'conn-other-window)
+                 map))
+          (other-window 1))
       (if-let* ((window (conn-prompt-for-window windows)))
           (select-window window)
         (user-error "No other windows available to select")))))
