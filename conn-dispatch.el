@@ -499,6 +499,29 @@ themselves once the selection process has concluded."
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
+(defvar conn--dispatch-thing-predicate nil)
+
+(oclosure-define (conn-dispatch-thing-argument
+                  (:parent conn-thing-argument)))
+
+(defun conn-dispatch-thing-argument ()
+  (declare (important-return-value t))
+  (oclosure-lambda (conn-dispatch-thing-argument
+                    (required t)
+                    (recursive-edit t))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-thing-argument)
+                                       sym)
+  (and (cl-call-next-method)
+       (if conn--dispatch-thing-predicate
+           (funcall conn--dispatch-thing-predicate sym)
+         t)))
+
 (defvar-keymap conn-dispatch-transform-map
   "x" 'conn-bounds-trim
   "a" 'conn-bounds-after-point
@@ -664,9 +687,11 @@ themselves once the selection process has concluded."
     (if (conn-argument-predicate self type)
         (progn
           (conn-cancel-action value)
-          (conn-set-argument
-           self (unless (cl-typep value type)
-                  (conn-make-action type))))
+          (when-let* ((_(not (cl-typep value type)))
+                      (action (conn-make-action type)))
+            (setq conn--dispatch-thing-predicate
+                  (conn-action--thing-predicate action))
+            (conn-set-argument self action)))
       self)))
 
 (cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
@@ -1617,7 +1642,7 @@ Target overlays may override this default by setting the
   (apply #'conn-dispatch-change-target
          (conn-with-dispatch-suspended
            (conn-eval-with-state 'conn-dispatch-mover-state
-               (list && (conn-thing-argument-dwim t)
+               (list && (conn-dispatch-thing-argument)
                      & (conn-dispatch-transform-argument))
              :prompt "New Targets"
              :reference conn-dispatch-mover-reference))))
@@ -1630,7 +1655,8 @@ Target overlays may override this default by setting the
   :group 'conn)
 
 (defun conn-target-nearest-op (a b)
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
 
@@ -2164,6 +2190,7 @@ contain targets."
   (description :type (or string nil))
   (window-predicate :type function)
   (target-predicate :type function)
+  (thing-predicate :type function)
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
@@ -3641,22 +3668,23 @@ contain targets."
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
-  (conn-eval-with-state 'conn-dispatch-state
-      (conn-perform-dispatch
-       & (conn-dispatch-action-argument)
-       && (conn-thing-argument t)
-       & (conn-dispatch-transform-argument)
-       :repeat & (conn-dispatch-repeat-argument)
-       :other-end & (conn-dispatch-other-end-argument nil)
-       :restrict-windows & (conn-dispatch-restrict-windows-argument))
-    :command-handler #'conn-handle-dispatch-command
-    :prefix initial-arg
-    :prompt "Dispatch"
-    :reference conn-dispatch-reference
-    :pre (lambda (_)
-           (when (and (bound-and-true-p conn-posframe-mode)
-                      (fboundp 'posframe-hide))
-             (posframe-hide " *conn-list-posframe*")))))
+  (let (conn--dispatch-thing-predicate)
+    (conn-eval-with-state 'conn-dispatch-state
+        (conn-perform-dispatch
+         & (conn-dispatch-action-argument)
+         && (conn-dispatch-thing-argument)
+         & (conn-dispatch-transform-argument)
+         :repeat & (conn-dispatch-repeat-argument)
+         :other-end & (conn-dispatch-other-end-argument nil)
+         :restrict-windows & (conn-dispatch-restrict-windows-argument))
+      :command-handler #'conn-handle-dispatch-command
+      :prefix initial-arg
+      :prompt "Dispatch"
+      :reference conn-dispatch-reference
+      :pre (lambda (_)
+             (when (and (bound-and-true-p conn-posframe-mode)
+                        (fboundp 'posframe-hide))
+               (posframe-hide " *conn-list-posframe*"))))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
