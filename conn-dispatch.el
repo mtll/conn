@@ -439,6 +439,11 @@ themselves once the selection process has concluded."
                               (category
                                . conn-dispatch-command)))
 
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-dispatch-mover-state)))
+  (setq conn--dispatch-thing-predicate #'always)
+  (conn-state-defer
+    (setq conn--dispatch-thing-predicate nil)))
+
 (conn-define-state conn-dispatch-bounds-state (conn-dispatch-mover-state)
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face
@@ -518,9 +523,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-predicate ((_arg conn-dispatch-thing-argument)
                                        sym)
   (and (cl-call-next-method)
-       (if conn--dispatch-thing-predicate
-           (funcall conn--dispatch-thing-predicate sym)
-         t)))
+       (funcall conn--dispatch-thing-predicate sym)))
 
 (defvar-keymap conn-dispatch-transform-map
   "x" 'conn-bounds-trim
@@ -684,15 +687,17 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-action-argument)
       (self type)
-    (if (conn-argument-predicate self type)
-        (progn
-          (conn-cancel-action value)
-          (when-let* ((_(not (cl-typep value type)))
-                      (action (conn-make-action type)))
+    (if (not (conn-argument-predicate self type))
+        self
+      (conn-cancel-action value)
+      (if-let* ((_(not (cl-typep value type)))
+                (action (conn-make-action type)))
+          (progn
             (setq conn--dispatch-thing-predicate
-                  (conn-action--thing-predicate action))
-            (conn-set-argument self action)))
-      self)))
+                  (or (conn-action--thing-predicate action)
+                      #'always))
+            (conn-set-argument self action))
+        (conn-set-argument self nil)))))
 
 (cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-state-eval-argument-value arg)))
@@ -1639,15 +1644,6 @@ Target overlays may override this default by setting the
   (setq conn-dispatch-target-finder (conn-get-target-finder thing))
   (throw 'dispatch-change-target (list thing thing-arg thing-transform)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (apply #'conn-dispatch-change-target
-         (conn-with-dispatch-suspended
-           (conn-eval-with-state 'conn-dispatch-mover-state
-               (list && (conn-dispatch-thing-argument)
-                     & (conn-dispatch-transform-argument))
-             :prompt "New Targets"
-             :reference conn-dispatch-mover-reference))))
-
 ;;;;; Dispatch Target Finders
 
 (defface conn-dispatch-context-separator-face
@@ -2392,9 +2388,7 @@ contain targets."
              (when (and separator (not conn-dispatch-other-end))
                (conn-dispatch-insert-separator separator))
              (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point)
-                                                    (+ (length str)
-                                                       (length separator)))
+               (pulse-momentary-highlight-region (- (point) (length str))
                                                  (point))))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
@@ -2527,9 +2521,7 @@ contain targets."
            (when (and separator (not conn-dispatch-other-end))
              (conn-dispatch-insert-separator separator))
            (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point)
-                                                  (+ (length str)
-                                                     (length separator)))
+             (pulse-momentary-highlight-region (- (point) (length str))
                                                (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-yank) &optional short)
@@ -2572,14 +2564,10 @@ contain targets."
              (when (and separator (not conn-dispatch-other-end))
                (conn-dispatch-insert-separator separator))
              (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point)
-                                                    (+ (length str)
-                                                       (length separator)))
+               (pulse-momentary-highlight-region (- (point) (length str))
                                                  (point)))))
           (unless executing-kbd-macro
-            (pulse-momentary-highlight-region (- (point)
-                                                 (+ (length str)
-                                                    (length separator)))
+            (pulse-momentary-highlight-region (- (point) (length str))
                                               (point))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
@@ -3537,8 +3525,23 @@ contain targets."
          (conn--state-eval-prefix-mag nil)
          (conn--state-eval-prefix-sign nil)
          (conn--dispatch-read-event-handlers
-          (cons #'conn-handle-dispatch-select-command
-                conn--dispatch-read-event-handlers))
+          `(,(lambda (cmd)
+               (when (eq cmd 'change-target-finder)
+                 (conn-with-dispatch-suspended
+                   (conn-eval-with-state 'conn-dispatch-mover-state
+                       (conn-dispatch-change-target
+                        && (conn-dispatch-thing-argument)
+                        & (conn-dispatch-transform-argument))
+                     :prompt "New Targets"
+                     :reference conn-dispatch-mover-reference
+                     :command-handler
+                     (lambda (cmd arghist)
+                       (when-let* ((_(eq cmd :init))
+                                   (pred (conn-action--thing-predicate action)))
+                         (setq conn--dispatch-thing-predicate pred))
+                       arghist)))))
+            ,#'conn-handle-dispatch-select-command
+            ,@conn--dispatch-read-event-handlers))
          (conn-dispatch-target-finder (conn-get-target-finder thing))
          (conn-dispatch-repeat-count 0)
          (conn--dispatch-always-retarget
@@ -3686,23 +3689,22 @@ contain targets."
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
-  (let (conn--dispatch-thing-predicate)
-    (conn-eval-with-state 'conn-dispatch-state
-        (conn-perform-dispatch
-         & (conn-dispatch-action-argument)
-         && (conn-dispatch-thing-argument)
-         & (conn-dispatch-transform-argument)
-         :repeat & (conn-dispatch-repeat-argument)
-         :other-end & (conn-dispatch-other-end-argument nil)
-         :restrict-windows & (conn-dispatch-restrict-windows-argument))
-      :command-handler #'conn-handle-dispatch-command
-      :prefix initial-arg
-      :prompt "Dispatch"
-      :reference conn-dispatch-reference
-      :pre (lambda (_)
-             (when (and (bound-and-true-p conn-posframe-mode)
-                        (fboundp 'posframe-hide))
-               (posframe-hide " *conn-list-posframe*"))))))
+  (conn-eval-with-state 'conn-dispatch-state
+      (conn-perform-dispatch
+       & (conn-dispatch-action-argument)
+       && (conn-dispatch-thing-argument)
+       & (conn-dispatch-transform-argument)
+       :repeat & (conn-dispatch-repeat-argument)
+       :other-end & (conn-dispatch-other-end-argument nil)
+       :restrict-windows & (conn-dispatch-restrict-windows-argument))
+    :command-handler #'conn-handle-dispatch-command
+    :prefix initial-arg
+    :prompt "Dispatch"
+    :reference conn-dispatch-reference
+    :pre (lambda (_)
+           (when (and (bound-and-true-p conn-posframe-mode)
+                      (fboundp 'posframe-hide))
+             (posframe-hide " *conn-list-posframe*")))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.

@@ -1415,6 +1415,8 @@ chooses to handle a command."
                               (delq nil (conn-argument-keymaps arguments)))))
                  ,@emulation-mode-map-alists)))
           (while (conn-argument-required-p (car arguments))
+            (let (conn--state-eval-error-message)
+              (update-args :init))
             (when (and conn--state-eval-message-timeout
                        (time-less-p conn--state-eval-message-timeout nil))
               (setq conn--state-eval-message nil
