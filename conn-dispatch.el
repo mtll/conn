@@ -1692,6 +1692,10 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (:method (_) nil))
 
+(cl-defgeneric conn-dispatch-target-save-state (target-finder)
+  (declare (important-return-value t))
+  (:method (_) nil))
+
 (defclass conn-dispatch-target-window-predicate ()
   ((window-predicate :initform (lambda (&rest _) t)
                      :allocation :class))
@@ -1715,6 +1719,11 @@ Target overlays may override this default by setting the
   ((string :initform nil))
   "Abstract type for target finders targeting a string."
   :abstract t)
+
+(cl-defmethod conn-dispatch-target-save-state ((target-finder conn-dispatch-string-targets))
+  (cons (let ((str (oref target-finder string)))
+          (lambda (tf) (setf (oref tf string) str)))
+        (cl-call-next-method)))
 
 (cl-defmethod conn-dispatch-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
@@ -2305,7 +2314,6 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto
-                    (no-history t)
                     (description "Goto"))
       (window pt thing thing-arg transform)
     (select-window window)
@@ -3166,7 +3174,6 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over
                     (description "Over")
-                    (no-history t)
                     (window-predicate (let ((obuf (current-buffer)))
                                         (lambda (win)
                                           (eq (window-buffer win) obuf)))))
@@ -3211,8 +3218,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump
-                    (description "Jump")
-                    (no-history t))
+                    (description "Jump"))
       (window pt _thing _thing-arg _transform)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
@@ -3339,7 +3345,12 @@ contain targets."
                   (other-end (if conn-dispatch-no-other-end
                                  :no-other-end
                                conn-dispatch-other-end))
-                  (always-retarget conn--dispatch-always-retarget)))
+                  (always-retarget conn--dispatch-always-retarget)
+                  (setup
+                   (let ((fns (conn-dispatch-target-save-state conn-dispatch-target-finder)))
+                     (lambda ()
+                       (dolist (fn fns)
+                         (funcall fn conn-dispatch-target-finder)))))))
                (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
   (thing nil :type (or symbol conn-anonymous-thing))
@@ -3349,7 +3360,8 @@ contain targets."
   (other-end nil :type symbol)
   (always-retarget nil :type boolean)
   (repeat nil :type boolean)
-  (restrict-windows nil :type boolean))
+  (restrict-windows nil :type boolean)
+  (setup nil :type function))
 
 (defvar conn-dispatch-ring-max 12)
 
@@ -3421,6 +3433,8 @@ contain targets."
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
   (unless (conn-action--no-history (conn-previous-dispatch-action dispatch))
+    (add-to-history 'command-history `(conn-call-previous-dispatch
+                                       (conn-ring-head conn-dispatch-ring)))
     (conn-ring-insert-front conn-dispatch-ring dispatch)))
 
 (defun conn-dispatch-ring-remove-stale ()
@@ -3463,7 +3477,8 @@ contain targets."
                           other-end
                           always-retarget
                           repeat
-                          restrict-windows)
+                          restrict-windows
+                          setup)
                dispatch))
     (apply #'conn-perform-dispatch
            `( ,action ,thing ,thing-arg ,thing-transform
@@ -3472,6 +3487,7 @@ contain targets."
               :repeat ,repeat
               :restrict-windows ,restrict-windows
               :other-end ,other-end
+              :setup ,setup
               ,@keys))))
 
 ;;;;; Dispatch Commands
@@ -3503,6 +3519,7 @@ contain targets."
                                              restrict-windows
                                              other-end
                                              always-retarget
+                                             setup
                                              &allow-other-keys)
   (let* ((dispatch-quit-flag)
          (opoint (point-marker))
@@ -3590,6 +3607,7 @@ contain targets."
     (when restrict-windows
       (add-function :after-while conn-target-window-predicate
                     'conn--dispatch-restrict-windows))
+    (when setup (funcall setup))
     (unwind-protect
         (progn
           (while-let ((new-target
@@ -3784,6 +3802,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
           (conn-eval-with-state 'conn-dispatch-bounds-state
               (conn-perform-dispatch
                & (oclosure-lambda (conn-action
+                                   (no-history t)
                                    (description "Bounds")
                                    (window-predicate
                                     (let ((win (selected-window)))
