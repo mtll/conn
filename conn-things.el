@@ -444,15 +444,21 @@ words."))
 (defvar conn-transformations-quick-ref
   (conn-reference-quote
     (("trim" conn-bounds-trim)
-     ("after point" conn-bounds-after-point)
-     ("before point" conn-bounds-before-point)
+     ("after point/exclusive"
+      conn-bounds-after-point
+      conn-bounds-after-point-exclusive)
+     ("before point/exclusive"
+      conn-bounds-before-point
+      conn-bounds-before-point-exclusive)
      ("last" conn-bounds-last)
      ("reset" conn-transform-reset))))
 
 (defvar-keymap conn-transform-map
   "x" 'conn-bounds-trim
   "a" 'conn-bounds-after-point
+  "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
+  "B" 'conn-bounds-before-point-exclusive
   "SPC" 'conn-bounds-last
   "X" 'conn-transform-reset)
 
@@ -806,34 +812,74 @@ words."))
 
 (cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point)) form)
   (if (or (eq form 'conn-bounds-last)
-          (eq form 'conn-bounds-before-point))
+          (eq form 'conn-bounds-before-point)
+          (eq form 'conn-bounds-before-point-exclusive)
+          (eq form 'conn-bounds-after-point)
+          (eq form 'conn-bounds-after-point-exclusive))
       (conn-argument-remove)
     arg))
 
-(cl-defgeneric conn-bounds-after-point (bounds))
+(cl-defgeneric conn-bounds-after-point (bounds &optional exclusive))
 
-(cl-defmethod conn-bounds-after-point (bounds)
-  (pcase-let (((conn-bounds `(,_beg . ,end)) bounds))
+(cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
+  (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (<= (point) end)
-        (conn-make-bounds-transform bounds (cons (point) end))
+        (conn-make-bounds-transform
+         bounds (cons (point) (if exclusive beg end)))
       (error "Invalid bounds"))))
+
+(put 'conn-bounds-after-point-exclusive :conn-bounds-transform t)
+(put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
+
+(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point-exclusive))
+                                    form)
+  (if (or (eq form 'conn-bounds-last)
+          (eq form 'conn-bounds-before-point)
+          (eq form 'conn-bounds-before-point-exclusive)
+          (eq form 'conn-bounds-after-point)
+          (eq form 'conn-bounds-after-point-exclusive))
+      (conn-argument-remove)
+    arg))
+
+(defun conn-bounds-after-point-exclusive (bounds)
+  (conn-bounds-after-point bounds t))
 
 (put 'conn-bounds-before-point :conn-bounds-transform t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
 
 (cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point)) form)
   (if (or (eq form 'conn-bounds-last)
-          (eq form 'conn-bounds-after-point))
+          (eq form 'conn-bounds-before-point)
+          (eq form 'conn-bounds-before-point-exclusive)
+          (eq form 'conn-bounds-after-point)
+          (eq form 'conn-bounds-after-point-exclusive))
       (conn-argument-remove)
     arg))
 
-(cl-defgeneric conn-bounds-before-point (bounds))
+(cl-defgeneric conn-bounds-before-point (bounds &optional exclusive))
 
-(cl-defmethod conn-bounds-before-point (bounds)
-  (pcase-let (((conn-bounds `(,beg . ,_end)) bounds))
+(cl-defmethod conn-bounds-before-point (bounds &optional exclusive)
+  (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (>= (point) beg)
-        (conn-make-bounds-transform bounds (cons beg (point)))
+        (conn-make-bounds-transform
+         bounds (cons (if exclusive end beg) (point)))
       (error "Invalid bounds"))))
+
+(put 'conn-bounds-before-point-exclusive :conn-bounds-transform t)
+(put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
+
+(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point-exclusive))
+                                    form)
+  (if (or (eq form 'conn-bounds-last)
+          (eq form 'conn-bounds-before-point)
+          (eq form 'conn-bounds-before-point-exclusive)
+          (eq form 'conn-bounds-after-point)
+          (eq form 'conn-bounds-after-point-exclusive))
+      (conn-argument-remove)
+    arg))
+
+(defun conn-bounds-before-point-exclusive (bounds)
+  (conn-bounds-before-point bounds t))
 
 ;;;;;; Check Region
 
