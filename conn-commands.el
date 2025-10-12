@@ -75,8 +75,9 @@ execution."
 (defun conn-repeat-last-complex-command ()
   ;; TODO: maybe make this only repeat conn operators?
   (interactive)
-  (when-let* ((last-repeatable-command (caar command-history)))
-    (repeat nil)))
+  (if-let* ((last-repeatable-command (caar command-history)))
+      (repeat nil)
+    (user-error "No repeatable last command")))
 
 ;;;;; Movement
 
