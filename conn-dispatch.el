@@ -1492,6 +1492,7 @@ Target overlays may override this default by setting the
                     ,conn-target-predicate
                     ,conn-target-sort-function)
                   conn--dispatch-init-state)
+                 (conn--dispatch-thing-predicate nil)
                  (conn-dispatch-looping nil)
                  (conn--dispatch-loop-change-groups nil)
                  (inhibit-message nil)
@@ -2609,8 +2610,7 @@ contain targets."
                       (separator
                        (if (eq separator 'default)
                            (cond ((eq thing 'region))
-                                 ((seq-contains-p str ?\n #'eql)
-                                  'newline)
+                                 ((seq-contains-p str ?\n #'eql) 'newline)
                                  (t 'space))
                          separator))
                       (window-predicate
