@@ -532,6 +532,14 @@
                              (apply jump args)
                              (conn-push-state 'conn-emacs-state))))
        :target-finder (lambda () (conn-dispatch-previous-emacs-state)))
+  "g y" (conn-anonymous-thing
+         'char
+         :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+         :target-finder (lambda () (conn-dispatch-global-mark)))
+  "<" (conn-anonymous-thing
+       'char
+       :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+       :target-finder (lambda () (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
    'char
