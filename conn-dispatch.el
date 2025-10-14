@@ -1737,11 +1737,11 @@ to the key binding for that target."
                 (when (conn-dispatch-label-p obj)
                   (throw 'label obj)))
             (progn
-              (ignore (conn-dispatch-read-event "Key"))
+              (ignore (conn-dispatch-read-event "Register"))
               (while t
                 (ignore
                  (conn-dispatch-read-event
-                  "Key" nil nil
+                  "Register" nil nil
                   (propertize "Invalid key" 'face 'error)))))))))
     (conn-delete-targets)))
 
@@ -1852,53 +1852,54 @@ contain targets."
 (cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden)))
 
-(cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
-  (unless (oref state hidden)
-    (conn-protected-let* ((hidden (list (make-overlay (point-min) (point-min)))
-                                  (mapc #'delete-overlay hidden))
-                          (context-lines (oref state context-lines))
-                          (separator-p (if (slot-boundp state 'separator-p)
-                                           (oref state separator-p)
-                                         (> context-lines 0))))
-      (pcase-dolist (`(,win . ,targets) conn-targets)
-        (with-selected-window win
-          (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
-            (save-excursion
-              (dolist (tar targets)
-                (push (or (overlay-get tar 'context)
-                          (progn
-                            (goto-char (overlay-start tar))
-                            (let ((beg (pos-bol (- 1 context-lines)))
-                                  (end (pos-bol (+ 2 context-lines))))
-                              (cons (if (invisible-p end) (max 1 (1- beg)) beg)
-                                    end))))
-                      regions)))
-            (cl-callf conn--merge-overlapping-regions regions t)
-            (conn--compat-callf sort regions :key #'car :in-place t)
-            (cl-loop for beg = (point-min) then next-beg
-                     for (end . next-beg) in regions
-                     while end
-                     do (let ((ov (make-overlay beg end)))
-                          (push ov hidden)
-                          (overlay-put ov 'invisible t)
-                          (overlay-put ov 'window win)
-                          (when (and separator-p (/= end (point-max)))
-                            (overlay-put
-                             (car hidden)
-                             'before-string
-                             (propertize
-                              (format " %s\n"
-                                      (when (memq display-line-numbers
-                                                  '(nil relative visual))
-                                        (line-number-at-pos end)))
-                              'face 'conn-dispatch-context-separator-face))))
-                     finally (let ((ov (make-overlay beg (point-max))))
-                               (push ov hidden)
-                               (overlay-put ov 'window win)
-                               (overlay-put ov 'invisible t))))
-          (recenter nil)))
-      (setf (oref state hidden) hidden)
-      (sit-for 0))))
+(cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-focus-targets))
+  (mapc #'delete-overlay (oref state hidden))
+  (setf (oref state hidden) nil)
+  (conn-protected-let* ((hidden (list (make-overlay (point-min) (point-min)))
+                                (mapc #'delete-overlay hidden))
+                        (context-lines (oref state context-lines))
+                        (separator-p (if (slot-boundp state 'separator-p)
+                                         (oref state separator-p)
+                                       (> context-lines 0))))
+    (pcase-dolist (`(,win . ,targets) conn-targets)
+      (with-selected-window win
+        (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
+          (save-excursion
+            (dolist (tar targets)
+              (push (or (overlay-get tar 'context)
+                        (progn
+                          (goto-char (overlay-start tar))
+                          (let ((beg (pos-bol (- 1 context-lines)))
+                                (end (pos-bol (+ 2 context-lines))))
+                            (cons (if (invisible-p end) (max 1 (1- beg)) beg)
+                                  end))))
+                    regions)))
+          (cl-callf conn--merge-overlapping-regions regions t)
+          (conn--compat-callf sort regions :key #'car :in-place t)
+          (cl-loop for beg = (point-min) then next-beg
+                   for (end . next-beg) in regions
+                   while end
+                   do (let ((ov (make-overlay beg end)))
+                        (push ov hidden)
+                        (overlay-put ov 'invisible t)
+                        (overlay-put ov 'window win)
+                        (when (and separator-p (/= end (point-max)))
+                          (overlay-put
+                           (car hidden)
+                           'before-string
+                           (propertize
+                            (format " %s\n"
+                                    (when (memq display-line-numbers
+                                                '(nil relative visual))
+                                      (line-number-at-pos end)))
+                            'face 'conn-dispatch-context-separator-face))))
+                   finally (let ((ov (make-overlay beg (point-max))))
+                             (push ov hidden)
+                             (overlay-put ov 'window win)
+                             (overlay-put ov 'invisible t))))
+        (recenter nil)))
+    (setf (oref state hidden) hidden)
+    (sit-for 0)))
 
 (defclass conn-dispatch-mark-ring (conn-dispatch-focus-targets
                                    conn-dispatch-target-window-predicate)
@@ -1917,7 +1918,8 @@ contain targets."
       (with-selected-window win
         (let ((points (conn-ring-list conn-mark-ring)))
           (dolist (pt points)
-            (conn-make-target-overlay pt 0)))))))
+            (conn-make-target-overlay pt 0)))))
+    (cl-call-next-method)))
 
 (defclass conn-dispatch-global-mark (conn-dispatch-focus-targets
                                      conn-dispatch-target-window-predicate)
@@ -1939,7 +1941,8 @@ contain targets."
       (with-selected-window win
         (dolist (mk global-mark-ring)
           (when (eq (current-buffer) (marker-buffer mk))
-            (conn-make-target-overlay mk 0)))))))
+            (conn-make-target-overlay mk 0)))))
+    (cl-call-next-method)))
 
 (defclass conn-dispatch-mark-register (conn-dispatch-focus-targets
                                        conn-dispatch-target-window-predicate
@@ -1966,7 +1969,8 @@ contain targets."
                      (eq (current-buffer) (marker-buffer obj)))
             (conn-make-target-overlay
              obj 0
-             :properties `(label-key ,(key-description (vector key))))))))))
+             :properties `(label-key ,(key-description (vector key))))))))
+    (cl-call-next-method)))
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets
                                               conn-dispatch-target-window-predicate)
