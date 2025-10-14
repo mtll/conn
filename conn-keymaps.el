@@ -313,11 +313,11 @@
   "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
   "i" conn-previous-line-remap
-  "J" 'conn-backward-inner-line
+  "J" 'conn-backward-inner-line-dwim
   "j" conn-backward-char-remap
   "K" conn-forward-paragraph-remap
   "k" conn-next-line-remap
-  "L" 'conn-forward-inner-line
+  "L" 'conn-forward-inner-line-dwim
   "l" conn-forward-char-remap
   "M" conn-end-of-defun-remap
   "m" conn-forward-sexp-remap

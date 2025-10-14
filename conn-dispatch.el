@@ -1672,7 +1672,7 @@ Target overlays may override this default by setting the
         conn-target-count 0))
 
 (cl-defgeneric conn-dispatch-update-targets (target-finder)
-  (:method ((target-finder function)) (funcall target-finder)))
+  (:method (target-finder) (funcall target-finder)))
 
 (cl-defgeneric conn-dispatch-cleanup-target-finder (target-finder)
   (:method (_) "Noop" nil))
@@ -4022,6 +4022,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   'conn-dispatch-inner-lines)
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
+  'conn-dispatch-end-of-inner-lines)
+
+(cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line-dwim)))
   'conn-dispatch-end-of-inner-lines)
 
 (provide 'conn-dispatch)

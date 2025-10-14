@@ -220,10 +220,38 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
                do (cl-decf N))
       (back-to-indentation))))
 
+(defun conn-forward-inner-line-dwim (N)
+  "Like `conn-forward-inner-line' but attempts to be more clever."
+  (interactive "p")
+  (cond ((= N 0))
+        ((> 0 N)
+         (conn-backward-inner-line-command (- N)))
+        ((= (point)
+            (progn
+              (conn--end-of-inner-line-1)
+              (point)))
+         (conn-forward-inner-line N))
+        ((= N 1))
+        (t (conn-forward-inner-line N))))
+
 (defun conn-backward-inner-line (N)
   "Inverse of `conn-forward-inner-line'."
   (interactive "p")
   (conn-forward-inner-line (- N)))
+
+(defun conn-backward-inner-line-dwim (N)
+  "Like `conn-backwad-inner-line' but attempts to be more clever."
+  (interactive "p")
+  (cond ((= N 0))
+        ((> 0 N)
+         (conn-backward-inner-line-command (- N)))
+        ((= (point)
+            (progn
+              (back-to-indentation)
+              (point)))
+         (conn-forward-inner-line (- N)))
+        ((= N 1))
+        (t (conn-forward-inner-line (- N)))))
 
 (defun conn-end-of-inner-line (&optional N)
   "Move point to after the last non-whitespace or comment character in line.

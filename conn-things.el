@@ -1275,6 +1275,8 @@ words."))
 
 (conn-register-thing-commands
  'inner-line 'conn-continuous-thing-handler
+ 'conn-forward-inner-line-dwim
+ 'conn-backward-inner-line-dwim
  'back-to-indentation
  'conn-forward-inner-line
  'conn-backward-inner-line
