@@ -238,6 +238,8 @@
   :keymap global-map
   "<conn-region-map>" conn-default-region-map
   "<conn-edit-map>" conn-default-edit-map
+  "<conn-thing-map> >" 'forward-line
+  "<conn-thing-map> <" 'conn-backward-line
   "<conn-thing-map> ;" 'conn-mark-comment
   "<conn-thing-map> V" 'conn-mark-visual-line
   "<conn-thing-map> ," 'conn-goto-line
@@ -295,12 +297,9 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "F" 'conn-register-prefix
   "=" 'conn-repeat-last-complex-command
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
-  ">" 'forward-line
-  "<" 'conn-backward-line
   "o" conn-forward-word-remap
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
@@ -333,7 +332,6 @@
   "<escape>" 'conn-pop-state
   "R" 'conn-emacs-state-overwrite
   "D" 'conn-duplicate
-  "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-separator
   "H" 'conn-expand
   "SPC" conn-edit-remap
@@ -363,6 +361,8 @@
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
   "." 'conn-register-load
+  ">" 'conn-register-load-and-replace
+  "<" 'conn-register-prefix
   "q" 'conn-transpose-things
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command

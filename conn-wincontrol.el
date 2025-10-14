@@ -212,7 +212,8 @@
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
   "o" 'tab-next
-  "p" 'conn-register-prefix
+  ">" 'conn-register-prefix
+  "." 'conn-register-load
   "q" 'quit-window
   "r" 'conn-wincontrol-split-right
   "s" conn-window-resize-map
@@ -754,19 +755,22 @@ Operates with the selected windows parent window."
       (define-keymap
         :keymap conn-wincontrol-map
         "\\" 'window-layout-transpose
-        "," 'rotate-windows-back
-        "." 'rotate-windows
-        "<" 'window-layout-rotate-anticlockwise
-        ">" 'window-layout-rotate-clockwise
         "|" 'window-layout-flip-leftright
         "_" 'window-layout-flip-topdown)
+
+      (define-keymap
+        :keymap conn-window-resize-map
+        "u" 'rotate-windows-back
+        "o" 'rotate-windows
+        "<" 'window-layout-rotate-anticlockwise
+        ">" 'window-layout-rotate-clockwise)
 
       (defvar-keymap conn-window-rotate-repeat-map
         :repeat t
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise
-        "," 'rotate-windows-back
-        "." 'rotate-windows)))
+        "u" 'rotate-windows-back
+        "o" 'rotate-windows)))
 
 (defun conn-kill-this-buffer ()
   (interactive)
