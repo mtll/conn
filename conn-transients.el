@@ -1380,7 +1380,7 @@ A zero means repeat until error."
      ("i" "Increment" increment-register)
      ("l" "List" list-registers)]
    [ :description "Register Store"
-     ("p" "Point" point-to-register)
+     ("j" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
      ("b" "Buffer" buffer-to-register :if (lambda () (<= 31 emacs-major-version)))

@@ -131,7 +131,6 @@
   "n" 'conn-narrow-to-thing)
 
 (defvar-keymap conn-default-edit-map
-  "." 'conn-register-prefix
   "l" 'duplicate-line
   "'" 'conn-kapply-on-thing-prefix
   "v" 'diff-buffer-with-file
@@ -296,6 +295,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "F" 'conn-register-prefix
   "=" 'conn-repeat-last-complex-command
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
