@@ -225,7 +225,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (cond ((= N 0))
         ((> 0 N)
-         (conn-backward-inner-line-command (- N)))
+         (conn-backward-inner-line-dwim (- N)))
         ((= (point)
             (progn
               (conn--end-of-inner-line-1)
@@ -244,7 +244,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (cond ((= N 0))
         ((> 0 N)
-         (conn-backward-inner-line-command (- N)))
+         (conn-backward-inner-line-dwim (- N)))
         ((= (point)
             (progn
               (back-to-indentation)
