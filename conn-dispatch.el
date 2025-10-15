@@ -442,7 +442,8 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-dispatch-mover-state)))
   (setq conn--dispatch-thing-predicate #'always)
   (conn-state-defer
-    (setq conn--dispatch-thing-predicate nil)))
+    (setq conn--dispatch-thing-predicate nil))
+  (cl-call-next-method))
 
 (conn-define-state conn-dispatch-bounds-state (conn-dispatch-mover-state)
   :lighter "DISPATCH"
