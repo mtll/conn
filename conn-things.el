@@ -24,6 +24,8 @@
   (require 'cl-lib))
 
 (declare-function conn--end-of-inner-line-1 "conn-commands")
+(declare-function rectangle--reset-crutches "rect")
+(declare-function rectangle--col-pos "rect")
 
 ;;;; Thing Types
 
@@ -925,7 +927,7 @@ words."))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
-(cl-defmethod conn-bounds-of ((cmd (eql conn-previous-mark-command)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command)) _arg)
   (unless conn-previous-mark-state
     (user-error "No previous mark state"))
   (save-mark-and-excursion
