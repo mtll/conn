@@ -831,7 +831,8 @@ If BUFFER is nil then use the current buffer."
                                         (if (eq hide t) t
                                           (alist-get conn-current-state hide)))
                                       (conn-state-get conn-current-state :disable-mark-cursor))
-        cursor-type (conn-state-get conn-current-state :cursor nil t)))
+        cursor-type (let ((c (conn-state-get conn-current-state :cursor nil t)))
+                      (if (functionp c) (funcall c) c))))
 
 (cl-defgeneric conn-enter-state (state)
   "Enter STATE.
@@ -1079,9 +1080,13 @@ Causes the mode-line face to be remapped to the face specified by the
   "Face for mode-line in a read-thing state."
   :group 'conn-faces)
 
+(defun conn-read-thing-cursor ()
+  `(hbar . ,(floor (default-line-height) 2.5)))
+
 (conn-define-state conn-read-thing-common-state (conn-command-state
                                                  conn-mode-line-face-state)
   "Common elements of thing reading states."
+  :cursor #'conn-read-thing-cursor
   :suppress-input-method t
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
