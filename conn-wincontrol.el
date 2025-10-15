@@ -215,8 +215,8 @@
   ">" 'conn-register-prefix
   "." 'conn-register-load
   "q" 'quit-window
-  "r" 'conn-wincontrol-split-right
-  "s" conn-window-resize-map
+  "s" 'conn-wincontrol-split-right
+  "r" conn-window-resize-map
   "t" 'conn-transpose-window
   "u" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
