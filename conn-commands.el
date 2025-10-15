@@ -1825,6 +1825,19 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (when fixup-whitespace
        (funcall conn-kill-fixup-whitespace-function bounds)))))
 
+(cl-defmethod conn-perform-kill ( (cmd (conn-thing region))
+                                  arg transform
+                                  &optional
+                                  append
+                                  delete
+                                  register
+                                  fixup-whitespace)
+  (pcase (conn-bounds-of cmd arg)
+    ((and (conn-bounds-get :subregions transform)
+          (conn-bounds `(,beg . ,end) transform))
+     (apply-on-rectangle 'delete-extract-rectangle-line beg end subregions nil))
+    (_ (cl-call-next-method))))
+
 ;;;;; Copy Thing
 
 (conn-define-state conn-copy-state (conn-read-thing-state)

@@ -925,6 +925,23 @@ words."))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
+(cl-defmethod conn-bounds-of ((cmd (eql conn-previous-mark-command)) _arg)
+  (unless conn-previous-mark-state
+    (user-error "No previous mark state"))
+  (save-mark-and-excursion
+    (goto-char (nth 0 conn-previous-mark-state))
+    (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state)
+                               nil t)
+    (pcase (nth 2 conn-previous-mark-state)
+      (`(,pc . ,mc)
+       (rectangle-mark-mode 1)
+       (rectangle--reset-crutches)
+       (save-excursion
+         (goto-char (mark))
+         (rectangle--col-pos mc 'mark))
+       (rectangle--col-pos pc 'point)))
+    (conn-bounds-of 'region nil)))
+
 ;;;;; Bounds of Remote Thing
 
 (cl-defgeneric conn-bounds-of-remote (cmd arg pt)
