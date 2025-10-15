@@ -1828,14 +1828,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-perform-kill ( (cmd (conn-thing region))
                                   arg transform
                                   &optional
-                                  append
+                                  _append
                                   delete
                                   register
-                                  fixup-whitespace)
+                                  _fixup-whitespace)
   (pcase (conn-bounds-of cmd arg)
-    ((and (conn-bounds-get :subregions transform)
+    ((and (conn-bounds-get :subregions nil _)
           (conn-bounds `(,beg . ,end) transform))
-     (apply-on-rectangle 'delete-extract-rectangle-line beg end subregions nil))
+     (cond (register (copy-rectangle-to-register register beg end t))
+           (delete (delete-rectangle beg end))
+           (t (kill-rectangle beg end))))
     (_ (cl-call-next-method))))
 
 ;;;;; Copy Thing
