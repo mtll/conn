@@ -3350,6 +3350,33 @@ contain targets."
             (when-let* ((macro (oref action macro)))
               (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
 
+(oclosure-define (conn-dispatch-repeat-command
+                  (:parent conn-action))
+  (command :type list))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-repeat-command)))
+  (when command-history
+    (oclosure-lambda (conn-dispatch-repeat-command
+                      (command (car command-history))
+                      (window-predicate
+                       (lambda (win)
+                         (not (buffer-local-value 'buffer-read-only
+                                                  (window-buffer win))))))
+        (window pt thing thing-arg transform)
+      (with-selected-window window
+        (conn-dispatch-loop-undo-boundary)
+        (save-mark-and-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((conn-bounds `(,beg . ,end) transform)
+             (goto-char (if conn-dispatch-other-end end beg))
+             (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
+             (eval command))))))))
+
+(cl-defmethod conn-describe-action ((action conn-dispatch-repeat-command) &optional short)
+  (if short "Repeat Cmd"
+    (format "Repeat <%s>" (car (oref action command)))))
+
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 

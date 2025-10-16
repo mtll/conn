@@ -481,6 +481,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "=" 'conn-dispatch-repeat-command
   "'" 'conn-dispatch-kapply
   "RET" 'conn-repeat-last-dispatch
   "t" 'conn-dispatch-copy
