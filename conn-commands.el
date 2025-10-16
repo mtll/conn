@@ -1875,10 +1875,59 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
 
+;;;;; Comment Thing
+
+(conn-define-state conn-comment-state (conn-read-thing-state)
+  :lighter "COMMENT")
+
+(cl-defmethod conn-perform-comment (thing thing-arg transform)
+  (declare (conn-anonymous-thing-property :comment-op))
+  ( :method (thing arg transform)
+    (if-let* ((comment-op (conn-anonymous-thing-property cmd :comment-op)))
+        (funcall comment-op arg transform)
+      (conn-perform-comment))))
+
+(cl-defmethod conn-perform-comment (thing thing-arg transform)
+  (pcase (conn-bounds-of thing thing-arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (comment-or-uncomment-region beg end))))
+
+(defun conn-comment-thing (thing thing-arg transform)
+  (interactive
+   (conn-eval-with-state 'conn-comment-state
+       (list && (conn-thing-argument-dwim t)
+             & (conn-transform-argument))
+     :prompt "Thing"))
+  (conn-perform-comment thing thing-arg transform))
+
 ;;;;; Duplicate Thing
 
 (conn-define-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-duplicate-state)
+  "c" 'copy-from-above-command)
+
+(oclosure-define (conn-duplicate-thing
+                  (:parent conn-thing-argument)))
+
+(cl-defmethod conn-argument-predicate ((arg conn-duplicate-thing)
+                                       (cmd (eql copy-from-above-command)))
+  t)
+
+(defun conn-duplicate-thing-argument ()
+  (oclosure-lambda (conn-duplicate-thing
+                    (value (when (use-region-p)
+                             (list 'region nil)))
+                    (set-flag (use-region-p))
+                    (required t)
+                    (recursive-edit t))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-state-eval-consume-prefix-arg)))
+      self)))
 
 (cl-defgeneric conn-perform-duplicate (cmd arg transform)
   (declare (conn-anonymous-thing-property :duplicate-op))
@@ -1900,13 +1949,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (insert-before-markers padding))
            (goto-char beg)))))))
 
+(cl-defmethod conn-perform-duplicate ((cmd (eql copy-from-above-command))
+                                      arg _transform)
+  (copy-from-above-command))
+
 (defun conn-duplicate (thing-mover thing-arg thing-transform)
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
   (interactive
    (conn-eval-with-state 'conn-duplicate-state
-       (list && (conn-thing-argument-dwim t)
+       (list && (conn-duplicate-thing-argument)
              & (conn-transform-argument))
      :prompt "Thing"))
   (conn-perform-duplicate thing-mover thing-arg thing-transform))
