@@ -31,7 +31,6 @@
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace
   "*" 'calc-grab-region
-  "C-j" 'conn-join-lines-in-region
   "v" 'rectangle-mark-mode
   "V" 'undefined
   "g" 'conn-surround
@@ -85,6 +84,7 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
+  "<conn-region-map> '" 'conn-kapply-on-rectangle-prefix
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
@@ -112,29 +112,23 @@
 (defvar-keymap conn-default-region-map
   "m" 'conn-replace
   "u" 'conn-regexp-replace
-  "'" 'conn-kapply-on-region-prefix
+  "'" 'conn-kapply-on-thing-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
-  ";" 'comment-or-uncomment-region
+  ";" 'conn-comment-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "RET" 'conn-join-lines
-  "p" 'conn-sort-prefix
+  "j" 'conn-join-lines
   "o" 'conn-occur-region
-  "h" 'vc-region-history
+  "V" 'vc-region-history
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
-  "y" 'yank-rectangle
-  "DEL" 'clear-rectangle
   "N" 'conn-narrow-indirect
   "n" 'conn-narrow-to-thing)
 
 (defvar-keymap conn-default-edit-map
-  "l" 'duplicate-line
-  "'" 'conn-kapply-on-thing-prefix
   "v" 'diff-buffer-with-file
-  "F" 'conn-bind-last-dispatch-to-key
   "SPC" 'whitespace-cleanup
   "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
@@ -143,8 +137,10 @@
   "k" 'conn-emacs-state-open-line
   "d" 'conn-duplicate
   "D" 'conn-duplicate-and-comment
-  "c" 'copy-from-above-command
   "y" 'yank-in-context
+  "s" 'conn-sort-prefix
+  "r" 'yank-rectangle
+  "DEL" 'clear-rectangle
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -276,6 +272,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "<escape>" 'keyboard-quit
+  "C-g" 'keyboard-quit
   "M-h" 'conn-mark-heading
   "C-s" 'isearch-forward
   "s" 'isearch-forward
@@ -297,6 +295,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "F" 'conn-bind-last-dispatch-to-key
   "=" 'conn-repeat-last-complex-command
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix

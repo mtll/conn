@@ -927,8 +927,8 @@ A zero means repeat until error."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix nil nil :scope arg))
 
-;;;###autoload (autoload 'conn-kapply-on-region-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kapply-on-region-prefix (arg)
+;;;###autoload (autoload 'conn-kapply-on-rectangle-prefix "conn-transients" nil t)
+(transient-define-prefix conn-kapply-on-rectangle-prefix (arg)
   "Transient menu for keyboard macro application on regions."
   [ :description conn--kmacro-ring-display
     [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
@@ -975,7 +975,7 @@ A zero means repeat until error."
       (conn--kapply-save-excursion-infix)]]
   (interactive "P")
   (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-on-region-prefix nil nil :scope arg))
+  (transient-setup 'conn-kapply-on-rectangle-prefix nil nil :scope arg))
 
 ;;;###autoload (autoload 'conn-kapply-on-thing-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-on-thing-prefix (arg)
