@@ -1837,7 +1837,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   register
                                   _fixup-whitespace)
   (pcase (conn-bounds-of cmd arg)
-    ((and (conn-bounds-get :subregions nil _)
+    ((and (conn-bounds-get :subregions nil
+                           (and r (guard (length> r 1))))
           (conn-bounds `(,beg . ,end) transform))
      (cond (register (copy-rectangle-to-register register beg end t))
            (delete (delete-rectangle beg end))
