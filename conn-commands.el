@@ -1531,6 +1531,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-kill-state)
+  "j" 'move-end-of-line)
+
 (oclosure-define (conn-kill-argument
                   (:parent conn-thing-argument)))
 
@@ -1845,6 +1849,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-copy-state (conn-read-thing-state)
   :lighter "COPY")
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-copy-state)
+  "j" 'move-end-of-line)
+
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
   (interactive
@@ -1880,10 +1888,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-comment-state (conn-read-thing-state)
   :lighter "COMMENT")
 
-(cl-defmethod conn-perform-comment (thing thing-arg transform)
+(cl-defgeneric conn-perform-comment (thing thing-arg transform)
   (declare (conn-anonymous-thing-property :comment-op))
   ( :method (thing arg transform)
-    (if-let* ((comment-op (conn-anonymous-thing-property cmd :comment-op)))
+    (if-let* ((comment-op (conn-anonymous-thing-property thing :comment-op)))
         (funcall comment-op arg transform)
       (conn-perform-comment))))
 
@@ -1912,8 +1920,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (oclosure-define (conn-duplicate-thing
                   (:parent conn-thing-argument)))
 
-(cl-defmethod conn-argument-predicate ((arg conn-duplicate-thing)
-                                       (cmd (eql copy-from-above-command)))
+(cl-defmethod conn-argument-predicate ((_arg conn-duplicate-thing)
+                                       (_cmd (eql copy-from-above-command)))
   t)
 
 (defun conn-duplicate-thing-argument ()
@@ -1949,9 +1957,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (insert-before-markers padding))
            (goto-char beg)))))))
 
-(cl-defmethod conn-perform-duplicate ((cmd (eql copy-from-above-command))
+(cl-defmethod conn-perform-duplicate ((_cmd (eql copy-from-above-command))
                                       arg _transform)
-  (copy-from-above-command))
+  (copy-from-above-command arg))
 
 (defun conn-duplicate (thing-mover thing-arg thing-transform)
   "Duplicate the region defined by a thing command.

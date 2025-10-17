@@ -414,7 +414,7 @@ words."))
                   (:parent conn-state-eval-argument)))
 
 (defvar-keymap conn-check-bounds-argument-map
-  "C-u" 'check-bounds)
+  "!" 'check-bounds)
 
 (defun conn-check-bounds-argument (&optional value)
   (declare (important-return-value t)
