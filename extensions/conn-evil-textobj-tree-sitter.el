@@ -46,7 +46,6 @@
 (conn-register-thing 'conn-etts-thing)
 
 (defmacro conn-etts-define-thing (name group &optional query)
-  "See `evil-textobj-tree-sitter-get-textobj'."
   (declare (indent defun))
   `(progn
      (put ',name
@@ -56,7 +55,7 @@
                             :query ,(macroexp-quote query)))
      (conn-register-thing ',name
                           :parent 'conn-etts-thing)
-     (defun ,name (&optional arg)
+     (defun ,(intern (format "%s-mark" name)) (&optional arg)
        (interactive "p")
        (pcase (conn-bounds-of ',name arg)
          ((conn-bounds `(,beg . ,end))
@@ -106,37 +105,37 @@
 (conn-etts-define-thing conn-etts-statement "statement.outer")
 
 (defvar-keymap conn-etts-things-mode-map
-  "<conn-thing-map> w i" 'conn-etts-assignment-inner
-  "<conn-thing-map> w l" 'conn-etts-assignment-lhs
-  "<conn-thing-map> w o" 'conn-etts-assignment-outer
-  "<conn-thing-map> w r" 'conn-etts-assignment-rhs
-  "<conn-thing-map> @ i" 'conn-etts-attribute-inner
-  "<conn-thing-map> @ o" 'conn-etts-attribute-outer
-  "<conn-thing-map> b i" 'conn-etts-block-inner
-  "<conn-thing-map> b o" 'conn-etts-block-outer
-  "<conn-thing-map> . i" 'conn-etts-call-inner
-  "<conn-thing-map> . o" 'conn-etts-call-outer
-  "<conn-thing-map> C i" 'conn-etts-class-inner
-  "<conn-thing-map> C o" 'conn-etts-class-outer
-  "<conn-thing-map> c i" 'conn-etts-comment-inner
-  "<conn-thing-map> c o" 'conn-etts-comment-outer
-  "<conn-thing-map> q i" 'conn-etts-conditional-inner
-  "<conn-thing-map> q o" 'conn-etts-conditional-outer
-  "<conn-thing-map> [ i" 'conn-etts-frame-inner
-  "<conn-thing-map> [ o" 'conn-etts-frame-outer
-  "<conn-thing-map> f i" 'conn-etts-function-inner
-  "<conn-thing-map> f o" 'conn-etts-function-outer
-  "<conn-thing-map> r i" 'conn-etts-loop-inner
-  "<conn-thing-map> r o" 'conn-etts-loop-outer
-  "<conn-thing-map> n" 'conn-etts-number
-  "<conn-thing-map> d i" 'conn-etts-parameter-inner
-  "<conn-thing-map> d o" 'conn-etts-parameter-outer
-  "<conn-thing-map> x i" 'conn-etts-regex-inner
-  "<conn-thing-map> x o" 'conn-etts-regex-outer
-  "<conn-thing-map> t i" 'conn-etts-return-inner
-  "<conn-thing-map> t o" 'conn-etts-return-outer
-  "<conn-thing-map> S" 'conn-etts-scopename
-  ;; "<conn-thing-map> t" 'conn-etts-statement
+  "<conn-thing-map> w i" 'conn-etts-assignment-inner-mark
+  "<conn-thing-map> w l" 'conn-etts-assignment-lhs-mark
+  "<conn-thing-map> w o" 'conn-etts-assignment-outer-mark
+  "<conn-thing-map> w r" 'conn-etts-assignment-rhs-mark
+  "<conn-thing-map> @ i" 'conn-etts-attribute-inner-mark
+  "<conn-thing-map> @ o" 'conn-etts-attribute-outer-mark
+  "<conn-thing-map> b i" 'conn-etts-block-inner-mark
+  "<conn-thing-map> b o" 'conn-etts-block-outer-mark
+  "<conn-thing-map> . i" 'conn-etts-call-inner-mark
+  "<conn-thing-map> . o" 'conn-etts-call-outer-mark
+  "<conn-thing-map> C i" 'conn-etts-class-inner-mark
+  "<conn-thing-map> C o" 'conn-etts-class-outer-mark
+  "<conn-thing-map> c i" 'conn-etts-comment-inner-mark
+  "<conn-thing-map> c o" 'conn-etts-comment-outer-mark
+  "<conn-thing-map> q i" 'conn-etts-conditional-inner-mark
+  "<conn-thing-map> q o" 'conn-etts-conditional-outer-mark
+  "<conn-thing-map> [ i" 'conn-etts-frame-inner-mark
+  "<conn-thing-map> [ o" 'conn-etts-frame-outer-mark
+  "<conn-thing-map> f i" 'conn-etts-function-inner-mark
+  "<conn-thing-map> f o" 'conn-etts-function-outer-mark
+  "<conn-thing-map> r i" 'conn-etts-loop-inner-mark
+  "<conn-thing-map> r o" 'conn-etts-loop-outer-mark
+  "<conn-thing-map> n" 'conn-etts-number-mark
+  "<conn-thing-map> d i" 'conn-etts-parameter-inner-mark
+  "<conn-thing-map> d o" 'conn-etts-parameter-outer-mark
+  "<conn-thing-map> x i" 'conn-etts-regex-inner-mark
+  "<conn-thing-map> x o" 'conn-etts-regex-outer-mark
+  "<conn-thing-map> t i" 'conn-etts-return-inner-mark
+  "<conn-thing-map> t o" 'conn-etts-return-outer-mark
+  "<conn-thing-map> S" 'conn-etts-scopename-mark
+  ;; "<conn-thing-map> t" 'conn-etts-statement-mark
   )
 
 (define-minor-mode conn-etts-things-mode
