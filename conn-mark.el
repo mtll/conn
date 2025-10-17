@@ -222,14 +222,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (handler
                    (or (conn-command-mark-handler this-command)
                        (conn-command-mark-handler real-this-command))))
-        (with-demoted-errors "Error in Mark Handler: %s"
+        (ignore-errors
           (funcall handler conn-this-command-start)))
       (unless (or conn--movement-ring-rotating
                   mark-active
                   (null conn--movement-mark)
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
-        (with-demoted-errors "Error in Movement Ring: %s"
+        (with-demoted-errors "Error pushing movement ring: %s"
           (conn-push-movement-ring (point) (mark t)))))))
 
 (defun conn--setup-mark ()

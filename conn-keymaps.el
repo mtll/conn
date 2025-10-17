@@ -346,7 +346,6 @@
   "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
-  ;; "SPC" (conn-remap-key conn-delete-char-keys t)
   "M-y" 'conn-completing-yank-replace
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window

@@ -73,7 +73,6 @@ execution."
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
 (defun conn-repeat-last-complex-command ()
-  ;; TODO: maybe make this only repeat conn operators?
   (interactive)
   (if-let* ((last-repeatable-command (caar command-history)))
       (repeat nil)
