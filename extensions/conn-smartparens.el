@@ -23,7 +23,6 @@
 (require 'conn-commands)
 (require 'conn-surround)
 (require 'smartparens)
-(require 'thingatpt)
 
 (defun conn-sp-forward-sexp-op (arg)
   (let ((backward (< arg 0))
@@ -224,7 +223,7 @@
                                        (_sym (eql sp-convolve-sexp)))
   t)
 
-(cl-defmethod conn-perform-transpose ((cmd (eql sp-convolve-sexp)) arg)
+(cl-defmethod conn-perform-transpose ((_cmd (eql sp-convolve-sexp)) arg)
   (sp-convolute-sexp arg))
 
 (put 'conn-sp-pair :conn-thing t)
@@ -261,18 +260,19 @@
                           (cons (+ beg (length open))
                                 (- end (length close)))))))))))
 
-(cl-defmethod conn-perform-surround ((_with (eql conn-sp-pair))
-                                     _arg &key &allow-other-keys)
-  (sp-wrap-with-pair
-   (with-memoization conn--surround-current-pair
-     (funcall conn-read-pair-function
-              (cl-loop for pair in sp-local-pairs
-                       collect (plist-get pair :open))))))
+(cl-defstruct (conn-surround-sp-pair
+               (:constructor conn--make-surround-sp-pair (id)))
+  id)
 
-(cl-defmethod conn-perform-surround :around ((_with (eql conn-sp-pair))
-                                             _arg &key &allow-other-keys)
-  (let ((conn--surround-current-pair nil))
-    (cl-call-next-method)))
+(cl-defmethod conn-handle-surround-with-argument ((_cmd (eql conn-sp-pair)))
+  (conn--make-surround-sp-pair
+   (funcall conn-read-pair-function
+            (cl-loop for pair in sp-local-pairs
+                     collect (plist-get pair :open)))))
+
+(cl-defmethod conn-perform-surround ((with conn-surround-sp-pair)
+                                     _arg &key &allow-other-keys)
+  (sp-wrap-with-pair (conn-surround-sp-pair-id with)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
                                        (_sym (eql conn-sp-pair)))
@@ -290,7 +290,7 @@
 (defun conn-smartparens-check-region ()
   (if smartparens-mode
       (cl-pushnew 'conn-sp-region-ok-p conn-check-bounds-functions)
-    (cl-callf2 deql 'conn-sp-region-ok-p conn-check-bounds-functions)))
+    (cl-callf2 delq 'conn-sp-region-ok-p conn-check-bounds-functions)))
 (add-hook 'smartparens-mode-hook 'conn-smartparens-check-region)
 
 ;;;###autoload

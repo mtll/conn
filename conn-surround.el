@@ -179,11 +179,15 @@
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list (if (eq cmd 'surround-self-insert)
-                        (conn--self-insert last-input-event)
-                      cmd)
+         self (list (conn-handle-surround-with-argument cmd)
                     (conn-state-eval-consume-prefix-arg)))
       self)))
+
+(cl-defgeneric conn-handle-surround-with-argument (cmd)
+  ( :method (cmd) cmd))
+
+(cl-defmethod conn-handle-surround-with-argument ((_cmd (eql surround-self-insert)))
+  (conn--self-insert last-input-event))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
                                        sym)
@@ -351,6 +355,10 @@
 
 ;;;;;; Surround Read Pair
 
+(cl-defstruct (conn-surround-pair
+               (:constructor conn--make-surround-pair (id)))
+  id)
+
 (defvar conn-read-pair-function 'conn-progressive-read-pair)
 
 (defun conn-progressive-read-pair (collection)
@@ -414,26 +422,22 @@
                                        (_sym (eql conn-read-pair)))
   t)
 
-(defvar conn--surround-current-pair nil)
+(cl-defmethod conn-handle-surround-with-argument ((_cmd (eql conn-read-pair)))
+  (conn--make-surround-pair
+   (funcall conn-read-pair-function
+            (cl-loop for (open . _) in insert-pair-alist
+                     collect (pcase open
+                               ((pred stringp) open)
+                               (_ (string open)))))))
 
-(cl-defmethod conn-perform-surround ((_with (eql conn-read-pair)) arg
+(cl-defmethod conn-perform-surround ((with conn-surround-pair) arg
                                      &key padding &allow-other-keys)
   (conn--perform-surround-with-pair-subr
-   (with-memoization conn--surround-current-pair
-     (let ((open (funcall conn-read-pair-function
-                          (cl-loop for (open . _) in insert-pair-alist
-                                   collect (pcase open
-                                             ((pred stringp) open)
-                                             (_ (string open)))))))
-       (or (assoc open insert-pair-alist)
-           (assq (aref open 0) insert-pair-alist))))
+   (let ((open (conn-surround-pair-id with)))
+     (or (assoc open insert-pair-alist)
+         (assq (aref open 0) insert-pair-alist)))
    padding
    arg))
-
-(cl-defmethod conn-perform-surround :around ((_with (eql conn-read-pair))
-                                             _arg &keys &allow-other-keys)
-  (let ((conn--surround-current-pair nil))
-    (cl-call-next-method)))
 
 ;;;;;; Change Surround
 
