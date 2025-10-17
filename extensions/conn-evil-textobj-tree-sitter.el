@@ -29,7 +29,8 @@
   (query nil :type list))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
-  (cl-loop with thing = (get cmd :conn-etts-thing)
+  (cl-loop with thing = (get (or (get cmd :conn-command-thing) cmd)
+                             :conn-etts-thing)
            with nodes = (evil-textobj-tree-sitter--get-within-and-after
                          (conn--etts-thing-group thing)
                          (prefix-numeric-value arg)
@@ -47,30 +48,32 @@
 
 (defmacro conn-etts-define-thing (name group &optional query)
   (declare (indent defun))
-  `(progn
-     (put ',name
-          :conn-etts-thing (conn--make-etts-thing
-                            :group (mapcar #'intern
-                                           (ensure-list ,(macroexp-quote group)))
-                            :query ,(macroexp-quote query)))
-     (conn-register-thing ',name
-                          :parent 'conn-etts-thing)
-     (defun ,(intern (format "%s-mark" name)) (&optional arg)
-       (interactive "p")
-       (pcase (conn-bounds-of ',name arg)
-         ((conn-bounds `(,beg . ,end))
-          (cond ((not (region-active-p))
-                 (goto-char beg)
-                 (conn--push-ephemeral-mark end))
-                ((= (point) (mark))
-                 (pcase (car (read-multiple-choice
-                              "Mark"
-                              '((?a "after point")
-                                (?b "before point"))))
-                   (?e (goto-char end))
-                   (?b (goto-char beg))))
-                ((> (point) (mark)) (goto-char end))
-                (t (goto-char beg))))))))
+  (let ((mark-cmd (intern (format "%s-mark" name))))
+    `(progn
+       (put ',name
+            :conn-etts-thing (conn--make-etts-thing
+                              :group (mapcar #'intern
+                                             (ensure-list ,(macroexp-quote group)))
+                              :query ,(macroexp-quote query)))
+       (conn-register-thing ',name
+                            :parent 'conn-etts-thing)
+       (defun ,mark-cmd (&optional arg)
+         (interactive "p")
+         (pcase (conn-bounds-of ',name arg)
+           ((conn-bounds `(,beg . ,end))
+            (cond ((not (region-active-p))
+                   (goto-char beg)
+                   (conn--push-ephemeral-mark end))
+                  ((= (point) (mark))
+                   (pcase (car (read-multiple-choice
+                                "Mark"
+                                '((?a "after point")
+                                  (?b "before point"))))
+                     (?e (goto-char end))
+                     (?b (goto-char beg))))
+                  ((> (point) (mark)) (goto-char end))
+                  (t (goto-char beg))))))
+       (conn-register-thing-commands ',name 'ignore ',mark-cmd))))
 
 (conn-etts-define-thing conn-etts-assignment-inner "assignment.inner")
 (conn-etts-define-thing conn-etts-assignment-lhs "assignment.lhs")
