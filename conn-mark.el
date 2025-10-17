@@ -60,27 +60,6 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 (defun conn-set-command-mark-handler (command handler)
   (put command :conn-mark-handler handler))
 
-(defun conn-symbol-handler (beg)
-  "Mark handler for symbols."
-  (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
-    (cond ((not (derived-mode-p 'prog-mode))
-           (conn-continuous-thing-handler beg))
-          ((and (conn--point-in-comment-or-string-p)
-                (save-excursion
-                  (goto-char beg)
-                  (conn--point-in-comment-or-string-p)))
-           (conn-continuous-thing-handler beg))
-          ((or (conn--point-in-comment-or-string-p)
-               (save-excursion
-                 (goto-char beg)
-                 (conn--point-in-comment-or-string-p)))
-           (conn-discrete-thing-handler beg))
-          ((equal list (save-excursion
-                         (goto-char beg)
-                         (bounds-of-thing-at-point 'list)))
-           (conn-continuous-thing-handler beg))
-          ((conn-discrete-thing-handler beg)))))
-
 (defun conn-continuous-thing-handler (beg)
   "Mark the things which have been moved over."
   (ignore-errors

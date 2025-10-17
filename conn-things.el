@@ -616,20 +616,23 @@ words."))
 
 (pcase-defmacro conn-bounds-get (property &optional transform pat)
   (static-if (< emacs-major-version 30)
-      `(app (lambda (v) (conn-bounds-get ,property v ,transform))
-            ,(or pat (if (keywordp property)
-                         (intern (substring (symbol-name property) 1))
-                       property)))
-    `(app (conn-bounds-get _ ,property ,transform)
-          ,(or pat (if (keywordp property)
-                       (intern (substring (symbol-name property) 1))
-                     property)))))
+      `(and (pred conn-bounds-p)
+            (app (lambda (v) (conn-bounds-get ,property v ,transform))
+                 ,(or pat (if (keywordp property)
+                              (intern (substring (symbol-name property) 1))
+                            property))))
+    `(and (pred conn-bounds-p)
+          (app (conn-bounds-get _ ,property ,transform)
+               ,(or pat (if (keywordp property)
+                            (intern (substring (symbol-name property) 1))
+                          property))))))
 
 (pcase-defmacro conn-bounds (pattern &optional transform)
-  `(app ,(static-if (< emacs-major-version 30)
-             `(pcase--flip conn-bounds ,transform)
-           `(conn-bounds _ ,transform))
-        ,pattern))
+  `(and (pred conn-bounds-p)
+        (app ,(static-if (< emacs-major-version 30)
+                  `(pcase--flip conn-bounds ,transform)
+                `(conn-bounds _ ,transform))
+             ,pattern)))
 
 (defun conn-transform-bounds (bounds transforms)
   (catch 'break
@@ -1170,7 +1173,7 @@ words."))
  'forward-char 'backward-char)
 
 (conn-register-thing-commands
- 'word 'conn-symbol-handler
+ 'word 'conn-continuous-thing-handler
  'forward-word 'backward-word
  'upcase-word 'downcase-word 'capitalize-word
  'upcase-dwim 'downcase-dwim 'capitalize-dwim)
