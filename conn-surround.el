@@ -30,6 +30,10 @@
 
 ;;;;; Bounds
 
+(cl-defstruct (conn-self-insert-event
+               (:constructor conn--self-insert (id)))
+  id)
+
 (keymap-set (conn-get-state-map 'conn-read-thing-state)
             "g" 'conn-surround)
 
@@ -73,13 +77,15 @@
         bounds
       (conn-bounds-get bounds property))))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql surround-self-insert)) arg)
+(cl-defmethod conn-bounds-of ((cmd conn-self-insert-event) arg)
   (catch 'return
     (save-mark-and-excursion
-      (pcase-let* (((or `(,_cmd ,open ,close)
+      (pcase-let* (((cl-struct conn-self-insert-event id)
+                    cmd)
+                   ((or `(,_cmd ,open ,close)
                         `(,open ,close))
-                    (or (assoc last-input-event insert-pair-alist)
-                        (list last-input-event last-input-event)))
+                    (or (assoc id insert-pair-alist)
+                        (list id id)))
                    (n (prefix-numeric-value arg)))
         (conn--push-ephemeral-mark)
         (pcase-dolist (`(,beg . ,end)
@@ -173,7 +179,10 @@
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list (if (eq cmd 'surround-self-insert)
+                        (conn--self-insert last-input-event)
+                      cmd)
+                    (conn-state-eval-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
@@ -250,10 +259,10 @@
          (ins-pair open close))))
     (when padding (ins-pair padding))))
 
-(cl-defmethod conn-perform-surround ((_with (eql surround-self-insert)) arg
+(cl-defmethod conn-perform-surround ((with conn-self-insert-event) arg
                                      &key padding &allow-other-keys)
   (conn--perform-surround-with-pair-subr
-   (assoc last-input-event insert-pair-alist)
+   (assoc (conn-self-insert-event-id with) insert-pair-alist)
    padding arg))
 
 (defun conn--make-surround-region (beg end)
@@ -289,21 +298,24 @@
   (interactive "P")
   (atomic-change-group
     (save-mark-and-excursion
-      (pcase-let* ((`(,regions . ,prep-keys)
+      (pcase-let* ((prep-args
                     (conn-eval-with-state 'conn-surround-thing-state
-                        (conn-prepare-surround
+                        (list
                          && (conn-thing-argument-dwim t)
                          & (conn-transform-argument)
                          :subregions & (conn-subregions-argument
                                         (use-region-p)))
                       :prompt "Surround"
                       :prefix arg))
+                   (`(,regions . ,prep-keys)
+                    (apply #'conn-prepare-surround prep-args))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
         (when regions
           (goto-char (overlay-start (car regions))))
         (unwind-protect
-            (pcase-let ((`(,with ,with-arg . ,with-keys)
+            (pcase-let (((and `(,with ,with-arg . ,with-keys)
+                              with-args)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
                            (conn-eval-with-state 'conn-surround-with-state
                                (list && (conn-surround-with-argument)
@@ -311,10 +323,31 @@
                              :prompt "Surround With"))))
               (apply #'conn-perform-surround
                      `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
+              (add-to-history
+               'command-history
+               `(conn-previous-surround ',(cons prep-args with-args)))
               (setq success t))
           (mapc #'delete-overlay regions)
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
+
+(defun conn-previous-surround (data)
+  (pcase-let* ((`(,prep-args . (,with ,with-arg . ,with-keys))
+                data)
+               (`(,regions . ,prep-keys)
+                (apply #'conn-prepare-surround prep-args))
+               (cleanup (plist-get prep-keys :cleanup))
+               (success nil))
+    (when regions
+      (goto-char (overlay-start (car regions))))
+    (unwind-protect
+        (progn
+          (apply #'conn-perform-surround
+                 `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
+          (setq success t))
+      (mapc #'delete-overlay regions)
+      (when cleanup
+        (funcall cleanup (if success :accept :cancel))))))
 
 ;;;;;; Surround Read Pair
 
@@ -455,20 +488,43 @@
                                    &optional _kill)
   (save-mark-and-excursion
     (atomic-change-group
-      (pcase-let* ((`(,ov . ,prep-keys)
+      (pcase-let* ((prev-change
                     (conn-eval-with-state 'conn-change-surround-state
-                        (conn-prepare-change-surround
-                         && (conn-change-surround-argument))
+                        (list && (conn-change-surround-argument))
                       :prompt "Change Surrounding"))
+                   (`(,ov . ,prep-keys)
+                    (apply #'conn-prepare-change-surround prev-change))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
         (unwind-protect
-            (pcase-let ((`(,with ,with-arg . ,with-keys)
+            (pcase-let (((and `(,with ,with-arg . ,with-keys)
+                              prev-with)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
                            (conn-eval-with-state 'conn-surround-with-state
                                (list && (conn-surround-with-argument)
                                      :padding & (conn-surround-padding-argument))
                              :prompt "Surround With"))))
+              (apply #'conn-perform-surround
+                     `(,with ,with-arg :regions ,(list ov) ,@prep-keys ,@with-keys))
+              (add-to-history
+               'command-history
+               `(conn-previous-change-surround ',(cons prev-change prev-with)))
+              (setq success t))
+          (delete-overlay ov)
+          (when cleanup
+            (funcall cleanup (if success :accept :cancel))))))))
+
+(defun conn-previous-change-surround (data)
+  (save-mark-and-excursion
+    (atomic-change-group
+      (pcase-let* ((`(,prev-change . (,with ,with-arg . ,with-keys))
+                    data)
+                   (`(,ov . ,prep-keys)
+                    (apply #'conn-prepare-change-surround prev-change))
+                   (cleanup (plist-get prep-keys :cleanup))
+                   (success nil))
+        (unwind-protect
+            (progn
               (apply #'conn-perform-surround
                      `(,with ,with-arg :regions ,(list ov) ,@prep-keys ,@with-keys))
               (setq success t))
