@@ -58,7 +58,7 @@
                           :parent 'conn-etts-thing)
      (defun ,name (&optional arg)
        (interactive "p")
-       (pcase (ignore-errors (conn-bounds-of ',name arg))
+       (pcase (conn-bounds-of ',name arg)
          ((conn-bounds `(,beg . ,end))
           (cond ((not (region-active-p))
                  (goto-char beg)
