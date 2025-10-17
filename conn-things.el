@@ -188,15 +188,19 @@ order to mark the region that should be defined by any of COMMANDS."
        (interactive)
        (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
          (`(,beg . ,end)
-          (if ,(unless ignore-mark-active '(region-active-p))
-              (pcase (car (read-multiple-choice
-                           "Mark"
-                           '((?a "after point")
-                             (?b "before point"))))
-                (?e (goto-char end))
-                (?b (goto-char beg)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)))))
+          (cond ((or ,ignore-mark-active
+                     (not (region-active-p)))
+                 (goto-char beg)
+                 (conn--push-ephemeral-mark end))
+                ((= (point) (mark))
+                 (pcase (car (read-multiple-choice
+                              "Mark"
+                              '((?a "after point")
+                                (?b "before point"))))
+                   (?e (goto-char end))
+                   (?b (goto-char beg))))
+                ((> (point) (mark)) (goto-char end))
+                (t (goto-char beg))))))
      (conn-register-thing-commands ',thing 'ignore ',name)))
 
 (defun conn-get-thing (thing)

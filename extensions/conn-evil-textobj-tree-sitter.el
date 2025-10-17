@@ -60,15 +60,18 @@
        (interactive "p")
        (pcase (ignore-errors (conn-bounds-of ',name arg))
          ((conn-bounds `(,beg . ,end))
-          (if (region-active-p)
-              (pcase (car (read-multiple-choice
-                           "Mark"
-                           '((?a "after point")
-                             (?b "before point"))))
-                (?e (goto-char end))
-                (?b (goto-char beg)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)))))))
+          (cond ((not (region-active-p))
+                 (goto-char beg)
+                 (conn--push-ephemeral-mark end))
+                ((= (point) (mark))
+                 (pcase (car (read-multiple-choice
+                              "Mark"
+                              '((?a "after point")
+                                (?b "before point"))))
+                   (?e (goto-char end))
+                   (?b (goto-char beg))))
+                ((> (point) (mark)) (goto-char end))
+                (t (goto-char beg))))))))
 
 (conn-etts-define-thing conn-etts-assignment-inner "assignment.inner")
 (conn-etts-define-thing conn-etts-assignment-lhs "assignment.lhs")
