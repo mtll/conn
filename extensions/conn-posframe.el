@@ -23,6 +23,7 @@
 
 (require 'conn)
 (require 'conn-quick-ref)
+(require 'conn-things)
 (require 'posframe)
 
 (defvar conn-read-pair-function)

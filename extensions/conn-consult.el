@@ -22,6 +22,7 @@
 ;;; Code:
 
 (require 'conn)
+(require 'conn-things)
 (require 'consult)
 (require 'xref)
 (eval-when-compile

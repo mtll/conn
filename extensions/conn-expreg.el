@@ -25,6 +25,8 @@
 ;;
 ;;; Code:
 
+(require 'conn)
+(require 'conn-things)
 (require 'conn-expand)
 (require 'expreg)
 
