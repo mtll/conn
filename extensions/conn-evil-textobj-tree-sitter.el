@@ -80,16 +80,13 @@
                       (when (= (cl-incf count) (abs arg))
                         (throw 'return nil)))))
           (dolist (capture captures)
-            (let (pending)
-              (dolist (node capture)
-                (cond ((eq (car node) tbeg)
-                       (push (cdr node) pending))
-                      ((eq (car node) tend)
-                       (push-node (treesit-node-start (pop pending))
-                                  (treesit-node-end (cdr node))))
-                      ((eq (car node) type)
-                       (push-node (treesit-node-start (cdr node))
-                                  (treesit-node-end (cdr node))))))))))
+            (if-let* ((beg (alist-get tbeg capture)))
+                (when-let* ((end (alist-get tend capture)))
+                  (push-node (treesit-node-start beg)
+                             (treesit-node-end end)))
+              (when-let* ((node (alist-get type capture)))
+                (push-node (treesit-node-start node)
+                           (treesit-node-end node)))))))
       (when nodes
         (conn-make-bounds
          thing arg
