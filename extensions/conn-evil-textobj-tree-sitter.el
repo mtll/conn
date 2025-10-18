@@ -55,7 +55,8 @@
                              nil t))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
-  (let* ((thing (get (or (get cmd :conn-command-thing) cmd)
+  (let* ((arg (prefix-numeric-value arg))
+         (thing (get (or (get cmd :conn-command-thing) cmd)
                      :conn-etts-thing))
          (groups (conn--etts-thing-groups thing))
          (captures (conn-etts--get-captures thing (< arg 0)))
@@ -65,32 +66,32 @@
          (min most-positive-fixnum))
     (unless (= 0 arg)
       (catch 'return
-        (cl-flet ((push-node (node)
-                    (when (and (if (< arg 0)
-                                   (< (car node) (point))
-                                 (> (cdr node) (point)))
-                               (not (member node nodes)))
-                      (cl-callf max max (cdr node))
-                      (cl-callf min min (car node))
-                      (push (conn-make-bounds cmd 1 node) nodes)
-                      (when (= (cl-incf count) (abs arg))
-                        (throw 'return nil)))))
-          (dolist (capture captures)
-            (cl-loop with pending = nil
-                     for (group tbeg . tend) in groups
-                     do (if-let* ((beg (alist-get tbeg capture)))
-                            (when-let* ((end (alist-get tend capture)))
-                              (push (cons (treesit-node-start beg)
-                                          (treesit-node-end end))
-                                    pending))
-                          (when-let* ((node (alist-get group capture)))
-                            (push (cons (treesit-node-start node)
-                                        (treesit-node-end node))
-                                  pending)))
-                     finally do (mapc #'push-node (sort pending
-                                                        :key #'car
-                                                        :reverse (< arg 0)
-                                                        :in-place t))))))
+        (dolist (capture captures)
+          (let (pending)
+            (pcase-dolist (`(,group ,tbeg . ,tend) groups)
+              (if-let* ((beg (alist-get tbeg capture)))
+                  (when-let* ((end (alist-get tend capture)))
+                    (push (cons (treesit-node-start beg)
+                                (treesit-node-end end))
+                          pending))
+                (when-let* ((node (alist-get group capture)))
+                  (push (cons (treesit-node-start node)
+                              (treesit-node-end node))
+                        pending))))
+            (setq pending (sort pending
+                                :key #'car
+                                :reverse (< arg 0)
+                                :in-place t))
+            (dolist (node pending)
+              (when (and (if (< arg 0)
+                             (< (car node) (point))
+                           (> (cdr node) (point)))
+                         (not (member node nodes)))
+                (cl-callf max max (cdr node))
+                (cl-callf min min (car node))
+                (push (conn-make-bounds cmd 1 node) nodes)
+                (when (= (cl-incf count) (abs arg))
+                  (throw 'return nil)))))))
       (when nodes
         (conn-make-bounds
          thing arg
