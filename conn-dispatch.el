@@ -439,12 +439,6 @@ themselves once the selection process has concluded."
                               (category
                                . conn-dispatch-command)))
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-dispatch-mover-state)))
-  (setq conn--dispatch-thing-predicate #'always)
-  (conn-state-defer
-    (setq conn--dispatch-thing-predicate nil))
-  (cl-call-next-method))
-
 (conn-define-state conn-dispatch-bounds-state (conn-dispatch-mover-state)
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face
@@ -686,6 +680,7 @@ themselves once the selection process has concluded."
 
 (defun conn-dispatch-action-argument ()
   (declare (important-return-value t))
+  (setq conn--dispatch-thing-predicate #'always)
   (oclosure-lambda (conn-dispatch-action-argument)
       (self type)
     (if (not (conn-argument-predicate self type))
@@ -793,11 +788,10 @@ themselves once the selection process has concluded."
 
 ;;;;;; Command Handler
 
-(cl-defgeneric conn-handle-dispatch-command (cmd arglist)
-  ( :method (_ arglist) arglist))
+(cl-defgeneric conn-dispatch-command-handler (cmd)
+  ( :method (_)))
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-next))
-                                            arglist)
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-next)))
   (condition-case _
       (progn
         (conn-dispatch-cycle-ring-next)
@@ -806,11 +800,9 @@ themselves once the selection process has concluded."
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
         (conn-state-eval-handle))
-    (user-error (setq conn--state-eval-error-message "Dispatch ring empty")))
-  arglist)
+    (user-error (setq conn--state-eval-error-message "Dispatch ring empty"))))
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-previous))
-                                            arglist)
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
   (condition-case _
       (progn
         (conn-dispatch-cycle-ring-previous)
@@ -819,19 +811,16 @@ themselves once the selection process has concluded."
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
         (conn-state-eval-handle))
-    (user-error (setq conn--state-eval-error-message "Dispatch ring empty")))
-  arglist)
+    (user-error (setq conn--state-eval-error-message "Dispatch ring empty"))))
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-ring-describe-head))
-                                            arglist)
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
   (conn-dispatch-ring-remove-stale)
   (if-let* ((head (conn-ring-head conn-dispatch-ring)))
       (if (bound-and-true-p conn-posframe-mode)
           (conn-posframe--dispatch-ring-display-subr)
         (conn-state-eval-message "%s" (conn-describe-dispatch head)))
-    (conn-state-eval-message "Dispatch ring empty"))
-  (conn-state-eval-handle)
-  arglist)
+    (setq conn--state-eval-error-message "Dispatch ring empty"))
+  (conn-state-eval-handle))
 
 ;;;;; Dispatch Window Filtering
 
@@ -2516,7 +2505,7 @@ contain targets."
                     (description "Copy and Replace To")
                     (str
                      (conn-eval-with-state 'conn-copy-state
-                         (pcase (conn-bounds-of && (conn-thing-argument-dwim))
+                         (pcase (conn-bounds-of &2 (conn-thing-argument-dwim))
                            ((conn-bounds `(,beg . ,end) & (conn-transform-argument))
                             (save-mark-and-excursion
                               (goto-char beg)
@@ -2767,7 +2756,7 @@ contain targets."
                        (let (kill-ring)
                          (conn-eval-with-state 'conn-kill-state
                              (conn-kill-thing
-                              && (conn-thing-argument-dwim)
+                              &2 (conn-thing-argument-dwim)
                               & (conn-transform-argument)
                               nil nil nil
                               & (conn-fixup-whitespace-argument
@@ -3494,36 +3483,17 @@ contain targets."
   (conn-make-ring conn-dispatch-ring-max
                   :cleanup 'conn-dispatch--cleanup))
 
-(cl-defmethod conn-handle-dispatch-command ((_cmd (eql conn-repeat-last-dispatch))
-                                            form)
-  (pcase (conn-ring-head conn-dispatch-ring)
-    ((and prev
-          (cl-struct conn-previous-dispatch
-                     thing
-                     thing-arg
-                     thing-transform
-                     action
-                     keys
-                     other-end
-                     always-retarget
-                     repeat
-                     restrict-windows))
-     (if (conn-action-stale-p action)
-         (progn
-           (conn-dispatch-ring-remove-stale)
-           (conn-dispatch-error "Last dispatch action stale"))
-       (conn-ring-delq prev conn-dispatch-ring)
-       (conn-state-eval-handle)
-       (cons (conn-state-eval-quote
-              (conn-perform-dispatch
-               & action & thing & thing-arg & thing-transform
-               :always-retarget & always-retarget
-               :repeat & repeat
-               :restrict-windows & restrict-windows
-               :other-end & other-end
-               && keys))
-             form)))
-    (_ (conn-dispatch-error "Dispatch ring empty"))))
+(cl-defmethod conn-dispatch-command-handler ((_cmd (eql conn-repeat-last-dispatch)))
+  (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
+      (if (conn-action-stale-p (conn-previous-dispatch-action prev))
+          (progn
+            (conn-dispatch-ring-remove-stale)
+            (conn-dispatch-error "Last dispatch action stale"))
+        (conn-ring-delq prev conn-dispatch-ring)
+        (conn-state-eval-handle)
+        (conn-eval-with-state-return
+          (conn-call-previous-dispatch prev)))
+    (conn-dispatch-error "Dispatch ring empty")))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -3667,16 +3637,10 @@ contain targets."
                  (conn-with-dispatch-suspended
                    (conn-eval-with-state 'conn-dispatch-mover-state
                        (conn-dispatch-change-target
-                        && (conn-dispatch-thing-argument)
+                        &2 (conn-dispatch-thing-argument)
                         & (conn-dispatch-transform-argument))
                      :prompt "New Targets"
-                     :reference conn-dispatch-mover-reference
-                     :command-handler
-                     (lambda (cmd arghist)
-                       (when-let* ((_(eq cmd :init))
-                                   (pred (conn-action--thing-predicate action)))
-                         (setq conn--dispatch-thing-predicate pred))
-                       arghist)))))
+                     :reference conn-dispatch-mover-reference))))
             ,#'conn-handle-dispatch-select-command
             ,@conn--dispatch-read-event-handlers))
          (conn-dispatch-target-finder (conn-get-target-finder thing))
@@ -3829,12 +3793,12 @@ contain targets."
   (conn-eval-with-state 'conn-dispatch-state
       (conn-perform-dispatch
        & (conn-dispatch-action-argument)
-       && (conn-dispatch-thing-argument)
+       &2 (conn-dispatch-thing-argument)
        & (conn-dispatch-transform-argument)
        :repeat & (conn-dispatch-repeat-argument)
        :other-end & (conn-dispatch-other-end-argument nil)
        :restrict-windows & (conn-dispatch-restrict-windows-argument))
-    :command-handler #'conn-handle-dispatch-command
+    :command-handler #'conn-dispatch-command-handler
     :prefix initial-arg
     :prompt "Dispatch"
     :reference conn-dispatch-reference
@@ -3957,7 +3921,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                         (push bound subregions))
                        (_
                         (user-error "No %s found at point" thing)))))
-               && (conn-thing-argument t)
+               &2 (conn-thing-argument t)
                & (conn-dispatch-transform-argument)
                :repeat & (conn-dispatch-repeat-argument repeat)
                :other-end :no-other-end)

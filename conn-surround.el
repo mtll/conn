@@ -69,7 +69,7 @@
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-surround)) arg)
   (pcase-let* ((`(,bounds ,property)
                 (conn-eval-with-state 'conn-surround-with-state
-                    (list (conn-bounds-of && (conn-surround-with-argument))
+                    (list (conn-bounds-of &2 (conn-surround-with-argument))
                           & (conn-surround-property-argument))
                   :prompt "Surround"
                   :prefix arg)))
@@ -119,7 +119,7 @@
 (cl-defmethod conn-perform-kill ((_cmd (eql conn-surround))
                                  arg _transform &optional _append _delete _register)
   (conn-eval-with-state 'conn-surround-with-state
-      (conn-delete-surround && (conn-surround-with-argument))
+      (conn-delete-surround &2 (conn-surround-with-argument))
     :prompt "Surrounding"
     :prefix arg))
 
@@ -305,7 +305,7 @@
       (pcase-let* ((prep-args
                     (conn-eval-with-state 'conn-surround-thing-state
                         (list
-                         && (conn-thing-argument-dwim t)
+                         &2 (conn-thing-argument-dwim t)
                          & (conn-transform-argument)
                          :subregions & (conn-subregions-argument
                                         (use-region-p)))
@@ -322,7 +322,7 @@
                               with-args)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
                            (conn-eval-with-state 'conn-surround-with-state
-                               (list && (conn-surround-with-argument)
+                               (list &2 (conn-surround-with-argument)
                                      :padding & (conn-surround-padding-argument))
                              :prompt "Surround With"))))
               (apply #'conn-perform-surround
@@ -461,9 +461,10 @@
   (oclosure-lambda (conn-change-surround-argument
                     (required t))
       (self cmd)
-    (if (conn-argument-predicate self cmd)
+    (if (eq 'surround-self-insert cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list (conn--self-insert last-input-event)
+                    (conn-state-eval-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
@@ -494,7 +495,7 @@
     (atomic-change-group
       (pcase-let* ((prev-change
                     (conn-eval-with-state 'conn-change-surround-state
-                        (list && (conn-change-surround-argument))
+                        (list &2 (conn-change-surround-argument))
                       :prompt "Change Surrounding"))
                    (`(,ov . ,prep-keys)
                     (apply #'conn-prepare-change-surround prev-change))
@@ -505,7 +506,7 @@
                               prev-with)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
                            (conn-eval-with-state 'conn-surround-with-state
-                               (list && (conn-surround-with-argument)
+                               (list &2 (conn-surround-with-argument)
                                      :padding & (conn-surround-padding-argument))
                              :prompt "Surround With"))))
               (apply #'conn-perform-surround

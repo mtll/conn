@@ -185,7 +185,7 @@
   (conn-eval-with-state 'conn-dired-dispatch-state
       (conn-perform-dispatch
        & (conn-dispatch-action-argument)
-       && (conn-thing-argument)
+       &2 (conn-thing-argument)
        & (conn-transform-argument)
        :repeat & (conn-dispatch-repeat-argument)
        :restrict-windows & (conn-dispatch-restrict-windows-argument)

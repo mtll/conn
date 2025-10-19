@@ -430,7 +430,7 @@ before each iteration."
   (declare (important-return-value t))
   (pcase-let* ((`(,cmd ,arg ,transform ,subregions)
                 (conn-eval-with-state 'conn-read-thing-state
-                    (list && (conn-thing-argument-dwim t)
+                    (list &2 (conn-thing-argument-dwim t)
                           & (conn-transform-argument)
                           & (conn-subregions-argument (use-region-p)))
                   :prompt "Thing")))
@@ -669,7 +669,7 @@ apply to each contiguous component of the region."
     (mapcar #'conn-bounds
             (conn-eval-with-state 'conn-read-thing-state
                 (conn-bounds-get
-                 (conn-bounds-of && (conn-thing-argument-dwim t))
+                 (conn-bounds-of &2 (conn-thing-argument-dwim t))
                  :subregions
                  & (conn-transform-argument))
               :prompt "Thing")))
@@ -791,7 +791,7 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let (((conn-bounds `(,beg . ,end))
                (conn-eval-with-state 'conn-read-thing-state
-                   (conn-bounds-of && (conn-thing-argument-dwim))
+                   (conn-bounds-of &2 (conn-thing-argument-dwim))
                  :prompt "Thing")))
     (conn--kapply-macro
      (alist-get :kmacro args)
