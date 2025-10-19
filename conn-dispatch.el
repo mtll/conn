@@ -1682,7 +1682,8 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-setup-targets ()
   (conn-dispatch-update-targets conn-dispatch-target-finder)
-  (conn-dispatch-setup-shadow-overlays conn-dispatch-target-finder)
+  (when conn-dispatch-shadow-windows
+    (conn-dispatch-setup-shadow-overlays conn-dispatch-target-finder))
   (conn-dispatch-setup-label-faces conn-dispatch-target-finder))
 
 (cl-defgeneric conn-dispatch-update-targets (target-finder)
@@ -1701,16 +1702,14 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-setup-shadow-overlays (target-finder)
   ( :method (_target-finder)
-    (when (and conn-dispatch-shadow-windows
-               (null conn-dispatch--window-shadow-overlays))
-      (pcase-dolist (`(,window . ,_targets) conn-targets)
-        (with-selected-window window
-          (push (make-overlay (point-min) (point-max))
-                conn-dispatch--window-shadow-overlays)
-          (overlay-put (car conn-dispatch--window-shadow-overlays)
-                       'face 'conn-dispatch-shadow-face)
-          (overlay-put (car conn-dispatch--window-shadow-overlays)
-                       'window window))))))
+    (pcase-dolist (`(,window . ,_targets) conn-targets)
+      (with-selected-window window
+        (push (make-overlay (point-min) (point-max))
+              conn-dispatch--window-shadow-overlays)
+        (overlay-put (car conn-dispatch--window-shadow-overlays)
+                     'face 'conn-dispatch-shadow-face)
+        (overlay-put (car conn-dispatch--window-shadow-overlays)
+                     'window window)))))
 
 (cl-defgeneric conn-dispatch-cleanup-target-finder (target-finder)
   (:method (_) "Noop" nil))
@@ -1943,21 +1942,20 @@ contain targets."
     (sit-for 0)))
 
 (cl-defmethod conn-dispatch-setup-shadow-overlays ((_ conn-dispatch-focus-targets))
-  (when conn-dispatch-shadow-windows
-    (pcase-dolist (`(,window . ,_targets) conn-targets)
-      (with-selected-window window
-        (push (make-overlay (point-min) (pos-bol))
-              conn-dispatch--window-shadow-overlays)
-        (overlay-put (car conn-dispatch--window-shadow-overlays)
-                     'face 'conn-dispatch-shadow-face)
-        (overlay-put (car conn-dispatch--window-shadow-overlays)
-                     'window window)
-        (push (make-overlay (pos-eol) (point-max))
-              conn-dispatch--window-shadow-overlays)
-        (overlay-put (car conn-dispatch--window-shadow-overlays)
-                     'face 'conn-dispatch-shadow-face)
-        (overlay-put (car conn-dispatch--window-shadow-overlays)
-                     'window window)))))
+  (pcase-dolist (`(,window . ,_targets) conn-targets)
+    (with-selected-window window
+      (push (make-overlay (point-min) (pos-bol))
+            conn-dispatch--window-shadow-overlays)
+      (overlay-put (car conn-dispatch--window-shadow-overlays)
+                   'face 'conn-dispatch-shadow-face)
+      (overlay-put (car conn-dispatch--window-shadow-overlays)
+                   'window window)
+      (push (make-overlay (pos-eol) (point-max))
+            conn-dispatch--window-shadow-overlays)
+      (overlay-put (car conn-dispatch--window-shadow-overlays)
+                   'face 'conn-dispatch-shadow-face)
+      (overlay-put (car conn-dispatch--window-shadow-overlays)
+                   'window window))))
 
 (defclass conn-dispatch-mark-ring (conn-dispatch-focus-targets
                                    conn-dispatch-target-window-predicate)
