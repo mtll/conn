@@ -1387,78 +1387,88 @@ chooses to handle a command."
                                   pre
                                   post
                                   reference)
-  (conn-protected-let* ((arguments arglist
-                                   (mapcar #'conn-cancel-argument arguments))
-                        (prompt (or prompt (symbol-name state)))
-                        (conn--state-eval-prefix-mag (when prefix (abs prefix)))
-                        (conn--state-eval-prefix-sign (when prefix (> 0 prefix)))
-                        (conn--state-eval-error-message "")
-                        (conn--state-eval-message nil)
-                        (conn--state-eval-message-timeout nil)
-                        (conn--state-eval-exiting nil)
-                        (inhibit-message t))
-    (cl-labels ((update-args (cmd)
-                  (setf conn--state-eval-error-message "Invalid Command")
-                  (when command-handler
-                    (funcall command-handler cmd))
-                  (let ((next (if update-handler
-                                  (funcall update-handler cmd arguments)
-                                (cl-loop for arg in arguments
-                                         collect (conn-update-argument arg cmd)))))
-                    (unless (= (length arguments) (length next))
-                      (error "Invalid arglist length"))
-                    (unless (equal arguments next)
-                      (setq conn--state-eval-error-message "")
-                      (setq arguments next)))))
+  (let ((arguments arglist)
+        (prompt (or prompt (symbol-name state)))
+        (conn--state-eval-prefix-mag (when prefix (abs prefix)))
+        (conn--state-eval-prefix-sign (when prefix (> 0 prefix)))
+        (conn--state-eval-error-message "")
+        (conn--state-eval-message nil)
+        (conn--state-eval-message-timeout nil)
+        (conn--state-eval-exiting nil)
+        (inhibit-message t)
+        (local-exit nil))
+    (cl-labels
+        ((continue-p (arguments)
+           (cl-loop for arg in arguments
+                    thereis (conn-argument-required-p arg)))
+         (update-args (cmd)
+           (setf conn--state-eval-error-message "Invalid Command")
+           (when command-handler
+             (funcall command-handler cmd))
+           (let ((next (if update-handler
+                           (funcall update-handler cmd arguments)
+                         (cl-loop for arg in arguments
+                                  collect (conn-update-argument arg cmd)))))
+             (unless (= (length arguments) (length next))
+               (error "Invalid arglist length"))
+             (unless (equal arguments next)
+               (setq conn--state-eval-error-message "")
+               (setq arguments next))))
+         (command-case (cmd)
+           (while (arrayp cmd) ; keyboard macro
+             (setq cmd (key-binding cmd t)))
+           (when cmd
+             (when pre (funcall pre cmd))
+             (pcase cmd
+               ('help
+                (when reference
+                  (conn-quick-reference reference)))
+               ('digit-argument
+                (let* ((char (if (integerp last-input-event)
+                                 last-input-event
+                               (get last-input-event 'ascii-character)))
+                       (digit (- (logand char ?\177) ?0)))
+                  (setf conn--state-eval-prefix-mag
+                        (if (integerp conn--state-eval-prefix-mag)
+                            (+ (* 10 conn--state-eval-prefix-mag) digit)
+                          (when (/= 0 digit) digit)))))
+               ('backward-delete-arg
+                (when conn--state-eval-prefix-mag
+                  (cl-callf floor conn--state-eval-prefix-mag 10)))
+               ('reset-arg
+                (setf conn--state-eval-prefix-mag nil))
+               ('negative-argument
+                (cl-callf not conn--state-eval-prefix-sign))
+               ((or 'keyboard-quit 'quit)
+                (keyboard-quit))
+               ('execute-extended-command
+                (when-let* ((cmd (conn--state-eval-completing-read
+                                  state arguments)))
+                  (update-args cmd)))
+               (_ (update-args cmd)))
+             (setq conn-state-eval-last-command cmd)
+             (when post (funcall post cmd)))))
       (apply
        (catch 'conn-eval-with-state-return
          (unwind-protect
              (conn-with-recursive-stack state
-               (let ((emulation-mode-map-alists
-                      `(((,state . ,(make-composed-keymap
-                                     (delq nil (mapcar #'conn-argument-keymaps arguments)))))
-                        ,@emulation-mode-map-alists)))
-                 (while (cl-loop for arg in arguments
-                                 thereis (conn-argument-required-p arg))
+               (let* ((emulation-mode-map-alists
+                       `(((,state . ,(thread-last
+                                       (mapcar #'conn-argument-keymaps arguments)
+                                       (delq nil)
+                                       (make-composed-keymap))))
+                         ,@emulation-mode-map-alists)))
+                 (while (continue-p arguments)
                    (when (and conn--state-eval-message-timeout
                               (time-less-p conn--state-eval-message-timeout nil))
                      (setq conn--state-eval-message nil
                            conn--state-eval-message-timeout nil))
                    (funcall display-handler prompt arguments)
-                   (let ((cmd (key-binding (read-key-sequence nil) t)))
-                     (setf conn--state-eval-error-message "")
-                     (while (arrayp cmd) ; keyboard macro
-                       (setq cmd (key-binding cmd t)))
-                     (when cmd
-                       (when pre (funcall pre cmd))
-                       (pcase cmd
-                         ('help
-                          (when reference
-                            (conn-quick-reference reference)))
-                         ('digit-argument
-                          (let* ((char (if (integerp last-input-event)
-                                           last-input-event
-                                         (get last-input-event 'ascii-character)))
-                                 (digit (- (logand char ?\177) ?0)))
-                            (setf conn--state-eval-prefix-mag
-                                  (if (integerp conn--state-eval-prefix-mag)
-                                      (+ (* 10 conn--state-eval-prefix-mag) digit)
-                                    (when (/= 0 digit) digit)))))
-                         ('backward-delete-arg
-                          (when conn--state-eval-prefix-mag
-                            (cl-callf floor conn--state-eval-prefix-mag 10)))
-                         ('reset-arg
-                          (setf conn--state-eval-prefix-mag nil))
-                         ('negative-argument
-                          (cl-callf not conn--state-eval-prefix-sign))
-                         ((or 'keyboard-quit 'quit)
-                          (keyboard-quit))
-                         ('execute-extended-command
-                          (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
-                            (update-args cmd)))
-                         (_ (update-args cmd)))
-                       (setq conn-state-eval-last-command cmd)
-                       (when post (funcall post cmd)))))))
+                   (setf conn--state-eval-error-message "")
+                   (command-case (key-binding (read-key-sequence nil) t)))
+                 (setq local-exit t)))
+           (unless local-exit
+             (mapc #'conn-cancel-argument arguments))
            (let ((inhibit-message nil))
              (message nil)))
          (cons callback (mapcar #'conn-eval-argument arguments)))))))
@@ -1471,7 +1481,7 @@ chooses to handle a command."
 (defmacro conn-eval-with-state (state form &rest keys)
   "Eval FORM after replacing arguments with values read in STATE.
 
-\(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST REFERENCE)"
+\(fn STATE ARGLIST &key UPDATE-HANDLER COMMAND-HANDLER DISPLAY-HANDLER PROMPT PREFIX PRE POST REFERENCE)"
   (declare (indent 2))
   (let (patterns args body)
     (cl-labels ((qt (form)

@@ -3492,7 +3492,10 @@ contain targets."
         (conn-ring-delq prev conn-dispatch-ring)
         (conn-state-eval-handle)
         (conn-eval-with-state-return
-          (conn-call-previous-dispatch prev)))
+          (conn-call-previous-dispatch
+           prev
+           :repeat (xor (conn-state-eval-consume-prefix-arg)
+                        (conn-previous-dispatch-repeat prev)))))
     (conn-dispatch-error "Dispatch ring empty")))
 
 (defun conn-dispatch-copy (dispatch)
