@@ -61,7 +61,12 @@
   :group 'conn
   :type '(list integer))
 
-(defface conn-dispatch-label-face
+(defface conn-dispatch-label-face-1
+  '((t (:inherit highlight :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
+
+(defface conn-dispatch-label-face-2
   '((t (:inherit highlight :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
@@ -1215,7 +1220,9 @@ Target overlays may override this default by setting the
           ((beg (overlay-end target))
            (ov (make-overlay beg beg (overlay-buffer target))
                (delete-overlay ov))
-           (str (propertize string 'face 'conn-dispatch-label-face)))
+           (str (propertize string
+                            'face (or (overlay-get target 'label-face)
+                                      'conn-dispatch-label-face))))
         (setf (overlay-get ov 'category) 'conn-label-overlay
               (overlay-get ov 'window) window
               (overlay-get target 'conn-label)
@@ -1747,6 +1754,15 @@ to the key binding for that target."
       (add-function :before-while conn-target-window-predicate pred)))
   (ignore-error cl-no-next-method
     (cl-call-next-method)))
+
+(cl-defmethod conn-dispatch-update-targets :after (_)
+  (let ((targets (conn-dispatch-get-targets))
+        (face1 'conn-dispatch-label-face-1)
+        (face2 'conn-dispatch-label-face-2))
+    (pcase-dolist (`(,_window . ,targets) targets)
+      (dolist (tar (sort targets :key #'overlay-start))
+        (overlay-put tar 'label-face face1)
+        (cl-rotatef face1 face2)))))
 
 (cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-target-window-predicate))
   (remove-function conn-target-window-predicate
