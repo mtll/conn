@@ -64,7 +64,7 @@
   "O" 'sp-forward-symbol)
 
 (conn-register-thing-commands
- 'symbol 'conn-symbol-handler
+ 'symbol 'conn-continuous-thing-handler
  'sp-forward-symbol 'sp-backward-symbol)
 
 (defun conn-sp-list-handler (beg)
