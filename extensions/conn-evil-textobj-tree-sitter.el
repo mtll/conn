@@ -31,6 +31,8 @@
 (defconst conn-etts--query-cache
   (make-hash-table :test 'eq))
 
+(defconst conn-etts--block-size 10000)
+
 (defun conn-etts--get-query ()
   (with-memoization (gethash (treesit-language-at (point)) conn-etts--query-cache)
     (treesit-query-compile
@@ -40,58 +42,64 @@
       (file-name-as-directory (concat evil-textobj-tree-sitter--dir "queries"))
       t))))
 
-(defun conn-etts--get-captures (thing before)
+(defun conn-etts--get-captures (thing start end)
   (let ((f-query (or (alist-get major-mode (conn--etts-thing-query thing))
                      (conn-etts--get-query))))
-    (if before
-        (nreverse
-         (treesit-query-capture (treesit-buffer-root-node)
-                                f-query
-                                (point-min) (point)
-                                nil t))
-      (treesit-query-capture (treesit-buffer-root-node)
-                             f-query
-                             (point) (point-max)
-                             nil t))))
+    (if (< start end)
+        (treesit-query-capture (treesit-buffer-root-node)
+                               f-query start end nil t)
+      (nreverse
+       (treesit-query-capture (treesit-buffer-root-node)
+                              f-query end start nil t)))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
   (let* ((arg (prefix-numeric-value arg))
          (thing (get (or (get cmd :conn-command-thing) cmd)
                      :conn-etts-thing))
          (groups (conn--etts-thing-groups thing))
-         (captures (conn-etts--get-captures thing (< arg 0)))
+         (beg (point))
+         (end nil)
+         (captures nil)
          (count 0)
          (nodes nil)
          (max most-negative-fixnum)
          (min most-positive-fixnum))
     (unless (= 0 arg)
       (catch 'return
-        (dolist (capture captures)
-          (let (pending)
-            (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-              (if-let* ((beg (alist-get tbeg capture)))
-                  (when-let* ((end (alist-get tend capture)))
-                    (push (cons (treesit-node-start beg)
-                                (treesit-node-end end))
-                          pending))
-                (when-let* ((node (alist-get group capture)))
-                  (push (cons (treesit-node-start node)
-                              (treesit-node-end node))
-                        pending))))
-            (setq pending (sort pending
-                                :key #'car
-                                :reverse (< arg 0)
-                                :in-place t))
-            (dolist (node pending)
-              (when (and (if (< arg 0)
-                             (< (car node) (point))
-                           (> (cdr node) (point)))
-                         (not (member node nodes)))
-                (cl-callf max max (cdr node))
-                (cl-callf min min (car node))
-                (push (conn-make-bounds cmd 1 node) nodes)
-                (when (= (cl-incf count) (abs arg))
-                  (throw 'return nil)))))))
+        (while (if (< arg 0)
+                   (> beg (point-min))
+                 (< beg (point-max)))
+          (setq end (if (< arg 0)
+                        (max (point-min) (- beg conn-etts--block-size))
+                      (min (point-max) (+ beg conn-etts--block-size)))
+                captures (conn-etts--get-captures thing beg end)
+                beg end)
+          (dolist (capture captures)
+            (let (pending)
+              (pcase-dolist (`(,group ,tbeg . ,tend) groups)
+                (if-let* ((beg (alist-get tbeg capture)))
+                    (when-let* ((end (alist-get tend capture)))
+                      (push (cons (treesit-node-start beg)
+                                  (treesit-node-end end))
+                            pending))
+                  (when-let* ((node (alist-get group capture)))
+                    (push (cons (treesit-node-start node)
+                                (treesit-node-end node))
+                          pending))))
+              (setq pending (sort pending
+                                  :key #'car
+                                  :reverse (< arg 0)
+                                  :in-place t))
+              (dolist (node pending)
+                (when (and (if (< arg 0)
+                               (< (car node) (point))
+                             (> (cdr node) (point)))
+                           (not (member node nodes)))
+                  (cl-callf max max (cdr node))
+                  (cl-callf min min (car node))
+                  (push (conn-make-bounds cmd 1 node) nodes)
+                  (when (= (cl-incf count) (abs arg))
+                    (throw 'return nil))))))))
       (when nodes
         (conn-make-bounds
          thing arg
@@ -118,19 +126,22 @@
 
        (defun ,forward-cmd (&optional arg)
          (interactive "p")
-         (pcase (conn-bounds-of ',name arg)
-           ((conn-bounds `(,beg . ,end))
-            (if (> arg 0)
-                (progn
-                  (goto-char end)
-                  (when (not (region-active-p))
-                    (conn--push-ephemeral-mark beg)))
-              (goto-char beg)
-              (when (not (region-active-p))
-                (conn--push-ephemeral-mark end))))
-           (_ (signal 'scan-error
-                      (list (format-message "No more %S to move across" ',name)
-                            (point) (point))))))
+         (let (start)
+           (dotimes (_ (abs arg))
+             (pcase (conn-bounds-of ',name (cl-signum arg))
+               ((conn-bounds `(,beg . ,end))
+                (if (> arg 0)
+                    (progn
+                      (goto-char end)
+                      (unless (or (region-active-p) start)
+                        (setq start beg)))
+                  (goto-char beg)
+                  (unless (or (region-active-p) start)
+                    (setq start beg))))
+               (_ (signal 'scan-error
+                          (list (format-message "No more %S to move across" ',name)
+                                (point) (point))))))
+           (when start (conn--push-ephemeral-mark start))))
 
        (defun ,backward-cmd (&optional arg)
          (interactive "p")
@@ -412,5 +423,27 @@
 
 (define-minor-mode conn-etts-things-mode
   "Minor mode for conn-etts things")
+
+;; fix etts comment thing overriding ours
+(conn-register-thing
+ 'comment
+ :bounds-op (lambda ()
+              (if (conn--point-in-comment-p)
+                  (cons (save-excursion
+                          (while (and (conn--point-in-comment-p)
+                                      (not (eobp)))
+                            (forward-char 1)
+                            (skip-chars-forward " \t\n\r"))
+                          (skip-chars-backward " \t\n\r")
+                          (point))
+                        (save-excursion
+                          (while (conn--point-in-comment-p)
+                            (forward-char -1)
+                            (skip-chars-backward " \t\n\r"))
+                          (skip-chars-forward " \t\n\r")
+                          (unless (conn--point-in-comment-p)
+                            (forward-char 1))
+                          (point)))
+                (error "Point not in comment"))))
 
 (provide 'conn-evil-textobj-tree-sitter)
