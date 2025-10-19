@@ -53,8 +53,10 @@
                               f-query end start nil t)))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
+  (setq arg (prefix-numeric-value arg))
   (unless (= 0 arg)
-    (let* ((arg (prefix-numeric-value arg))
+    (let* ((seen (when (> arg 100)
+                   (make-hash-table :test 'equal :size arg)))
            (thing (get (or (get cmd :conn-command-thing) cmd)
                        :conn-etts-thing))
            (groups (conn--etts-thing-groups thing))
@@ -74,8 +76,8 @@
                       (min (point-max) (+ beg conn-etts--block-size)))
                 captures (conn-etts--get-captures thing beg end)
                 beg end)
-          (dolist (capture captures)
-            (let (pending)
+          (let (pending)
+            (dolist (capture captures)
               (pcase-dolist (`(,group ,tbeg . ,tend) groups)
                 (if-let* ((beg (alist-get tbeg capture)))
                     (when-let* ((end (alist-get tend capture)))
@@ -85,29 +87,27 @@
                   (when-let* ((node (alist-get group capture)))
                     (push (cons (treesit-node-start node)
                                 (treesit-node-end node))
-                          pending))))
-              (setq pending (sort pending
-                                  :key #'car
-                                  :reverse (< arg 0)
-                                  :in-place t))
-              (dolist (node pending)
-                (when (and (if (< arg 0)
-                               (< (car node) (point))
-                             (> (cdr node) (point)))
-                           (not (member node nodes)))
-                  (cl-callf max max (cdr node))
-                  (cl-callf min min (car node))
-                  (push (conn-make-bounds cmd 1 node) nodes)
-                  (when (= (cl-incf count) (abs arg))
-                    (throw 'return nil))))))))
+                          pending)))))
+            (cl-callf sort pending
+              :key (if (< arg 0) #'car #'cdr)
+              :reverse (< arg 0)
+              :in-place t)
+            (dolist (node pending)
+              (unless (if seen
+                          (or (gethash node seen)
+                              (and (setf (gethash node seen) t)
+                                   nil))
+                        (member node nodes))
+                (cl-callf max max (cdr node))
+                (cl-callf min min (car node))
+                (push (conn-make-bounds cmd 1 node) nodes)
+                (when (= (cl-incf count) (abs arg))
+                  (throw 'return nil)))))))
       (when nodes
         (conn-make-bounds
          thing arg
          (cons min max)
-         :subregions (sort nodes
-                           :key #'car
-                           :reverse (< arg 0)
-                           :in-place t))))))
+         :subregions (nreverse nodes))))))
 
 (conn-register-thing 'conn-etts-thing)
 
@@ -140,7 +140,7 @@
                         (setq start beg)))
                   (goto-char beg)
                   (unless (or (region-active-p) start)
-                    (setq start beg))))
+                    (setq start end))))
                (_ (signal 'scan-error
                           (list (format-message "No more %S to move across" ',name)
                                 (point) (point))))))
