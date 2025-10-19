@@ -71,12 +71,21 @@
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
+(defface conn-dispatch-shadow-face
+  '((t (:inherit shadow)))
+  "Face for background text during dispatch."
+  :group 'conn-faces)
+
 (defvar conn-window-labeling-function 'conn-header-line-label
   "Function to label windows for `conn-prompt-for-window'.
 
 The function should accept a single argument, the list of windows to be
 labeled and it should return a list of structs for `conn-label-select',
 which see.")
+
+(defvar conn-dispatch-shadow-windows t)
+
+(defvar conn-dispatch--window-shadow-overlays nil)
 
 (defvar conn-target-window-predicate)
 
@@ -1663,10 +1672,13 @@ Target overlays may override this default by setting the
     (dolist (target targets)
       (conn-label-delete (overlay-get target 'conn-label))
       (delete-overlay target)))
+  (dolist (ov conn-dispatch--window-shadow-overlays)
+    (delete-overlay ov))
   (clrhash conn--pixelwise-window-cache)
   (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
-        conn-target-count 0))
+        conn-target-count 0
+        conn-dispatch--window-shadow-overlays nil))
 
 (cl-defgeneric conn-dispatch-update-targets (target-finder)
   (:method (target-finder) (funcall target-finder)))
@@ -1759,7 +1771,15 @@ to the key binding for that target."
   (let ((targets (conn-dispatch-get-targets))
         (face1 'conn-dispatch-label-face-1)
         (face2 'conn-dispatch-label-face-2))
-    (pcase-dolist (`(,_window . ,targets) targets)
+    (pcase-dolist (`(,window . ,targets) targets)
+      (when conn-dispatch-shadow-windows
+        (with-selected-window window
+          (push (make-overlay (point-min) (point-max))
+                conn-dispatch--window-shadow-overlays)
+          (overlay-put (car conn-dispatch--window-shadow-overlays)
+                       'face 'conn-dispatch-shadow-face)
+          (overlay-put (car conn-dispatch--window-shadow-overlays)
+                       'window window)))
       (dolist (tar (sort targets :key #'overlay-start))
         (overlay-put tar 'label-face face1)
         (cl-rotatef face1 face2)))))
