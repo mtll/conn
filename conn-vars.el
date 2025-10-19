@@ -271,6 +271,10 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
     "Conn Search Map"
   [conn-thing-map])
 
+(conn-define-remap-keymap conn-thing-inner-remap
+    "Conn Search Map"
+  [conn-thing-map ?i])
+
 (conn-define-remap-keymap conn-region-remap
     "Conn Search Map"
   [conn-region-map])

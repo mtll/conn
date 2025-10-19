@@ -288,6 +288,7 @@
   "h" 'conn-expand
   "p" 'forward-paragraph
   "," conn-thing-remap
+  "." conn-thing-inner-remap
   "e" 'end-of-buffer)
 
 ;;;;;; Command State

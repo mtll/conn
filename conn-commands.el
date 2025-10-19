@@ -1634,7 +1634,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (:parent conn-state-eval-argument)))
 
 (defvar-keymap conn-register-argument-map
-  "." 'register)
+  "<" 'register)
 
 (defun conn-register-argument (&optional value)
   (declare (important-return-value t)
