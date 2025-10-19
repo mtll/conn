@@ -1339,8 +1339,9 @@ chooses to handle a command."
               (conn--state-eval-prefix-sign "[-1]")
               (t "[1]"))
         'face 'read-multiple-choice-face)
-       ", \\[reset-arg] reset; "
-       (string-join (delq nil (mapcar #'conn-display-argument arguments)) "; ")
+       ", \\[reset-arg] reset"
+       (when-let* ((args (delq nil (mapcar #'conn-display-argument arguments))))
+         (string-join (cons nil args) "; "))
        "): "
        (when conn--state-eval-message (format "[%s] " conn--state-eval-message))
        (propertize conn--state-eval-error-message 'face 'error))))))
