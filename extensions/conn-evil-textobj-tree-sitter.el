@@ -25,8 +25,8 @@
 
 (cl-defstruct (conn--etts-thing
                (:constructor conn--make-etts-thing))
-  (groups nil :type (or cons symbol))
-  (query nil :type list))
+  (groups nil :type (or cons symbol) :read-only t)
+  (query nil :type list :read-only t))
 
 (defconst conn-etts--query-cache
   (make-hash-table :test 'eq))
@@ -104,7 +104,10 @@
         (conn-make-bounds
          thing arg
          (cons min max)
-         :subregions (nreverse nodes))))))
+         :subregions (sort nodes
+                           :key #'car
+                           :reverse (< arg 0)
+                           :in-place t))))))
 
 (conn-register-thing 'conn-etts-thing)
 
