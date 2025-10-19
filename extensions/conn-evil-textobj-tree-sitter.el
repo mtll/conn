@@ -2,7 +2,7 @@
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.4") (compat "30.0.2.0") (evil-textobj-tree-sitter "0.5") conn)
+;; Package-Requires: ((emacs "30.1") (compat "30.0.2.0") (evil-textobj-tree-sitter "0.5") conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@
 (defconst conn-etts--query-cache
   (make-hash-table :test 'eq))
 
-(defconst conn-etts--block-size 10000)
+(defvar conn-etts--block-size 10000)
 
 (defun conn-etts--get-query ()
   (with-memoization (gethash (treesit-language-at (point)) conn-etts--query-cache)
@@ -53,18 +53,18 @@
                               f-query end start nil t)))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
-  (let* ((arg (prefix-numeric-value arg))
-         (thing (get (or (get cmd :conn-command-thing) cmd)
-                     :conn-etts-thing))
-         (groups (conn--etts-thing-groups thing))
-         (beg (point))
-         (end nil)
-         (captures nil)
-         (count 0)
-         (nodes nil)
-         (max most-negative-fixnum)
-         (min most-positive-fixnum))
-    (unless (= 0 arg)
+  (unless (= 0 arg)
+    (let* ((arg (prefix-numeric-value arg))
+           (thing (get (or (get cmd :conn-command-thing) cmd)
+                       :conn-etts-thing))
+           (groups (conn--etts-thing-groups thing))
+           (beg (point))
+           (end nil)
+           (captures nil)
+           (count 0)
+           (nodes nil)
+           (max most-negative-fixnum)
+           (min most-positive-fixnum))
       (catch 'return
         (while (if (< arg 0)
                    (> beg (point-min))
@@ -112,15 +112,15 @@
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
         (backward-cmd (intern (format "%s-backward" name)))
-        (groups (mapcar #'intern (ensure-list group))))
+        (groups (cl-loop
+                 for group in (ensure-list group)
+                 collect (cons (intern group)
+                               (cons (intern (format "%s._start" group))
+                                     (intern (format "%s._end" group)))))))
     `(progn
        (put ',name
             :conn-etts-thing (conn--make-etts-thing
-                              :groups (cl-loop
-                                       for group in ',groups
-                                       collect (cons group
-                                                     (cons (intern (format "%s._start" group))
-                                                           (intern (format "%s._end" group)))))
+                              :groups ',groups
                               :query ,(macroexp-quote query)))
        (conn-register-thing ',name :parent 'conn-etts-thing)
 
