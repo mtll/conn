@@ -93,11 +93,13 @@
               :reverse (< arg 0)
               :in-place t)
             (dolist (node pending)
-              (unless (if seen
-                          (or (gethash node seen)
-                              (and (setf (gethash node seen) t)
-                                   nil))
-                        (member node nodes))
+              (when (and (if (< arg 0)
+                             (< (car node) (point))
+                           (> (cdr node) (point)))
+                         (if seen
+                             (or (not (gethash node seen))
+                                 (setf (gethash node seen) t))
+                           (not (member node nodes))))
                 (cl-callf max max (cdr node))
                 (cl-callf min min (car node))
                 (push (conn-make-bounds cmd 1 node) nodes)
@@ -125,7 +127,9 @@
             :conn-etts-thing (conn--make-etts-thing
                               :groups ',groups
                               :query ,(macroexp-quote query)))
-       (conn-register-thing ',name :parent 'conn-etts-thing)
+       (conn-register-thing ',name
+                            :parent 'conn-etts-thing
+                            :forward-op ',forward-cmd)
 
        (defun ,forward-cmd (&optional arg)
          (interactive "p")
@@ -332,97 +336,64 @@
   "j"  'conn-etts-scopename-backward)
 
 (defvar-keymap conn-etts-things-mode-map
-  "<conn-thing-map> w i l" 'conn-etts-assignment-inner-forward
-  "<conn-thing-map> w i j" 'conn-etts-assignment-inner-backward
+  "<conn-thing-map> i w l" 'conn-etts-assignment-inner-forward
+  "<conn-thing-map> i w j" 'conn-etts-assignment-inner-backward
   "<conn-thing-map> w m" 'conn-etts-assignment-side-forward
   "<conn-thing-map> w n" 'conn-etts-assignment-side-backward
   "<conn-thing-map> w l" 'conn-etts-assignment-outer-forward
   "<conn-thing-map> w j" 'conn-etts-assignment-outer-backward
-  "<conn-thing-map> @ i l" 'conn-etts-attribute-inner-forward
-  "<conn-thing-map> @ i j" 'conn-etts-attribute-inner-backward
+  "<conn-thing-map> i @ l" 'conn-etts-attribute-inner-forward
+  "<conn-thing-map> i @ j" 'conn-etts-attribute-inner-backward
   "<conn-thing-map> @ l" 'conn-etts-attribute-outer-forward
   "<conn-thing-map> @ j" 'conn-etts-attribute-outer-backward
-  "<conn-thing-map> b i l" 'conn-etts-block-inner-forward
-  "<conn-thing-map> b i j" 'conn-etts-block-inner-backward
+  "<conn-thing-map> i b l" 'conn-etts-block-inner-forward
+  "<conn-thing-map> i b j" 'conn-etts-block-inner-backward
   "<conn-thing-map> b l" 'conn-etts-block-outer-forward
   "<conn-thing-map> b j" 'conn-etts-block-outer-backward
-  "<conn-thing-map> . i l" 'conn-etts-call-inner-forward
-  "<conn-thing-map> . i j" 'conn-etts-call-inner-backward
+  "<conn-thing-map> i . l" 'conn-etts-call-inner-forward
+  "<conn-thing-map> i . j" 'conn-etts-call-inner-backward
   "<conn-thing-map> . l" 'conn-etts-call-outer-forward
   "<conn-thing-map> . j" 'conn-etts-call-outer-backward
-  "<conn-thing-map> C i l" 'conn-etts-class-inner-forward
-  "<conn-thing-map> C i j" 'conn-etts-class-inner-backward
+  "<conn-thing-map> i C l" 'conn-etts-class-inner-forward
+  "<conn-thing-map> i C j" 'conn-etts-class-inner-backward
   "<conn-thing-map> C l" 'conn-etts-class-outer-forward
   "<conn-thing-map> C j" 'conn-etts-class-outer-backward
-  "<conn-thing-map> c i l" 'conn-etts-comment-inner-forward
-  "<conn-thing-map> c i j" 'conn-etts-comment-inner-backward
+  "<conn-thing-map> i c l" 'conn-etts-comment-inner-forward
+  "<conn-thing-map> i c j" 'conn-etts-comment-inner-backward
   "<conn-thing-map> c l" 'conn-etts-comment-outer-forward
   "<conn-thing-map> c j" 'conn-etts-comment-outer-backward
-  "<conn-thing-map> q i l" 'conn-etts-conditional-inner-forward
-  "<conn-thing-map> q i j" 'conn-etts-conditional-inner-backward
+  "<conn-thing-map> i q l" 'conn-etts-conditional-inner-forward
+  "<conn-thing-map> i q j" 'conn-etts-conditional-inner-backward
   "<conn-thing-map> q l" 'conn-etts-conditional-outer-forward
   "<conn-thing-map> q j" 'conn-etts-conditional-outer-backward
-  "<conn-thing-map> [ i l" 'conn-etts-frame-inner-forward
-  "<conn-thing-map> [ i j" 'conn-etts-frame-inner-backward
+  "<conn-thing-map> i [ l" 'conn-etts-frame-inner-forward
+  "<conn-thing-map> i [ j" 'conn-etts-frame-inner-backward
   "<conn-thing-map> [ l" 'conn-etts-frame-outer-forward
   "<conn-thing-map> [ j" 'conn-etts-frame-outer-backward
-  "<conn-thing-map> f i l" 'conn-etts-function-inner-forward
-  "<conn-thing-map> f i j" 'conn-etts-function-inner-backward
+  "<conn-thing-map> i f l" 'conn-etts-function-inner-forward
+  "<conn-thing-map> i f j" 'conn-etts-function-inner-backward
   "<conn-thing-map> f l" 'conn-etts-function-outer-forward
   "<conn-thing-map> f j" 'conn-etts-function-outer-backward
-  "<conn-thing-map> r i l" 'conn-etts-loop-inner-forward
-  "<conn-thing-map> r i j" 'conn-etts-loop-inner-backward
+  "<conn-thing-map> i r l" 'conn-etts-loop-inner-forward
+  "<conn-thing-map> i r j" 'conn-etts-loop-inner-backward
   "<conn-thing-map> r l" 'conn-etts-loop-outer-forward
   "<conn-thing-map> r j" 'conn-etts-loop-outer-backward
   "<conn-thing-map> n l" 'conn-etts-number-forward
   "<conn-thing-map> n j" 'conn-etts-number-backward
-  "<conn-thing-map> d i l" 'conn-etts-parameter-inner-forward
-  "<conn-thing-map> d i j" 'conn-etts-parameter-inner-backward
+  "<conn-thing-map> i d l" 'conn-etts-parameter-inner-forward
+  "<conn-thing-map> i d j" 'conn-etts-parameter-inner-backward
   "<conn-thing-map> d l" 'conn-etts-parameter-outer-forward
   "<conn-thing-map> d j" 'conn-etts-parameter-outer-backward
-  "<conn-thing-map> x i l" 'conn-etts-regex-inner-forward
-  "<conn-thing-map> x i j" 'conn-etts-regex-inner-backward
+  "<conn-thing-map> i x l" 'conn-etts-regex-inner-forward
+  "<conn-thing-map> i x j" 'conn-etts-regex-inner-backward
   "<conn-thing-map> x l" 'conn-etts-regex-outer-forward
   "<conn-thing-map> x j" 'conn-etts-regex-outer-backward
-  "<conn-thing-map> t i l" 'conn-etts-return-inner-forward
-  "<conn-thing-map> t i j" 'conn-etts-return-inner-backward
+  "<conn-thing-map> i t l" 'conn-etts-return-inner-forward
+  "<conn-thing-map> i t j" 'conn-etts-return-inner-backward
   "<conn-thing-map> t l" 'conn-etts-return-outer-forward
   "<conn-thing-map> t j" 'conn-etts-return-outer-backward
   "<conn-thing-map> S l" 'conn-etts-scopename-forward
   "<conn-thing-map> S j" 'conn-etts-scopename-backward)
-
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-read-thing-state 'conn-etts-things-mode-map)
-  "<conn-thing-map> w i" 'conn-etts-assignment-inner-forward
-  "<conn-thing-map> w l" 'conn-etts-assignment-outer-forward
-  "<conn-thing-map> w m" 'conn-etts-assignment-side-forward
-  "<conn-thing-map> w n" 'conn-etts-assignment-side-backward
-  "<conn-thing-map> @ i" 'conn-etts-attribute-inner-forward
-  "<conn-thing-map> @ l" 'conn-etts-attribute-outer-forward
-  "<conn-thing-map> b i" 'conn-etts-block-inner-forward
-  "<conn-thing-map> b l" 'conn-etts-block-outer-forward
-  "<conn-thing-map> . i" 'conn-etts-call-inner-forward
-  "<conn-thing-map> . l" 'conn-etts-call-outer-forward
-  "<conn-thing-map> C i" 'conn-etts-class-inner-forward
-  "<conn-thing-map> C l" 'conn-etts-class-outer-forward
-  "<conn-thing-map> c i" 'conn-etts-comment-inner-forward
-  "<conn-thing-map> c l" 'conn-etts-comment-outer-forward
-  "<conn-thing-map> q i" 'conn-etts-conditional-inner-forward
-  "<conn-thing-map> q l" 'conn-etts-conditional-outer-forward
-  "<conn-thing-map> [ i" 'conn-etts-frame-inner-forward
-  "<conn-thing-map> [ l" 'conn-etts-frame-outer-forward
-  "<conn-thing-map> f i" 'conn-etts-function-inner-forward
-  "<conn-thing-map> f l" 'conn-etts-function-outer-forward
-  "<conn-thing-map> r i" 'conn-etts-loop-inner-forward
-  "<conn-thing-map> r l" 'conn-etts-loop-outer-forward
-  "<conn-thing-map> n" 'conn-etts-number-forward
-  "<conn-thing-map> d i" 'conn-etts-parameter-inner-forward
-  "<conn-thing-map> d l" 'conn-etts-parameter-outer-forward
-  "<conn-thing-map> x i" 'conn-etts-regex-inner-forward
-  "<conn-thing-map> x l" 'conn-etts-regex-outer-forward
-  "<conn-thing-map> t i" 'conn-etts-return-inner-forward
-  "<conn-thing-map> t l" 'conn-etts-return-outer-forward
-  "<conn-thing-map> S" 'conn-etts-scopename-forward)
 
 (define-minor-mode conn-etts-things-mode
   "Minor mode for conn-etts things")
