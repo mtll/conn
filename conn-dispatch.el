@@ -1715,7 +1715,7 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-setup-shadow-overlays (target-finder)
   ( :method (_target-finder)
-    (pcase-dolist (`(,window . ,_targets) conn-targets)
+    (dolist (window (conn--get-target-windows))
       (with-selected-window window
         (push (make-overlay (point-min) (point-max))
               conn-dispatch--window-shadow-overlays)
