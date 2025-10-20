@@ -1593,6 +1593,7 @@ chooses to handle a command."
   ( :method (_arg) nil)
   ( :method ((arg cons))
     (conn-display-argument (cdr arg)))
+  ( :method ((arg string)) arg)
   ( :method ((arg conn-state-eval-argument))
     (pcase (conn-state-eval-argument-name arg)
       ((and (pred stringp) str)

@@ -136,7 +136,8 @@
 (put 'org-link 'bounds-of-thing-at-point
      (lambda () (org-in-regexp org-link-any-re)))
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
+                                      _arg)
   (add-function :before-while
                 conn-target-window-predicate
                 'conn--org-window-p)
@@ -144,7 +145,8 @@
 
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph))
+                                      _arg)
   (add-function :before-while
                 conn-target-window-predicate
                 'conn--org-window-p)
@@ -219,7 +221,8 @@
      (lambda () (bounds-of-thing-at-point 'org-element)))
 (put 'org-heading 'forward-op 'org-next-visible-heading)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading))
+                                      _arg)
   (let ((conn-target-window-predicate conn-target-window-predicate))
     (add-function :before-while
                   conn-target-window-predicate

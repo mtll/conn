@@ -79,7 +79,8 @@
 
 (conn-define-mark-command conn-mark-heading heading)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
+                                      _arg)
   (conn-dispatch-headings))
 
 (conn-register-thing-commands
@@ -338,7 +339,8 @@
  'dired-line nil
  'dired-previous-line 'dired-next-line)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-line)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-line))
+                                      _arg)
   'conn--dispatch-dired-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
@@ -349,7 +351,8 @@
  'dired-next-subdir 'dired-prev-subdir
  'dired-tree-up 'dired-tree-down)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir))
+                                      _arg)
   'conn--dispatch-dired-subdir)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
@@ -359,7 +362,8 @@
  'dired-dirline nil
  'dired-next-dirline 'dired-prev-dirline)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline))
+                                      _arg)
   'conn--dispatch-dired-dirline)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
@@ -498,7 +502,8 @@
  'ibuffer-line nil
  'ibuffer-backward-line 'ibuffer-forward-line)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line))
+                                      _arg)
   'conn--dispatch-ibuffer-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
@@ -509,7 +514,8 @@
  'ibuffer-forward-filter-group
  'ibuffer-backward-filter-group)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group))
+                                      _arg)
   'conn--dispatch-ibuffer-filter-group)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))

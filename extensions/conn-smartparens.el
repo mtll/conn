@@ -128,7 +128,8 @@
  :forward-op 'conn-sp-forward-sexp-op
  :bounds-op 'conn-sp-bounds-of-sexp)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sp-sexp)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sp-sexp))
+                                      _arg)
   (conn-dispatch-things-read-prefix 'sp-sexp 1))
 
 (conn-register-thing-commands
@@ -199,7 +200,7 @@
        :description "list"
        :bounds-op (lambda (arg)
                     (conn-bounds-of 'forward-sexp arg))
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
                                        (syntax string-quote))))))
@@ -208,7 +209,7 @@
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-bounds-of 'sp-down-sexp arg))
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
                                        (syntax string-quote)))))))

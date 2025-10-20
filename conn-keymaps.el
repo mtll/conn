@@ -149,6 +149,7 @@
   "a u" 'align-unhighlight-rule)
 
 (defvar-keymap conn-search-map
+  "f" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-hightlight-prefix
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward
@@ -426,16 +427,22 @@
   "<remap> <conn-bounds-before-point>" 'undefined)
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-thingatpt-state)
+  "u" conn-backward-word-remap
+  "n" conn-backward-sexp-remap
+  "k" 'forward-line)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
   "O" (conn-anonymous-thing
        'forward-word
        :description "all-words"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
        'forward-symbol
        :description "all-symbols"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'symbol))))
 
 (define-keymap
@@ -452,12 +459,12 @@
   "O" (conn-anonymous-thing
        'word
        :description "all-words"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
        'symbol
        :description "all-symbols"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'symbol)))
   "b" 'conn-dispatch-buttons)
 
@@ -466,7 +473,7 @@
   ")" (conn-anonymous-thing
        'forward-sexp
        :description "list"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-anonymous-thing
@@ -474,7 +481,7 @@
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-bounds-of 'down-list arg))
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))
 
@@ -531,20 +538,20 @@
                                (&rest args)
                              (apply jump args)
                              (conn-push-state 'conn-emacs-state))))
-       :target-finder (lambda () (conn-dispatch-previous-emacs-state)))
+       :target-finder (lambda (_arg) (conn-dispatch-previous-emacs-state)))
   "g y" (conn-anonymous-thing
          'char
          :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-         :target-finder (lambda () (conn-dispatch-global-mark)))
+         :target-finder (lambda (_arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
        'char
        :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-       :target-finder (lambda () (conn-dispatch-mark-register)))
+       :target-finder (lambda (_arg) (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
    'char
    :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-   :target-finder (lambda () (conn-dispatch-mark-ring))))
+   :target-finder (lambda (_arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State
 
@@ -565,12 +572,12 @@
   "o" (conn-anonymous-thing
        'word
        :description "all-words"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'word)))
   "u" (conn-anonymous-thing
        'symbol
        :description "all-symbols"
-       :target-finder (lambda ()
+       :target-finder (lambda (_arg)
                         (conn-dispatch-all-things 'symbol))))
 
 (define-keymap
