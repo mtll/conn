@@ -1399,6 +1399,12 @@ Target overlays may override this default by setting the
                (when (and unhandled (eq cmd 'keyboard-quit))
                  (keyboard-quit))))))))))
 
+(defun conn-dispatch-prompt-p ()
+  (or conn--dispatch-must-prompt
+      conn--dispatch-action-always-prompt
+      (> conn-dispatch-repeat-count 0)
+      (conn-dispatch-target-prompt-p conn-dispatch-target-finder)))
+
 (cl-defgeneric conn-dispatch-select-target ()
   (declare (important-return-value t)))
 
@@ -1435,9 +1441,7 @@ Target overlays may override this default by setting the
                              (concat "Label ["
                                      (number-to-string conn-target-count)
                                      "]")
-                             (or conn--dispatch-must-prompt
-                                 conn--dispatch-action-always-prompt
-                                 (> conn-dispatch-repeat-count 0)))
+                             (conn-dispatch-prompt-p))
           (conn--target-label-payload)))
     (conn-delete-targets)))
 
@@ -1755,6 +1759,9 @@ Target overlays may override this default by setting the
           (last-command conn-state-eval-last-command))
       (recenter-top-bottom (conn-state-eval-prefix-arg)))))
 
+(cl-defgeneric conn-dispatch-target-prompt-p (target-finder)
+  ( :method (_target-finder) nil))
+
 (defclass conn-dispatch-target-key-labels ()
   ()
   "Abstract type for target finders which use key-bindings as labels.
@@ -1908,11 +1915,14 @@ to the key binding for that target."
 (defclass conn-dispatch-focus-targets ()
   ((hidden :initform nil)
    (context-lines :initform 0 :initarg :context-lines)
-   (cursor-location :initform 'middle :initarg :cursor-location)
+   (cursor-location :initform nil)
    (separator-p :initarg :separator))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
+
+(cl-defmethod conn-dispatch-target-prompt-p ((_state conn-dispatch-focus-targets))
+  t)
 
 (cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden)))
@@ -1923,8 +1933,10 @@ contain targets."
     (move-to-column col)))
 
 (cl-defmethod conn-dispatch-recenter-window ((state conn-dispatch-focus-targets))
-  (setf (oref state cursor-location)
-        (or (cadr (memq (oref state cursor-location) recenter-positions))
+  (setf (alist-get (selected-window) (oref state cursor-location))
+        (or (cadr (memq (alist-get (selected-window)
+                                   (oref state cursor-location))
+                        recenter-positions))
             (car recenter-positions))))
 
 (cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-focus-targets))
@@ -1976,10 +1988,13 @@ contain targets."
         (let ((this-scroll-margin
                (min (max 0 scroll-margin)
 		    (truncate (/ (window-body-height) 4.0)))))
-          (pcase (oref state cursor-location)
+          (pcase (alist-get win (oref state cursor-location))
             ('middle (recenter nil))
             ('top (recenter this-scroll-margin))
-            ('bottom (recenter (- -1 this-scroll-margin)))))))
+            ('bottom (recenter (- -1 this-scroll-margin)))
+            (_
+             (setf (alist-get win (oref state cursor-location)) 'middle)
+             (recenter nil))))))
     (setf (oref state hidden) hidden)
     (sit-for 0)))
 
@@ -3804,6 +3819,7 @@ contain targets."
                      :reference conn-dispatch-mover-reference))))
             ,#'conn-handle-dispatch-select-command
             ,@conn--dispatch-read-event-handlers))
+         (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn-dispatch-target-finder
           (conn-dispatch-setup-target-finder thing thing-arg))
          (conn-dispatch-repeat-count 0)
@@ -3817,7 +3833,6 @@ contain targets."
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
-         (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn--dispatch-read-event-message-prefixes
           `(,(propertize (conn-describe-action action t)
                          'face 'eldoc-highlight-function-argument)
@@ -3976,7 +3991,8 @@ contain targets."
             (pcase (ignore-errors (conn-bounds-of cmd arg))
               ((conn-bounds `(,beg . ,end))
                (conn-dispatch-focus-thing-at-point
-                :string (buffer-substring-no-properties beg end)))))))
+                :string (buffer-substring-no-properties beg end))))))
+         (conn--dispatch-action-always-prompt t))
     (conn-eval-with-state 'conn-dispatch-thingatpt-state
         (conn-perform-dispatch
          & (conn-dispatch-action-argument)
