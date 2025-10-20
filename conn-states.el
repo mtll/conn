@@ -1323,28 +1323,31 @@ chooses to handle a command."
     (setq conn--state-eval-message (apply #'format format-string args)
           conn--state-eval-message-timeout (time-add nil minibuffer-message-timeout))))
 
+
+(defun conn--display-state-eval-messages ()
+  (concat
+   (when conn--state-eval-message (format "[%s] " conn--state-eval-message))
+   (propertize conn--state-eval-error-message 'face 'error)))
+
 (defun conn--state-eval-prompt (prompt arguments)
-  (let ((inhibit-message conn-state-eval-inhibit-message)
-        (message-log-max nil))
-    (message
-     (substitute-command-keys
-      (concat
-       (propertize prompt 'face 'minibuffer-prompt)
-       " (arg: "
-       (propertize
-        (cond (conn--state-eval-prefix-mag
-               (number-to-string
-                (* (if conn--state-eval-prefix-sign -1 1)
-                   conn--state-eval-prefix-mag)))
-              (conn--state-eval-prefix-sign "[-1]")
-              (t "[1]"))
-        'face 'read-multiple-choice-face)
-       ", \\[reset-arg] reset"
-       (when-let* ((args (delq nil (mapcar #'conn-display-argument arguments))))
-         (string-join (cons nil args) "; "))
-       "): "
-       (when conn--state-eval-message (format "[%s] " conn--state-eval-message))
-       (propertize conn--state-eval-error-message 'face 'error))))))
+  (message
+   (substitute-command-keys
+    (concat
+     (propertize prompt 'face 'minibuffer-prompt)
+     " (arg: "
+     (propertize
+      (cond (conn--state-eval-prefix-mag
+             (number-to-string
+              (* (if conn--state-eval-prefix-sign -1 1)
+                 conn--state-eval-prefix-mag)))
+            (conn--state-eval-prefix-sign "[-1]")
+            (t "[1]"))
+      'face 'read-multiple-choice-face)
+     ", \\[reset-arg] reset"
+     (when-let* ((args (delq nil (mapcar #'conn-display-argument arguments))))
+       (string-join (cons nil args) "; "))
+     "): "
+     (conn--display-state-eval-messages)))))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -1464,7 +1467,9 @@ chooses to handle a command."
                               (time-less-p conn--state-eval-message-timeout nil))
                      (setq conn--state-eval-message nil
                            conn--state-eval-message-timeout nil))
-                   (funcall display-handler prompt arguments)
+                   (let ((inhibit-message conn-state-eval-inhibit-message)
+                         (message-log-max nil))
+                     (funcall display-handler prompt arguments))
                    (setf conn--state-eval-error-message "")
                    (command-case (key-binding (read-key-sequence nil) t)))
                  (setq local-exit t)))
@@ -1484,19 +1489,51 @@ chooses to handle a command."
 
 \(fn STATE ARGLIST &key UPDATE-HANDLER COMMAND-HANDLER DISPLAY-HANDLER PROMPT PREFIX PRE POST REFERENCE)"
   (declare (indent 2))
-  (let (patterns args body)
+  (let (patterns args labels body)
     (cl-labels ((qt (form)
                   (pcase form
+
                     ((and exp `(conn-eval-with-state . ,_))
                      exp)
+
+                    (`(& ,(and (pred keywordp) label)
+                         . ,tail)
+                     (let ((sym (with-memoization (alist-get label labels)
+                                  (gensym (substring (symbol-name label) 1)))))
+                       (cons sym (qt tail))))
+
+                    (`(,(and splice (or '&1 '&2 '&3 '&4 '&5 '&6 '&7 '&8 '&9))
+                       ,(and (pred keywordp) label)
+                       . ,tail)
+                     (let* ((count (thread-first
+                                     (symbol-name splice)
+                                     (substring 1)
+                                     (string-to-number)))
+                            (syms
+                             (if label
+                                 (with-memoization (alist-get label labels)
+                                   (cl-loop for i from 1 upto count
+                                            collect (thread-last
+                                                      (substring (symbol-name label) 1)
+                                                      (gensym))))
+                               (cl-loop repeat count collect (gensym)))))
+                       (unless (and (listp syms)
+                                    (length= syms count))
+                         (error "All splicing labels must have the same length"))
+                       (append syms (qt tail))))
+
                     (`(& ,(or `(,(and (pred keywordp) label) ,exp)
                               `(,(and (pred keywordp) label) . ,exp)
                               exp)
                          . ,tail)
-                     (let ((sym (gensym)))
+                     (let ((sym (if label
+                                    (with-memoization (alist-get label labels)
+                                      (gensym (substring (symbol-name label) 1)))
+                                  (gensym))))
                        (push sym patterns)
                        (push (if label `(cons ,label ,exp) exp) args)
                        (cons sym (qt tail))))
+
                     (`(,(and splice (or '&1 '&2 '&3 '&4 '&5 '&6 '&7 '&8 '&9))
                        ,(or `(,(and (pred keywordp) label) ,exp)
                             `(,(and (pred keywordp) label) . ,exp)
@@ -1506,14 +1543,26 @@ chooses to handle a command."
                                      (symbol-name splice)
                                      (substring 1)
                                      (string-to-number)))
-                            (syms (cl-loop repeat count collect (gensym)))
+                            (syms
+                             (if label
+                                 (with-memoization (alist-get label labels)
+                                   (cl-loop for i from 1 upto count
+                                            collect (thread-last
+                                                      (substring (symbol-name label) 1)
+                                                      (gensym))))
+                               (cl-loop repeat count collect (gensym))))
                             (pat (list '\` (cl-loop for s in syms
                                                     collect (list '\, s)))))
+                       (unless (and (listp syms)
+                                    (length= syms count))
+                         (error "All splicing labels must have the same length"))
                        (push pat patterns)
                        (push (if label `(cons ,label ,exp) exp) args)
                        (append syms (qt tail))))
+
                     (`(,head . ,tail)
                      (cons (qt head) (qt tail)))
+
                     (form form))))
       (setq body (qt form))
       `(conn--eval-with-state ,state

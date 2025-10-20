@@ -826,7 +826,7 @@ themselves once the selection process has concluded."
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
         (conn-state-eval-handle))
-    (user-error (setq conn--state-eval-error-message "Dispatch ring empty"))))
+    (user-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
   (condition-case _
@@ -837,7 +837,7 @@ themselves once the selection process has concluded."
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
         (conn-state-eval-handle))
-    (user-error (setq conn--state-eval-error-message "Dispatch ring empty"))))
+    (user-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
   (conn-dispatch-ring-remove-stale)
@@ -845,7 +845,7 @@ themselves once the selection process has concluded."
       (if (bound-and-true-p conn-posframe-mode)
           (conn-posframe--dispatch-ring-display-subr)
         (conn-state-eval-message "%s" (conn-describe-dispatch head)))
-    (setq conn--state-eval-error-message "Dispatch ring empty"))
+    (user-error "Dispatch ring empty"))
   (conn-state-eval-handle))
 
 ;;;;; Dispatch Window Filtering
@@ -1447,12 +1447,6 @@ Target overlays may override this default by setting the
 
 ;;;;; Perform Dispatch Loop
 
-(define-error 'conn-dispatch-error "Dispatch error" 'user-error)
-
-(defun conn-dispatch-error (string)
-  (setf conn--state-eval-error-message string)
-  (signal 'conn-dispatch-error nil))
-
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
@@ -1515,7 +1509,8 @@ Target overlays may override this default by setting the
                        ,@body
                        (cl-incf conn-dispatch-repeat-count))
                    (user-error
-                    (conn-dispatch-error (error-message-string err))))))
+                    (setf conn--state-eval-error-message
+                          (error-message-string err))))))
            (dolist (undo conn--dispatch-loop-change-groups)
              (funcall undo :accept)))))))
 
@@ -3661,7 +3656,7 @@ contain targets."
       (if (conn-action-stale-p (conn-previous-dispatch-action prev))
           (progn
             (conn-dispatch-ring-remove-stale)
-            (conn-dispatch-error "Last dispatch action stale"))
+            (user-error "Last dispatch action stale"))
         (conn-ring-delq prev conn-dispatch-ring)
         (conn-state-eval-handle)
         (conn-eval-with-state-return
@@ -3669,7 +3664,7 @@ contain targets."
            prev
            :repeat (xor (conn-state-eval-consume-prefix-arg)
                         (conn-previous-dispatch-repeat prev)))))
-    (conn-dispatch-error "Dispatch ring empty")))
+    (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))

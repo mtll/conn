@@ -23,6 +23,7 @@
 (require 'conn-things)
 (require 'conn-dispatch)
 (require 'evil-textobj-tree-sitter)
+(require 'mule-util)
 
 (cl-defstruct (conn--etts-thing
                (:constructor conn--make-etts-thing))
@@ -83,7 +84,7 @@
            (nodes nil)
            (max most-negative-fixnum)
            (min most-positive-fixnum))
-      (catch 'return
+      (catch 'done
         (while (if (< arg 0)
                    (> beg (point-min))
                  (< beg (point-max)))
@@ -109,7 +110,7 @@
                 (cl-callf min min (car node))
                 (push (conn-make-bounds cmd 1 node) nodes)
                 (when (= (cl-incf count) (abs arg))
-                  (throw 'return nil)))))))
+                  (throw 'done nil)))))))
       (when nodes
         (conn-make-bounds
          thing arg
@@ -117,6 +118,170 @@
          :subregions (nreverse nodes))))))
 
 (conn-register-thing 'conn-etts-thing)
+
+(conn-define-state conn-etts-expand-state (conn-mode-line-face-state)
+  "State for selecting a tree sit node."
+  :lighter "NODE"
+  :mode-line-face 'conn-read-thing-mode-line-face)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-etts-expand-state)
+  "l" 'conn-expand
+  "j" 'conn-contract
+  "e" 'end)
+
+(defun conn-etts-select-node (nodes)
+  (pcase nodes
+    ('nil)
+    (`((,_ ,beg . ,end) . nil)
+     (conn-make-bounds
+      'conn-etts-thing nil
+      (cons beg end)))
+    (_
+     (save-mark-and-excursion
+       (cl-callf sort nodes
+         :key (pcase-lambda (`(,_ ,beg . ,end))
+                (- end beg)))
+       (pcase (car nodes)
+         (`(,_ ,beg . ,end)
+          (goto-char beg)
+          (conn--push-ephemeral-mark end)
+          (activate-mark)))
+       (conn-eval-with-state 'conn-etts-expand-state
+           (conn-make-bounds
+            'conn-etts-thing nil
+            & (:node
+               (oclosure-lambda (conn-state-eval-argument
+                                 (required t))
+                   (self command)
+                 (pcase command
+                   ('conn-contract
+                    (setq nodes (nconc (last nodes) (butlast nodes)))
+                    (pcase (car nodes)
+                      (`(,_ ,beg . ,end)
+                       (goto-char beg)
+                       (conn--push-ephemeral-mark end)))
+                    (conn-state-eval-handle)
+                    self)
+                   ('conn-expand
+                    (setq nodes (nconc (cdr nodes) (list (car nodes))))
+                    (pcase (car nodes)
+                      (`(,_ ,beg . ,end)
+                       (goto-char beg)
+                       (conn--push-ephemeral-mark end)))
+                    (conn-state-eval-handle)
+                    self)
+                   ((or 'end 'exit-recursive-edit)
+                    (conn-set-argument
+                     self
+                     (cons (region-beginning) (region-end))))
+                   (_ self)))))
+         :prompt "Node"
+         :display-handler (lambda (prompt _args)
+                            (message
+                             (substitute-command-keys
+                              (concat
+                               (propertize prompt 'face 'minibuffer-prompt)
+                               " ("
+                               "Node: "
+                               (propertize (format "%s" (caar nodes))
+                                           'face 'eldoc-highlight-function-argument)
+                               "; "
+                               (concat
+                                "\\[conn-expand] expand; "
+                                "\\[conn-contract] contract; "
+                                "\\[end] finish")
+                               "): "
+                               (conn--display-state-eval-messages))))))))))
+
+(defvar conn-etts-parent-things
+  '(conn-etts-assignment-inner
+    conn-etts-assignment-outer
+    conn-etts-assignment-side
+    conn-etts-attribute-inner
+    conn-etts-attribute-outer
+    conn-etts-block-inner
+    conn-etts-block-outer
+    conn-etts-call-inner
+    conn-etts-call-outer
+    conn-etts-class-inner
+    conn-etts-class-outer
+    conn-etts-comment-inner
+    conn-etts-comment-outer
+    conn-etts-conditional-inner
+    conn-etts-conditional-outer
+    conn-etts-frame-inner
+    conn-etts-frame-outer
+    conn-etts-function-inner
+    conn-etts-function-outer
+    conn-etts-loop-inner
+    conn-etts-loop-outer
+    conn-etts-number
+    conn-etts-parameter-inner
+    conn-etts-parameter-outer
+    conn-etts-regex-inner
+    conn-etts-regex-outer
+    conn-etts-return-inner
+    conn-etts-return-outer
+    conn-etts-scopename))
+
+(defclass conn-etts-parents-targets (conn-dispatch-target-window-predicate)
+  ((things :initarg :things)
+   (window-predicate
+    :initform (lambda (win) (eq win (selected-window))))))
+
+(defun conn-etts-parents-target-finder (_arg)
+  (conn-etts-parents-targets :things conn-etts-parent-things))
+
+(cl-defmethod conn-dispatch-update-targets ((state conn-etts-parents-targets))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (let ((captures
+             (treesit-query-capture (treesit-buffer-root-node)
+                                    (conn-etts--get-query)
+                                    (window-start) (window-end)
+                                    nil t))
+            (groups
+             (cl-loop for thing in (oref state things)
+                      append (conn--etts-thing-groups
+                              (get thing :conn-etts-thing)))))
+        (pcase-dolist (`(,group ,tbeg . ,tend) groups)
+          (dolist (capture captures)
+            (let ((beg nil)
+                  (end nil))
+              (if-let* ((nbeg (alist-get tbeg capture)))
+                  (when-let* ((nend (alist-get tend capture))
+                              (_(and (< (treesit-node-start nbeg) (point))
+                                     (<= (point) (treesit-node-end nend)))))
+                    (setq beg (treesit-node-start nbeg)
+                          end (treesit-node-end nend)))
+                (when-let* ((n (alist-get group capture))
+                            (_(and (< (treesit-node-start n) (point))
+                                   (<= (point) (treesit-node-end n)))))
+                  (setq beg (treesit-node-start n)
+                        end (treesit-node-end n))))
+              (when beg
+                (if-let* ((ov (car (conn--overlays-in-of-type
+                                    beg (1+ beg) 'conn-target-overlay))))
+                    (when (length= (cl-pushnew (cons group (cons beg end))
+                                               (conn-anonymous-thing-property
+                                                (overlay-get ov 'thing)
+                                                :nodes)
+                                               :key #'cdr
+                                               :test #'equal)
+                                   2)
+                      (move-overlay ov (overlay-start ov) (1+ (overlay-start ov)))
+                      (overlay-put ov 'display (truncate-string-ellipsis)))
+                  (letrec ((ov (conn-make-target-overlay beg 0))
+                           (thing
+                            (conn-anonymous-thing
+                             'conn-etts-thing
+                             :nodes (list (cons group (cons beg end)))
+                             :bounds-op (lambda (_arg)
+                                          (conn-etts-select-node
+                                           (conn-anonymous-thing-property thing :nodes))))))
+                    (overlay-put ov 'thing thing))))))))))
+  (cl-call-next-method))
 
 (defclass conn-etts-targets (conn-dispatch-target-window-predicate)
   ((thing :initarg :thing)
@@ -137,7 +302,8 @@
                  (nodes (conn-etts--filter-captures groups captures)))
             (pcase-dolist (`(,beg . ,_end) nodes)
               (when (<= (window-start) beg)
-                (conn-make-target-overlay beg 0)))))))))
+                (conn-make-target-overlay beg 0))))))))
+  (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
                                       _arg)
@@ -432,6 +598,12 @@
 
 (define-minor-mode conn-etts-things-mode
   "Minor mode for conn-etts things")
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state 'conn-etts-things-mode)
+  "h" (conn-anonymous-thing
+       'conn-etts-thing
+       :target-finder 'conn-etts-parents-target-finder))
 
 ;; fix etts comment thing overriding ours
 (conn-register-thing

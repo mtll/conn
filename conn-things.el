@@ -124,7 +124,7 @@
                ;; (:constructor conn-anonymous-thing (parent &rest properties))
                )
   (parent nil :read-only t)
-  (properties nil :read-only t))
+  (properties nil))
 
 (defun conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
@@ -167,7 +167,11 @@
         (list #'conn--set-anonymous-thing-property)))
 
 (define-inline conn-anonymous-thing-property (object property)
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (gv-setter
+            (lambda (val)
+              `(setf (plist-get (conn-anonymous-thing-properties ,object) ,property)
+                     ,val))))
   (inline-quote
    (plist-get (conn-anonymous-thing-properties ,object) ,property)))
 
@@ -229,7 +233,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-generic-define-generalizer conn--thing-command-generalizer
   70 (lambda (cmd &rest _)
-       `(conn-command-thing ,cmd))
+       `(and (conn-command-thing ,cmd) ,cmd))
   (lambda (thing &rest _)
     (when thing
       `(,@(cl-loop for thing in (conn-thing-all-parents thing)
