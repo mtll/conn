@@ -946,13 +946,13 @@ Optionally the overlay may have an associated THING."
     (cl-callf2 delq ov (alist-get win conn-targets)))
   (delete-overlay ov))
 
-(defun conn-make-string-target-overlays (string &optional predicate)
+(defun conn-make-string-target-overlays (string &optional predicate fixed-length)
   (when (length> string 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (pcase-dolist (`(,beg . ,end)
                        (conn--visible-matches string predicate))
-          (conn-make-target-overlay beg (- end beg)))))))
+          (conn-make-target-overlay beg (or fixed-length (- end beg))))))))
 
 (defun conn-make-re-target-overlays (regexp &optional predicate)
   (when (length> regexp 0)
@@ -1825,33 +1825,35 @@ to the key binding for that target."
    (predicate :initform nil :initarg :predicate)))
 
 (cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-read-n-chars))
-  (with-slots (string string-length predicate) state
-    (if string
-        (conn-make-string-target-overlays string predicate)
+  (if-let* ((string (oref state string)))
+      (conn-make-string-target-overlays string (oref state predicate))
+    (let* ((string-length (oref state string-length))
+           (predicate (oref state predicate))
+           (prompt (if (> string-length 1)
+                       (propertize (format "%d Chars" string-length)
+                                   'face 'minibuffer-prompt)
+                     (propertize "1 Char" 'face 'minibuffer-prompt))))
       (conn-with-input-method
-        (let* ((prompt (if (> string-length 1)
-                           (propertize (format "%d Chars" string-length)
-                                       'face 'minibuffer-prompt)
-                         (propertize "1 Char" 'face 'minibuffer-prompt))))
-          (while (length< string string-length)
-            (when (length> string 0)
-              (while-no-input
-                (conn-make-string-target-overlays string predicate)))
-            (catch 'dispatch-redisplay
-              (conn-with-dispatch-event-handler 'backspace
-                  (define-keymap "<remap> <backward-delete-char>" 'backspace)
-                  (lambda (cmd)
-                    (when (eq cmd 'backspace)
-                      (when (length> string 0)
-                        (cl-callf substring string 0 -1))
-                      (throw 'backspace nil)))
-                (cl-callf thread-last
-                    string
-                  (conn-dispatch-read-event prompt t)
-                  (char-to-string)
-                  (concat string))))
-            (conn-delete-targets))
-          (conn-make-string-target-overlays string predicate)))))
+        (while (length< string string-length)
+          (when (length> string 0)
+            (while-no-input
+              (conn-make-string-target-overlays string predicate)))
+          (catch 'dispatch-redisplay
+            (conn-with-dispatch-event-handler 'backspace
+                (define-keymap "<remap> <backward-delete-char>" 'backspace)
+                (lambda (cmd)
+                  (when (eq cmd 'backspace)
+                    (when (length> string 0)
+                      (cl-callf substring string 0 -1))
+                    (throw 'backspace nil)))
+              (cl-callf thread-last
+                  string
+                (conn-dispatch-read-event prompt t)
+                (char-to-string)
+                (concat string))))
+          (conn-delete-targets)))
+      (conn-make-string-target-overlays string predicate 0)
+      (setf (oref state string) string)))
   (cl-call-next-method))
 
 (defclass conn-dispatch-read-with-timeout (conn-dispatch-string-targets)
@@ -2147,7 +2149,7 @@ contain targets."
             (when (get-char-property (point) 'button)
               (conn-make-target-overlay (point) 0))))))))
 
-(defun conn-dispatch-re-matches (regexp)
+(defun conn-dispatch-re-matches (regexp &optional fixed-length)
   (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
@@ -2155,7 +2157,7 @@ contain targets."
         (save-excursion
           (goto-char (window-start))
           (pcase-dolist (`(,beg . ,end) (conn--visible-re-matches regexp))
-            (conn-make-target-overlay beg (- end beg))))))))
+            (conn-make-target-overlay beg (or fixed-length (- end beg)))))))))
 
 (defun conn-dispatch-things-read-prefix (thing prefix-length)
   (declare (important-return-value t))
@@ -2167,7 +2169,7 @@ contain targets."
                   (pcase (ignore-errors (bounds-of-thing-at-point thing))
                     (`(,tbeg . ,_tend) (= beg tbeg)))))))
 
-(defun conn-dispatch-things-with-prefix (thing prefix-string)
+(defun conn-dispatch-things-with-prefix (thing prefix-string &optional fixed-length)
   (declare (important-return-value t))
   (lambda ()
     (conn-make-string-target-overlays
@@ -2176,9 +2178,10 @@ contain targets."
        (save-excursion
          (goto-char beg)
          (pcase (ignore-errors (bounds-of-thing-at-point thing))
-           (`(,tbeg . ,_tend) (= beg tbeg))))))))
+           (`(,tbeg . ,_tend) (= beg tbeg)))))
+     fixed-length)))
 
-(defun conn-dispatch-things-with-re-prefix (thing prefix-regex)
+(defun conn-dispatch-things-with-re-prefix (thing prefix-regex &optional fixed-length)
   (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
@@ -2192,9 +2195,9 @@ contain targets."
                             (pcase (ignore-errors (bounds-of-thing-at-point thing))
                               (`(,tbeg . ,tend)
                                (and (= tbeg beg) (<= end tend))))))))
-          (conn-make-target-overlay beg (- end beg)))))))
+          (conn-make-target-overlay beg (or fixed-length (- end beg))))))))
 
-(defun conn-dispatch-things-matching-re (thing regexp)
+(defun conn-dispatch-things-matching-re (thing regexp &optional fixed-length)
   (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
@@ -2208,7 +2211,7 @@ contain targets."
                             (pcase (ignore-errors (bounds-of-thing-at-point thing))
                               (`(,tbeg . ,tend)
                                (and (<= tbeg beg) (<= tend end))))))))
-          (conn-make-target-overlay beg (- end beg)))))))
+          (conn-make-target-overlay beg (or fixed-length (- end beg))))))))
 
 (defun conn-dispatch-columns ()
   (let ((line-move-visual nil)
@@ -2223,6 +2226,9 @@ contain targets."
           (while (and (< (point-min) (point))
                       (line-move -1 t))
             (conn-make-target-overlay (point) 0)))))))
+
+(cl-defmethod conn-dispatch-setup-label-faces ((_ (eql conn-dispatch-columns)))
+  nil)
 
 (defun conn-dispatch-lines ()
   (dolist (win (conn--get-target-windows))
