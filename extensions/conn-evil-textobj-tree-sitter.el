@@ -21,6 +21,7 @@
 
 (require 'conn)
 (require 'conn-things)
+(require 'conn-dispatch)
 (require 'evil-textobj-tree-sitter)
 
 (cl-defstruct (conn--etts-thing
@@ -52,6 +53,21 @@
        (treesit-query-capture (treesit-buffer-root-node)
                               f-query end start nil t)))))
 
+(defun conn-etts--filter-captures (groups captures)
+  (let (regions)
+    (pcase-dolist (`(,group ,tbeg . ,tend) groups)
+      (dolist (capture captures)
+        (if-let* ((beg (alist-get tbeg capture)))
+            (when-let* ((end (alist-get tend capture)))
+              (push (cons (treesit-node-start beg)
+                          (treesit-node-end end))
+                    regions))
+          (when-let* ((node (alist-get group capture)))
+            (push (cons (treesit-node-start node)
+                        (treesit-node-end node))
+                  regions)))))
+    regions))
+
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
   (setq arg (prefix-numeric-value arg))
   (unless (= 0 arg)
@@ -76,18 +92,7 @@
                       (min (point-max) (+ beg conn-etts--block-size)))
                 captures (conn-etts--get-captures thing beg end)
                 beg end)
-          (let (pending)
-            (dolist (capture captures)
-              (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-                (if-let* ((beg (alist-get tbeg capture)))
-                    (when-let* ((end (alist-get tend capture)))
-                      (push (cons (treesit-node-start beg)
-                                  (treesit-node-end end))
-                            pending))
-                  (when-let* ((node (alist-get group capture)))
-                    (push (cons (treesit-node-start node)
-                                (treesit-node-end node))
-                          pending)))))
+          (let ((pending (conn-etts--filter-captures groups captures)))
             (cl-callf sort pending
               :key (if (< arg 0) #'car #'cdr)
               :reverse (< arg 0)
@@ -113,6 +118,33 @@
 
 (conn-register-thing 'conn-etts-thing)
 
+(defclass conn-etts-targets (conn-dispatch-target-window-predicate)
+  ((thing :initarg :thing)
+   (window-predicate
+    :initform (lambda (win)
+                (buffer-local-value 'treesit-primary-parser
+                                    (window-buffer win))))))
+
+(cl-defmethod conn-dispatch-update-targets ((state conn-etts-targets))
+  (let ((thing (oref state thing)))
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (ignore-errors
+          (let* ((captures (conn-etts--get-captures thing
+                                                    (window-start)
+                                                    (window-end)))
+                 (groups (conn--etts-thing-groups thing))
+                 (nodes (conn-etts--filter-captures groups captures)))
+            (pcase-dolist (`(,beg . ,_end) nodes)
+              (when (<= (window-start) beg)
+                (conn-make-target-overlay beg 0)))))))))
+
+(cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
+                                      _arg)
+  (conn-etts-targets
+   :thing (get (or (get cmd :conn-command-thing) cmd)
+               :conn-etts-thing)))
+
 (defmacro conn-etts-define-thing (name group &optional query)
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
@@ -127,6 +159,7 @@
             :conn-etts-thing (conn--make-etts-thing
                               :groups ',groups
                               :query ,(macroexp-quote query)))
+
        (conn-register-thing ',name
                             :parent 'conn-etts-thing
                             :forward-op ',forward-cmd)
@@ -193,178 +226,149 @@
 (conn-etts-define-thing conn-etts-statement "statement.outer")
 
 (defvar-keymap conn-etts-assignment-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
+  :repeat t
   "l" 'conn-etts-assignment-inner-forward
   "j" 'conn-etts-assignment-inner-backward)
 
 (defvar-keymap conn-etts-assignment-side-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "m"  'conn-etts-assignment-side-forward
-  "n"  'conn-etts-assignment-side-backward)
+  :repeat t
+  "m" 'conn-etts-assignment-side-forward
+  "n" 'conn-etts-assignment-side-backward)
 
 (defvar-keymap conn-etts-assignment-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-assignment-outer-forward
-  "j"  'conn-etts-assignment-outer-backward)
+  :repeat t
+  "l" 'conn-etts-assignment-outer-forward
+  "j" 'conn-etts-assignment-outer-backward)
 
 (defvar-keymap conn-etts-attribute-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-attribute-inner-forward
-  "j"  'conn-etts-attribute-inner-backward)
+  :repeat t
+  "l" 'conn-etts-attribute-inner-forward
+  "j" 'conn-etts-attribute-inner-backward)
 
 (defvar-keymap conn-etts-attribute-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-attribute-outer-forward
-  "j"  'conn-etts-attribute-outer-backward)
+  :repeat t
+  "l" 'conn-etts-attribute-outer-forward
+  "j" 'conn-etts-attribute-outer-backward)
 
 (defvar-keymap conn-etts-block-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-block-inner-forward
-  "j"  'conn-etts-block-inner-backward)
+  :repeat t
+  "l" 'conn-etts-block-inner-forward
+  "j" 'conn-etts-block-inner-backward)
 
 (defvar-keymap conn-etts-block-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-block-outer-forward
-  "j"  'conn-etts-block-outer-backward)
+  :repeat t
+  "l" 'conn-etts-block-outer-forward
+  "j" 'conn-etts-block-outer-backward)
 
 (defvar-keymap conn-etts-call-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-call-inner-forward
-  "j"  'conn-etts-call-inner-backward)
+  :repeat t
+  "l" 'conn-etts-call-inner-forward
+  "j" 'conn-etts-call-inner-backward)
 
 (defvar-keymap conn-etts-call-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-call-outer-forward
-  "j"  'conn-etts-call-outer-backward)
+  :repeat t
+  "l" 'conn-etts-call-outer-forward
+  "j" 'conn-etts-call-outer-backward)
 
 (defvar-keymap conn-etts-class-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-class-inner-forward
-  "j"  'conn-etts-class-inner-backward)
+  :repeat t
+  "l" 'conn-etts-class-inner-forward
+  "j" 'conn-etts-class-inner-backward)
 
 (defvar-keymap conn-etts-class-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-class-outer-forward
-  "j"  'conn-etts-class-outer-backward)
+  :repeat t
+  "l" 'conn-etts-class-outer-forward
+  "j" 'conn-etts-class-outer-backward)
 
 (defvar-keymap conn-etts-comment-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-comment-inner-forward
-  "j"  'conn-etts-comment-inner-backward)
+  :repeat t
+  "l" 'conn-etts-comment-inner-forward
+  "j" 'conn-etts-comment-inner-backward)
 
 (defvar-keymap conn-etts-comment-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-comment-outer-forward
-  "j"  'conn-etts-comment-outer-backward)
+  :repeat t
+  "l" 'conn-etts-comment-outer-forward
+  "j" 'conn-etts-comment-outer-backward)
 
 (defvar-keymap conn-etts-conditional-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-conditional-inner-forward
-  "j"  'conn-etts-conditional-inner-backward)
+  :repeat t
+  "l" 'conn-etts-conditional-inner-forward
+  "j" 'conn-etts-conditional-inner-backward)
 
 (defvar-keymap conn-etts-conditional-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-conditional-outer-forward
-  "j"  'conn-etts-conditional-outer-backward)
+  :repeat t
+  "l" 'conn-etts-conditional-outer-forward
+  "j" 'conn-etts-conditional-outer-backward)
 
 (defvar-keymap conn-etts-frame-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-frame-inner-forward
-  "j"  'conn-etts-frame-inner-backward)
+  :repeat t
+  "l" 'conn-etts-frame-inner-forward
+  "j" 'conn-etts-frame-inner-backward)
 
 (defvar-keymap conn-etts-frame-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-frame-outer-forward
-  "j"  'conn-etts-frame-outer-backward)
+  :repeat t
+  "l" 'conn-etts-frame-outer-forward
+  "j" 'conn-etts-frame-outer-backward)
 
 (defvar-keymap conn-etts-function-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-function-inner-forward
-  "j"  'conn-etts-function-inner-backward)
+  :repeat t
+  "l" 'conn-etts-function-inner-forward
+  "j" 'conn-etts-function-inner-backward)
 
 (defvar-keymap conn-etts-function-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-function-outer-forward
-  "j"  'conn-etts-function-outer-backward)
+  :repeat t
+  "l" 'conn-etts-function-outer-forward
+  "j" 'conn-etts-function-outer-backward)
 
 (defvar-keymap conn-etts-loop-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-loop-inner-forward
-  "j"  'conn-etts-loop-inner-backward)
+  :repeat t
+  "l" 'conn-etts-loop-inner-forward
+  "j" 'conn-etts-loop-inner-backward)
 
 (defvar-keymap conn-etts-loop-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-loop-outer-forward
-  "j"  'conn-etts-loop-outer-backward)
+  :repeat t
+  "l" 'conn-etts-loop-outer-forward
+  "j" 'conn-etts-loop-outer-backward)
 
 (defvar-keymap conn-etts-number-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-number-forward
-  "j"  'conn-etts-number-backward)
+  :repeat t
+  "l" 'conn-etts-number-forward
+  "j" 'conn-etts-number-backward)
 
 (defvar-keymap conn-etts-parameter-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-parameter-inner-forward
-  "j"  'conn-etts-parameter-inner-backward)
+  :repeat t
+  "l" 'conn-etts-parameter-inner-forward
+  "j" 'conn-etts-parameter-inner-backward)
 
 (defvar-keymap conn-etts-parameter-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-parameter-outer-forward
-  "j"  'conn-etts-parameter-outer-backward)
+  :repeat t
+  "l" 'conn-etts-parameter-outer-forward
+  "j" 'conn-etts-parameter-outer-backward)
 
 (defvar-keymap conn-etts-regex-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-regex-inner-forward
-  "j"  'conn-etts-regex-inner-backward)
+  :repeat t
+  "l" 'conn-etts-regex-inner-forward
+  "j" 'conn-etts-regex-inner-backward)
 
 (defvar-keymap conn-etts-regex-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-regex-outer-forward
-  "j"  'conn-etts-regex-outer-backward)
+  :repeat t
+  "l" 'conn-etts-regex-outer-forward
+  "j" 'conn-etts-regex-outer-backward)
 
 (defvar-keymap conn-etts-return-inner-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-return-inner-forward
-  "j"  'conn-etts-return-inner-backward)
+  :repeat t
+  "l" 'conn-etts-return-inner-forward
+  "j" 'conn-etts-return-inner-backward)
 
 (defvar-keymap conn-etts-return-outer-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-return-outer-forward
-  "j"  'conn-etts-return-outer-backward)
+  :repeat t
+  "l" 'conn-etts-return-outer-forward
+  "j" 'conn-etts-return-outer-backward)
 
 (defvar-keymap conn-etts-scopename-repeat-map
-  :repeat (:continue (recenter-top-bottom
-                      conn-recenter-on-region))
-  "l"  'conn-etts-scopename-forward
-  "j"  'conn-etts-scopename-backward)
+  :repeat t
+  "l" 'conn-etts-scopename-forward
+  "j" 'conn-etts-scopename-backward)
 
 (defvar-keymap conn-etts-things-mode-map
   "<conn-thing-map> i w l" 'conn-etts-assignment-inner-forward
