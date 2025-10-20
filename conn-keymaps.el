@@ -513,8 +513,8 @@
   "d" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
   "SPC" 'conn-dispatch-jump
-  "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-replace
+  ">" 'conn-dispatch-register-load
+  "M->" 'conn-dispatch-register-replace
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase

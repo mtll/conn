@@ -4202,7 +4202,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                       _arg)
   (conn-dispatch-all-things 'paragraph))
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing char))
+(cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       _arg)
   (conn-dispatch-read-string-with-timeout))
 
