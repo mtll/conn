@@ -1447,40 +1447,43 @@ chooses to handle a command."
                (_ (update-args cmd)))
              (setq conn-state-eval-last-command cmd)
              (when post (funcall post cmd))))
+         (display-message ()
+           (when (and conn--state-eval-message-timeout
+                      (time-less-p conn--state-eval-message-timeout nil))
+             (setq conn--state-eval-message nil
+                   conn--state-eval-message-timeout nil))
+           (let ((inhibit-message conn-state-eval-inhibit-message)
+                 (message-log-max nil))
+             (funcall display-handler prompt arguments))
+           (setf conn--state-eval-error-message ""))
          (cont ()
-           (conn-with-recursive-stack state
-             (let* ((conn--state-eval-prefix-mag (when prefix (abs prefix)))
-                    (conn--state-eval-prefix-sign (when prefix (> 0 prefix)))
-                    (conn--state-eval-error-message "")
-                    (conn--state-eval-message nil)
-                    (conn--state-eval-message-timeout nil)
-                    (conn--state-eval-exiting nil)
-                    (inhibit-message t)
-                    (emulation-mode-map-alists
-                     `(((,state . ,overriding-map)
-                        (,state . ,(thread-last
-                                     (mapcar #'conn-argument-keymaps arguments)
-                                     (delq nil)
-                                     (make-composed-keymap))))
-                       ,@emulation-mode-map-alists)))
-               (while (continue-p arguments)
-                 (when (and conn--state-eval-message-timeout
-                            (time-less-p conn--state-eval-message-timeout nil))
-                   (setq conn--state-eval-message nil
-                         conn--state-eval-message-timeout nil))
-                 (let ((inhibit-message conn-state-eval-inhibit-message)
-                       (message-log-max nil))
-                   (funcall display-handler prompt arguments))
-                 (setf conn--state-eval-error-message "")
-                 (command-case (key-binding (read-key-sequence nil) t)))
-               (setq local-exit t)))))
-      (apply (catch 'conn-eval-with-state-return
-               (unwind-protect
-                   (if around (funcall around #'cont) (cont))
-                 (unless local-exit
-                   (mapc #'conn-cancel-argument arguments))
-                 (message nil))
-               (cons callback (mapcar #'conn-eval-argument arguments)))))))
+           (let ((conn--state-eval-prefix-mag (when prefix (abs prefix)))
+                 (conn--state-eval-prefix-sign (when prefix (> 0 prefix)))
+                 (conn--state-eval-error-message "")
+                 (conn--state-eval-message nil)
+                 (conn--state-eval-message-timeout nil)
+                 (conn--state-eval-exiting nil)
+                 (emulation-mode-map-alists
+                  `(((,state . ,overriding-map)
+                     (,state . ,(thread-last
+                                  (mapcar #'conn-argument-keymaps arguments)
+                                  (delq nil)
+                                  (make-composed-keymap))))
+                    ,@emulation-mode-map-alists)))
+             (apply
+              (catch 'conn-eval-with-state-return
+                (unwind-protect
+                    (let ((inhibit-message t))
+                      (conn-with-recursive-stack state
+                        (while (continue-p arguments)
+                          (display-message)
+                          (command-case (key-binding (read-key-sequence nil) t)))
+                        (setq local-exit t)))
+                  (unless local-exit
+                    (mapc #'conn-cancel-argument arguments))
+                  (message nil))
+                (cons callback (mapcar #'conn-eval-argument arguments)))))))
+      (if around (funcall around #'cont) (cont)))))
 
 (defmacro conn-eval-with-state-return (&rest body)
   (declare (indent 0))
@@ -1504,20 +1507,6 @@ chooses to handle a command."
                             (list ,@(nreverse values))
                             (pcase-lambda ,(nreverse patterns) ,@body)
                             ,@keys)))
-
-(defun conn--fontify-state-eval ()
-  (font-lock-add-keywords
-   nil '(("\\_<\\(&[1-9]?\\)\\_>" 1 'font-lock-keyword-face))))
-
-;;;###autoload
-(define-minor-mode conn-fontify-state-eval-mode
-  "Highlight `conn-eval-with-state' symbols."
-  :global t
-  :lighter nil
-  :group 'conn
-  (if conn-fontify-state-eval-mode
-      (add-hook 'emacs-lisp-mode-hook 'conn--fontify-state-eval)
-    (remove-hook 'emacs-lisp-mode-hook 'conn--fontify-state-eval)))
 
 ;;;;; Loop Arguments
 
