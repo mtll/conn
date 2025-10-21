@@ -1520,30 +1520,31 @@ Target overlays may override this default by setting the
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
   (cl-with-gensyms (select-mode)
-    `(pcase-let ((`(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function)
-                  conn--dispatch-init-state)
-                 (conn-dispatch-target-finder nil)
-                 (conn-dispatch-looping nil)
-                 (conn--dispatch-loop-change-groups nil)
-                 (inhibit-message nil)
-                 (recenter-last-op nil)
-                 (conn-dispatch-repeat-count nil)
-                 (conn-dispatch-other-end nil)
-                 (conn-state-eval-last-command nil)
-                 (conn--state-eval-prefix-mag nil)
-                 (conn--state-eval-prefix-sign nil)
-                 (conn--dispatch-read-event-handlers nil)
-                 (conn--dispatch-read-event-message-prefixes nil)
-                 (conn--dispatch-always-retarget nil)
-                 (,select-mode conn-dispatch-select-mode))
+    `(progn
        (conn-delete-targets)
-       (message nil)
-       (if ,select-mode (conn-dispatch-select-mode -1))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (if ,select-mode (conn-dispatch-select-mode 1))))))
+       (pcase-let ((`(,conn-target-window-predicate
+                      ,conn-target-predicate
+                      ,conn-target-sort-function)
+                    conn--dispatch-init-state)
+                   (conn-dispatch-target-finder nil)
+                   (conn-dispatch-looping nil)
+                   (conn--dispatch-loop-change-groups nil)
+                   (inhibit-message nil)
+                   (recenter-last-op nil)
+                   (conn-dispatch-repeat-count nil)
+                   (conn-dispatch-other-end nil)
+                   (conn-state-eval-last-command nil)
+                   (conn--state-eval-prefix-mag nil)
+                   (conn--state-eval-prefix-sign nil)
+                   (conn--dispatch-read-event-handlers nil)
+                   (conn--dispatch-read-event-message-prefixes nil)
+                   (conn--dispatch-always-retarget nil)
+                   (,select-mode conn-dispatch-select-mode))
+         (message nil)
+         (if ,select-mode (conn-dispatch-select-mode -1))
+         (unwind-protect
+             ,(macroexp-progn body)
+           (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
   (:method (_cmd) nil))
@@ -1711,7 +1712,8 @@ Target overlays may override this default by setting the
   (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
         conn-target-count 0
-        conn-dispatch--window-shadow-overlays nil))
+        conn-dispatch--window-shadow-overlays nil)
+  (conn-dispatch-suspend-targets conn-dispatch-target-finder))
 
 (defun conn-dispatch-setup-targets ()
   (conn-dispatch-update-targets conn-dispatch-target-finder)
@@ -1745,6 +1747,9 @@ Target overlays may override this default by setting the
                      'window window)))))
 
 (cl-defgeneric conn-dispatch-cleanup-target-finder (target-finder)
+  (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-dispatch-suspend-targets (target-finder)
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-dispatch-retarget (target-finder)
@@ -1951,7 +1956,13 @@ contain targets."
   t)
 
 (cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-focus-targets))
-  (mapc #'delete-overlay (oref state hidden)))
+  (mapc #'delete-overlay (oref state hidden))
+  (setf (oref conn-dispatch-target-finder hidden) nil))
+
+(cl-defmethod conn-dispatch-suspend-targets ((state conn-dispatch-focus-targets))
+  (mapc #'delete-overlay (oref state hidden))
+  (setf (oref state hidden) nil)
+  (cl-call-next-method))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_ (eql scroll-down))
                                                    &context (conn-dispatch-target-finder

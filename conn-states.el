@@ -1470,20 +1470,20 @@ chooses to handle a command."
                                   (delq nil)
                                   (make-composed-keymap))))
                     ,@emulation-mode-map-alists)))
-             (apply
-              (catch 'conn-eval-with-state-return
-                (unwind-protect
-                    (let ((inhibit-message t))
-                      (conn-with-recursive-stack state
-                        (while (continue-p arguments)
-                          (display-message)
-                          (command-case (key-binding (read-key-sequence nil) t)))
-                        (setq local-exit t)))
-                  (unless local-exit
-                    (mapc #'conn-cancel-argument arguments))
-                  (message nil))
-                (cons callback (mapcar #'conn-eval-argument arguments)))))))
-      (if around (funcall around #'cont) (cont)))))
+             (let ((inhibit-message t))
+               (conn-with-recursive-stack state
+                 (while (continue-p arguments)
+                   (display-message)
+                   (command-case (key-binding (read-key-sequence nil) t)))))
+             (setq local-exit t))))
+      (apply
+       (catch 'conn-eval-with-state-return
+         (unwind-protect
+             (if around (funcall around #'cont) (cont))
+           (unless local-exit
+             (mapc #'conn-cancel-argument arguments))
+           (message nil))
+         (cons callback (mapcar #'conn-eval-argument arguments)))))))
 
 (defmacro conn-eval-with-state-return (&rest body)
   (declare (indent 0))
