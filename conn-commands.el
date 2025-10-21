@@ -1803,22 +1803,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (funcall kill-op arg transform append delete register fixup-whitespace)
       (cl-call-next-method))))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
-                                 _arg _transform
-                                 &optional _ _ _ _)
-  (let ((col (current-column)))
-    (cl-call-next-method)
-    (move-to-column col)))
-
-(cl-defmethod conn-perform-kill ((cmd (conn-thing char))
-                                 arg transform
-                                 &optional
-                                 append
-                                 _delete
-                                 register
-                                 fixup-whitespace)
-  (cl-call-next-method cmd arg transform append t register fixup-whitespace))
-
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
                                   append
@@ -1836,6 +1820,22 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          (conn--kill-region beg end t append register)))
      (when fixup-whitespace
        (funcall conn-kill-fixup-whitespace-function bounds)))))
+
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
+                                 _arg _transform
+                                 &optional _ _ _ _)
+  (let ((col (current-column)))
+    (cl-call-next-method)
+    (move-to-column col)))
+
+(cl-defmethod conn-perform-kill ((cmd (conn-thing char))
+                                 arg transform
+                                 &optional
+                                 append
+                                 _delete
+                                 register
+                                 fixup-whitespace)
+  (cl-call-next-method cmd arg transform append t register fixup-whitespace))
 
 (cl-defmethod conn-perform-kill ( (cmd (conn-thing region))
                                   arg transform
