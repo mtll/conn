@@ -236,8 +236,8 @@ order to mark the region that should be defined by any of COMMANDS."
        `(and (conn-command-thing ,cmd) ,cmd))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for thing in (conn-thing-all-parents thing)
-                   collect `(conn-thing ,thing))
+      `(,@(cl-loop for parent in (conn-thing-all-parents thing)
+                   collect `(conn-thing ,parent))
         (conn-thing command)
         (conn-thing t)))))
 
@@ -981,26 +981,24 @@ words."))
          (max (point) pt))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch)) _arg)
-  (pcase-let* ((name (symbol-name cmd))
-               (at nil)
-               (quit (lambda ()
-                       (when (or isearch-mode-end-hook-quit
-                                 (null isearch-other-end))
-                         (abort-recursive-edit))
-                       (setq at (min (point) isearch-other-end))))
-               (`(,thing ,arg)
-                (conn-eval-with-state (conn-read-thing-state
-                                       :prompt "Thing")
-                    ((`(,thing ,thing-arg)))
-                  (list thing thing-arg))))
-    (unwind-protect
-        (save-mark-and-excursion
-          (add-hook 'isearch-mode-end-hook quit)
-          (isearch-mode (not (string-match-p "backward" name))
-                        (string-match-p "regexp" name)
-                        nil t))
-      (remove-hook 'isearch-mode-end-hook quit))
-    (conn-bounds-of-remote thing arg at)))
+  (conn-eval-with-state (conn-read-thing-state
+                         :prompt "Thing")
+      ((`(,thing ,thing-arg) (conn-thing-argument)))
+    (let* ((name (symbol-name cmd))
+           (at nil)
+           (quit (lambda ()
+                   (when (or isearch-mode-end-hook-quit
+                             (null isearch-other-end))
+                     (abort-recursive-edit))
+                   (setq at (min (point) isearch-other-end)))))
+      (unwind-protect
+          (save-mark-and-excursion
+            (add-hook 'isearch-mode-end-hook quit)
+            (isearch-mode (not (string-match-p "backward" name))
+                          (string-match-p "regexp" name)
+                          nil t))
+        (remove-hook 'isearch-mode-end-hook quit))
+      (conn-bounds-of-remote thing thing-arg at))))
 
 ;;;; Bounds of Things in Region
 
@@ -1127,6 +1125,8 @@ words."))
 (conn-register-thing-commands
  'recursive-edit-thing nil
  'recursive-edit 'exit-recursive-edit)
+
+(conn-register-thing 'isearch)
 
 (conn-register-thing-commands
  'isearch nil
