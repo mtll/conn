@@ -1342,11 +1342,12 @@ Target overlays may override this default by setting the
 (defun conn--dispatch-read-event-prefix ()
   (declare (important-return-value t))
   (when-let* ((prefix
-               (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-                        for str = (pcase pfx
-                                    ((pred functionp) (funcall pfx))
-                                    ((pred stringp) pfx))
-                        if str collect str)))
+               (flatten-tree
+                (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+                         for str = (pcase pfx
+                                     ((pred functionp) (funcall pfx))
+                                     ((pred stringp) pfx))
+                         if str collect str))))
     (concat " (" (string-join prefix "; ") ")")))
 
 (defun conn-dispatch-read-event (&optional prompt
@@ -1521,7 +1522,7 @@ Target overlays may override this default by setting the
                     ,conn-target-predicate
                     ,conn-target-sort-function)
                   conn--dispatch-init-state)
-                 (conn--dispatch-thing-predicate nil)
+                 (conn-dispatch-target-finder nil)
                  (conn-dispatch-looping nil)
                  (conn--dispatch-loop-change-groups nil)
                  (inhibit-message nil)
@@ -1545,6 +1546,18 @@ Target overlays may override this default by setting the
 (cl-defgeneric conn-handle-dispatch-select-command (command)
   (:method (_cmd) nil))
 
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
+  (conn-eval-with-state (conn-dispatch-mover-state
+                         :prompt "New Targets"
+                         :reference conn-dispatch-mover-reference
+                         :around (lambda (cont)
+                                   (conn-with-dispatch-suspended
+                                     (funcall cont))))
+      ((`(,thing ,thing-arg)
+        (conn-dispatch-thing-argument))
+       (transform (conn-dispatch-transform-argument)))
+    (conn-dispatch-change-target thing thing-arg transform)))
+
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
   (defvar conn-dispatch-select-ref)
@@ -1564,7 +1577,9 @@ Target overlays may override this default by setting the
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom)))
-  (conn-dispatch-recenter-window conn-dispatch-target-finder)
+  (let ((this-command 'recenter-top-bottom)
+        (last-command conn-state-eval-last-command))
+    (recenter-top-bottom (conn-state-eval-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
@@ -1598,11 +1613,17 @@ Target overlays may override this default by setting the
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
-  (conn-dispatch-scroll-window conn-dispatch-target-finder nil)
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
+                                       (floor (window-height) 2.5))))
+    (conn-scroll-up)
+    (goto-char (window-start (selected-window))))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
-  (conn-dispatch-scroll-window conn-dispatch-target-finder t)
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
+                                       (floor (window-height) 2.5))))
+    (conn-scroll-down)
+    (goto-char (window-start (selected-window))))
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-goto-window (window)
@@ -1731,7 +1752,7 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (:method (_) "Noop" nil))
 
-(cl-defgeneric conn-dispatch-has-target-p (target-finder)
+(cl-defgeneric conn-dispatch-has-targets-p (target-finder)
   (declare (important-return-value t))
   (:method (_) "Noop" nil))
 
@@ -1743,18 +1764,13 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (:method (_) nil))
 
-(cl-defgeneric conn-dispatch-scroll-window (target-finder down)
-  ( :method (_target-finder down)
-    (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
-                                         (floor (window-height) 2.5))))
-      (if down (conn-scroll-up) (conn-scroll-down))
-      (goto-char (window-start (selected-window))))))
+(cl-defgeneric conn-dispatch-target-keymaps (target-finder)
+  (declare (important-return-value t))
+  ( :method (_) nil))
 
-(cl-defgeneric conn-dispatch-recenter-window (target-finder)
-  ( :method (_target-finder)
-    (let ((this-command 'recenter-top-bottom)
-          (last-command conn-state-eval-last-command))
-      (recenter-top-bottom (conn-state-eval-prefix-arg)))))
+(cl-defgeneric conn-dispatch-target-message-prefixes (target-finder)
+  (declare (important-return-value t))
+  (:method (_) nil))
 
 (cl-defgeneric conn-dispatch-target-prompt-p (target-finder)
   ( :method (_target-finder) nil))
@@ -1844,7 +1860,7 @@ to the key binding for that target."
 (cl-defmethod conn-dispatch-retargetable-p ((_ conn-dispatch-string-targets))
   t)
 
-(cl-defmethod conn-dispatch-has-target-p ((state conn-dispatch-string-targets))
+(cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
 
 (defclass conn-dispatch-read-n-chars (conn-dispatch-string-targets)
@@ -1924,17 +1940,33 @@ contain targets."
 (cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden)))
 
-(cl-defmethod conn-dispatch-scroll-window ((_state conn-dispatch-focus-targets) down)
+(cl-defmethod conn-handle-dispatch-select-command ((_ (eql scroll-down))
+                                                   &context (conn-dispatch-target-finder
+                                                             conn-dispatch-focus-targets))
   (let ((col (current-column)))
-    (goto-char (if down (window-start) (window-end)))
-    (move-to-column col)))
+    (goto-char (window-start))
+    (move-to-column col))
+  (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-recenter-window ((state conn-dispatch-focus-targets))
-  (setf (alist-get (selected-window) (oref state cursor-location))
-        (or (cadr (memq (alist-get (selected-window)
-                                   (oref state cursor-location))
-                        recenter-positions))
-            (car recenter-positions))))
+(cl-defmethod conn-handle-dispatch-select-command ((_ (eql scroll-up))
+                                                   &context (conn-dispatch-target-finder
+                                                             conn-dispatch-focus-targets))
+  (let ((col (current-column)))
+    (goto-char (window-end))
+    (move-to-column col))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
+                                                   &context (conn-dispatch-target-finder
+                                                             conn-dispatch-focus-targets))
+  (cl-callf thread-first
+      (alist-get (selected-window)
+                 (oref conn-dispatch-target-finder cursor-location))
+    (memq recenter-positions)
+    (cadr)
+    (or (car recenter-positions)))
+  (pulse-momentary-highlight-one-line)
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden))
@@ -3808,17 +3840,7 @@ contain targets."
          (conn--state-eval-prefix-mag nil)
          (conn--state-eval-prefix-sign nil)
          (conn--dispatch-read-event-handlers
-          `(,(lambda (cmd)
-               (when (eq cmd 'change-target-finder)
-                 (conn-with-dispatch-suspended
-                   (conn-eval-with-state (conn-dispatch-mover-state
-                                          :prompt "New Targets"
-                                          :reference conn-dispatch-mover-reference)
-                       ((`(,thing ,thing-arg)
-                         (conn-dispatch-thing-argument))
-                        (transform (conn-dispatch-transform-argument)))
-                     (conn-dispatch-change-target thing thing-arg transform)))))
-            ,#'conn-handle-dispatch-select-command
+          `(,#'conn-handle-dispatch-select-command
             ,@conn--dispatch-read-event-handlers))
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn-dispatch-target-finder
@@ -3837,10 +3859,13 @@ contain targets."
          (conn--dispatch-read-event-message-prefixes
           `(,(propertize (conn-describe-action action t)
                          'face 'eldoc-highlight-function-argument)
+            ,(lambda ()
+               (conn-dispatch-target-message-prefixes
+                conn-dispatch-target-finder))
             ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                (lambda ()
                  (when-let* ((binding
-                              (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
+                              (and (conn-dispatch-has-targets-p conn-dispatch-target-finder)
                                    (not conn--dispatch-always-retarget)
                                    (where-is-internal 'retarget
                                                       conn-dispatch-read-event-map
@@ -3894,10 +3919,14 @@ contain targets."
         (progn
           (while-let ((new-target
                        (catch 'dispatch-change-target
-                         (apply #'cl-call-next-method
-                                action
-                                thing thing-arg thing-transform
-                                keys)
+                         (conn-with-overriding-map
+                             (make-composed-keymap
+                              (conn-dispatch-target-keymaps
+                               conn-dispatch-target-finder))
+                           (apply #'cl-call-next-method
+                                  action
+                                  thing thing-arg thing-transform
+                                  keys))
                          nil)))
             (pcase-setq `(,thing ,thing-arg ,thing-transform) new-target))
           (conn-dispatch-push-history
