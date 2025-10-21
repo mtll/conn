@@ -502,7 +502,9 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
-  (conn-dispatch-read-n-chars :string-length 2))
+  (conn-dispatch-read-n-chars
+   :string-length 2
+   :hide-target-overlays t))
 
 (defun conn--dispatch-restrict-windows (win)
   (declare (side-effect-free t))
@@ -1865,11 +1867,17 @@ to the key binding for that target."
 
 (defclass conn-dispatch-read-n-chars (conn-dispatch-string-targets)
   ((string-length :initform 1 :initarg :string-length)
-   (predicate :initform nil :initarg :predicate)))
+   (predicate :initform nil :initarg :predicate)
+   (hide-target-overlays :initform nil :initarg :hide-target-overlays)))
 
 (cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-read-n-chars))
   (if-let* ((string (oref state string)))
-      (conn-make-string-target-overlays string (oref state predicate))
+      (conn-make-string-target-overlays
+       string
+       (oref state predicate)
+       (if (oref state hide-target-overlays)
+           0
+         (length string)))
     (let* ((string-length (oref state string-length))
            (predicate (oref state predicate))
            (prompt (if (> string-length 1)
@@ -1895,7 +1903,12 @@ to the key binding for that target."
                 (char-to-string)
                 (concat string))))
           (conn-delete-targets)))
-      (conn-make-string-target-overlays string predicate 0)
+      (conn-make-string-target-overlays
+       string
+       predicate
+       (if (oref state hide-target-overlays)
+           0
+         (length string)))
       (setf (oref state string) string)))
   (cl-call-next-method))
 
@@ -2288,6 +2301,7 @@ contain targets."
   (declare (important-return-value t))
   (conn-dispatch-read-n-chars
    :string-length prefix-length
+   :hide-target-overlays t
    :predicate (lambda (beg _end)
                 (save-excursion
                   (goto-char beg)
@@ -3840,8 +3854,8 @@ contain targets."
          (conn--state-eval-prefix-mag nil)
          (conn--state-eval-prefix-sign nil)
          (conn--dispatch-read-event-handlers
-          `(,#'conn-handle-dispatch-select-command
-            ,@conn--dispatch-read-event-handlers))
+          (cons #'conn-handle-dispatch-select-command
+                conn--dispatch-read-event-handlers))
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn-dispatch-target-finder
           (conn-get-target-finder thing thing-arg))
@@ -3851,8 +3865,9 @@ contain targets."
               (conn-action--always-retarget action)))
          (target-other-end (conn-dispatch-targets-other-end
                             conn-dispatch-target-finder))
-         (conn-dispatch-no-other-end (or (eq other-end :no-other-end)
-                                         (eq target-other-end :no-other-end)))
+         (conn-dispatch-no-other-end
+          (or (eq other-end :no-other-end)
+              (eq target-other-end :no-other-end)))
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
