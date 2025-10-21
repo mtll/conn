@@ -1262,6 +1262,10 @@ words."))
  'buffer 'conn-discrete-thing-handler
  'end-of-buffer 'beginning-of-buffer)
 
+(conn-register-thing
+ 'line
+ :properties '(:linewise t))
+
 (conn-register-thing-commands
  'line 'conn-continuous-thing-handler
  'forward-line 'conn-backward-line
