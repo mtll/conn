@@ -183,16 +183,19 @@
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-eval-with-state 'conn-dired-dispatch-state
-      (conn-perform-dispatch
-       & (conn-dispatch-action-argument)
-       &2 (conn-thing-argument)
-       & (conn-transform-argument)
-       :repeat & (conn-dispatch-repeat-argument)
-       :restrict-windows & (conn-dispatch-restrict-windows-argument)
-       :other-end :no-other-end)
-    :prefix initial-arg
-    :prompt "Dired Dispatch"))
+  (conn-eval-with-state (conn-dired-dispatch-state
+                         :prefix initial-arg
+                         :prompt "Dired Dispatch")
+      ((action (conn-dispatch-action-argument))
+       (`(,thing ,thing-arg) (conn-thing-argument))
+       (transform (conn-transform-argument))
+       (repeat (conn-dispatch-repeat-argument))
+       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+    (conn-perform-dispatch
+     action thing thing-arg transform
+     :repeat repeat
+     :restrict-windows restrict-windows
+     :other-end :no-other-end)))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dired-dispatch-state)

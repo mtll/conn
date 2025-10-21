@@ -428,13 +428,12 @@ before each iteration."
 
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
-  (pcase-let* ((`(,cmd ,arg ,transform ,subregions)
-                (conn-eval-with-state 'conn-read-thing-state
-                    (list &2 (conn-thing-argument-dwim t)
-                          & (conn-transform-argument)
-                          & (conn-subregions-argument (use-region-p)))
-                  :prompt "Thing")))
-    (pcase (conn-bounds-of cmd arg)
+  (conn-eval-with-state (conn-read-thing-state
+                         :prompt "Thing")
+      ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       (transform (conn-transform-argument))
+       (subregions (conn-subregions-argument (use-region-p))))
+    (pcase (conn-bounds-of thing thing-arg)
       ((and (guard subregions)
             (conn-bounds-get :subregions
                              transform
@@ -666,13 +665,13 @@ apply to each contiguous component of the region."
   (conn--kapply-macro
    (alist-get :kmacro args)
    (conn--kapply-region-iterator
-    (mapcar #'conn-bounds
-            (conn-eval-with-state 'conn-read-thing-state
-                (conn-bounds-get
-                 (conn-bounds-of &2 (conn-thing-argument-dwim t))
-                 :subregions
-                 & (conn-transform-argument))
-              :prompt "Thing")))
+    (conn-eval-with-state (conn-read-thing-state
+                           :prompt "Thing")
+        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+         (transform (conn-transform-argument)))
+      (mapcar #'conn-bounds (conn-bounds-get
+                             (conn-bounds-of thing thing-arg)
+                             :subregions transform))))
    `(conn--kapply-relocate-to-region
      conn--kapply-skip-invisible-points
      conn--kapply-pulse-region
@@ -789,22 +788,23 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let (((conn-bounds `(,beg . ,end))
-               (conn-eval-with-state 'conn-read-thing-state
-                   (conn-bounds-of &2 (conn-thing-argument-dwim))
-                 :prompt "Thing")))
-    (conn--kapply-macro
-     (alist-get :kmacro args)
-     (conn--kapply-highlight-iterator
-      (or beg (point-min))
-      (or end (point-max))
-      (or (alist-get :order args)
-          'conn--nnearest-first)
-      (alist-get :read-patterns args))
-     `(conn--kapply-relocate-to-region
-       conn--kapply-open-invisible
-       conn--kapply-pulse-region
-       ,@(conn--transient-kapply-pipeline-args args)))))
+  (conn-eval-with-state (conn-read-thing-state
+                         :prompt "Thing")
+      ((`(,thing ,thing-arg) (conn-thing-argument-dwim)))
+    (pcase (conn-bounds-of thing thing-arg)
+      ((conn-bounds `(,beg . ,end))
+       (conn--kapply-macro
+        (alist-get :kmacro args)
+        (conn--kapply-highlight-iterator
+         (or beg (point-min))
+         (or end (point-max))
+         (or (alist-get :order args)
+             'conn--nnearest-first)
+         (alist-get :read-patterns args))
+        `(conn--kapply-relocate-to-region
+          conn--kapply-open-invisible
+          conn--kapply-pulse-region
+          ,@(conn--transient-kapply-pipeline-args args)))))))
 
 (transient-define-suffix conn--kapply-occur (args)
   "Apply keyboard macro on regions of text with a specified text property."

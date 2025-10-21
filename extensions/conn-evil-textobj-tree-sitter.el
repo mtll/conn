@@ -147,10 +147,26 @@
           (goto-char beg)
           (conn--push-ephemeral-mark end)
           (activate-mark)))
-       (conn-eval-with-state 'conn-etts-expand-state
-           (conn-make-bounds
-            'conn-etts-thing nil
-            & (:node
+       (cl-flet ((display-handler (prompt _args)
+                   (message
+                    (substitute-command-keys
+                     (concat
+                      (propertize prompt 'face 'minibuffer-prompt)
+                      " ("
+                      "Node: "
+                      (propertize (format "%s" (caar nodes))
+                                  'face 'eldoc-highlight-function-argument)
+                      "; "
+                      (concat
+                       "\\[conn-expand] expand; "
+                       "\\[conn-contract] contract; "
+                       "\\[end] finish")
+                      "): "
+                      (conn--display-state-eval-messages))))))
+         (conn-eval-with-state (conn-etts-expand-state
+                                :prompt "Node"
+                                :display-handler #'display-handler)
+             ((bounds
                (oclosure-lambda (conn-state-eval-argument
                                  (required t))
                    (self command)
@@ -176,23 +192,7 @@
                      self
                      (cons (region-beginning) (region-end))))
                    (_ self)))))
-         :prompt "Node"
-         :display-handler (lambda (prompt _args)
-                            (message
-                             (substitute-command-keys
-                              (concat
-                               (propertize prompt 'face 'minibuffer-prompt)
-                               " ("
-                               "Node: "
-                               (propertize (format "%s" (caar nodes))
-                                           'face 'eldoc-highlight-function-argument)
-                               "; "
-                               (concat
-                                "\\[conn-expand] expand; "
-                                "\\[conn-contract] contract; "
-                                "\\[end] finish")
-                               "): "
-                               (conn--display-state-eval-messages))))))))))
+           (conn-make-bounds 'conn-etts-thing nil bounds)))))))
 
 (defvar conn-etts-parent-things
   '(conn-etts-assignment-inner

@@ -1344,7 +1344,7 @@ chooses to handle a command."
             (t "[1]"))
       'face 'read-multiple-choice-face)
      ", \\[reset-arg] reset"
-     (when-let* ((args (delq nil (mapcar #'conn-display-argument arguments))))
+     (when-let* ((args (flatten-tree (mapcar #'conn-display-argument arguments))))
        (string-join (cons nil args) "; "))
      "): "
      (conn--display-state-eval-messages)))))
@@ -1386,6 +1386,7 @@ chooses to handle a command."
                                   command-handler
                                   update-handler
                                   (display-handler #'conn--state-eval-prompt)
+                                  overriding-map
                                   prompt
                                   prefix
                                   pre
@@ -1457,7 +1458,8 @@ chooses to handle a command."
          (unwind-protect
              (conn-with-recursive-stack state
                (let* ((emulation-mode-map-alists
-                       `(((,state . ,(thread-last
+                       `(((,state . ,overriding-map)
+                          (,state . ,(thread-last
                                        (mapcar #'conn-argument-keymaps arguments)
                                        (delq nil)
                                        (make-composed-keymap))))
@@ -1484,91 +1486,23 @@ chooses to handle a command."
   `(throw 'conn-eval-with-state-return
           (list (lambda () ,@body))))
 
-(defmacro conn-eval-with-state (state form &rest keys)
+(defmacro conn-eval-with-state (state-and-keys varlist &rest body)
   "Eval FORM after replacing arguments with values read in STATE.
 
-\(fn STATE ARGLIST &key UPDATE-HANDLER COMMAND-HANDLER DISPLAY-HANDLER PROMPT PREFIX PRE POST REFERENCE)"
+\(fn (STATE KEYS) &rest BODY)"
   (declare (indent 2))
-  (let (patterns args labels body)
-    (cl-labels ((qt (form)
-                  (pcase form
-
-                    ((and exp `(conn-eval-with-state . ,_))
-                     exp)
-
-                    (`(& ,(and (pred keywordp) label)
-                         . ,tail)
-                     (let ((sym (with-memoization (alist-get label labels)
-                                  (gensym (substring (symbol-name label) 1)))))
-                       (cons sym (qt tail))))
-
-                    (`(,(and splice (or '&1 '&2 '&3 '&4 '&5 '&6 '&7 '&8 '&9))
-                       ,(and (pred keywordp) label)
-                       . ,tail)
-                     (let* ((count (thread-first
-                                     (symbol-name splice)
-                                     (substring 1)
-                                     (string-to-number)))
-                            (syms
-                             (if label
-                                 (with-memoization (alist-get label labels)
-                                   (cl-loop for i from 1 upto count
-                                            collect (thread-last
-                                                      (substring (symbol-name label) 1)
-                                                      (gensym))))
-                               (cl-loop repeat count collect (gensym)))))
-                       (unless (and (listp syms)
-                                    (length= syms count))
-                         (error "All splicing labels must have the same length"))
-                       (append syms (qt tail))))
-
-                    (`(& ,(or `(,(and (pred keywordp) label) ,exp)
-                              `(,(and (pred keywordp) label) . ,exp)
-                              exp)
-                         . ,tail)
-                     (let ((sym (if label
-                                    (with-memoization (alist-get label labels)
-                                      (gensym (substring (symbol-name label) 1)))
-                                  (gensym))))
-                       (push sym patterns)
-                       (push (if label `(cons ,label ,exp) exp) args)
-                       (cons sym (qt tail))))
-
-                    (`(,(and splice (or '&1 '&2 '&3 '&4 '&5 '&6 '&7 '&8 '&9))
-                       ,(or `(,(and (pred keywordp) label) ,exp)
-                            `(,(and (pred keywordp) label) . ,exp)
-                            exp)
-                       . ,tail)
-                     (let* ((count (thread-first
-                                     (symbol-name splice)
-                                     (substring 1)
-                                     (string-to-number)))
-                            (syms
-                             (if label
-                                 (with-memoization (alist-get label labels)
-                                   (cl-loop for i from 1 upto count
-                                            collect (thread-last
-                                                      (substring (symbol-name label) 1)
-                                                      (gensym))))
-                               (cl-loop repeat count collect (gensym))))
-                            (pat (list '\` (cl-loop for s in syms
-                                                    collect (list '\, s)))))
-                       (unless (and (listp syms)
-                                    (length= syms count))
-                         (error "All splicing labels must have the same length"))
-                       (push pat patterns)
-                       (push (if label `(cons ,label ,exp) exp) args)
-                       (append syms (qt tail))))
-
-                    (`(,head . ,tail)
-                     (cons (qt head) (qt tail)))
-
-                    (form form))))
-      (setq body (qt form))
-      `(conn--eval-with-state ,state
-                              (list ,@(nreverse args))
-                              (pcase-lambda ,(nreverse patterns) ,body)
-                              ,@keys))))
+  (pcase-let (((or `(,state . ,keys)
+                   state)
+               state-and-keys)
+              (patterns nil)
+              (values nil))
+    (pcase-dolist (`(,pat ,val) varlist)
+      (push pat patterns)
+      (push val values))
+    `(conn--eval-with-state ',state
+                            (list ,@(nreverse values))
+                            (pcase-lambda ,(nreverse patterns) ,@body)
+                            ,@keys)))
 
 (defun conn--fontify-state-eval ()
   (font-lock-add-keywords
@@ -1587,7 +1521,7 @@ chooses to handle a command."
 ;;;;; Loop Arguments
 
 (oclosure-define (conn-state-eval-argument
-                  (:predicate conn-state-eval-argument-p)
+                  ;; (:predicate conn-state-eval-argument-p)
                   (:copier conn-set-argument (value &aux (set-flag t)))
                   (:copier conn-unset-argument (value &aux (set-flag nil))))
   (value :type t)
@@ -1596,6 +1530,9 @@ chooses to handle a command."
   (name :type (or nil string function))
   (reference :type function)
   (keymap :type keymap))
+
+(oclosure-define (conn-state-eval-argument-wrapper)
+  (wrapped :type list))
 
 (defalias 'conn-state-eval-argument-name
   'conn-state-eval-argument--name)
@@ -1608,40 +1545,42 @@ chooses to handle a command."
 
 (cl-defgeneric conn-cancel-argument (argument)
   ( :method (arg) arg)
-  ( :method ((arg cons))
-    (conn-cancel-argument (cdr arg))))
+  ( :method ((arg conn-state-eval-argument-wrapper))
+    (mapc #'conn-cancel-argument
+          (conn-state-eval-argument-wrapper--wrapped arg))))
 
 (cl-defgeneric conn-argument-required-p (argument)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg cons))
-    (conn-argument-required-p (cdr arg)))
   ( :method ((arg conn-state-eval-argument))
     (and (conn-state-eval-argument--required arg)
-         (not (conn-state-eval-argument--set-flag arg)))))
+         (not (conn-state-eval-argument--set-flag arg))))
+  ( :method ((arg conn-state-eval-argument-wrapper))
+    (and (seq-find #'conn-argument-required-p
+                   (conn-state-eval-argument-wrapper--wrapped arg))
+         t)))
 
 (cl-defgeneric conn-update-argument (argument form)
   ( :method (arg _form) arg)
-  ( :method ((arg cons) form)
-    (conn-update-argument (cdr arg) form))
   ( :method ((arg conn-state-eval-argument) form)
+    (funcall arg arg form))
+  ( :method ((arg conn-state-eval-argument-wrapper) form)
     (funcall arg arg form)))
 
 (cl-defgeneric conn-eval-argument (argument)
   (declare (important-return-value t))
   ( :method (arg) arg)
-  ( :method ((arg cons))
-    (conn-eval-argument (cdr arg)))
   ( :method ((arg conn-state-eval-argument))
-    (conn-state-eval-argument-value arg)))
+    (conn-state-eval-argument-value arg))
+  ( :method ((arg conn-state-eval-argument-wrapper))
+    (mapcar #'conn-state-eval-argument-value
+            (conn-state-eval-argument-wrapper--wrapped arg))))
 
 (cl-defgeneric conn-display-argument (argument)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg cons))
-    (conn-display-argument (cdr arg)))
   ( :method ((arg string)) arg)
   ( :method ((arg conn-state-eval-argument))
     (pcase (conn-state-eval-argument-name arg)
@@ -1650,14 +1589,20 @@ chooses to handle a command."
       ((and (pred functionp) fn)
        (and-let* ((str (funcall fn arg))
                   ((stringp str)))
-         str)))))
+         str))))
+  ( :method ((arg conn-state-eval-argument-wrapper))
+    (thread-last
+      (conn-state-eval-argument-wrapper--wrapped arg)
+      (mapcar #'conn-display-argument)
+      (delq nil))))
 
 (cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg _val) nil)
-  ( :method ((arg cons) value)
-    (conn-argument-predicate (cdr arg) value)))
+  ( :method ((arg conn-state-eval-argument-wrapper) val)
+    (cl-loop for arg in (conn-state-eval-argument-wrapper--wrapped arg)
+             thereis (conn-argument-predicate arg val))))
 
 (cl-defgeneric conn-argument-keymaps (argument)
   (declare (important-return-value t)
@@ -1666,6 +1611,12 @@ chooses to handle a command."
   ( :method ((arg cons))
     (conn-argument-keymaps (cdr arg)))
   ( :method ((arg conn-state-eval-argument))
-    (conn-state-eval-argument-keymap arg)))
+    (conn-state-eval-argument-keymap arg))
+  ( :method ((arg conn-state-eval-argument-wrapper))
+    (when-let* ((maps (thread-last
+                        (conn-state-eval-argument-wrapper--wrapped arg)
+                        (mapcar #'conn-argument-keymaps)
+                        (delq nil))))
+      (make-composed-keymap maps))))
 
 (provide 'conn-states)

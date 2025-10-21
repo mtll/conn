@@ -989,8 +989,10 @@ words."))
                          (abort-recursive-edit))
                        (setq at (min (point) isearch-other-end))))
                (`(,thing ,arg)
-                (conn-eval-with-state 'conn-read-thing-state
-                    (list &2 (conn-thing-argument)))))
+                (conn-eval-with-state (conn-read-thing-state
+                                       :prompt "Thing")
+                    ((`(,thing ,thing-arg)))
+                  (list thing thing-arg))))
     (unwind-protect
         (save-mark-and-excursion
           (add-hook 'isearch-mode-end-hook quit)
@@ -1035,15 +1037,14 @@ words."))
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
-  (let* ((thing (conn-eval-with-state 'conn-read-thing-state
-                    (car & (conn-thing-argument-dwim))
-                  :prompt "Things in Region"))
-         (thing (cl-loop for thing in (conn-thing-all-parents thing)
-                         when (conn-thing-p thing) return thing
-                         finally (user-error "Not a valid things in region thing"))))
-    (conn-get-things-in-region thing
-                               (region-beginning)
-                               (region-end))))
+  (conn-eval-with-state (conn-read-thing-state
+                         :prompt "Things in Region")
+      ((thing (car (conn-thing-argument-dwim))))
+    (thread-first
+      (cl-loop for parent in (conn-thing-all-parents thing)
+               when (conn-thing-p parent) return parent
+               finally (user-error "Not a valid things in region thing"))
+      (conn-get-things-in-region (region-beginning) (region-end)))))
 
 ;;;; Thing Definitions
 
