@@ -72,11 +72,20 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
+(defun conn-make-command-repeatable (&optional command)
+  (let ((map (make-sparse-keymap)))
+    (define-key map
+                (vector last-command-event)
+                (or command 'conn-repeat-last-complex-command))
+    (setq repeat-map map)))
+
 (defun conn-repeat-last-complex-command ()
   (interactive)
-  (if-let* ((last-repeatable-command (caar command-history)))
+  (if-let* ((last-repeatable-command (caar command-history))
+            (repeat-message-function 'ignore))
       (repeat nil)
     (user-error "No repeatable last command")))
+(put 'conn-repeat-last-complex-command 'repeat-continue t)
 
 ;;;;; Movement
 
@@ -1102,7 +1111,8 @@ region after a `recursive-edit'."
      (list thing thing-arg)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
-  (conn-perform-transpose mover arg))
+  (conn-perform-transpose mover arg)
+  (conn-make-command-repeatable))
 
 ;;;;; Line Commands
 
@@ -1706,10 +1716,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (setq append 'append))
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace)
-  (setq this-command 'conn-kill-thing))
+  (setq this-command 'conn-kill-thing)
+  (conn-make-command-repeatable))
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds)
-  ( :method :around ((_bounds conn-bounds-transform))))
+  (:method :around ((_bounds conn-bounds-transform)) nil))
 
 (cl-defmethod conn-kill-fixup-whitespace :after (_bounds)
   (let ((tab-always-indent t))

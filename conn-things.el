@@ -37,9 +37,9 @@
   (declare (side-effect-free t)
            (gv-setter conn-set-command-thing))
   (inline-letevals (cmd)
-                   (inline-quote
-                    (and (symbolp ,cmd)
-                         (get ,cmd :conn-command-thing)))))
+    (inline-quote
+     (and (symbolp ,cmd)
+          (get ,cmd :conn-command-thing)))))
 
 (defun conn-set-command-thing (cmd thing)
   (put cmd :conn-command-thing thing))
@@ -48,14 +48,14 @@
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (thing)
-                   (inline-quote
-                    (and (symbolp ,thing)
-                         (or (get ,thing :conn-thing)
-                             (get ,thing 'forward-op)
-                             (intern-soft (format "forward-%s" ,thing))
-                             (get ,thing 'end-op)
-                             (get ,thing 'bounds-of-thing-at-point))
-                         ,thing))))
+    (inline-quote
+     (and (symbolp ,thing)
+          (or (get ,thing :conn-thing)
+              (get ,thing 'forward-op)
+              (intern-soft (format "forward-%s" ,thing))
+              (get ,thing 'end-op)
+              (get ,thing 'bounds-of-thing-at-point))
+          ,thing))))
 
 (defconst conn--thing-all-parents-cache (make-hash-table :test 'eq))
 

@@ -218,13 +218,13 @@ PROPERTY.  If no parent has that property either than nil is returned."
 
 Returns VALUE."
   (inline-letevals (property)
-                   (inline-quote
-                    (progn
-                      (cl-assert (not (conn-property-static-p ,property))
-                                 t "%s is a static property")
-                      (thread-last
-                        (conn--find-state ,state)
-                        conn-state--properties (puthash ,property ,value))))))
+    (inline-quote
+     (progn
+       (cl-assert (not (conn-property-static-p ,property))
+                  t "%s is a static property")
+       (thread-last
+         (conn--find-state ,state)
+         conn-state--properties (puthash ,property ,value))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -232,24 +232,24 @@ Returns VALUE."
 If a property is unset in a state it will inherit the value of that
 property from its parents."
   (inline-letevals (property)
-                   (inline-quote
-                    (progn
-                      (cl-assert (not (conn-property-static-p ,property))
-                                 t "%s is a static property")
-                      (remhash (conn-state--properties (conn--find-state ,state))
-                               ,property)))))
+    (inline-quote
+     (progn
+       (cl-assert (not (conn-property-static-p ,property))
+                  t "%s is a static property")
+       (remhash (conn-state--properties (conn--find-state ,state))
+                ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (property)
-                   (inline-quote
-                    (thread-first
-                      (gethash ,property
-                               (conn-state--properties (conn--find-state ,state))
-                               conn--key-missing)
-                      (eq conn--key-missing) not))))
+    (inline-quote
+     (thread-first
+       (gethash ,property
+                (conn-state--properties (conn--find-state ,state))
+                conn--key-missing)
+       (eq conn--key-missing) not))))
 
 ;;;;; Keymaps
 
@@ -1394,6 +1394,7 @@ chooses to handle a command."
                             post
                             reference)
   (let ((arguments arglist)
+        (prefix (prefix-numeric-value prefix))
         (prompt (or prompt (symbol-name state)))
         (local-exit nil))
     (cl-labels
