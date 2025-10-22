@@ -1112,7 +1112,8 @@ region after a `recursive-edit'."
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
   (conn-perform-transpose mover arg)
-  (conn-make-command-repeatable))
+  (unless (memq 'region (conn-thing-all-parents mover))
+    (conn-make-command-repeatable)))
 
 ;;;;; Line Commands
 
@@ -1717,10 +1718,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace)
   (setq this-command 'conn-kill-thing)
-  (conn-make-command-repeatable))
+  (unless (memq 'region (conn-thing-all-parents cmd))
+    (conn-make-command-repeatable)))
 
-(cl-defgeneric conn-kill-fixup-whitespace (bounds)
-  (:method :around ((_bounds conn-bounds-transform)) nil))
+(cl-defgeneric conn-kill-fixup-whitespace (bounds))
 
 (cl-defmethod conn-kill-fixup-whitespace :after (_bounds)
   (let ((tab-always-indent t))
@@ -1829,7 +1830,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (if delete
            (delete-region beg end)
          (conn--kill-region beg end t append register)))
-     (when fixup-whitespace
+     (when (and fixup-whitespace (null transform))
        (funcall conn-kill-fixup-whitespace-function bounds)))))
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
