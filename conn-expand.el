@@ -201,34 +201,34 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
-  (conn-eval-with-state (conn-expand-state
-                         :prompt "Expansion"
-                         :prefix arg)
+  (conn-read-args (conn-expand-state
+                   :prompt "Expansion"
+                   :prefix arg)
       ((bounds
-        (oclosure-lambda (conn-state-eval-argument
+        (oclosure-lambda (conn-read-args-argument
                           (required t)
                           (name 'conn--read-expand-message))
             (self command)
           (pcase command
             ('conn-expand-exchange
              (conn-expand-exchange)
-             (conn-state-eval-handle)
+             (conn-read-args-handle)
              self)
             ('conn-contract
              (ignore-error user-error
-               (conn-contract (conn-state-eval-consume-prefix-arg)))
-             (conn-state-eval-handle)
+               (conn-contract (conn-read-args-consume-prefix-arg)))
+             (conn-read-args-handle)
              self)
             ('conn-expand
              (ignore-error user-error
-               (conn-expand (conn-state-eval-consume-prefix-arg)))
-             (conn-state-eval-handle)
+               (conn-expand (conn-read-args-consume-prefix-arg)))
+             (conn-read-args-handle)
              self)
             ('conn-toggle-mark-command
              (if mark-active
                  (deactivate-mark)
                (activate-mark))
-             (conn-state-eval-handle)
+             (conn-read-args-handle)
              self)
             ((or 'end 'exit-recursive-edit)
              (conn-set-argument self (cons (region-beginning)

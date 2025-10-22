@@ -48,7 +48,7 @@
   :lighter "SURROUNDING")
 
 (oclosure-define (conn-surround-property-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-surround-property-argument (&optional value)
   (oclosure-lambda (conn-surround-property-argument
@@ -67,9 +67,9 @@
       (eq sym :inner)))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-surround)) arg)
-  (conn-eval-with-state (conn-surround-with-state
-                         :prompt "Surround"
-                         :prefix arg)
+  (conn-read-args (conn-surround-with-state
+                   :prompt "Surround"
+                   :prefix arg)
       ((`(,thing ,thing-arg) (conn-surround-with-argument))
        (property (conn-surround-property-argument)))
     (let ((bounds (conn-bounds-of thing thing-arg)))
@@ -118,9 +118,9 @@
 
 (cl-defmethod conn-perform-kill ((_cmd (eql conn-surround))
                                  arg _transform &optional _append _delete _register)
-  (conn-eval-with-state (conn-surround-with-state
-                         :prompt "Surrounding"
-                         :prefix arg)
+  (conn-read-args (conn-surround-with-state
+                   :prompt "Surrounding"
+                   :prefix arg)
       ((`(,thing ,thing-arg) (conn-surround-with-argument)))
     (conn-delete-surround thing thing-arg)))
 
@@ -162,7 +162,7 @@
 ;;;;;; Surround With arg
 
 (oclosure-define (conn-surround-with-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-surround-with-argument ()
   (declare (important-return-value t))
@@ -172,7 +172,7 @@
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
          self (list (conn-handle-surround-with-argument cmd)
-                    (conn-state-eval-consume-prefix-arg)))
+                    (conn-read-args-consume-prefix-arg)))
       self)))
 
 (cl-defgeneric conn-handle-surround-with-argument (cmd)
@@ -186,12 +186,12 @@
   (memq sym '(surround-self-insert surround-command)))
 
 (cl-defmethod conn-eval-argument ((arg conn-surround-with-argument))
-  (conn-state-eval-argument-value arg))
+  (conn-read-args-argument-value arg))
 
 ;;;;;; Padding Arg
 
 (oclosure-define (conn-surround-padding-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-surround-padding-argument ()
   (declare (important-return-value t))
@@ -200,7 +200,7 @@
     (if (eq cmd 'conn-padding-flag)
         (conn-set-argument
          self (unless value
-                (if (conn-state-eval-consume-prefix-arg)
+                (if (conn-read-args-consume-prefix-arg)
                     (read-string "Padding: ")
                   " ")))
       self)))
@@ -211,7 +211,7 @@
 
 (cl-defmethod conn-display-argument ((arg conn-surround-padding-argument))
   (concat "\\[conn-padding-flag] "
-          (if-let* ((p (conn-state-eval-argument-value arg)))
+          (if-let* ((p (conn-read-args-argument-value arg)))
               (propertize (format "padding <%s>" p)
                           'face 'eldoc-highlight-function-argument)
             "padding")))
@@ -292,9 +292,9 @@
 ;;;###autoload
 (defun conn-surround (&optional arg)
   (interactive "P")
-  (conn-eval-with-state (conn-surround-thing-state
-                         :prompt "Surround"
-                         :prefix arg)
+  (conn-read-args (conn-surround-thing-state
+                   :prompt "Surround"
+                   :prefix arg)
       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument
@@ -308,9 +308,9 @@
                      (success nil))
           (when regions
             (goto-char (overlay-start (car regions))))
-          (conn-eval-with-state (conn-surround-with-state
-                                 :prompt "Surround With"
-                                 :overriding-map (plist-get prep-keys :keymap))
+          (conn-read-args (conn-surround-with-state
+                           :prompt "Surround With"
+                           :overriding-map (plist-get prep-keys :keymap))
               ((`(,with ,with-arg) (conn-surround-with-argument))
                (padding (conn-surround-padding-argument)))
             (unwind-protect
@@ -448,10 +448,10 @@
 (cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
                                            arg)
   (conn-set-argument
-   arg (list cmd (conn-state-eval-consume-prefix-arg))))
+   arg (list cmd (conn-read-args-consume-prefix-arg))))
 
 (oclosure-define (conn-change-surround-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-change-surround-argument ()
   (declare (important-return-value t))
@@ -461,7 +461,7 @@
     (if (eq 'surround-self-insert cmd)
         (conn-set-argument
          self (list (conn--self-insert last-input-event)
-                    (conn-state-eval-consume-prefix-arg)))
+                    (conn-read-args-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
@@ -490,19 +490,19 @@
                                    &optional _kill)
   (atomic-change-group
     (save-mark-and-excursion
-      (conn-eval-with-state (conn-change-surround-state
-                             :prompt "Change Surrounding")
+      (conn-read-args (conn-change-surround-state
+                       :prompt "Change Surrounding")
           ((`(,thing ,thing-arg) (conn-change-surround-argument)))
         (pcase-let* ((`(,ov . ,prep-keys)
                       (conn-prepare-change-surround thing thing-arg))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
-          (conn-eval-with-state (conn-surround-with-state
-                                 :prompt "Surround With"
-                                 :around (lambda (cont)
-                                           (conn-with-overriding-map
-                                               (plist-get prep-keys :keymap)
-                                             (funcall cont))))
+          (conn-read-args (conn-surround-with-state
+                           :prompt "Surround With"
+                           :around (lambda (cont)
+                                     (conn-with-overriding-map
+                                         (plist-get prep-keys :keymap)
+                                       (funcall cont))))
               ((`(,with ,with-arg) (conn-surround-with-argument))
                (padding (conn-surround-padding-argument)))
             (unwind-protect

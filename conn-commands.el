@@ -435,8 +435,8 @@ instances of from-string.")
                       &optional delimited backward query-flag subregions-p)
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
-   (conn-eval-with-state (conn-replace-state
-                          :prompt "Replace in Thing")
+   (conn-read-args (conn-replace-state
+                    :prompt "Replace in Thing")
        ((`(,thing-mover ,arg) (conn-thing-argument t))
         (transform (conn-transform-argument))
         (subregions-p (conn-subregions-argument (use-region-p))))
@@ -493,8 +493,8 @@ instances of from-string.")
                              &optional delimited backward query-flag subregions-p)
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
-   (conn-eval-with-state (conn-replace-state
-                          :prompt "Replace Regexp in Thing")
+   (conn-read-args (conn-replace-state
+                    :prompt "Replace Regexp in Thing")
        ((`(,thing-mover ,arg) (conn-thing-argument t))
         (transform (conn-transform-argument))
         (subregions-p (conn-subregions-argument t)))
@@ -701,8 +701,8 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (conn-eval-with-state (conn-isearch-state
-                          :prompt "Isearch in Thing")
+   (conn-read-args (conn-isearch-state
+                    :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (subregions (conn-subregions-argument (use-region-p))))
      (list thing thing-arg current-prefix-arg subregions)))
@@ -714,8 +714,8 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (conn-eval-with-state (conn-isearch-state
-                          :prompt "Isearch in Thing")
+   (conn-read-args (conn-isearch-state
+                    :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (subregions (conn-subregions-argument (use-region-p))))
      (list thing thing-arg current-prefix-arg subregions)))
@@ -729,8 +729,8 @@ Exiting the recursive edit will resume the isearch."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-eval-with-state (conn-isearch-state
-                          :prompt "Thing")
+   (conn-read-args (conn-isearch-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument t)))
      (list thing thing-arg current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
@@ -748,8 +748,8 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-eval-with-state (conn-isearch-state
-                          :prompt "Thing")
+   (conn-read-args (conn-isearch-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument t)))
      (list thing thing-arg current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
@@ -850,8 +850,8 @@ Immediately repeating this command pushes a mark."
 
 (defun conn-mark-thing (thing arg transform)
   (interactive
-   (conn-eval-with-state (conn-read-thing-state
-                          :prompt "Thing")
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -923,7 +923,7 @@ With a prefix ARG `push-mark' without activating it."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (defun conn--transpose-recursive-message ()
@@ -1034,9 +1034,9 @@ With a prefix ARG `push-mark' without activating it."
   (while
       (condition-case err
           (progn
-            (conn-eval-with-state (conn-dispatch-transpose-state
-                                   :prompt "Transpose Dispatch"
-                                   :prefix arg)
+            (conn-read-args (conn-dispatch-transpose-state
+                             :prompt "Transpose Dispatch"
+                             :prefix arg)
                 ((`(,thing ,thing-arg) (conn-thing-argument t))
                  (restrict-windows (conn-dispatch-restrict-windows-argument)))
               (conn-perform-dispatch
@@ -1094,10 +1094,10 @@ With argument ARG 0, exchange the things at point and mark.
 If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
-   (conn-eval-with-state (conn-transpose-state
-                          :prompt "Transpose"
-                          :prefix current-prefix-arg
-                          :reference conn-transpose-reference)
+   (conn-read-args (conn-transpose-state
+                    :prompt "Transpose"
+                    :prefix current-prefix-arg
+                    :reference conn-transpose-reference)
        ((`(,thing ,thing-arg) (conn-transpose-argument)))
      (list thing thing-arg)))
   (when conn-transpose-recursive-edit-mode
@@ -1145,8 +1145,8 @@ With arg N, insert N newlines."
 (defun conn-join-lines (thing-mover thing-arg transform &optional subregions-p)
   "`delete-indentation' in region from START and END."
   (interactive
-   (conn-eval-with-state (conn-join-lines-state
-                          :prompt "Thing")
+   (conn-read-args (conn-join-lines-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
         (subregions (conn-subregions-argument (use-region-p))))
@@ -1181,8 +1181,8 @@ With arg N, insert N newlines."
                                    &optional subregions-p)
   "Push thing regions to narrow ring."
   (interactive
-   (conn-eval-with-state (conn-narrow-state
-                          :prompt "Thing")
+   (conn-read-args (conn-narrow-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
         (subregions (conn-subregions-argument (use-region-p))))
@@ -1294,9 +1294,9 @@ With arg N, insert N newlines."
 (defun conn-narrow-to-thing (thing-mover arg thing-transform)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (conn-eval-with-state (conn-narrow-state
-                          :prompt "Thing"
-                          :prefix current-prefix-arg)
+   (conn-read-args (conn-narrow-state
+                    :prompt "Thing"
+                    :prefix current-prefix-arg)
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -1315,9 +1315,9 @@ With arg N, insert N newlines."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (conn-eval-with-state (conn-narrow-state
-                          :prompt "Thing"
-                          :prefix current-prefix-arg)
+   (conn-read-args (conn-narrow-state
+                    :prompt "Thing"
+                    :prefix current-prefix-arg)
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -1554,11 +1554,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (oclosure-define (conn-kill-append-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-kill-append-map
   "@" 'append-next-kill)
@@ -1575,7 +1575,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (cond (value
               (conn-unset-argument self nil))
              ((> (prefix-numeric-value
-                  (conn-state-eval-consume-prefix-arg))
+                  (conn-read-args-consume-prefix-arg))
                  0)
               (conn-set-argument self t))
              (t
@@ -1592,7 +1592,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (substitute-command-keys
    (concat
     "\\[append-next-kill] "
-    (pcase (conn-state-eval-argument-value arg)
+    (pcase (conn-read-args-argument-value arg)
       ('nil "append")
       ('prepend
        (propertize
@@ -1604,7 +1604,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         'face 'eldoc-highlight-function-argument))))))
 
 (oclosure-define (conn-delete-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-delete-argument-map
   "d" 'delete)
@@ -1630,14 +1630,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (substitute-command-keys
    (concat
     "\\[delete]: "
-    (if-let* ((ts (conn-state-eval-argument-value arg)))
+    (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "del"
          'face 'eldoc-highlight-function-argument)
       "del"))))
 
 (oclosure-define (conn-register-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-register-argument-map
   "<" 'register)
@@ -1666,7 +1666,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (substitute-command-keys
    (concat
     "\\[register]: "
-    (if-let* ((ts (conn-state-eval-argument-value arg)))
+    (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          (format "reg <%c>" ts)
          'face 'eldoc-highlight-function-argument)
@@ -1680,9 +1680,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          fixup-whitespace
                          check-bounds)
   (interactive
-   (conn-eval-with-state (conn-kill-state
-                          :prompt "Thing"
-                          :reference conn-kill-reference)
+   (conn-read-args (conn-kill-state
+                    :prompt "Thing"
+                    :reference conn-kill-reference)
        ((`(,thing ,thing-arg) (conn-kill-argument))
         (transform (conn-transform-argument))
         (append (conn-kill-append-argument
@@ -1865,8 +1865,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
   (interactive
-   (conn-eval-with-state (conn-copy-state
-                          :prompt "Thing")
+   (conn-read-args (conn-copy-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
         (append (conn-kill-append-argument))
@@ -1912,8 +1912,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defun conn-comment-thing (thing thing-arg transform)
   (interactive
-   (conn-eval-with-state (conn-comment-state
-                          :prompt "Thing")
+   (conn-read-args (conn-comment-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -1945,7 +1945,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (cl-defgeneric conn-perform-duplicate (cmd arg transform)
@@ -1977,8 +1977,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-eval-with-state (conn-duplicate-state
-                          :prompt "Thing")
+   (conn-read-args (conn-duplicate-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -1989,8 +1989,8 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-eval-with-state (conn-duplicate-state
-                          :prompt "Thing")
+   (conn-read-args (conn-duplicate-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
@@ -2153,7 +2153,7 @@ Interactively `region-beginning' and `region-end'."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-argument)
@@ -2166,8 +2166,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD and ARG."
   (interactive
-   (conn-eval-with-state (conn-change-state
-                          :prompt "Thing")
+   (conn-read-args (conn-change-state
+                    :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-change-argument))
         (transform (conn-transform-argument 'conn-bounds-last)))
      (list thing thing-arg transform)))

@@ -428,8 +428,8 @@ before each iteration."
 
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
-  (conn-eval-with-state (conn-read-thing-state
-                         :prompt "Thing")
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Thing")
       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument (use-region-p))))
@@ -665,8 +665,8 @@ apply to each contiguous component of the region."
   (conn--kapply-macro
    (alist-get :kmacro args)
    (conn--kapply-region-iterator
-    (conn-eval-with-state (conn-read-thing-state
-                           :prompt "Thing")
+    (conn-read-args (conn-read-thing-state
+                     :prompt "Thing")
         ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
          (transform (conn-transform-argument)))
       (mapcar #'conn-bounds (conn-bounds-get
@@ -788,8 +788,8 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (conn-eval-with-state (conn-read-thing-state
-                         :prompt "Thing")
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Thing")
       ((`(,thing ,thing-arg) (conn-thing-argument-dwim)))
     (pcase (conn-bounds-of thing thing-arg)
       ((conn-bounds `(,beg . ,end))
@@ -1417,8 +1417,8 @@ A zero means repeat until error."
               (substring-no-properties fill-prefix))))
 
 (conn-transient-mode-suffix conn-auto-fill-suffix ()
-  "Auto Fill"
-  (auto-fill-mode auto-fill-function))
+                            "Auto Fill"
+                            (auto-fill-mode auto-fill-function))
 
 ;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()

@@ -37,9 +37,9 @@
   (declare (side-effect-free t)
            (gv-setter conn-set-command-thing))
   (inline-letevals (cmd)
-    (inline-quote
-     (and (symbolp ,cmd)
-          (get ,cmd :conn-command-thing)))))
+                   (inline-quote
+                    (and (symbolp ,cmd)
+                         (get ,cmd :conn-command-thing)))))
 
 (defun conn-set-command-thing (cmd thing)
   (put cmd :conn-command-thing thing))
@@ -48,14 +48,14 @@
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (thing)
-    (inline-quote
-     (and (symbolp ,thing)
-          (or (get ,thing :conn-thing)
-              (get ,thing 'forward-op)
-              (intern-soft (format "forward-%s" ,thing))
-              (get ,thing 'end-op)
-              (get ,thing 'bounds-of-thing-at-point))
-          ,thing))))
+                   (inline-quote
+                    (and (symbolp ,thing)
+                         (or (get ,thing :conn-thing)
+                             (get ,thing 'forward-op)
+                             (intern-soft (format "forward-%s" ,thing))
+                             (get ,thing 'end-op)
+                             (get ,thing 'bounds-of-thing-at-point))
+                         ,thing))))
 
 (defconst conn--thing-all-parents-cache (make-hash-table :test 'eq))
 
@@ -291,7 +291,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;; Thing Args
 
 (oclosure-define (conn-thing-argument
-                  (:parent conn-state-eval-argument))
+                  (:parent conn-read-args-argument))
   (recursive-edit :type boolean))
 
 (defun conn-thing-argument (&optional recursive-edit)
@@ -302,7 +302,7 @@ order to mark the region that should be defined by any of COMMANDS."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (defun conn-thing-argument-dwim (&optional recursive-edit)
@@ -316,11 +316,11 @@ order to mark the region that should be defined by any of COMMANDS."
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
-         self (list cmd (conn-state-eval-consume-prefix-arg)))
+         self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
 (cl-defmethod conn-eval-argument ((arg conn-thing-argument))
-  (conn-state-eval-argument-value arg))
+  (conn-read-args-argument-value arg))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -336,7 +336,7 @@ order to mark the region that should be defined by any of COMMANDS."
   "z" 'toggle-subregions)
 
 (oclosure-define (conn-subregions-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-subregions-argument (&optional value)
   (declare (important-return-value t))
@@ -346,7 +346,7 @@ order to mark the region that should be defined by any of COMMANDS."
       (self cmd)
     (if (eq cmd 'toggle-subregions)
         (conn-set-argument
-         self (not (conn-state-eval-argument-value self)))
+         self (not (conn-read-args-argument-value self)))
       (conn-subregions-default-value cmd self))))
 
 (cl-defgeneric conn-subregions-default-value (cmd arg)
@@ -371,7 +371,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-display-argument ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
           (propertize "subregions"
-                      'face (when (conn-state-eval-argument-value arg)
+                      'face (when (conn-read-args-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 (defvar conn-subregions-argument-reference
@@ -386,7 +386,7 @@ words."))
 ;;;;;; Fixup Whitespace Argument
 
 (oclosure-define (conn-fixup-whitespace-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-fixup-whitespace-argument-map
   "q" 'fixup-whitespace)
@@ -410,7 +410,7 @@ words."))
   (substitute-command-keys
    (concat
     "\\[fixup-whitespace]: "
-    (if-let* ((ts (conn-state-eval-argument-value arg)))
+    (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "fixup"
          'face 'eldoc-highlight-function-argument)
@@ -419,7 +419,7 @@ words."))
 ;;;;;; Check Bounds Argument
 
 (oclosure-define (conn-check-bounds-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-check-bounds-argument-map
   "!" 'check-bounds)
@@ -443,7 +443,7 @@ words."))
   (substitute-command-keys
    (concat
     "\\[check-bounds]: "
-    (if-let* ((ts (conn-state-eval-argument-value arg)))
+    (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "check region"
          'face 'eldoc-highlight-function-argument)
@@ -473,7 +473,7 @@ words."))
   "X" 'conn-transform-reset)
 
 (oclosure-define (conn-transform-argument
-                  (:parent conn-state-eval-argument)))
+                  (:parent conn-read-args-argument)))
 
 (defun conn-transform-argument (&rest value)
   (declare (important-return-value t)
@@ -482,7 +482,7 @@ words."))
                     (value value)
                     (keymap conn-transform-map))
       (self cmd)
-    (let ((val (cl-loop for tform in (conn-state-eval-argument-value self)
+    (let ((val (cl-loop for tform in (conn-read-args-argument-value self)
                         for update = (conn-update-argument tform cmd)
                         when update collect update)))
       (pcase cmd
@@ -506,7 +506,7 @@ words."))
   (get sym :conn-bounds-transform))
 
 (cl-defmethod conn-display-argument ((arg conn-transform-argument))
-  (when-let* ((ts (conn-state-eval-argument-value arg)))
+  (when-let* ((ts (conn-read-args-argument-value arg)))
     (concat
      "Transforms: "
      (propertize
@@ -516,7 +516,7 @@ words."))
       'face 'eldoc-highlight-function-argument))))
 
 (cl-defmethod conn-eval-argument ((arg conn-transform-argument))
-  (nreverse (conn-state-eval-argument-value arg)))
+  (nreverse (conn-read-args-argument-value arg)))
 
 ;;;;; Read Mover State
 
@@ -981,8 +981,8 @@ words."))
          (max (point) pt))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch)) _arg)
-  (conn-eval-with-state (conn-read-thing-state
-                         :prompt "Thing")
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Thing")
       ((`(,thing ,thing-arg) (conn-thing-argument)))
     (let* ((name (symbol-name cmd))
            (at nil)
@@ -1035,8 +1035,8 @@ words."))
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
-  (conn-eval-with-state (conn-read-thing-state
-                         :prompt "Things in Region")
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Things in Region")
       ((thing (car (conn-thing-argument-dwim))))
     (thread-first
       (cl-loop for parent in (conn-thing-all-parents thing)

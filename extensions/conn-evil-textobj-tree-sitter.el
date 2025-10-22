@@ -162,12 +162,12 @@
                        "\\[conn-contract] contract; "
                        "\\[end] finish")
                       "): "
-                      (conn--display-state-eval-messages))))))
-         (conn-eval-with-state (conn-etts-expand-state
-                                :prompt "Node"
-                                :display-handler #'display-handler)
+                      (conn--read-args-display-message))))))
+         (conn-read-args (conn-etts-expand-state
+                          :prompt "Node"
+                          :display-handler #'display-handler)
              ((bounds
-               (oclosure-lambda (conn-state-eval-argument
+               (oclosure-lambda (conn-read-args-argument
                                  (required t))
                    (self command)
                  (pcase command
@@ -177,7 +177,7 @@
                       (`(,_ ,beg . ,end)
                        (goto-char beg)
                        (conn--push-ephemeral-mark end)))
-                    (conn-state-eval-handle)
+                    (conn-read-args-handle)
                     self)
                    ('conn-expand
                     (setq nodes (nconc (cdr nodes) (list (car nodes))))
@@ -185,7 +185,7 @@
                       (`(,_ ,beg . ,end)
                        (goto-char beg)
                        (conn--push-ephemeral-mark end)))
-                    (conn-state-eval-handle)
+                    (conn-read-args-handle)
                     self)
                    ((or 'end 'exit-recursive-edit)
                     (conn-set-argument

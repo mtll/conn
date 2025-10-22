@@ -183,9 +183,9 @@
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-eval-with-state (conn-dired-dispatch-state
-                         :prefix initial-arg
-                         :prompt "Dired Dispatch")
+  (conn-read-args (conn-dired-dispatch-state
+                   :prefix initial-arg
+                   :prompt "Dired Dispatch")
       ((action (conn-dispatch-action-argument))
        (`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
