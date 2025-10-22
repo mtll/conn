@@ -1478,30 +1478,12 @@ Target overlays may override this default by setting the
     `(catch 'dispatch-select-exit
        (let* ((,rep nil)
               (,display-always nil)
-              (conn-dispatch-repeating ,repeat)
+              (conn-dispatch-repeating (and ,repeat t))
               (conn-dispatch-looping t)
               (conn--dispatch-loop-change-groups nil)
               (conn--state-eval-error-message nil)
               (conn--dispatch-read-event-message-prefixes
                `(,(car conn--dispatch-read-event-message-prefixes)
-                 ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                    (lambda ()
-                      (when-let* ((binding
-                                   (and (or ,rep
-                                            ,display-always
-                                            conn--dispatch-always-retarget)
-                                        (where-is-internal
-                                         'always-retarget
-                                         conn-dispatch-read-event-map
-                                         t))))
-                        (setf ,display-always t)
-                        (concat
-                         (propertize (key-description binding)
-                                     'face 'help-key-binding)
-                         " "
-                         (propertize "always retarget"
-                                     'face (when conn--dispatch-always-retarget
-                                             'eldoc-highlight-function-argument))))))
                  ,@(cdr conn--dispatch-read-event-message-prefixes))))
          (unwind-protect
              (while (or (setq ,rep ,repeat)
@@ -1656,14 +1638,12 @@ Target overlays may override this default by setting the
     (conn-dispatch-handle-and-redisplay :prompt nil)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
-  (when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-    (conn-dispatch-retarget conn-dispatch-target-finder)
-    (conn-dispatch-handle-and-redisplay :prompt nil)))
+  (conn-dispatch-retarget conn-dispatch-target-finder)
+  (conn-dispatch-handle-and-redisplay :prompt nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
-  (when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-    (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
-    (conn-dispatch-handle-and-redisplay)))
+  (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql restrict-windows)))
   (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
@@ -1752,22 +1732,16 @@ Target overlays may override this default by setting the
 (cl-defgeneric conn-dispatch-suspend-targets (target-finder)
   (:method (_) "Noop" nil))
 
-(cl-defgeneric conn-dispatch-retarget (target-finder)
-  (:method (_) "Noop" nil))
-
-(cl-defgeneric conn-dispatch-retargetable-p (target-finder)
-  (declare (important-return-value t))
-  (:method (_) "Noop" nil))
-
-(cl-defgeneric conn-dispatch-has-targets-p (target-finder)
-  (declare (important-return-value t))
-  (:method (_) "Noop" nil))
-
 (cl-defgeneric conn-dispatch-targets-other-end (target-finder)
+  "Default value for :other-end parameter in `conn-perform-dispatch'."
   (declare (important-return-value t))
   (:method (_) nil))
 
 (cl-defgeneric conn-dispatch-target-save-state (target-finder)
+  "Return a list of functions to restore TARGET-FINDER\\='s state.
+
+Each function should take an uninitialized target finder of the same
+type and initialize it to contain the same state as TARGET-FINDER."
   (declare (important-return-value t))
   (:method (_) nil))
 
@@ -1850,7 +1824,45 @@ to the key binding for that target."
   (ignore-error cl-no-next-method
     (cl-call-next-method)))
 
-(defclass conn-dispatch-string-targets ()
+(defclass conn-dispatch-retargetable-target () ()
+  :abstract t)
+
+(defvar-keymap conn-dispatch-retargetable-map
+  "M-f" 'always-retarget
+  "C-f" 'retarget)
+
+(cl-defgeneric conn-dispatch-retarget (target-finder))
+
+(cl-defgeneric conn-dispatch-has-targets-p (target-finder)
+  (declare (important-return-value t)))
+
+(cl-defmethod conn-dispatch-target-keymaps ((_ conn-dispatch-retargetable-target))
+  conn-dispatch-retargetable-map)
+
+(cl-defmethod conn-dispatch-target-message-prefixes ((state conn-dispatch-retargetable-target))
+  (nconc
+   (list (when-let* ((binding
+                      (and (conn-dispatch-has-targets-p state)
+                           (not conn--dispatch-always-retarget)
+                           (where-is-internal 'retarget nil t))))
+           (concat
+            (propertize (key-description binding)
+                        'face 'help-key-binding)
+            " retarget"))
+         (when-let* ((binding
+                      (and (conn-dispatch-has-targets-p state)
+                           conn-dispatch-repeating
+                           (where-is-internal 'always-retarget nil t))))
+           (concat
+            (propertize (key-description binding)
+                        'face 'help-key-binding)
+            " "
+            (propertize "always retarget"
+                        'face (when conn--dispatch-always-retarget
+                                'eldoc-highlight-function-argument)))))
+   (cl-call-next-method)))
+
+(defclass conn-dispatch-string-targets (conn-dispatch-retargetable-target)
   ((string :initform nil
            :initarg :string))
   "Abstract type for target finders targeting a string."
@@ -1863,9 +1875,6 @@ to the key binding for that target."
 
 (cl-defmethod conn-dispatch-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
-
-(cl-defmethod conn-dispatch-retargetable-p ((_ conn-dispatch-string-targets))
-  t)
 
 (cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
@@ -2064,9 +2073,6 @@ contain targets."
     :initform (lambda (win)
                 (eq (window-buffer win)
                     (window-buffer (selected-window)))))))
-
-(cl-defmethod conn-dispatch-retargetable-p ((_state conn-dispatch-focus-thing-at-point))
-  nil)
 
 (cl-defmethod conn-dispatch-update-targets ((state conn-dispatch-focus-thing-at-point))
   (dolist (win (conn--get-target-windows))
@@ -3888,18 +3894,6 @@ contain targets."
             ,(lambda ()
                (conn-dispatch-target-message-prefixes
                 conn-dispatch-target-finder))
-            ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-               (lambda ()
-                 (when-let* ((binding
-                              (and (conn-dispatch-has-targets-p conn-dispatch-target-finder)
-                                   (not conn--dispatch-always-retarget)
-                                   (where-is-internal 'retarget
-                                                      conn-dispatch-read-event-map
-                                                      t))))
-                   (concat
-                    (propertize (key-description binding)
-                                'face 'help-key-binding)
-                    " retarget"))))
             ,(unless conn-dispatch-no-other-end
                (lambda ()
                  (when-let* ((binding
@@ -3945,10 +3939,12 @@ contain targets."
         (progn
           (while-let ((new-target
                        (catch 'dispatch-change-target
-                         (conn-with-overriding-map
-                             (make-composed-keymap
-                              (conn-dispatch-target-keymaps
-                               conn-dispatch-target-finder))
+                         (let ((emulation-mode-map-alists
+                                `(((conn-dispatch-select-mode
+                                    . ,(make-composed-keymap
+                                        (conn-dispatch-target-keymaps
+                                         conn-dispatch-target-finder))))
+                                  ,@emulation-mode-map-alists)))
                            (apply #'cl-call-next-method
                                   action
                                   thing thing-arg thing-transform

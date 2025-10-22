@@ -1464,9 +1464,9 @@ chooses to handle a command."
                  (conn--state-eval-exiting nil)
                  (inhibit-message t)
                  (emulation-mode-map-alists
-                  `(((,state . ,overriding-map)
-                     (,state . ,(thread-last
+                  `(((,state . ,(thread-last
                                   (mapcar #'conn-argument-keymaps arguments)
+                                  (cons overriding-map)
                                   (delq nil)
                                   (make-composed-keymap))))
                     ,@emulation-mode-map-alists)))

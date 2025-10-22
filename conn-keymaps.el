@@ -217,7 +217,7 @@
   "M-g e" 'conn-previous-emacs-state
   "M-g E" 'conn-next-emacs-state
   "C-S-w" 'delete-region
-  "C-." 'conn-dispatch
+  "C-," 'conn-dispatch
   "C->" 'conn-dispatch-on-buttons
   "C-x /" 'tab-bar-history-back
   "C-x 4 /" 'tab-bar-history-back
@@ -394,8 +394,8 @@
   "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  "C-f" 'retarget
-  "M-f" 'always-retarget
+  ;; "C-f" 'retarget
+  ;; "M-f" 'always-retarget
   "C-t" 'change-target-finder
   "<escape>" 'finish
   "C-o" 'conn-goto-window
