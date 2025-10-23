@@ -392,149 +392,207 @@
 (conn-etts-define-thing conn-etts-statement "statement.outer")
 
 (defvar-keymap conn-etts-assignment-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-assignment-inner-forward
   "j" 'conn-etts-assignment-inner-backward)
+(keymap-set conn-etts-assignment-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-assignment-side-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "m" 'conn-etts-assignment-side-forward
   "n" 'conn-etts-assignment-side-backward)
+(keymap-set conn-etts-assignment-side-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-assignment-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-assignment-outer-forward
   "j" 'conn-etts-assignment-outer-backward)
+(keymap-set conn-etts-assignment-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-attribute-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-attribute-inner-forward
   "j" 'conn-etts-attribute-inner-backward)
+(keymap-set conn-etts-attribute-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-attribute-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-attribute-outer-forward
   "j" 'conn-etts-attribute-outer-backward)
+(keymap-set conn-etts-attribute-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-block-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-block-inner-forward
   "j" 'conn-etts-block-inner-backward)
+(keymap-set conn-etts-block-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-block-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-block-outer-forward
   "j" 'conn-etts-block-outer-backward)
+(keymap-set conn-etts-block-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-call-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-call-inner-forward
   "j" 'conn-etts-call-inner-backward)
+(keymap-set conn-etts-call-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-call-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-call-outer-forward
   "j" 'conn-etts-call-outer-backward)
+(keymap-set conn-etts-call-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-class-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-class-inner-forward
   "j" 'conn-etts-class-inner-backward)
+(keymap-set conn-etts-class-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-class-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-class-outer-forward
   "j" 'conn-etts-class-outer-backward)
+(keymap-set conn-etts-class-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-comment-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-comment-inner-forward
   "j" 'conn-etts-comment-inner-backward)
+(keymap-set conn-etts-comment-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-comment-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-comment-outer-forward
   "j" 'conn-etts-comment-outer-backward)
+(keymap-set conn-etts-comment-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-conditional-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-conditional-inner-forward
   "j" 'conn-etts-conditional-inner-backward)
+(keymap-set conn-etts-conditional-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-conditional-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-conditional-outer-forward
   "j" 'conn-etts-conditional-outer-backward)
+(keymap-set conn-etts-conditional-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-frame-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-frame-inner-forward
   "j" 'conn-etts-frame-inner-backward)
+(keymap-set conn-etts-frame-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-frame-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-frame-outer-forward
   "j" 'conn-etts-frame-outer-backward)
+(keymap-set conn-etts-frame-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-function-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-function-inner-forward
   "j" 'conn-etts-function-inner-backward)
+(keymap-set conn-etts-function-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-function-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-function-outer-forward
   "j" 'conn-etts-function-outer-backward)
+(keymap-set conn-etts-function-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-loop-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-loop-inner-forward
   "j" 'conn-etts-loop-inner-backward)
+(keymap-set conn-etts-loop-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-loop-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-loop-outer-forward
   "j" 'conn-etts-loop-outer-backward)
+(keymap-set conn-etts-loop-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-number-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-number-forward
   "j" 'conn-etts-number-backward)
+(keymap-set conn-etts-number-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-parameter-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-parameter-inner-forward
   "j" 'conn-etts-parameter-inner-backward)
+(keymap-set conn-etts-parameter-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-parameter-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-parameter-outer-forward
   "j" 'conn-etts-parameter-outer-backward)
+(keymap-set conn-etts-parameter-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-regex-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-regex-inner-forward
   "j" 'conn-etts-regex-inner-backward)
+(keymap-set conn-etts-regex-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-regex-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-regex-outer-forward
   "j" 'conn-etts-regex-outer-backward)
+(keymap-set conn-etts-regex-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-return-inner-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-return-inner-forward
   "j" 'conn-etts-return-inner-backward)
+(keymap-set conn-etts-return-inner-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-return-outer-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-return-outer-forward
   "j" 'conn-etts-return-outer-backward)
+(keymap-set conn-etts-return-outer-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-scopename-repeat-map
-  :repeat t
+  :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-scopename-forward
   "j" 'conn-etts-scopename-backward)
+(keymap-set conn-etts-scopename-repeat-map
+            "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-things-mode-map
   "<conn-thing-map> i w l" 'conn-etts-assignment-inner-forward
