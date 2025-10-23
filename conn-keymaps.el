@@ -485,58 +485,58 @@
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-state)
-  "=" 'conn-dispatch-repeat-command
-  "'" 'conn-dispatch-kapply
-  "RET" 'conn-repeat-last-dispatch
-  "<return>" 'conn-repeat-last-dispatch
-  "M-n" 'conn-dispatch-cycle-ring-next
-  "M-p" 'conn-dispatch-cycle-ring-previous
-  "M-f" 'conn-dispatch-ring-describe-head
-  "t" 'conn-dispatch-copy-to
-  "T" 'conn-dispatch-copy-replace-to
-  "v" 'conn-dispatch-over
-  "x" 'conn-dispatch-yank-replace
-  "X" 'conn-dispatch-yank-read-replace
-  "C-y" 'conn-dispatch-yank-to-replace
-  "M-y" 'conn-dispatch-reading-yank-to-replace
-  "y" 'conn-dispatch-yank-to
-  "Y" 'conn-dispatch-reading-yank-to
-  "f" 'conn-dispatch-copy-from
-  "F" 'conn-dispatch-copy-from-replace
-  "s" 'conn-dispatch-send
-  "S" 'conn-dispatch-send-replace
-  "d" 'conn-dispatch-grab
-  "D" 'conn-dispatch-grab-replace
-  "q" 'conn-dispatch-transpose
-  "SPC" 'conn-dispatch-jump
-  "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-replace
-  "e" (conn-anonymous-thing
-       'char
-       :default-action (lambda ()
-                         (let ((jump (conn-make-action 'conn-dispatch-jump)))
-                           (oclosure-lambda (conn-action
-                                             (description "Previous Emacs State")
-                                             (no-history t))
-                               (&rest args)
-                             (apply jump args)
-                             (conn-push-state 'conn-emacs-state))))
-       :target-finder (lambda (_arg) (conn-dispatch-previous-emacs-state)))
-  "g y" (conn-anonymous-thing
-         'char
-         :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-         :target-finder (lambda (_arg) (conn-dispatch-global-mark)))
-  "<" (conn-anonymous-thing
-       'char
-       :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-       :target-finder (lambda (_arg) (conn-dispatch-mark-register)))
-  "<remap> <conn-pop-mark-ring>"
-  (conn-anonymous-thing
-   'char
-   :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-   :target-finder (lambda (_arg) (conn-dispatch-mark-ring))))
+(define-keymapl
+ :keymap (conn-get-state-map 'conn-dispatch-state)
+ "=" 'conn-dispatch-repeat-command
+ "'" 'conn-dispatch-kapply
+ "RET" 'conn-repeat-last-dispatch
+ "<return>" 'conn-repeat-last-dispatch
+ "M-n" 'conn-dispatch-cycle-ring-next
+ "M-p" 'conn-dispatch-cycle-ring-previous
+ "M-f" 'conn-dispatch-ring-describe-head
+ "t" 'conn-dispatch-copy-to
+ "T" 'conn-dispatch-copy-replace-to
+ "v" 'conn-dispatch-over
+ "x" 'conn-dispatch-yank-replace
+ "X" 'conn-dispatch-yank-read-replace
+ "C-y" 'conn-dispatch-yank-to-replace
+ "M-y" 'conn-dispatch-reading-yank-to-replace
+ "y" 'conn-dispatch-yank-to
+ "Y" 'conn-dispatch-reading-yank-to
+ "f" 'conn-dispatch-copy-from
+ "F" 'conn-dispatch-copy-from-replace
+ "s" 'conn-dispatch-send
+ "S" 'conn-dispatch-send-replace
+ "d" 'conn-dispatch-grab
+ "D" 'conn-dispatch-grab-replace
+ "q" 'conn-dispatch-transpose
+ "SPC" 'conn-dispatch-jump
+ "." 'conn-dispatch-register-load
+ ">" 'conn-dispatch-register-replace
+ "e" (conn-anonymous-thing
+      'char
+      :default-action (lambda ()
+                        (let ((jump (conn-make-action 'conn-dispatch-jump)))
+                          (oclosure-lambda (conn-action
+                                            (description "Previous Emacs State")
+                                            (no-history t))
+                              (&rest args)
+                            (apply jump args)
+                            (conn-push-state 'conn-emacs-state))))
+      :target-finder (lambda (_arg) (conn-dispatch-previous-emacs-state)))
+ "g y" (conn-anonymous-thing
+        'char
+        :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+        :target-finder (lambda (_arg) (conn-dispatch-global-mark)))
+ "<" (conn-anonymous-thing
+      'char
+      :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+      :target-finder (lambda (_arg) (conn-dispatch-mark-register)))
+ "<remap> <conn-pop-mark-ring>"
+ (conn-anonymous-thing
+  'char
+  :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
+  :target-finder (lambda (_arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State
 
