@@ -81,8 +81,7 @@ necessary state as well.")
                    (properties (make-hash-table :test 'eq))
                    (minor-mode-depths (make-hash-table :test 'eq))
                    (minor-mode-sort-tick conn--minor-mode-maps-sort-tick)
-                   (minor-mode-maps (list :conn-minor-mode-map-alist))
-                   (major-mode-maps (make-hash-table :test 'eq))))
+                   (minor-mode-maps (list :conn-minor-mode-map-alist))))
                (:conc-name conn-state--)
                (:copier nil))
   (name nil :type symbol :read-only t)
@@ -93,8 +92,7 @@ necessary state as well.")
   (keymap nil :type (or nil keymap))
   (minor-mode-depths nil :type hash-table :read-only t)
   (minor-mode-sort-tick nil :type (or nil integer))
-  (minor-mode-maps nil :type alist :read-only t)
-  (major-mode-maps nil :type hash-table :read-only t))
+  (minor-mode-maps nil :type alist :read-only t))
 
 (defmacro conn--find-state (state)
   `(get ,state :conn--state))
@@ -254,7 +252,6 @@ property from its parents."
 ;;;;; Keymaps
 
 (defvar-local conn--state-map nil)
-(defvar-local conn--major-mode-map nil)
 (defvar-local conn--minor-mode-maps nil)
 
 (defconst conn--composed-state-maps (make-hash-table :test 'eq))
@@ -281,14 +278,7 @@ Called when the inheritance hierarchy for STATE changes."
           (unless (cdr map)
             (push cons to-remove)))
         (cl-callf seq-difference (cdr (conn-state--minor-mode-maps state-obj))
-          to-remove #'eq))
-      (maphash
-       (lambda (mode map)
-         (setf (cdr map)
-               (cl-loop for pstate in parents
-                        for pmap = (conn-get-major-mode-map pstate mode t)
-                        when pmap collect pmap)))
-       (conn-state--major-mode-maps state-obj)))))
+          to-remove #'eq)))))
 
 ;;;;;; State Maps
 
@@ -331,81 +321,6 @@ The composed keymap is of the form:
     (or (conn-state--keymap (conn--find-state state))
         (unless dont-create
           (setf (conn-get-state-map state) (make-sparse-keymap))))))
-
-;;;;;; Major Mode Maps
-
-(defvar-local conn-major-mode-maps nil)
-
-(defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
-
-(defun conn--ensure-major-mode-map (state mode)
-  (declare (important-return-value t))
-  (cl-macrolet ((get-map (state)
-                  `(gethash (cons ,state mode) conn--major-mode-maps-cache))
-                (get-composed-map (state)
-                  `(gethash mode (conn-state--major-mode-maps
-                                  (conn--find-state ,state))))
-                (parent-maps (state)
-                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
-    (or (get-composed-map state)
-        (setf (get-composed-map state)
-              (make-composed-keymap (parent-maps state))))))
-
-(defun conn-set-major-mode-map (state mode map)
-  (cl-macrolet ((get-map (state)
-                  `(gethash (cons ,state mode) conn--major-mode-maps-cache))
-                (get-composed-map (state)
-                  `(gethash mode (conn-state--major-mode-maps
-                                  (conn--find-state ,state))))
-                (parent-maps (state)
-                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
-    (cl-assert (keymapp map))
-    (cl-check-type (conn--find-state state) conn-state)
-    (cl-check-type mode symbol)
-    (setf (get-map state) map)
-    (setf (get-composed-map state)
-          (make-composed-keymap (parent-maps state)))
-    (dolist (child (conn-state-all-children state) map)
-      (if-let* ((map (get-composed-map child)))
-          (setf (cdr map) (parent-maps child))
-        (unless (conn-state-get child :no-keymap)
-          (setf (get-composed-map child)
-                (make-composed-keymap (parent-maps child))))))))
-
-(gv-define-simple-setter conn-get-major-mode-map conn-set-major-mode-map)
-
-(defun conn-get-major-mode-map (state mode &optional dont-create)
-  "Return keymap for major MODE in STATE.
-
-If one does not exists create a new sparse keymap for MODE in STATE and
-return it."
-  (declare (important-return-value t))
-  (if (conn-state-get state :no-keymap)
-      (unless dont-create
-        (error "%s has non-nil :no-keymap property" state))
-    (or (gethash (cons state mode) conn--major-mode-maps-cache)
-        (unless dont-create
-          (setf (conn-get-major-mode-map state mode)
-                (make-sparse-keymap))))))
-
-(defconst conn--composed-major-mode-maps (make-hash-table :test 'equal))
-
-(defun conn--compose-major-mode-map ()
-  (declare (important-return-value t))
-  (with-memoization
-      (gethash (cons conn-current-state
-                     (with-memoization conn-major-mode-maps
-                       (copy-sequence (conn--derived-mode-all-parents major-mode))))
-               conn--composed-major-mode-maps)
-    (cl-assert (not (conn-state-get conn-current-state :no-keymap))
-               nil "%s :no-keymap property is non-nil" conn-current-state)
-    (make-composed-keymap
-     (cl-loop for sym in conn-major-mode-maps
-              collect (conn--ensure-major-mode-map conn-current-state sym)))))
 
 ;;;;;; Minor Mode Maps
 
@@ -815,10 +730,8 @@ If BUFFER is nil then use the current buffer."
 (defun conn--setup-state-keymaps ()
   (if (conn-state-get conn-current-state :no-keymap)
       (setf conn--state-map nil
-            conn--major-mode-map nil
             conn--minor-mode-maps nil)
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
-          conn--major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map)))
           conn--minor-mode-maps (conn-state-minor-mode-maps-alist conn-current-state))))
 
 (defun conn--setup-state-properties ()
@@ -1394,7 +1307,7 @@ chooses to handle a command."
                             post
                             reference)
   (let ((arguments arglist)
-        (prefix (prefix-numeric-value prefix))
+        (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
         (local-exit nil))
     (cl-labels

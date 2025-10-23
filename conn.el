@@ -134,11 +134,9 @@
   (if conn-mode
       (progn
         (cl-pushnew 'conn--state-map emulation-mode-map-alists)
-        (cl-pushnew 'conn--major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--minor-mode-maps emulation-mode-map-alists))
     (setq emulation-mode-map-alists
           (seq-difference '(conn--state-map
-                            conn--major-mode-map
                             conn--minor-mode-maps)
                           emulation-mode-map-alists #'eq))))
 
@@ -155,7 +153,6 @@
         (kill-local-variable 'conn--state-stack)
         (make-local-variable 'conn-lighter)
         (setq-local conn--state-map (list (list 'conn-local-mode))
-                    conn--major-mode-map (list (list 'conn-local-mode))
                     conn-emacs-state-ring
                     (conn-make-ring 8
                                     :cleanup (lambda (mk) (set-marker mk nil))
