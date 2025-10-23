@@ -624,11 +624,11 @@ themselves once the selection process has concluded."
        conn-dispatch-copy-from
        conn-dispatch-copy-from-replace)
       ("yank to/replace"
-       conn-dispatch-yank
-       conn-dispatch-yank-replace)
+       conn-dispatch-yank-to
+       conn-dispatch-yank-to-replace)
       ("yank read/replace"
        conn-dispatch-reading-yank-to
-       conn-dispatch-yank-read-replace)
+       conn-dispatch-reading-yank-to-replace)
       ("send/replace"
        conn-dispatch-send
        conn-dispatch-send-replace)
@@ -641,17 +641,9 @@ themselves once the selection process has concluded."
       ("transpose" conn-dispatch-transpose)
       ("goto/over" conn-dispatch-over-or-goto)
       ("kapply" conn-dispatch-kapply))
-     (("kill/append/prepend from"
-       conn-dispatch-kill
-       conn-dispatch-kill-append
-       conn-dispatch-kill-prepend)
-      ("copy/append/prepend from"
-       conn-dispatch-copy
-       conn-dispatch-copy-append
-       conn-dispatch-copy-prepend)
-      ("register load/replace"
+     (("register load/replace"
        conn-dispatch-register-load
-       conn-dispatch-register-replace)
+       conn-dispatch-register-load-replace)
       ("up/down/capital case"
        conn-dispatch-upcase
        conn-dispatch-downcase
@@ -2763,12 +2755,12 @@ contain targets."
                                                    (point))))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(oclosure-define (conn-dispatch-yank-replace
+(oclosure-define (conn-dispatch-yank-to-replace
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace)))
-  (oclosure-lambda (conn-dispatch-yank-replace
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to-replace)))
+  (oclosure-lambda (conn-dispatch-yank-to-replace
                     (description "Yank and Replace To")
                     (str (current-kill 0))
                     (window-predicate
@@ -2791,12 +2783,12 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(oclosure-define (conn-dispatch-yank-read-replace
+(oclosure-define (conn-dispatch-reading-yank-to-replace
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace)))
-  (oclosure-lambda (conn-dispatch-yank-read-replace
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to-replace)))
+  (oclosure-lambda (conn-dispatch-reading-yank-to-replace
                     (description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
                     (window-predicate
@@ -2817,13 +2809,13 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(oclosure-define (conn-dispatch-yank
+(oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
   (str :type string)
   (separator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank)))
-  (oclosure-lambda (conn-dispatch-yank
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
+  (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
                     (separator
                      (cond ((conn-read-args-consume-prefix-arg)
@@ -2856,8 +2848,8 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str))
                                                (point)))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-yank) &optional short)
-  (if-let* ((sep (and (not short) (conn-dispatch-yank--separator action))))
+(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
+  (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
@@ -3024,71 +3016,6 @@ contain targets."
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send-replace))
   (conn--action-cancel-change-group (conn-dispatch-send-replace--change-group action)))
 
-(oclosure-define (conn-dispatch-downcase
-                  (:parent conn-action)))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-downcase)))
-  (oclosure-lambda (conn-dispatch-downcase
-                    (description "Downcase")
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-mark-and-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-transform-bounds
-            transform
-            (conn-bounds `(,beg . ,end)))
-           (downcase-region beg end))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(oclosure-define (conn-dispatch-upcase
-                  (:parent conn-action)))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-upcase)))
-  (oclosure-lambda (conn-dispatch-upcase
-                    (description "Upcase")
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-mark-and-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (upcase-region beg end))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(oclosure-define (conn-dispatch-capitalize
-                  (:parent conn-action)))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-capitalize)))
-  (oclosure-lambda (conn-dispatch-capitalize
-                    (description "Capitalize")
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-mark-and-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (capitalize-region beg end))
-          (_ (user-error "Cannot find thing at point")))))))
-
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
   (register :type integer))
@@ -3112,12 +3039,12 @@ contain targets."
   (if short "Register"
     (format "Register <%c>" (conn-dispatch-register-load--register action))))
 
-(oclosure-define (conn-dispatch-register-replace
+(oclosure-define (conn-dispatch-register-load-replace
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
-  (oclosure-lambda (conn-dispatch-register-replace
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load-replace)))
+  (oclosure-lambda (conn-dispatch-register-load-replace
                     (register (register-read-with-preview "Register: ")))
       (window pt thing thing-arg transform)
     (with-selected-window window
@@ -3132,198 +3059,9 @@ contain targets."
            (conn-register-load register))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-register-replace) &optional short)
+(cl-defmethod conn-describe-action ((action conn-dispatch-register-load-replace) &optional short)
   (if short "Register Replace"
-    (format "Register Replace <%c>" (conn-dispatch-register-replace--register action))))
-
-(oclosure-define (conn-dispatch-kill
-                  (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill)))
-  (oclosure-lambda (conn-dispatch-kill
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: ")))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((and bounds (conn-bounds `(,beg . ,end) transform))
-           (cond ((> conn-dispatch-repeat-count 0)
-                  (conn-append-region beg end register t))
-                 (register
-                  (copy-to-register register beg end t))
-                 (t
-                  (kill-region beg end)))
-           (funcall conn-kill-fixup-whitespace-function bounds)
-           (message "Killed thing"))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill) &optional short)
-  (if-let* ((register (conn-dispatch-kill--register action)))
-      (if short "Kill to Reg"
-        (format "Kill to Register <%c>" register))
-    "Kill"))
-
-(oclosure-define (conn-dispatch-kill-append (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-append)))
-  (oclosure-lambda (conn-dispatch-kill-append
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: ")))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((and bounds (conn-bounds `(,beg . ,end) transform))
-           (let ((str (filter-buffer-substring beg end)))
-             (if register
-                 (copy-to-register register beg end t)
-               (kill-append str nil)
-               (delete-region beg end))
-             (funcall conn-kill-fixup-whitespace-function bounds)
-             (message "Appended: %s" str)))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill-append) &optional short)
-  (if-let* ((register (conn-dispatch-kill-append--register action)))
-      (if short "Kill App to Reg"
-        (format "Kill Append Register <%c>" register))
-    "Kill Append"))
-
-(oclosure-define (conn-dispatch-kill-prepend
-                  (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-prepend)))
-  (oclosure-lambda (conn-dispatch-kill-prepend
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: ")))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((and bounds (conn-bounds `(,beg . ,end) transform))
-           (let ((str (filter-buffer-substring beg end)))
-             (if register
-                 (prepend-to-register register beg end t)
-               (kill-append str t)
-               (delete-region beg end))
-             (funcall conn-kill-fixup-whitespace-function bounds)
-             (message "Prepended: %s" str)))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill-prepend) &optional short)
-  (if-let* ((register (conn-dispatch-kill-prepend--register action)))
-      (if short "Kill Pre to Reg"
-        (format "Kill Prepend Register <%c>" register))
-    "Kill Prepend"))
-
-(oclosure-define (conn-dispatch-copy
-                  (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy)))
-  (oclosure-lambda (conn-dispatch-copy
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: "))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (let ((str (filter-buffer-substring beg end)))
-             (if register
-                 (set-register register str)
-               (kill-new str))
-             (unless executing-kbd-macro
-               (pulse-momentary-highlight-region beg end))))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy) &optional short)
-  (if-let* ((register (conn-dispatch-copy-append--register action)))
-      (if short "Copy to Reg"
-        (format "Copy to Register <%c>" register))
-    "Copy"))
-
-(oclosure-define (conn-dispatch-copy-append
-                  (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-append)))
-  (oclosure-lambda (conn-dispatch-copy-append
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: "))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (let ((str (filter-buffer-substring beg end)))
-             (if register
-                 (append-to-register register beg end)
-               (kill-append str nil))
-             (unless executing-kbd-macro
-               (pulse-momentary-highlight-region beg end))))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-append) &optional short)
-  (if-let* ((register (conn-dispatch-copy-append--register action)))
-      (if short "Copy App to Reg"
-        (format "Copy Append to Register <%c>" register))
-    "Copy Append to Kill"))
-
-(oclosure-define (conn-dispatch-copy-prepend
-                  (:parent conn-action))
-  (register :type integer))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-prepend)))
-  (oclosure-lambda (conn-dispatch-copy-prepend
-                    (register (when (conn-read-args-consume-prefix-arg)
-                                (register-read-with-preview "Register: "))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((conn-bounds `(,beg . ,end) transform)
-           (let ((str (filter-buffer-substring beg end)))
-             (if register
-                 (prepend-to-register register beg end)
-               (kill-append str t))
-             (unless executing-kbd-macro
-               (pulse-momentary-highlight-region beg end))))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend) &optional short)
-  (if-let* ((register (conn-dispatch-copy-prepend--register action)))
-      (if short "Copy Pre to Reg"
-        (format "Copy Prepend to Register <%c>" register))
-    "Copy Prepend to Kill"))
+    (format "Register Replace <%c>" (conn-dispatch-register-load-replace--register action))))
 
 (oclosure-define (conn-dispatch-copy-from
                   (:parent conn-action)

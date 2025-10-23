@@ -490,44 +490,29 @@
   "=" 'conn-dispatch-repeat-command
   "'" 'conn-dispatch-kapply
   "RET" 'conn-repeat-last-dispatch
-  "t" 'conn-dispatch-copy
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "w" 'conn-dispatch-copy-to
-  "W" 'conn-dispatch-copy-replace-to
+  "t" 'conn-dispatch-copy-to
+  "T" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over
   "x" 'conn-dispatch-yank-replace
   "X" 'conn-dispatch-yank-read-replace
-  "C-y" 'conn-dispatch-yank-replace
-  "M-y" 'conn-dispatch-yank-read-replace
-  "y" 'conn-dispatch-yank
+  "C-y" 'conn-dispatch-yank-to-replace
+  "M-y" 'conn-dispatch-reading-yank-to-replace
+  "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
-  "c" 'conn-dispatch-copy-from
-  "C" 'conn-dispatch-copy-from-replace
+  "f" 'conn-dispatch-copy-from
+  "F" 'conn-dispatch-copy-from-replace
   "s" 'conn-dispatch-send
   "S" 'conn-dispatch-send-replace
-  "F" 'conn-dispatch-grab-replace
-  "f" 'conn-dispatch-grab
-  "d" 'conn-dispatch-kill
+  "d" 'conn-dispatch-grab
+  "D" 'conn-dispatch-grab-replace
   "q" 'conn-dispatch-transpose
   "SPC" 'conn-dispatch-jump
-  ">" 'conn-dispatch-register-load
-  "M->" 'conn-dispatch-register-replace
-  "<remap> <downcase-word>" 'conn-dispatch-downcase
-  "<remap> <downcase-region>" 'conn-dispatch-downcase
-  "<remap> <downcase-dwim>" 'conn-dispatch-downcase
-  "<remap> <upcase-word>" 'conn-dispatch-upcase
-  "<remap> <upcase-region>" 'conn-dispatch-upcase
-  "<remap> <upcase-dwim>" 'conn-dispatch-upcase
-  "<remap> <capitalize-word>" 'conn-dispatch-capitalize
-  "<remap> <capitalize-region>" 'conn-dispatch-capitalize
-  "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
-  "D" 'conn-dispatch-kill-append
-  "C-d" 'conn-dispatch-kill-prepend
-  "T" 'conn-dispatch-copy-append
-  "C-t" 'conn-dispatch-copy-prepend
+  "." 'conn-dispatch-register-load
+  ">" 'conn-dispatch-register-replace
   "e" (conn-anonymous-thing
        'char
        :default-action (lambda ()
