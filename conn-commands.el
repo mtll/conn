@@ -74,9 +74,11 @@ execution."
 
 (defun conn-make-command-repeatable (&optional command)
   (let ((map (make-sparse-keymap)))
-    (define-key map
-                (vector last-command-event)
-                (or command 'conn-repeat-last-complex-command))
+    (define-key map (vector last-command-event)
+                (or command
+                    (when (eq this-command (caar command-history))
+                      'conn-repeat-last-complex-command)
+                    'repeat))
     (setq repeat-map map)))
 
 (defun conn-repeat-last-complex-command ()
@@ -1715,6 +1717,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (repeat-is-really-this-command))
              (eq last-command 'conn-kill-thing))
     (setq append 'append))
+  (cl-callf and fixup-whitespace (null transform))
   (when check-bounds (cl-callf append transform (list 'conn-check-bounds)))
   (conn-perform-kill cmd arg transform append delete register fixup-whitespace)
   (setq this-command 'conn-kill-thing)
@@ -1830,7 +1833,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (if delete
            (delete-region beg end)
          (conn--kill-region beg end t append register)))
-     (when (and fixup-whitespace (null transform))
+     (when fixup-whitespace
        (funcall conn-kill-fixup-whitespace-function bounds)))))
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
