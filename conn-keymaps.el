@@ -485,7 +485,7 @@
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))
 
-(define-keymapl
+(define-keymap
  :keymap (conn-get-state-map 'conn-dispatch-state)
  "=" 'conn-dispatch-repeat-command
  "'" 'conn-dispatch-kapply
