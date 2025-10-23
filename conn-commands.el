@@ -81,6 +81,9 @@ execution."
                     'repeat))
     (setq repeat-map map)))
 
+(defun conn-disable-repeating ()
+  (setq repeat-map nil))
+
 (defun conn-repeat-last-complex-command ()
   (interactive)
   (if-let* ((last-repeatable-command (caar command-history))
@@ -1818,6 +1821,25 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (funcall kill-op arg transform append delete register fixup-whitespace)
       (cl-call-next-method))))
 
+(cl-defmethod conn-perform-kill :before ( _cmd _arg _transform
+                                          &optional
+                                          _append
+                                          _delete
+                                          _register
+                                          _fixup-whitespace)
+  (conn-make-command-repeatable))
+
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing dispatch))
+                                 _arg _transform
+                                 &optional
+                                 _append
+                                 _delete
+                                 _register
+                                 _fixup-whitespace)
+  (conn-disable-repeating)
+  (save-mark-and-excursion
+    (cl-call-next-method)))
+
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
                                   append
@@ -1859,6 +1881,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   delete
                                   register
                                   _fixup-whitespace)
+  (conn-disable-repeating)
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds-get :subregions nil
                            (and r (guard (length> r 1))))
