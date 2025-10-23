@@ -306,15 +306,15 @@
                                              :subregions subregions))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
-          (when regions
-            (goto-char (overlay-start (car regions))))
-          (conn-read-args (conn-surround-with-state
-                           :prompt "Surround With"
-                           :overriding-map (plist-get prep-keys :keymap))
-              ((`(,with ,with-arg) (conn-surround-with-argument))
-               (padding (conn-surround-padding-argument)))
-            (unwind-protect
-                (progn
+          (unwind-protect
+              (progn
+                (when regions
+                  (goto-char (overlay-start (car regions))))
+                (conn-read-args (conn-surround-with-state
+                                 :prompt "Surround With"
+                                 :overriding-map (plist-get prep-keys :keymap))
+                    ((`(,with ,with-arg) (conn-surround-with-argument))
+                     (padding (conn-surround-padding-argument)))
                   (apply #'conn-perform-surround
                          `( ,with ,with-arg
                             :regions ,regions
@@ -327,10 +327,10 @@
                                    :subregions subregions)
                              (list with with-arg
                                    :padding padding))))
-                  (setq success t))
-              (mapc #'delete-overlay regions)
-              (when cleanup
-                (funcall cleanup (if success :accept :cancel))))))))))
+                  (setq success t)))
+            (mapc #'delete-overlay regions)
+            (when cleanup
+              (funcall cleanup (if success :accept :cancel)))))))))
 
 (defun conn-previous-surround (data)
   (pcase-let* ((`(,prep-args . (,with ,with-arg . ,with-keys))
@@ -497,30 +497,26 @@
                       (conn-prepare-change-surround thing thing-arg))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
-          (conn-read-args (conn-surround-with-state
-                           :prompt "Surround With"
-                           :around (lambda (cont)
-                                     (conn-with-overriding-map
-                                         (plist-get prep-keys :keymap)
-                                       (funcall cont))))
-              ((`(,with ,with-arg) (conn-surround-with-argument))
-               (padding (conn-surround-padding-argument)))
-            (unwind-protect
-                (progn
-                  (apply #'conn-perform-surround
-                         `(,with ,with-arg
-                                 :regions ,(list ov)
-                                 ,@prep-keys
-                                 :padding ,padding))
-                  (add-to-history
-                   'command-history
-                   `(conn-previous-change-surround
-                     ',(cons (list thing thing-arg)
-                             (list with with-arg :padding padding))))
-                  (setq success t))
-              (delete-overlay ov)
-              (when cleanup
-                (funcall cleanup (if success :accept :cancel))))))))))
+          (unwind-protect
+              (conn-read-args (conn-surround-with-state
+                               :prompt "Surround With"
+                               :overriding-map (plist-get prep-keys :keymap))
+                  ((`(,with ,with-arg) (conn-surround-with-argument))
+                   (padding (conn-surround-padding-argument)))
+                (apply #'conn-perform-surround
+                       `(,with ,with-arg
+                               :regions ,(list ov)
+                               ,@prep-keys
+                               :padding ,padding))
+                (add-to-history
+                 'command-history
+                 `(conn-previous-change-surround
+                   ',(cons (list thing thing-arg)
+                           (list with with-arg :padding padding))))
+                (setq success t))
+            (delete-overlay ov)
+            (when cleanup
+              (funcall cleanup (if success :accept :cancel)))))))))
 
 (defun conn-previous-change-surround (data)
   (save-mark-and-excursion

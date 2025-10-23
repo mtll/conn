@@ -1370,25 +1370,25 @@ chooses to handle a command."
                (setq conn-read-args-last-command cmd)
                (when post (funcall post cmd)))))
          (cont ()
-           (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
-                 (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
-                 (conn--read-args-error-message "")
-                 (conn--read-args-message nil)
-                 (conn--read-args-message-timeout nil)
-                 (conn--read-args-exiting nil)
-                 (inhibit-message t)
-                 (emulation-mode-map-alists
-                  `(((,state . ,(thread-last
-                                  (mapcar #'conn-argument-keymaps arguments)
-                                  (cons overriding-map)
-                                  (delq nil)
-                                  (make-composed-keymap))))
-                    ,@emulation-mode-map-alists)))
-             (conn-with-recursive-stack state
+           (conn-with-recursive-stack state
+             (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
+                   (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
+                   (conn--read-args-error-message "")
+                   (conn--read-args-message nil)
+                   (conn--read-args-message-timeout nil)
+                   (conn--read-args-exiting nil)
+                   (inhibit-message t)
+                   (emulation-mode-map-alists
+                    `(((,state . ,(thread-last
+                                    (mapcar #'conn-argument-keymaps arguments)
+                                    (cons overriding-map)
+                                    (delq nil)
+                                    (make-composed-keymap))))
+                      ,@emulation-mode-map-alists)))
                (while (continue-p)
                  (display-message)
-                 (read-command)))
-             (setq local-exit t))))
+                 (read-command))))
+           (setq local-exit t)))
       (apply
        (catch 'conn-read-args-return
          (unwind-protect
