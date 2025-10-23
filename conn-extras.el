@@ -822,7 +822,7 @@
   "x" (conn-remap-key "C-x" t))
 
 (defun conn-occur-edit-map-setup ()
-  (setq conn-major-mode-maps (list 'occur-edit-mode)))
+  (conn-set-major-mode-maps 'occur-edit-mode))
 (add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
 
 ;;;; Compile mode
