@@ -26,10 +26,6 @@
 (require 'org-element)
 (require 'org-agenda)
 
-(define-minor-mode conn-org-map-mode "")
-
-(add-hook 'org-mode-hook 'conn-org-map-mode)
-
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing org-element)) _arg)
   (org-transpose-element))
 
@@ -251,7 +247,7 @@
  'org-up-heading)
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-command-state 'conn-org-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-command-state 'org-mode)
   "^" 'org-up-element
   ")" 'org-next-visible-heading
   "(" 'org-previous-visible-heading
@@ -285,7 +281,7 @@
 ;;;; Surround
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-surround-with-state 'conn-org-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-surround-with-state 'org-mode)
   "q" 'org-quote
   "c" 'org-center
   "C" 'org-comment
@@ -296,6 +292,7 @@
   "l" 'org-export-latex
   "E" 'org-export
   "e" 'org-example)
+
 
 (cl-defmethod conn-argument-predicate :extra "conn-org" ((_arg conn-surround-with-argument)
                                                          sym)

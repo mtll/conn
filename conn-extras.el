@@ -237,12 +237,8 @@
   [conn-search-map]
   "M-s")
 
-(define-minor-mode conn-dired-map-mode "")
-
-(add-hook 'dired-mode-hook 'conn-dired-map-mode)
-
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-dired-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
   "C-q" 'conn-dired-quick-ref
   "SPC <t>" conn-demap-key
   "<conn-dired-search-map> s" 'dired-do-isearch
@@ -448,12 +444,8 @@
   (interactive)
   (conn-quick-reference (list conn-magit-ref)))
 
-(define-minor-mode conn-magit-section-map-mode "")
-
-(add-hook 'magit-section-mode-hook 'conn-magit-section-map-mode)
-
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-magit-section-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
   "C-q" 'conn-magit-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
@@ -587,15 +579,11 @@
   (interactive)
   (conn-quick-reference (list conn-ibuffer-ref conn-ibuffer-mark-ref)))
 
-(define-minor-mode conn-ibuffer-map-mode "")
-
-(add-hook 'ibuffer-mode 'conn-ibuffer-map-mode)
-
-(keymap-set (conn-get-minor-mode-map 'conn-dispatch-state 'conn-ibuffer-map-mode)
+(keymap-set (conn-get-major-mode-map 'conn-dispatch-state 'ibuffer-mode)
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-ibuffer-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
   "C-q" 'conn-ibuffer-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
@@ -661,13 +649,26 @@
 
 ;;;; Help
 
-(define-minor-mode conn-help-map-mode "")
-
-(add-hook 'help-mode-hook 'conn-help-map-mode)
-(add-hook 'helpful-mode-hook 'conn-help-map-mode)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
+  "SPC <t>" conn-demap-key
+  "m" 'end-of-buffer
+  "n" 'beginning-of-buffer
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "b" 'beginning-of-buffer
+  "e" 'end-of-buffer
+  "j" 'backward-button
+  "l" 'forward-button
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-buttons
+  "`" 'conn-wincontrol-mru-window
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-help-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
   "SPC <t>" conn-demap-key
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
@@ -734,12 +735,8 @@
   (interactive)
   (conn-quick-reference (list conn-info-ref)))
 
-(define-minor-mode conn-info-map-mode "")
-
-(add-hook 'Info-mode-hook 'conn-info-map-mode)
-
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-info-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
   "SPC <t>" conn-demap-key
   "C-q" 'conn-info-quick-ref
   "h" 'conn-wincontrol-one-command
@@ -763,13 +760,9 @@
 
 ;;;; Treemacs
 
-(define-minor-mode conn-treemacs-map-mode "")
-
-(add-hook 'treemacs-mode-hook 'conn-treemacs-map-mode)
-
 (conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-treemacs-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -782,13 +775,9 @@
 
 ;;;; Messages
 
-(define-minor-mode conn-messages-buffer-map-mode "")
-
-(add-hook 'messages-buffer-mode-hook 'conn-messages-buffer-map-mode)
-
 (conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-messages-buffer-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -803,13 +792,9 @@
 
 ;;;; Debugger mode
 
-(define-minor-mode conn-debugger-map-mode "")
-
-(add-hook 'debugger-mode-hook 'conn-debugger-map-mode)
-
 (conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-debugger-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'debugger-mode)
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -822,14 +807,10 @@
 
 ;;;; Occur mode
 
-(define-minor-mode conn-occur-map-mode "")
-
-(add-hook 'occur-mode 'conn-occur-map-mode)
-
 (conn-set-mode-property 'occur-mode :disable-mark-cursor t)
 (conn-set-mode-property 'occur-edit-mode :disable-mark-cursor nil)
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-occur-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'occur-mode)
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -840,26 +821,17 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-minor-mode-map state 'conn-occur-map-mode)
-              "C-c e" 'occur-edit-mode))
-
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-minor-mode-map state 'conn-occur-edit-map-mode)
-              "C-c e" 'occur-cease-edit))
-
+(defun conn-occur-edit-map-setup ()
+  (setq conn-major-mode-maps (list 'occur-edit-mode)))
+(add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
 
 ;;;; Compile mode
-
-(define-minor-mode conn-compilation-map-mode "")
-
-(add-hook 'compilation-mode-hook 'conn-compilation-map-mode)
 
 (conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
 (static-if (<= 31 emacs-major-version)
     (conn-set-mode-property 'grep-edit-mode :disable-mark-cursor nil))
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-compilation-map-mode)
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -868,9 +840,7 @@
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
-  "x" (conn-remap-key "C-x" t)
-  "<" 'previous-error-no-select
-  ">" 'next-error-no-select)
+  "x" (conn-remap-key "C-x" t))
 
 ;;; Footer
 ;; Local Variables:
