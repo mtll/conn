@@ -404,7 +404,7 @@
   "C-M-r" 'isearch-regexp-backward
   "C-v" 'scroll-up
   "M-v" 'scroll-down
-  "C-n" 'restrict-windows)
+  "C-w" 'restrict-windows)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
@@ -415,7 +415,7 @@
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "TAB" 'repeat-dispatch
-  "C-n" 'restrict-windows
+  "C-w" 'restrict-windows
   "DEL" 'backward-delete-arg
   "<backspace>" 'backward-delete-arg
   "u" 'forward-symbol
@@ -548,7 +548,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
   "TAB" 'repeat-dispatch
-  "C-n" 'restrict-windows
+  "C-w" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
   "C-o" 'other-window
