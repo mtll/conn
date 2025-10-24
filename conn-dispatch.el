@@ -665,15 +665,11 @@ themselves once the selection process has concluded."
        conn-dispatch-copy-to
        conn-dispatch-copy-replace-to)
       ("transpose" conn-dispatch-transpose)
-      ("goto/over" conn-dispatch-over-or-goto)
-      ("kapply" conn-dispatch-kapply))
-     (("register load/replace"
+      ("over" conn-dispatch-over)
+      ("kapply" conn-dispatch-kapply)
+      ("register load/replace"
        conn-dispatch-register-load
-       conn-dispatch-register-load-replace)
-      ("up/down/capital case"
-       conn-dispatch-upcase
-       conn-dispatch-downcase
-       conn-dispatch-capitalize)))))
+       conn-dispatch-register-load-replace)))))
 
 (defvar conn-dispatch-command-ref
   (conn-reference-page "Misc Commands"

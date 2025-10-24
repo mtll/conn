@@ -508,7 +508,7 @@
   "q" 'conn-dispatch-transpose
   "SPC" 'conn-dispatch-jump
   "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-replace
+  ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
        'char
        :default-action (lambda ()
