@@ -1836,21 +1836,34 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                  register
                                  fixup-whitespace)
   (conn-disable-repeating)
-  (save-mark-and-excursion
-    (when-let* ((bounds (conn-bounds-of cmd arg)))
-      (conn-bounds bounds)
-      (dolist (bound (or (conn-bounds-get bounds :subregions transform)
-                         (list bounds)))
-        (pcase bound
-          ((conn-bounds `(,beg . ,end))
-           (goto-char beg)
-           (save-mark-and-excursion
-             (conn--push-ephemeral-mark end)
-             (if delete
-                 (delete-region beg end)
-               (conn--kill-region beg end t append register)))
-           (when fixup-whitespace
-             (funcall conn-kill-fixup-whitespace-function bound))))))))
+  (conn-read-args (conn-dispatch-bounds-state
+                   :prefix arg
+                   :prompt "Kill"
+                   :reference (list conn-dispatch-thing-ref))
+      ((`(,thing ,thing-arg) (conn-thing-argument t))
+       (repeat (conn-dispatch-repeat-argument)))
+    (conn-perform-dispatch
+     (oclosure-lambda (conn-action
+                       (description "Kill")
+                       (window-predicate
+                        (lambda (win) (eq win (selected-window)))))
+         (window pt thing thing-arg transform)
+       (with-selected-window window
+         (conn-dispatch-loop-undo-boundary)
+         (save-mark-and-excursion
+           (goto-char pt)
+           (pcase (conn-bounds-of thing thing-arg)
+             ((and (conn-bounds `(,beg . ,end) transform)
+                   bounds)
+              (conn--push-ephemeral-mark end)
+              (if delete
+                  (delete-region beg end)
+                (conn--kill-region beg end t append register))
+              (when fixup-whitespace
+                (funcall conn-kill-fixup-whitespace-function bounds)))))))
+     thing thing-arg transform
+     :repeat repeat
+     :no-other-end :no-other-end)))
 
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
