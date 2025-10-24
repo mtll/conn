@@ -2845,7 +2845,9 @@ contain targets."
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
-      (format "Yank To <%s>" sep)
+      (format "Yank To <%s>" (if (eq sep 'register)
+                                 (get-register register-separator)
+                               sep))
     "Yank To"))
 
 (oclosure-define (conn-dispatch-reading-yank-to

@@ -1828,7 +1828,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                           _fixup-whitespace)
   (conn-make-command-repeatable))
 
-(cl-defmethod conn-perform-kill ((cmd (conn-thing dispatch))
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing dispatch))
                                  arg transform
                                  &optional
                                  append
