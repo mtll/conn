@@ -294,15 +294,14 @@
   (let ((thing (oref state thing)))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
-        (ignore-errors
-          (let* ((captures (conn-etts--get-captures thing
-                                                    (window-start)
-                                                    (window-end)))
-                 (groups (conn--etts-thing-groups thing))
-                 (nodes (conn-etts--filter-captures groups captures)))
-            (pcase-dolist (`(,beg . ,_end) nodes)
-              (when (<= (window-start) beg)
-                (conn-make-target-overlay beg 0))))))))
+        (let* ((captures (conn-etts--get-captures thing
+                                                  (window-start)
+                                                  (window-end)))
+               (groups (conn--etts-thing-groups thing))
+               (nodes (conn-etts--filter-captures groups captures)))
+          (pcase-dolist (`(,beg . ,_end) nodes)
+            (when (<= (window-start) beg)
+              (conn-make-target-overlay beg 0)))))))
   (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
