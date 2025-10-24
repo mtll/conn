@@ -1220,7 +1220,6 @@ the state stays active if the previous command was a prefix command."
   "V" 'undefined
   "g" 'conn-surround
   "RET" 'conn-duplicate
-  "S-<return>" 'conn-duplicate-and-comment-region
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))

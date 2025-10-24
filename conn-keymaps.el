@@ -35,7 +35,6 @@
   "V" 'undefined
   "g" 'conn-surround
   "RET" 'conn-duplicate
-  "S-<return>" 'conn-duplicate-and-comment-region
   "SPC" 'conn-push-mark-command)
 
 (define-keymap
@@ -136,7 +135,6 @@
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
   "d" 'conn-duplicate
-  "D" 'conn-duplicate-and-comment
   "y" 'yank-in-context
   "s" 'conn-sort-prefix
   "r" 'yank-rectangle

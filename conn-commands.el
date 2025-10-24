@@ -2230,6 +2230,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        (_cmd (eql copy-from-above-command)))
   t)
 
+(cl-defmethod conn-argument-predicate ((_arg conn-duplicate-thing)
+                                       (_cmd (conn-thing con-dispatch)))
+  nil)
+
 (defun conn-duplicate-thing-argument ()
   (oclosure-lambda (conn-duplicate-thing
                     (value (when (use-region-p)
@@ -2243,31 +2247,61 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
-(cl-defgeneric conn-perform-duplicate (cmd arg transform)
+(cl-defgeneric conn-perform-duplicate (cmd arg transform &optional comment)
   (declare (conn-anonymous-thing-property :duplicate-op))
-  ( :method (cmd arg transform)
+  ( :method (cmd arg transform &optional comment)
     (if-let* ((dup-op (conn-anonymous-thing-property cmd :duplicate-op)))
-        (funcall dup-op arg transform)
-      (conn-perform-duplicate)))
-  ( :method (cmd arg transform)
-    (pcase (conn-bounds-of cmd arg)
-      ((conn-bounds `(,beg . ,end) transform)
-       (save-mark-and-excursion
-         (let* ((region (buffer-substring-no-properties beg end))
-                (multiline (seq-contains-p region ?\n))
-                (padding (if multiline "\n" " "))
-                (regexp (if multiline "\n" "[\t ]")))
-           (goto-char beg)
-           (insert-before-markers region)
-           (unless (looking-back regexp 1)
-             (insert-before-markers padding))
-           (goto-char beg)))))))
+        (funcall dup-op arg transform comment)
+      (cl-call-next-method))))
+
+(cl-defmethod conn-perform-duplicate (cmd arg transform &optional comment)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (save-mark-and-excursion
+       (let* ((region (buffer-substring-no-properties beg end))
+              (multiline (seq-contains-p region ?\n))
+              (padding (if multiline "\n" " "))
+              (regexp (if multiline "\n" "[\t ]")))
+         (goto-char beg)
+         (insert-before-markers region)
+         (unless (looking-back regexp 1)
+           (insert-before-markers padding))
+         (goto-char beg)))
+     (when comment
+       (comment-region beg end)))))
 
 (cl-defmethod conn-perform-duplicate ((_cmd (eql copy-from-above-command))
-                                      arg _transform)
+                                      arg _transform _comment)
   (copy-from-above-command arg))
 
-(defun conn-duplicate (thing-mover thing-arg thing-transform)
+(oclosure-define (conn-duplicate-comment-argument
+                  (:parent conn-read-args-argument)))
+
+(defvar-keymap conn-duplicate-comment-argument-map
+  "c" 'duplicate-comment)
+
+(defun conn-duplicate-comment-argument (&optional value)
+  (oclosure-lambda (conn-duplicate-comment-argument
+                    (value value)
+                    (keymap conn-duplicate-comment-argument-map))
+      (self cmd)
+    (pcase cmd
+      ('duplicate-comment
+       (conn-set-argument self (not value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-duplicate-comment-argument)
+                                       (_cmd (eql duplicate-comment)))
+  t)
+
+(cl-defmethod conn-display-argument ((arg conn-duplicate-comment-argument))
+  (concat
+   "\\[duplicate-comment] "
+   (propertize "comment"
+               'face (when (conn-read-args-argument-value arg)
+                       'eldoc-highlight-function-argument))))
+
+(defun conn-duplicate (thing-mover thing-arg transform &optional comment)
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
@@ -2275,24 +2309,11 @@ With prefix arg N duplicate region N times."
    (conn-read-args (conn-duplicate-state
                     :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform)))
-  (conn-perform-duplicate thing-mover thing-arg thing-transform))
-
-(defun conn-duplicate-and-comment (thing-mover thing-arg transform)
-  "Duplicate and comment the region defined by a thing command.
-
-With prefix arg N duplicate region N times."
-  (interactive
-   (conn-read-args (conn-duplicate-state
-                    :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform)))
-  (pcase (conn-bounds-of thing-mover thing-arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (conn-perform-duplicate thing-mover thing-arg transform)
-     (comment-or-uncomment-region beg end))))
+        (transform (conn-transform-argument))
+        (comment (conn-duplicate-comment-argument)))
+     (list thing thing-arg transform comment)))
+  (conn-make-command-repeatable)
+  (conn-perform-duplicate thing-mover thing-arg transform comment))
 
 ;;;;; Recenter
 
