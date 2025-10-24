@@ -44,6 +44,8 @@
 (declare-function conn-beginning-of-inner-line "conn-commands")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-kill-thing "conn-commands")
+(declare-function color-hsl-to-rgb "color")
+(declare-function color-rgb-to-hsl "color")
 
 ;;;; Labels
 
@@ -61,6 +63,11 @@
   :group 'conn
   :type '(list integer))
 
+(defface conn-dispatch-action-pulse-face
+  '((t (:inherit default)))
+  "Face for highlight pulses after dispatch actions."
+  :group 'conn-face)
+
 (defface conn-dispatch-label-face-1
   '((t (:inherit highlight :bold t)))
   "Face for group in dispatch lead overlay."
@@ -75,6 +82,8 @@
   '((t (:inherit shadow)))
   "Face for background text during dispatch."
   :group 'conn-faces)
+
+(defvar conn-dispatch-action-pulse-color nil)
 
 (defvar conn-window-labeling-function 'conn-header-line-label
   "Function to label windows for `conn-prompt-for-window'.
@@ -160,18 +169,28 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-event-handler-maps nil)
 (defvar conn--dispatch-read-event-handlers nil)
 
-(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
-  (declare (indent 3))
+(defmacro conn-with-dispatch-event-handler (tag keymap message-fn handler &rest body)
+  (declare (indent 4))
   (cl-once-only (keymap)
-    (let ((body `(let ((conn--dispatch-read-event-handlers
-                        (cons ,handler conn--dispatch-read-event-handlers)))
-                   ,@body)))
-      `(catch ,tag
-         ,(if keymap
+    (let* ((body `(let ((conn--dispatch-read-event-handlers
+                         (cons ,handler conn--dispatch-read-event-handlers))
+                        (conn--dispatch-read-event-message-prefixes
+                         ,(if message-fn
+                              `(cons ,message-fn conn--dispatch-read-event-message-prefixes)
+                            'conn--dispatch-read-event-message-prefixes)))
+                    ,@body)))
+      (if (or (not tag) (eq tag '_))
+          (if keymap
               `(let ((conn--dispatch-event-handler-maps
                       (cons ,keymap conn--dispatch-event-handler-maps)))
                  ,body)
-            body)))))
+            body)
+        `(catch ,tag
+           ,(if keymap
+                `(let ((conn--dispatch-event-handler-maps
+                        (cons ,keymap conn--dispatch-event-handler-maps)))
+                   ,body)
+              body))))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -397,7 +416,7 @@ themselves once the selection process has concluded."
           (conn-label-select-always-prompt always-prompt))
       (unwind-protect
           (conn-with-dispatch-event-handler 'mouse-click
-              nil
+              nil nil
               (lambda (cmd)
                 (when (or (and (eq cmd 'act)
                                (mouse-event-p last-input-event))
@@ -1405,7 +1424,7 @@ Target overlays may override this default by setting the
 (cl-defmethod conn-dispatch-select-target :around ()
   (let ((conn--dispatch-remap-cookies nil))
     (conn-with-dispatch-event-handler 'mouse-click
-        nil
+        nil nil
         (lambda (cmd)
           (when (or (and (eq cmd 'act)
                          (mouse-event-p last-input-event))
@@ -1466,29 +1485,36 @@ Target overlays may override this default by setting the
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   (cl-with-gensyms (rep display-always)
-    `(catch 'dispatch-select-exit
-       (let* ((,rep nil)
-              (,display-always nil)
-              (conn-dispatch-repeating (and ,repeat t))
-              (conn-dispatch-looping t)
-              (conn--dispatch-loop-change-groups nil)
-              (conn--read-args-error-message nil)
-              (conn--dispatch-read-event-message-prefixes
-               `(,(car conn--dispatch-read-event-message-prefixes)
-                 ,@(cdr conn--dispatch-read-event-message-prefixes))))
-         (unwind-protect
-             (while (or (setq ,rep ,repeat)
-                        (< conn-dispatch-repeat-count 1))
-               (catch 'dispatch-redisplay
-                 (condition-case err
-                     (progn
-                       ,@body
-                       (cl-incf conn-dispatch-repeat-count))
-                   (user-error
-                    (setf conn--read-args-error-message
-                          (error-message-string err))))))
-           (dolist (undo conn--dispatch-loop-change-groups)
-             (funcall undo :accept)))))))
+    `(progn
+       (catch 'dispatch-select-exit
+         (let* ((,rep nil)
+                (,display-always nil)
+                (conn-dispatch-repeating (and ,repeat t))
+                (conn--dispatch-undo-change-groups nil)
+                (conn--read-args-error-message nil)
+                (conn--dispatch-read-event-message-prefixes
+                 `(,(car conn--dispatch-read-event-message-prefixes)
+                   ,@(cdr conn--dispatch-read-event-message-prefixes))))
+           (unwind-protect
+               (let ((conn-dispatch-in-progress t))
+                 (while (or (setq ,rep ,repeat)
+                            (< conn-dispatch-repeat-count 1))
+                   (catch 'dispatch-redisplay
+                     (condition-case err
+                         (progn
+                           (push nil conn--dispatch-undo-change-groups)
+                           ,@body
+                           (cl-incf conn-dispatch-repeat-count))
+                       (user-error
+                        (setf conn--read-args-error-message
+                              (error-message-string err)))))))
+             (dolist (undo conn--dispatch-undo-change-groups)
+               (pcase-dolist (`(,_ . ,undo-fn) undo)
+                 (funcall undo-fn
+                          (if dispatch-quit-flag
+                              :cancel
+                            :accept)))))))
+       (when dispatch-quit-flag (keyboard-quit)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -1500,8 +1526,8 @@ Target overlays may override this default by setting the
                       ,conn-target-sort-function)
                     conn--dispatch-init-state)
                    (conn-dispatch-target-finder nil)
-                   (conn-dispatch-looping nil)
-                   (conn--dispatch-loop-change-groups nil)
+                   (conn-dispatch-in-progress nil)
+                   (conn--dispatch-undo-change-groups nil)
                    (inhibit-message nil)
                    (recenter-last-op nil)
                    (conn-dispatch-repeat-count nil)
@@ -1647,8 +1673,11 @@ Target overlays may override this default by setting the
          (conn-dispatch-handle-and-redisplay))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
-  (when conn--dispatch-loop-change-groups
-    (funcall (pop conn--dispatch-loop-change-groups) :cancel))
+  (when conn--dispatch-undo-change-groups
+    ;; pop the current loop's change group first
+    (pop conn--dispatch-undo-change-groups)
+    (pcase-dolist (`(,_ . ,undo-fn) (pop conn--dispatch-undo-change-groups))
+      (funcall undo-fn :cancel)))
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-change-target (thing thing-arg thing-transform)
@@ -1783,6 +1812,7 @@ to the key binding for that target."
                          do (keymap-set map key label))
                 (mapc #'conn-label-redisplay labels)
                 map)
+              nil
               (lambda (obj)
                 (when (conn-dispatch-label-p obj)
                   (throw 'label obj)))
@@ -1896,6 +1926,7 @@ to the key binding for that target."
           (catch 'dispatch-redisplay
             (conn-with-dispatch-event-handler 'backspace
                 (define-keymap "<remap> <backward-delete-char>" 'backspace)
+                nil
                 (lambda (cmd)
                   (when (eq cmd 'backspace)
                     (when (length> string 0)
@@ -2509,7 +2540,7 @@ contain targets."
 
 ;;;;; Dispatch Actions
 
-(defvar conn-dispatch-looping nil)
+(defvar conn-dispatch-in-progress nil)
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
@@ -2522,21 +2553,59 @@ contain targets."
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
-(defvar conn--dispatch-loop-change-groups nil)
+(defvar conn--dispatch-undo-change-groups nil)
+(defvar conn--dispatch-undoing nil)
+
+(defmacro conn-dispatch-undo-case (depth &rest body)
+  (declare (indent 1))
+  (cl-assert (<= -100 depth 100))
+  (cl-with-gensyms (do)
+    `(progn
+       (push (cons ,depth (lambda (,do)
+                            (let ((conn--dispatch-undoing t))
+                              (pcase ,do ,@body))))
+             (car conn--dispatch-undo-change-groups))
+       (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
+         :key #'car
+         :in-place t))))
 
 (defun conn-dispatch-loop-undo-boundary (&rest buffers)
-  (when conn-dispatch-looping
-    (push (let ((cg (mapcan #'prepare-change-group
-                            (or buffers (list (current-buffer))))))
-            (when conn--dispatch-loop-change-groups
-              (dolist (b (or buffers (list (current-buffer))))
-                (with-current-buffer b
-                  (undo-boundary))))
-            (lambda (do)
-              (pcase do
-                (:cancel (cancel-change-group cg))
-                (:accept (accept-change-group cg)))))
-          conn--dispatch-loop-change-groups)))
+  (when conn-dispatch-in-progress
+    (let ((cg (mapcan #'prepare-change-group
+                      (or buffers (list (current-buffer))))))
+      (when conn--dispatch-undo-change-groups
+        (dolist (b (or buffers (list (current-buffer))))
+          (with-current-buffer b
+            (undo-boundary))))
+      (conn-dispatch-undo-case 0
+        (:cancel (cancel-change-group cg))
+        (:accept (accept-change-group cg))))))
+
+(defun conn-dispatch-action-pulse (beg end)
+  (require 'pulse)
+  (set-face-background
+   'conn-dispatch-action-pulse-face
+   (if conn--dispatch-undoing
+       (pcase-let ((`(,h ,s ,l)
+                    (apply #'color-rgb-to-hsl
+                           (color-name-to-rgb
+                            (face-background
+                             'pulse-highlight-start-face
+                             nil
+                             'default)))))
+         (apply #'color-rgb-to-hex
+                (color-hsl-to-rgb
+                 (+ h float-pi)
+                 s
+                 (if (> l .5)
+                     (- l .2)
+                   (+ l .2)))))
+     (face-background 'pulse-highlight-start-face
+                      nil
+                      'default)))
+  (pulse-momentary-highlight-region
+   beg end
+   'conn-dispatch-action-pulse-face))
 
 (defun conn--action-type-p (item)
   (declare (important-return-value t)
@@ -2708,8 +2777,9 @@ contain targets."
                (when (and separator (not conn-dispatch-other-end))
                  (conn-dispatch-insert-separator separator))
                (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str))
-                                                   (point)))))))))))
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point)))))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -2750,8 +2820,9 @@ contain targets."
                (delete-region beg end)
                (insert-for-yank str)
                (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str))
-                                                   (point))))
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point))))
               (_ (user-error "Cannot find thing at point")))))))))
 
 (oclosure-define (conn-dispatch-yank-to-replace
@@ -2777,7 +2848,8 @@ contain targets."
            (delete-region beg end)
            (insert-for-yank str)
            (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
 (oclosure-define (conn-dispatch-reading-yank-to-replace
@@ -2803,7 +2875,8 @@ contain targets."
            (delete-region beg end)
            (insert-for-yank str)
            (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
 (oclosure-define (conn-dispatch-yank-to
@@ -2840,8 +2913,9 @@ contain targets."
            (when (and separator (not conn-dispatch-other-end))
              (conn-dispatch-insert-separator separator))
            (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point) (length str))
-                                               (point)))))))))
+             (conn-dispatch-action-pulse
+              (- (point) (length str))
+              (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
@@ -2885,11 +2959,13 @@ contain targets."
              (when (and separator (not conn-dispatch-other-end))
                (conn-dispatch-insert-separator separator))
              (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point) (length str))
-                                                 (point)))))
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))))
           (unless executing-kbd-macro
-            (pulse-momentary-highlight-region (- (point) (length str))
-                                              (point))))))))
+            (conn-dispatch-action-pulse
+             (- (point) (length str))
+             (point))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -2913,12 +2989,11 @@ contain targets."
        (check-bounds (conn-check-bounds-argument))
        (separator (conn-dispatch-separator-argument 'default)))
     (let* ((cg (conn--action-buffer-change-group))
-           (str
-            (let (kill-ring)
-              (conn-kill-thing thing arg transform
-                               nil nil nil
-                               fixup check-bounds)
-              (car kill-ring))))
+           (str (progn
+                  (conn-kill-thing thing arg transform
+                                   nil nil nil
+                                   fixup check-bounds)
+                  (current-kill 0))))
       (oclosure-lambda (conn-dispatch-send
                         (description "Send")
                         (change-group cg)
@@ -2948,11 +3023,13 @@ contain targets."
                (when (not conn-dispatch-other-end)
                  (conn-dispatch-insert-separator separator))
                (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str))
-                                                   (point)))))
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point)))))
             (unless executing-kbd-macro
-              (pulse-momentary-highlight-region (- (point) (length str))
-                                                (point)))))))))
+              (conn-dispatch-action-pulse
+               (- (point) (length str))
+               (point)))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (conn-dispatch-send--change-group action))
@@ -2980,12 +3057,11 @@ contain targets."
                             (fixup (conn-fixup-whitespace-argument
                                     (not (region-active-p))))
                             (check-bounds (conn-check-bounds-argument t)))
-                         (let (kill-ring)
-                           (conn-kill-thing
-                            thing thing-arg transform
-                            nil nil nil
-                            fixup check-bounds)
-                           (car kill-ring))))
+                         (progn
+                           (conn-kill-thing thing thing-arg transform
+                                            nil nil nil
+                                            fixup check-bounds)
+                           (current-kill 0))))
                       (window-predicate
                        (lambda (win)
                          (not
@@ -3001,7 +3077,8 @@ contain targets."
              (delete-region beg end)
              (insert-for-yank str)
              (unless executing-kbd-macro
-               (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+               (conn-dispatch-action-pulse
+                (- (point) (length str)) (point))))
             (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
@@ -3087,7 +3164,8 @@ contain targets."
           (goto-char pt)
           (pcase (conn-bounds-of thing thing-arg)
             ((conn-bounds `(,beg . ,end) transform)
-             (pulse-momentary-highlight-region beg end)
+             (conn-dispatch-action-pulse
+              beg end)
              (setq str (filter-buffer-substring beg end))))))
       (with-current-buffer (marker-buffer opoint)
         (conn-dispatch-loop-undo-boundary)
@@ -3116,7 +3194,8 @@ contain targets."
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
           ((conn-bounds `(,beg . ,end) transform)
-           (pulse-momentary-highlight-region beg end)
+           (conn-dispatch-action-pulse
+            beg end)
            (copy-region-as-kill beg end))
           (_ (user-error "Cannot find thing at point")))))
     (conn-dispatch-loop-undo-boundary)

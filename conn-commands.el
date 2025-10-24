@@ -1787,7 +1787,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (dotimes (_ (min (empty-lines) (empty-lines t)))
         (join-line)))))
 
-(defun conn--kill-region (beg end &optional delete-flag append register)
+(defun conn--kill-region (beg end &optional delete-flag append register separator)
   (if register
       (pcase append
         ('nil
@@ -1803,9 +1803,32 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (set-mark (point))
         (goto-char omark)))
     (let ((last-command (if append 'kill-region last-command)))
+      (when (and append separator)
+        (kill-append (conn-kill-separator-for-region separator)
+                     (< (point) (mark t))))
       (if delete-flag
           (kill-region (mark t) (point) t)
         (copy-region-as-kill (mark t) (point) t)))))
+
+(defun conn--kill-string (string &optional append register separator)
+  (if register
+      (if append
+          (let ((reg (get-register register)))
+            (set-register
+             register
+             (cond ((not reg) string)
+                   ((stringp reg)
+                    (if (eq append 'prepend)
+                        (concat string separator reg)
+                      (concat reg separator string)))
+                   (t (user-error "Register does not contain text")))))
+        (set-register register string))
+    (if append
+        (progn
+          (when separator
+            (kill-append separator (eq append 'prepend)))
+          (kill-append string (eq append 'prepend)))
+      (kill-new string))))
 
 (cl-defgeneric conn-perform-kill ( cmd arg transform
                                    &optional
@@ -1828,6 +1851,93 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                           _fixup-whitespace)
   (conn-make-command-repeatable))
 
+(oclosure-define (conn-prepend-argument
+                  (:parent conn-read-args-argument)))
+
+(defun conn-prepend-argument (&optional value)
+  (oclosure-lambda (conn-prepend-argument
+                    (value value))
+      (self cmd)
+    (if (eq cmd 'dispatch-other-end)
+        (conn-set-argument self (not value))
+      self)))
+
+(cl-defmethod conn-display-argument ((arg conn-prepend-argument))
+  (concat "\\[dispatch-other-end] "
+          (propertize "prepend"
+                      'face (when (conn-read-args-argument-value arg)
+                              'eldoc-highlight-function-argument))))
+
+(oclosure-define (conn-separator-argument
+                  (:parent conn-read-args-argument)))
+
+(defvar-keymap conn-separator-argument-keymap
+  "+" 'register-separator
+  "SPC" 'separator)
+
+(defun conn-separator-argument (&optional initial-value)
+  (oclosure-lambda (conn-separator-argument
+                    (value initial-value)
+                    (keymap conn-separator-argument-keymap))
+      (self cmd)
+    (pcase cmd
+      ('separator
+       (if (or (stringp value)
+               (eq 'default value))
+           (conn-unset-argument self nil)
+         (conn-set-argument
+          self
+          (if (conn-read-args-consume-prefix-arg)
+              (read-string "Separator: " nil nil nil t)
+            'default))))
+      ('register-separator
+       (if (eq value 'register)
+           (conn-unset-argument self nil)
+         (conn-set-argument self 'register)))
+      (_ self))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-separator-argument)
+                                       sym)
+  (or (eq sym 'separator)
+      (eq sym 'register-separator)))
+
+(cl-defmethod conn-display-argument ((arg conn-separator-argument))
+  (concat "\\[separator]/\\[register-separator] separator"
+          (when-let* ((sep (conn-read-args-argument-value arg)))
+            (concat
+             ": "
+             (propertize (format "<%s>" sep)
+                         'face 'eldoc-highlight-function-argument)))))
+
+(defun conn-kill-separator-for-region (separator)
+  (pcase separator
+    ('nil)
+    ('register (get-register register-separator))
+    ('space " ")
+    ('newline "\n")
+    ((pred stringp) separator)
+    (_ (let ((beg (region-beginning))
+             (end (region-end)))
+         (save-excursion
+           (goto-char beg)
+           (if (search-forward "\n" end t) "\n" " "))))))
+
+(defun conn-kill-separator-for-strings (strings separator)
+  (pcase separator
+    ('nil)
+    ('register (get-register register-separator))
+    ('space " ")
+    ('newline "\n")
+    ((pred stringp) separator)
+    (_ (catch 'sep
+         (dolist (str strings)
+           (when (string-match "\n" str nil t)
+             (throw 'sep "\n")))
+         " "))))
+
+(oclosure-define (conn-kill-action
+                  (:parent conn-action)))
+
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing dispatch))
                                  arg transform
                                  &optional
@@ -1841,29 +1951,71 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                    :prompt "Kill"
                    :reference (list conn-dispatch-thing-ref))
       ((`(,thing ,thing-arg) (conn-thing-argument t))
-       (repeat (conn-dispatch-repeat-argument)))
-    (conn-perform-dispatch
-     (oclosure-lambda (conn-action
-                       (description "Kill")
-                       (window-predicate
-                        (lambda (win) (eq win (selected-window)))))
-         (window pt thing thing-arg transform)
-       (with-selected-window window
-         (conn-dispatch-loop-undo-boundary)
-         (save-mark-and-excursion
-           (goto-char pt)
-           (pcase (conn-bounds-of thing thing-arg)
-             ((and (conn-bounds `(,beg . ,end) transform)
-                   bounds)
-              (conn--push-ephemeral-mark end)
-              (if delete
-                  (delete-region beg end)
-                (conn--kill-region beg end t append register))
-              (when fixup-whitespace
-                (funcall conn-kill-fixup-whitespace-function bounds)))))))
-     thing thing-arg transform
-     :repeat repeat
-     :no-other-end :no-other-end)))
+       (repeat (conn-dispatch-repeat-argument))
+       (prepend (conn-prepend-argument (eq append 'prepend)))
+       (separator (when (not delete)
+                    (conn-separator-argument 'default)))
+       (restrict-windows (conn-dispatch-restrict-windows-argument t)))
+    (conn-with-dispatch-event-handler _
+        nil
+        (lambda ()
+          (when-let* ((binding
+                       (where-is-internal 'dispatch-other-end
+                                          conn-dispatch-read-event-map
+                                          t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "prepend"
+              'face (when prepend
+                      'eldoc-highlight-function-argument)))))
+        (lambda (cmd)
+          (when (eq cmd 'dispatch-other-end)
+            (setq prepend (not prepend))
+            (conn-dispatch-handle)))
+      (let ((result nil)
+            (strings nil))
+        (conn-perform-dispatch
+         (oclosure-lambda (conn-kill-action
+                           (description "Kill"))
+             (window pt thing thing-arg transform)
+           (with-selected-window window
+             (conn-dispatch-loop-undo-boundary)
+             (save-mark-and-excursion
+               (goto-char pt)
+               (pcase (conn-bounds-of thing thing-arg)
+                 ((and (conn-bounds `(,beg . ,end) transform)
+                       bounds)
+                  (goto-char (if conn-dispatch-other-end end beg))
+                  (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
+                  (if delete
+                      (delete-region beg end)
+                    (push (cons prepend (funcall region-extract-function t))
+                          strings)
+                    (conn-dispatch-undo-case 90
+                      (:cancel
+                       (pop strings)
+                       (when conn-dispatch-in-progress
+                         (pulse-momentary-highlight-region
+                          beg end
+                          'conn-dispatch-undo-pulse-face)))))
+                  (when fixup-whitespace
+                    (funcall conn-kill-fixup-whitespace-function bounds)))))))
+         thing thing-arg transform
+         :repeat repeat
+         :other-end :no-other-end
+         :restrict-windows restrict-windows)
+        (when strings
+          (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
+                                                      separator)))
+            (pcase-dolist (`(,prepend . ,string) (nreverse strings))
+              (setq result
+                    (if prepend
+                        (concat string (and result sep) result)
+                      (concat result (and result sep) string))))
+            (conn--kill-string result append register sep)))))))
 
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
@@ -1955,6 +2107,73 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn--kill-region beg end nil append register))
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
+
+(cl-defmethod conn-perform-copy ((_cmd (conn-thing dispatch)) arg
+                                 &optional transform append register)
+  (conn-disable-repeating)
+  (conn-read-args (conn-dispatch-bounds-state
+                   :prefix arg
+                   :prompt "Copy"
+                   :reference (list conn-dispatch-thing-ref))
+      ((`(,thing ,thing-arg) (conn-thing-argument t))
+       (repeat (conn-dispatch-repeat-argument))
+       (prepend (conn-prepend-argument (eq append 'prepend)))
+       (separator (conn-separator-argument 'default))
+       (restrict-windows (conn-dispatch-restrict-windows-argument t)))
+    (conn-with-dispatch-event-handler _
+        nil
+        (lambda ()
+          (when-let* ((binding
+                       (where-is-internal 'dispatch-other-end
+                                          conn-dispatch-read-event-map
+                                          t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "prepend"
+              'face (when prepend
+                      'eldoc-highlight-function-argument)))))
+        (lambda (cmd)
+          (when (eq cmd 'dispatch-other-end)
+            (setq prepend (not prepend))
+            (conn-dispatch-handle)))
+      (let ((result nil)
+            (strings nil))
+        (conn-perform-dispatch
+         (oclosure-lambda (conn-kill-action
+                           (description "Copy"))
+             (window pt thing thing-arg transform)
+           (with-selected-window window
+             (conn-dispatch-loop-undo-boundary)
+             (save-mark-and-excursion
+               (goto-char pt)
+               (pcase (conn-bounds-of thing thing-arg)
+                 ((conn-bounds `(,beg . ,end) transform)
+                  (goto-char (if conn-dispatch-other-end end beg))
+                  (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
+                  (push (cons prepend (funcall region-extract-function nil))
+                        strings)
+                  (conn-dispatch-action-pulse beg end)
+                  (conn-dispatch-undo-case 90
+                    (:cancel
+                     (pop strings)
+                     (when conn-dispatch-in-progress
+                       (conn-dispatch-action-pulse beg end)))))))))
+         thing thing-arg transform
+         :repeat repeat
+         :other-end :no-other-end
+         :restrict-windows restrict-windows)
+        (when strings
+          (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
+                                                      separator)))
+            (pcase-dolist (`(,prepend . ,string) (nreverse strings))
+              (setq result
+                    (if prepend
+                        (concat string (and result sep) result)
+                      (concat result (and result sep) string))))
+            (conn--kill-string result append register sep)))))))
 
 ;;;;; Comment Thing
 
