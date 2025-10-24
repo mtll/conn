@@ -444,7 +444,7 @@ themselves once the selection process has concluded."
     (keymap-set map "C-g" 'keyboard-quit)
     map))
 
-(conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
+(conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face
@@ -453,7 +453,7 @@ themselves once the selection process has concluded."
                               (category
                                . conn-dispatch-command)))
 
-(conn-define-state conn-dispatch-bounds-state (conn-dispatch-mover-state)
+(conn-define-state conn-dispatch-bounds-state (conn-dispatch-targets-state)
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face
   :loop-completion-metadata `((affixation-function
@@ -461,7 +461,7 @@ themselves once the selection process has concluded."
                               (category
                                . conn-dispatch-command)))
 
-(conn-define-state conn-dispatch-state (conn-dispatch-mover-state)
+(conn-define-state conn-dispatch-state (conn-dispatch-targets-state)
   "State for reading a dispatch command."
   :loop-completion-metadata `((affixation-function
                                . conn--dispatch-command-affixation)
@@ -529,12 +529,12 @@ themselves once the selection process has concluded."
 
 (defvar conn--dispatch-thing-predicate nil)
 
-(oclosure-define (conn-dispatch-thing-argument
+(oclosure-define (conn-dispatch-target-argument
                   (:parent conn-thing-argument)))
 
-(defun conn-dispatch-thing-argument ()
+(defun conn-dispatch-target-argument ()
   (declare (important-return-value t))
-  (oclosure-lambda (conn-dispatch-thing-argument
+  (oclosure-lambda (conn-dispatch-target-argument
                     (required t)
                     (recursive-edit t))
       (self cmd)
@@ -543,7 +543,7 @@ themselves once the selection process has concluded."
          self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-thing-argument)
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-target-argument)
                                        sym)
   (and (cl-call-next-method)
        (funcall conn--dispatch-thing-predicate sym)))
@@ -608,14 +608,14 @@ themselves once the selection process has concluded."
      ("defun"
       (:eval (conn-quick-ref-find-remap
               conn-end-of-defun-remap
-              (conn-get-state-map 'conn-dispatch-mover-state)))))))
+              (conn-get-state-map 'conn-dispatch-targets-state)))))))
 
 (defvar conn-dispatch-thing-ref
   (conn-reference-page "Things"
     "Use a thing command to specify a region to operate on."
     "Dispatch state redefines some thing bindings:
 "
-    ((:keymap (list (conn-get-state-map 'conn-dispatch-mover-state)))
+    ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
      (:splice (conn-quick-ref-to-cols conn-dispatch-thing-ref-extras)))))
 
 (defvar conn-dispatch-action-ref
@@ -689,9 +689,8 @@ themselves once the selection process has concluded."
         conn-dispatch-command-ref
         conn-dispatch-thing-ref))
 
-(defvar conn-dispatch-mover-reference
-  (list conn-dispatch-command-ref
-        conn-dispatch-thing-ref))
+(defvar conn-dispatch-target-reference
+  (list conn-dispatch-thing-ref))
 
 ;;;;;; Action
 
@@ -1524,13 +1523,13 @@ Target overlays may override this default by setting the
   (:method (_cmd) nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (conn-read-args (conn-dispatch-mover-state
+  (conn-read-args (conn-dispatch-targets-state
                    :prompt "New Targets"
-                   :reference conn-dispatch-mover-reference
+                   :reference (list conn-dispatch-thing-ref)
                    :around (lambda (cont)
                              (conn-with-dispatch-suspended
                                (funcall cont))))
-      ((`(,thing ,thing-arg) (conn-dispatch-thing-argument))
+      ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
     (conn-dispatch-change-target thing thing-arg transform)))
 
@@ -3766,7 +3765,7 @@ contain targets."
                                      (fboundp 'posframe-hide))
                             (posframe-hide " *conn-list-posframe*"))))
       ((action (conn-dispatch-action-argument))
-       (`(,thing ,thing-arg) (conn-dispatch-thing-argument))
+       (`(,thing ,thing-arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
        (repeat (conn-dispatch-repeat-argument))
        (other-end (conn-dispatch-other-end-argument nil))
@@ -3797,7 +3796,7 @@ contain targets."
                                        (fboundp 'posframe-hide))
                               (posframe-hide " *conn-list-posframe*"))))
         ((action (conn-dispatch-action-argument))
-         (`(,thing ,thing-arg) (conn-dispatch-thing-argument))
+         (`(,thing ,thing-arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument))
          (repeat (conn-dispatch-repeat-argument))
          (other-end (conn-dispatch-other-end-argument nil))
@@ -3903,7 +3902,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
                    :prompt "Bounds of Dispatch"
-                   :reference conn-dispatch-mover-reference)
+                   :reference (list conn-dispatch-command-ref
+                                    conn-dispatch-thing-ref))
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat (conn-dispatch-repeat-argument repeat)))

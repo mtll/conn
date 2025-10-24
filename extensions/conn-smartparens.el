@@ -194,7 +194,7 @@
   "x" (conn-remap-key "C-x"))
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state 'smartparens-mode)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'smartparens-mode)
   ")" (conn-anonymous-thing
        'forward-sexp
        :description "list"

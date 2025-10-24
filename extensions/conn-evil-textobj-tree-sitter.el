@@ -658,7 +658,7 @@
   "Minor mode for conn-etts things")
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state 'conn-etts-things-mode)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-etts-things-mode)
   "h" (conn-anonymous-thing
        'conn-etts-thing
        :target-finder 'conn-etts-parents-target-finder))

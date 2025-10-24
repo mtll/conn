@@ -461,7 +461,7 @@
 
 ;;;; Ibuffer
 
-(conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-mover-state)
+(conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
   "State for dispatch in `ibuffer-mode'."
   :cursor '(bar . 4)
   :disable-mark-cursor t

@@ -407,7 +407,7 @@
   "C-n" 'restrict-windows)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-mover-state)
+  :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   :parent conn-dispatch-common-map
   "z" 'dispatch-other-end
   "<escape>" 'finish
@@ -446,7 +446,7 @@
                         (conn-dispatch-all-things 'symbol))))
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state :override)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
   "<remap> <conn-expand>" (conn-anonymous-thing
                            'expansion
                            :bounds-op (lambda (arg)
@@ -469,7 +469,7 @@
   "b" 'conn-dispatch-buttons)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-mover-state)
+  :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   ")" (conn-anonymous-thing
        'forward-sexp
        :description "list"
