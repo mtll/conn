@@ -1851,6 +1851,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                           _fixup-whitespace)
   (conn-make-command-repeatable))
 
+(cl-defmethod conn-perform-kill ( (_cmd (conn-thing expansion))
+                                  _arg _transform
+                                  &optional
+                                  _append
+                                  _delete
+                                  _register
+                                  _fixup-whitespace)
+  (conn-disable-repeating)
+  (cl-call-next-method))
+
 (oclosure-define (conn-prepend-argument
                   (:parent conn-read-args-argument)))
 
@@ -2100,6 +2110,15 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn--kill-region beg end nil append register))
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
+
+(cl-defmethod conn-perform-copy ((_cmd (conn-thing expansion))
+                                 _arg
+                                 &optional
+                                 _transform
+                                 _append
+                                 _register)
+  (conn-disable-repeating)
+  (cl-call-next-method))
 
 (cl-defmethod conn-perform-copy ((_cmd (conn-thing dispatch)) arg
                                  &optional transform append register)
