@@ -1308,7 +1308,7 @@ With arg N, insert N newlines."
     (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
 
-(defun conn-narrow-to-thing (thing-mover arg thing-transform)
+(defun conn-narrow-to-thing (thing-mover arg transform)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
@@ -1317,16 +1317,16 @@ With arg N, insert N newlines."
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
-  (pcase-let (((conn-bounds `(,beg . ,end) thing-transform)
-               (conn-bounds-of thing-mover arg)))
-    (unless (and (<= beg (point) end)
-                 (<= beg (mark t) end))
-      (deactivate-mark))
-    (conn--narrow-to-region-1 beg end t)
-    (when (called-interactively-p 'interactive)
-      (message "Buffer narrowed"))))
+  (pcase (conn-bounds-of thing-mover arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (unless (and (<= beg (point) end)
+                  (<= beg (mark t) end))
+       (deactivate-mark))
+     (conn--narrow-to-region-1 beg end t)
+     (when (called-interactively-p 'interactive)
+       (message "Buffer narrowed")))))
 
-(defun conn-narrow-indirect (thing-mover arg thing-transform)
+(defun conn-narrow-indirect (thing-mover arg transform)
   "Narrow to THING at point.
 
 Interactively prompt for the keybinding of a command and use THING
@@ -1338,11 +1338,11 @@ associated with that command (see `conn-register-thing')."
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
-  (pcase-let (((conn-bounds `(,beg . ,end) thing-transform)
-               (conn-bounds-of thing-mover arg)))
-    (conn--narrow-indirect beg end t)
-    (when (called-interactively-p 'interactive)
-      (message "Buffer narrowed indirect"))))
+  (pcase (conn-bounds-of thing-mover arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (conn--narrow-indirect beg end t)
+     (when (called-interactively-p 'interactive)
+       (message "Buffer narrowed indirect")))))
 
 (defun conn-narrow-to-region (beg end &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
@@ -1893,7 +1893,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ('register-separator
        (if (eq value 'register)
            (conn-unset-argument self nil)
-         (conn-set-argument self 'register)))
+         (conn-set-argument self (get-register register-separator))))
       (_ self))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-separator-argument)
@@ -1912,9 +1912,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-kill-separator-for-region (separator)
   (pcase separator
     ('nil)
-    ('register (get-register register-separator))
-    ('space " ")
-    ('newline "\n")
     ((pred stringp) separator)
     (_ (let ((beg (region-beginning))
              (end (region-end)))
@@ -1925,12 +1922,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-kill-separator-for-strings (strings separator)
   (pcase separator
     ('nil)
-    ('register (get-register register-separator))
-    ('space " ")
-    ('newline "\n")
     ((pred stringp) separator)
     (_ (catch 'sep
-         (dolist (str strings)
+         (dolist (str (ensure-list strings))
            (when (string-match "\n" str nil t)
              (throw 'sep "\n")))
          " "))))
