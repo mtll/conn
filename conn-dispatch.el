@@ -2773,9 +2773,7 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-transform-bounds
-            transform
-            (conn-bounds `(,beg . ,end)))
+          ((conn-bounds `(,beg . ,end) transform)
            (delete-region beg end)
            (insert-for-yank str)
            (unless executing-kbd-macro
@@ -2834,9 +2832,7 @@ contain targets."
       (save-excursion
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
-          ((conn-transform-bounds
-            transform
-            (conn-bounds `(,beg . ,end)))
+          ((conn-bounds `(,beg . ,end) transform)
            (goto-char (if conn-dispatch-other-end end beg))
            (when (and separator conn-dispatch-other-end)
              (conn-dispatch-insert-separator separator))
@@ -2942,9 +2938,7 @@ contain targets."
           (save-excursion
             (goto-char pt)
             (pcase (conn-bounds-of thing thing-arg)
-              ((conn-transform-bounds
-                transform
-                (conn-bounds `(,beg . ,end) transform))
+              ((conn-bounds `(,beg . ,end) transform)
                (goto-char (if conn-dispatch-other-end end beg))
                (when conn-dispatch-other-end
                  (conn-dispatch-insert-separator separator))
