@@ -2278,7 +2278,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-duplicate-comment-argument-map
-  "c" 'duplicate-comment)
+  "q" 'duplicate-comment)
 
 (defun conn-duplicate-comment-argument (&optional value)
   (oclosure-lambda (conn-duplicate-comment-argument
