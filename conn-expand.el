@@ -200,6 +200,7 @@ Expansions and contractions are provided by functions in
     "\\[end] finish")))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
+  (conn--push-ephemeral-mark (point))
   (call-interactively cmd)
   (conn-read-args (conn-expand-state
                    :prompt "Expansion"
