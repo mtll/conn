@@ -1694,8 +1694,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          delete
                          register
                          fixup-whitespace
-                         check-bounds
-                         subregions)
+                         check-bounds)
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
@@ -1840,7 +1839,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                  fixup-whitespace)
   (conn-disable-repeating)
   (save-mark-and-excursion
-    (let ((bounds (conn-bounds-of cmd arg)))
+    (when-let* ((bounds (conn-bounds-of cmd arg)))
+      (conn-bounds bounds)
       (dolist (bound (or (conn-bounds-get bounds :subregions transform)
                          (list bounds)))
         (pcase bound
