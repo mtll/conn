@@ -3981,7 +3981,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    nil nil
    :other-end :no-other-end))
 
-(defun conn--dispatch-bounds (bounds &optional repeat)
+(defun conn--dispatch-bounds (bounds &optional subregions-p)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
                    :prompt "Bounds of Dispatch"
@@ -3989,7 +3989,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                     conn-dispatch-thing-ref))
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument))
-       (repeat (conn-dispatch-repeat-argument repeat)))
+       (repeat (conn-dispatch-repeat-argument subregions-p)))
     (let (ovs subregions)
       (unwind-protect
           (progn
@@ -4007,14 +4007,17 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                          bound)
                     (unless executing-kbd-macro
                       (push (make-overlay beg end) ovs)
+                      (conn-dispatch-undo-case 0
+                        (:cancel (delete-overlay (pop ovs))))
                       (overlay-put (car ovs) 'face 'region))
-                    (push bound subregions))
+                    (push bound subregions)
+                    (conn-dispatch-undo-case 0
+                      (:cancel (pop subregions))))
                    (_
                     (user-error "No %s found at point" thing)))))
              thing thing-arg transform
              :repeat repeat
              :other-end :no-other-end)
-            (unless ovs (keyboard-quit))
             (cl-loop for bound in subregions
                      for (b . e) = (conn-bounds bound)
                      minimize b into beg
@@ -4022,7 +4025,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                      finally do
                      (setf (conn-bounds bounds) (cons beg end)
                            (conn-bounds-get bounds :subregions) subregions))
-            (if repeat subregions (conn-bounds bounds)))
+            (if subregions-p subregions (conn-bounds bounds)))
         (mapc #'delete-overlay ovs)))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing dispatch)) arg)
