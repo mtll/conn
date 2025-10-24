@@ -1694,7 +1694,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          delete
                          register
                          fixup-whitespace
-                         check-bounds)
+                         check-bounds
+                         subregions)
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
@@ -1712,7 +1713,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (fixup (conn-fixup-whitespace-argument
                 (unless (region-active-p)
                   conn-kill-fixup-whitespace-default)))
-        (check-bounds (conn-check-bounds-argument (listp current-prefix-arg))))
+        (check-bounds (conn-check-bounds-argument (listp current-prefix-arg)))
+        (subregions (conn-subregions-argument)))
      (list thing thing-arg transform append
            delete register fixup check-bounds)))
   (when (and (null append)
@@ -1829,16 +1831,28 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                           _fixup-whitespace)
   (conn-make-command-repeatable))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing dispatch))
-                                 _arg _transform
+(cl-defmethod conn-perform-kill ((cmd (conn-thing dispatch))
+                                 arg transform
                                  &optional
-                                 _append
-                                 _delete
-                                 _register
-                                 _fixup-whitespace)
+                                 append
+                                 delete
+                                 register
+                                 fixup-whitespace)
   (conn-disable-repeating)
   (save-mark-and-excursion
-    (cl-call-next-method)))
+    (let ((bounds (conn-bounds-of cmd arg)))
+      (dolist (bound (or (conn-bounds-get bounds :subregions transform)
+                         (list bounds)))
+        (pcase bound
+          ((conn-bounds `(,beg . ,end))
+           (goto-char beg)
+           (save-mark-and-excursion
+             (conn--push-ephemeral-mark end)
+             (if delete
+                 (delete-region beg end)
+               (conn--kill-region beg end t append register)))
+           (when fixup-whitespace
+             (funcall conn-kill-fixup-whitespace-function bound))))))))
 
 (cl-defmethod conn-perform-kill ( cmd arg transform
                                   &optional
