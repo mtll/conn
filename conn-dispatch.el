@@ -64,8 +64,15 @@
   :type '(list integer))
 
 (defface conn-dispatch-action-pulse-face
-  '((t (:inherit default)))
+  '((t (:inherit pulse-highlight-start-face)))
   "Face for highlight pulses after dispatch actions."
+  :group 'conn-face)
+
+(defvar conn-dispatch-undo-pulse-face nil)
+
+(defface conn--dispatch-action-current-pulse-face
+  '((t (:inherit conn-dispatch-undo-pulse-face)))
+  "Face for current action pulse, do not customize."
   :group 'conn-face)
 
 (defface conn-dispatch-label-face-1
@@ -2584,28 +2591,29 @@ contain targets."
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
   (set-face-background
-   'conn-dispatch-action-pulse-face
+   'conn--dispatch-action-current-pulse-face
    (if conn--dispatch-undoing
-       (pcase-let ((`(,h ,s ,l)
-                    (apply #'color-rgb-to-hsl
-                           (color-name-to-rgb
-                            (face-background
-                             'pulse-highlight-start-face
-                             nil
-                             'default)))))
-         (apply #'color-rgb-to-hex
-                (color-hsl-to-rgb
-                 (+ h float-pi)
-                 s
-                 (if (> l .5)
-                     (- l .2)
-                   (+ l .2)))))
+       (or conn-dispatch-undo-pulse-face
+           (pcase-let ((`(,h ,s ,l)
+                        (apply #'color-rgb-to-hsl
+                               (color-name-to-rgb
+                                (face-background
+                                 'pulse-highlight-start-face
+                                 nil
+                                 'default)))))
+             (apply #'color-rgb-to-hex
+                    (color-hsl-to-rgb
+                     (+ h (* .5 float-pi))
+                     s
+                     (if (> l .5)
+                         (- l .2)
+                       (+ l .2))))))
      (face-background 'pulse-highlight-start-face
                       nil
                       'default)))
   (pulse-momentary-highlight-region
    beg end
-   'conn-dispatch-action-pulse-face))
+   'conn--dispatch-action-current-pulse-face))
 
 (defun conn--action-type-p (item)
   (declare (important-return-value t)
