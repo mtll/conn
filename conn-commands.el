@@ -1989,12 +1989,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                     (push (cons prepend (funcall region-extract-function t))
                           strings)
                     (conn-dispatch-undo-case 90
-                      (:cancel
+                      (:undo
                        (pop strings)
-                       (when conn-dispatch-in-progress
-                         (pulse-momentary-highlight-region
-                          beg end
-                          'conn-dispatch-undo-pulse-face)))))
+                       (conn-dispatch-undo-pulse beg end))
+                      (:cancel
+                       (pop strings))))
                   (when fixup-whitespace
                     (funcall conn-kill-fixup-whitespace-function bounds)))))))
          thing thing-arg transform
@@ -2151,10 +2150,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                         strings)
                   (conn-dispatch-action-pulse beg end)
                   (conn-dispatch-undo-case 90
-                    (:cancel
+                    (:undo
                      (pop strings)
-                     (when conn-dispatch-in-progress
-                       (conn-dispatch-action-pulse beg end)))))))))
+                     (conn-dispatch-undo-pulse beg end))
+                    (:cancel
+                     (pop strings))))))))
          thing thing-arg transform
          :repeat repeat
          :other-end :no-other-end

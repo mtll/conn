@@ -1518,9 +1518,7 @@ Target overlays may override this default by setting the
              (dolist (undo conn--dispatch-undo-change-groups)
                (pcase-dolist (`(,_ . ,undo-fn) undo)
                  (funcall undo-fn
-                          (if dispatch-quit-flag
-                              :cancel
-                            :accept)))))))
+                          (if dispatch-quit-flag :cancel :accept)))))))
        (when dispatch-quit-flag (keyboard-quit)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -1684,7 +1682,7 @@ Target overlays may override this default by setting the
     ;; pop the current loop's change group first
     (pop conn--dispatch-undo-change-groups)
     (pcase-dolist (`(,_ . ,undo-fn) (pop conn--dispatch-undo-change-groups))
-      (funcall undo-fn :cancel)))
+      (funcall undo-fn :undo)))
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-change-target (thing thing-arg thing-transform)
@@ -2561,16 +2559,13 @@ contain targets."
   (always-prompt :type boolean))
 
 (defvar conn--dispatch-undo-change-groups nil)
-(defvar conn--dispatch-undoing nil)
 
 (defmacro conn-dispatch-undo-case (depth &rest body)
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
   (cl-with-gensyms (do)
     `(progn
-       (push (cons ,depth (lambda (,do)
-                            (let ((conn--dispatch-undoing t))
-                              (pcase ,do ,@body))))
+       (push (cons ,depth (lambda (,do) (pcase ,do ,@body)))
              (car conn--dispatch-undo-change-groups))
        (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
          :key #'car
@@ -2585,32 +2580,39 @@ contain targets."
           (with-current-buffer b
             (undo-boundary))))
       (conn-dispatch-undo-case 0
-        (:cancel (cancel-change-group cg))
+        ((or :cancel :undo) (cancel-change-group cg))
         (:accept (accept-change-group cg))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
   (set-face-background
    'conn--dispatch-action-current-pulse-face
-   (if conn--dispatch-undoing
-       (or conn-dispatch-undo-pulse-face
-           (pcase-let ((`(,h ,s ,l)
-                        (apply #'color-rgb-to-hsl
-                               (color-name-to-rgb
-                                (face-background
-                                 'pulse-highlight-start-face
-                                 nil
-                                 'default)))))
-             (apply #'color-rgb-to-hex
-                    (color-hsl-to-rgb
-                     (+ h (* .5 float-pi))
-                     s
-                     (if (> l .5)
-                         (- l .2)
-                       (+ l .2))))))
-     (face-background 'pulse-highlight-start-face
-                      nil
-                      'default)))
+   (face-background 'pulse-highlight-start-face
+                    nil
+                    'default))
+  (pulse-momentary-highlight-region
+   beg end
+   'conn--dispatch-action-current-pulse-face))
+
+(defun conn-dispatch-undo-pulse (beg end)
+  (require 'pulse)
+  (set-face-background
+   'conn--dispatch-action-current-pulse-face
+   (or conn-dispatch-undo-pulse-face
+       (pcase-let ((`(,h ,s ,l)
+                    (apply #'color-rgb-to-hsl
+                           (color-name-to-rgb
+                            (face-background
+                             'pulse-highlight-start-face
+                             nil
+                             'default)))))
+         (apply #'color-rgb-to-hex
+                (color-hsl-to-rgb
+                 (+ h (* .5 float-pi))
+                 s
+                 (if (> l .5)
+                     (- l .2)
+                   (+ l .2)))))))
   (pulse-momentary-highlight-region
    beg end
    'conn--dispatch-action-current-pulse-face))
@@ -4008,11 +4010,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                     (unless executing-kbd-macro
                       (push (make-overlay beg end) ovs)
                       (conn-dispatch-undo-case 0
-                        (:cancel (delete-overlay (pop ovs))))
+                        ((or :cancel :undo) (delete-overlay (pop ovs))))
                       (overlay-put (car ovs) 'face 'region))
                     (push bound subregions)
                     (conn-dispatch-undo-case 0
-                      (:cancel (pop subregions))))
+                      ((or :cancel :undo) (pop subregions))))
                    (_
                     (user-error "No %s found at point" thing)))))
              thing thing-arg transform
