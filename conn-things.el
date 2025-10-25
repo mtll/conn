@@ -142,7 +142,6 @@
                                (method-expander
                                 (lambda (args &rest body)
                                   `(lambda ,(cons cnm args)
-                                     (ignore ,cnm)
                                      ,@(macroexp-unprogn
                                         (macroexpand-all
                                          `(cl-flet ((cl-call-next-method ,cnm))
