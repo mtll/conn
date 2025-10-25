@@ -128,32 +128,32 @@
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
-  `(conn--make-anonymous-thing
-    :parent ,parent
-    :properties ,(cl-loop
-                  with known = (get 'conn-anonymous-thing :known-properties)
-                  with seen = nil
-                  for (key var) on properties by #'cddr
-                  if (when-let* ((fn (alist-get key known)))
-                       (cl-assert (not (memq fn seen))
-                                  "Duplicate method in anonymous thing definition")
-                       (push fn seen))
-                  nconc (let* ((cnm (gensym "thing--cnm"))
-                               (method-expander
-                                (lambda (args &rest body)
-                                  `(lambda ,(cons cnm args)
-                                     ,@(macroexp-unprogn
-                                        (macroexpand-all
-                                         `(cl-flet ((cl-call-next-method ,cnm))
-                                            ,@body)))))))
-                          (list (intern (concat ":" (symbol-name (car seen))))
-                                (macroexpand-all
-                                 var
-                                 (cons (cons :method method-expander)
-                                       macroexpand-all-environment))))
-                  into result
-                  else nconc (list key var) into result
-                  finally return (cons 'list result))))
+  (cl-assert (plistp properties))
+  (cl-loop with known = (get 'conn-anonymous-thing :known-properties)
+           with seen = nil
+           for (key var) on properties by #'cddr
+           if (when-let* ((fn (alist-get key known)))
+                (cl-assert (not (memq fn seen)) nil
+                           "Duplicate method in anonymous thing definition")
+                (push fn seen))
+           nconc (let* ((cnm (gensym "thing--cnm"))
+                        (method-expander
+                         (lambda (args &rest body)
+                           `(lambda ,(cons cnm args)
+                              ,@(macroexp-unprogn
+                                 (macroexpand-all
+                                  `(cl-flet ((cl-call-next-method ,cnm))
+                                     ,@body)))))))
+                   (list (intern (concat ":" (symbol-name (car seen))))
+                         (macroexpand-all
+                          var
+                          (cons (cons :method method-expander)
+                                macroexpand-all-environment))))
+           into result
+           else nconc (list key var) into result
+           finally return `(conn--make-anonymous-thing
+                            :parent ,parent
+                            :properties ,(cons 'list result))))
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()

@@ -2485,9 +2485,8 @@ contain targets."
                 'conn-forward-inner-line
                 :description ( :method (_self) "end-of-inner-line")
                 :bounds-op ( :method (_self _arg)
-                             (save-excursion
-                               (goto-char (pos-bol))
-                               (cl-call-next-method))))))
+                             (goto-char (pos-bol))
+                             (cl-call-next-method)))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
