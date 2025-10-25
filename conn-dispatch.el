@@ -2554,6 +2554,8 @@ contain targets."
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
+(defvar conn-dispatch-amalgamate-undo nil)
+
 (defvar conn--dispatch-undo-change-groups nil)
 
 (defmacro conn-dispatch-undo-case (depth &rest body)
@@ -2561,11 +2563,10 @@ contain targets."
   (cl-assert (<= -100 depth 100))
   (cl-with-gensyms (do buf)
     `(progn
-       (push (cons ,depth
-                   (let ((,buf (current-buffer)))
-                     (lambda (,do)
-                       (with-current-buffer ,buf
-                         (pcase ,do ,@body)))))
+       (push (cons ,depth (let ((,buf (current-buffer)))
+                            (lambda (,do)
+                              (with-current-buffer ,buf
+                                (pcase ,do ,@body)))))
              (car conn--dispatch-undo-change-groups))
        (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
          :key #'car
@@ -2575,7 +2576,8 @@ contain targets."
   (when conn-dispatch-in-progress
     (let ((cg (mapcan #'prepare-change-group
                       (or buffers (list (current-buffer))))))
-      (when conn--dispatch-undo-change-groups
+      (when (and conn--dispatch-undo-change-groups
+                 (not conn-dispatch-amalgamate-undo))
         (dolist (b (or buffers (list (current-buffer))))
           (with-current-buffer b
             (undo-boundary))))
