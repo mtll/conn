@@ -185,7 +185,7 @@
                                        sym)
   (memq sym '(surround-self-insert surround-command)))
 
-(cl-defmethod conn-eval-argument ((arg conn-surround-with-argument))
+(cl-defmethod conn-argument-value ((arg conn-surround-with-argument))
   (conn-read-args-argument-value arg))
 
 ;;;;;; Padding Arg
@@ -209,7 +209,7 @@
                                        (_sym (eql conn-padding-flag)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-surround-padding-argument))
+(cl-defmethod conn-argument-display ((arg conn-surround-padding-argument))
   (concat "\\[conn-padding-flag] "
           (if-let* ((p (conn-read-args-argument-value arg)))
               (propertize (format "padding <%s>" p)

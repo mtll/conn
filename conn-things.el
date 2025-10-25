@@ -319,7 +319,7 @@ order to mark the region that should be defined by any of COMMANDS."
          self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
-(cl-defmethod conn-eval-argument ((arg conn-thing-argument))
+(cl-defmethod conn-argument-value ((arg conn-thing-argument))
   (conn-read-args-argument-value arg))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
@@ -368,7 +368,7 @@ order to mark the region that should be defined by any of COMMANDS."
                                        (_sym (eql toggle-subregions)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-subregions-argument))
+(cl-defmethod conn-argument-display ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
           (propertize "subregions"
                       'face (when (conn-read-args-argument-value arg)
@@ -406,7 +406,7 @@ words."))
                                        (_sym (eql fixup-whitespace)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-fixup-whitespace-argument))
+(cl-defmethod conn-argument-display ((arg conn-fixup-whitespace-argument))
   (substitute-command-keys
    (concat
     "\\[fixup-whitespace]: "
@@ -439,7 +439,7 @@ words."))
                                        (_sym (eql check-bounds)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-check-bounds-argument))
+(cl-defmethod conn-argument-display ((arg conn-check-bounds-argument))
   (substitute-command-keys
    (concat
     "\\[check-bounds]: "
@@ -483,7 +483,7 @@ words."))
                     (keymap conn-transform-map))
       (self cmd)
     (let ((val (cl-loop for tform in (conn-read-args-argument-value self)
-                        for update = (conn-update-argument tform cmd)
+                        for update = (conn-argument-update tform cmd)
                         when update collect update)))
       (pcase cmd
         ('conn-transform-reset
@@ -505,17 +505,17 @@ words."))
                                        sym)
   (get sym :conn-bounds-transform))
 
-(cl-defmethod conn-display-argument ((arg conn-transform-argument))
+(cl-defmethod conn-argument-display ((arg conn-transform-argument))
   (when-let* ((ts (conn-read-args-argument-value arg)))
     (concat
-     "Transforms: "
+     "transforms: "
      (propertize
       (mapconcat (lambda (tf)
                    (or (get tf :conn-transform-description) ""))
                  ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
-(cl-defmethod conn-eval-argument ((arg conn-transform-argument))
+(cl-defmethod conn-argument-value ((arg conn-transform-argument))
   (nreverse (conn-read-args-argument-value arg)))
 
 ;;;;; Read Mover State
@@ -782,7 +782,7 @@ words."))
 (put 'conn-bounds-last :conn-bounds-transform t)
 (put 'conn-bounds-last :conn-transform-description "last")
 
-(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-last)) form)
+(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-last)) form)
   (unless (memq form '(toggle-subregions
                        conn-bounds-after-point
                        conn-bounds-before-point))
@@ -824,7 +824,7 @@ words."))
 (put 'conn-bounds-after-point :conn-bounds-transform t)
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
-(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point)) form)
+(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-after-point)) form)
   (unless (or (eq form 'conn-bounds-last)
               (eq form 'conn-bounds-before-point)
               (eq form 'conn-bounds-before-point-exclusive)
@@ -844,7 +844,7 @@ words."))
 (put 'conn-bounds-after-point-exclusive :conn-bounds-transform t)
 (put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
 
-(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-after-point-exclusive))
+(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-after-point-exclusive))
                                     form)
   (unless (or (eq form 'conn-bounds-last)
               (eq form 'conn-bounds-before-point)
@@ -859,7 +859,7 @@ words."))
 (put 'conn-bounds-before-point :conn-bounds-transform t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
 
-(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point)) form)
+(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-before-point)) form)
   (unless (or (eq form 'conn-bounds-last)
               (eq form 'conn-bounds-before-point)
               (eq form 'conn-bounds-before-point-exclusive)
@@ -879,7 +879,7 @@ words."))
 (put 'conn-bounds-before-point-exclusive :conn-bounds-transform t)
 (put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
 
-(cl-defmethod conn-update-argument ((arg (eql 'conn-bounds-before-point-exclusive))
+(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-before-point-exclusive))
                                     form)
   (unless (or (eq form 'conn-bounds-last)
               (eq form 'conn-bounds-before-point)

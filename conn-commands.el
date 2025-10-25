@@ -1605,7 +1605,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        (_sym (eql append-next-kill)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-kill-append-argument))
+(cl-defmethod conn-argument-display ((arg conn-kill-append-argument))
   (substitute-command-keys
    (concat
     "\\[append-next-kill] "
@@ -1643,7 +1643,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        (_sym (eql delete)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-delete-argument))
+(cl-defmethod conn-argument-display ((arg conn-delete-argument))
   (substitute-command-keys
    (concat
     "\\[delete]: "
@@ -1679,7 +1679,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        (_sym (eql register)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-register-argument))
+(cl-defmethod conn-argument-display ((arg conn-register-argument))
   (substitute-command-keys
    (concat
     "\\[register]: "
@@ -1728,7 +1728,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
 
-(cl-defmethod conn-kill-fixup-whitespace :after (_bounds)
+(cl-defmethod conn-kill-fixup-whitespace :after
+  (_bounds &context (major-mode (derived-mode prog-mode)))
   (let ((tab-always-indent t))
     (unless (save-excursion
               (beginning-of-line)
@@ -1779,7 +1780,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          finally return i))))
     (when (or (looking-at (rx (syntax whitespace)))
               (looking-back (rx (syntax whitespace)) 1))
-      (fixup-whitespace))
+      (save-excursion
+        (fixup-whitespace)))
     (when (and (conn-get-thing-property bounds :linewise)
                (save-excursion
                  (beginning-of-line)
@@ -1872,7 +1874,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-set-argument self (not value))
       self)))
 
-(cl-defmethod conn-display-argument ((arg conn-prepend-argument))
+(cl-defmethod conn-argument-display ((arg conn-prepend-argument))
   (concat "\\[dispatch-other-end] "
           (propertize "prepend"
                       'face (when (conn-read-args-argument-value arg)
@@ -1911,7 +1913,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (or (eq sym 'separator)
       (eq sym 'register-separator)))
 
-(cl-defmethod conn-display-argument ((arg conn-separator-argument))
+(cl-defmethod conn-argument-display ((arg conn-separator-argument))
   (concat "\\[separator]/\\[register-separator] separator"
           (when-let* ((sep (conn-read-args-argument-value arg)))
             (concat
@@ -2294,7 +2296,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        (_cmd (eql duplicate-comment)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-duplicate-comment-argument))
+(cl-defmethod conn-argument-display ((arg conn-duplicate-comment-argument))
   (concat
    "\\[duplicate-comment] "
    (propertize "comment"

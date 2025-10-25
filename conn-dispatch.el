@@ -598,7 +598,7 @@ themselves once the selection process has concluded."
       (eq sym 'unset-separator)
       (cl-call-next-method)))
 
-(cl-defmethod conn-display-argument ((arg conn-dispatch-separator-argument))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-separator-argument))
   (when-let* ((sep (conn-read-args-argument-value arg)))
     (propertize (if (eq sep 'default)
                     "Separator: default"
@@ -736,10 +736,10 @@ themselves once the selection process has concluded."
             (conn-set-argument self action))
         (conn-set-argument self nil)))))
 
-(cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-read-args-argument-value arg)))
 
-(cl-defmethod conn-eval-argument :before ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-value :before ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
     (conn-accept-action action)))
 
@@ -747,7 +747,7 @@ themselves once the selection process has concluded."
                                        sym)
   (conn--action-type-p sym))
 
-(cl-defmethod conn-display-argument ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
     (propertize (conn-describe-action action)
                 'face 'eldoc-highlight-function-argument)))
@@ -770,7 +770,7 @@ themselves once the selection process has concluded."
                                        (_sym (eql dispatch-other-end)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-dispatch-other-end-argument))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-other-end-argument))
   (concat "\\[dispatch-other-end] "
           (propertize "other-end"
                       'face (when (conn-read-args-argument-value arg)
@@ -797,7 +797,7 @@ themselves once the selection process has concluded."
                                        (_sym (eql dispatch-repeat)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-dispatch-repeat-argument))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-repeat-argument))
   (concat "\\[repeat-dispatch] "
           (propertize "repeat"
                       'face (when (conn-read-args-argument-value arg)
@@ -821,7 +821,7 @@ themselves once the selection process has concluded."
                                        (_sym (eql restrict-windows)))
   t)
 
-(cl-defmethod conn-display-argument ((arg conn-dispatch-restrict-windows-argument))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-restrict-windows-argument))
   (concat "\\[restrict-windows] "
           (propertize "this-win"
                       'face (when (conn-read-args-argument-value arg)
