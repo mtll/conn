@@ -75,15 +75,12 @@
   "Face for current action pulse, do not customize."
   :group 'conn-face)
 
-(defface conn-dispatch-label-face-1
+(defface conn-dispatch-label-face
   '((t (:inherit highlight :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defface conn-dispatch-label-face-2
-  '((t (:inherit highlight :bold t)))
-  "Face for group in dispatch lead overlay."
-  :group 'conn-faces)
+(defvar conn-dispatch-label-alt-face nil)
 
 (defface conn-dispatch-shadow-face
   '((t (:inherit shadow)))
@@ -1250,7 +1247,7 @@ Target overlays may override this default by setting the
                (delete-overlay ov))
            (str (propertize string
                             'face (or (overlay-get target 'label-face)
-                                      'conn-dispatch-label-face-1))))
+                                      'conn-dispatch-label-face))))
         (setf (overlay-get ov 'category) 'conn-label-overlay
               (overlay-get ov 'window) window
               (overlay-get target 'conn-label)
@@ -1718,10 +1715,23 @@ Target overlays may override this default by setting the
     (when (functionp target-finder)
       (funcall target-finder))))
 
+(defun conn-dispatch-label-alt-background ()
+  (or conn-dispatch-label-alt-face
+      (pcase-let ((`(,h ,s ,l)
+                   (apply #'color-rgb-to-hsl
+                          (color-name-to-rgb
+                           (face-background
+                            'conn-dispatch-label-face
+                            nil
+                            'default)))))
+        (apply #'color-rgb-to-hex
+               (color-hsl-to-rgb h s (* l 0.8))))))
+
 (cl-defgeneric conn-dispatch-setup-label-faces (target-finder)
   ( :method (_target-finder)
-    (let ((face1 'conn-dispatch-label-face-1)
-          (face2 'conn-dispatch-label-face-2))
+    (let ((face1 'conn-dispatch-label-face)
+          (face2 `( :inherit conn-dispatch-label-face
+                    :background ,(conn-dispatch-label-alt-background))))
       (pcase-dolist (`(,_window . ,targets) conn-targets)
         (dolist (tar (sort targets :key #'overlay-start))
           (overlay-put tar 'label-face face1)
