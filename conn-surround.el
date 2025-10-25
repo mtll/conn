@@ -269,12 +269,7 @@
 (cl-defgeneric conn-prepare-surround (cmd arg transform &key &allow-other-keys)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
-  ( :method ((_ (eql nil)) _ _ &rest _ &key &allow-other-keys) nil)
-  ( :method ((cmd (conn-thing anonymous-thing-override))
-             arg transform &rest keys &key &allow-other-keys)
-    (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
-        (apply op arg transform keys)
-      (cl-call-next-method))))
+  ( :method ((_ (eql nil)) _ _ &rest _ &key &allow-other-keys) nil))
 
 (cl-defmethod conn-prepare-surround (cmd arg transform &key subregions &allow-other-keys)
   (let (regions)
@@ -471,11 +466,7 @@
 
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
-           (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
-    (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
-        (funcall op arg)
-      (cl-call-next-method))))
+           (important-return-value t)))
 
 (cl-defmethod conn-prepare-change-surround (cmd arg)
   (pcase (conn-bounds-of cmd arg)

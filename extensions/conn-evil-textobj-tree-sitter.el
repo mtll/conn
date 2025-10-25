@@ -230,9 +230,6 @@
    (window-predicate
     :initform (lambda (win) (eq win (selected-window))))))
 
-(defun conn-etts-parents-target-finder (_arg)
-  (conn-etts-parents-targets :things conn-etts-parent-things))
-
 (cl-defmethod conn-dispatch-update-targets ((state conn-etts-parents-targets))
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
@@ -272,15 +269,16 @@
                                    2)
                       (move-overlay ov (overlay-start ov) (1+ (overlay-start ov)))
                       (overlay-put ov 'display (truncate-string-ellipsis)))
-                  (letrec ((ov (conn-make-target-overlay beg 0))
-                           (thing
-                            (conn-anonymous-thing
-                             'conn-etts-thing
-                             :nodes (list (cons group (cons beg end)))
-                             :bounds-op (lambda (_arg)
-                                          (conn-etts-select-node
-                                           (conn-anonymous-thing-property thing :nodes))))))
-                    (overlay-put ov 'thing thing))))))))))
+                  (overlay-put
+                   (conn-make-target-overlay beg 0)
+                   'thing (conn-anonymous-thing
+                           'conn-etts-thing
+                           :nodes (list (cons group (cons beg end)))
+                           :bounds-op ( :method (self _arg)
+                                        (thread-first
+                                          self
+                                          (conn-anonymous-thing-property :nodes)
+                                          (conn-etts-select-node)))))))))))))
   (cl-call-next-method))
 
 (defclass conn-etts-targets (conn-dispatch-target-window-predicate)
@@ -660,7 +658,9 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-etts-things-mode)
   "h" (conn-anonymous-thing
        'conn-etts-thing
-       :target-finder 'conn-etts-parents-target-finder))
+       :target-finder ( :method (_self _arg)
+                        (conn-etts-parents-targets
+                         :things conn-etts-parent-things))))
 
 ;; fix etts comment thing overriding ours
 (conn-register-thing

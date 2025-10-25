@@ -434,20 +434,20 @@
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
   "O" (conn-anonymous-thing
        'forward-word
-       :description "all-words"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-words")
+       :target-finder ( :method (_arg)
                         (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
        'forward-symbol
-       :description "all-symbols"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-symbols")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-all-things 'symbol))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
   "<remap> <conn-expand>" (conn-anonymous-thing
                            'expansion
-                           :bounds-op (lambda (arg)
+                           :bounds-op ( :method (_self arg)
                                         (conn--push-ephemeral-mark)
                                         (conn-bounds-of 'conn-expand arg)))
   "m" 'forward-sexp
@@ -456,13 +456,13 @@
   "<conn-thing-map> a" 'move-beginning-of-line
   "O" (conn-anonymous-thing
        'word
-       :description "all-words"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-words")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
        'symbol
-       :description "all-symbols"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-symbols")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-all-things 'symbol)))
   "b" 'conn-dispatch-buttons)
 
@@ -470,16 +470,16 @@
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   ")" (conn-anonymous-thing
        'forward-sexp
-       :description "list"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "list")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-anonymous-thing
        'sexp
-       :description "inner-list"
-       :bounds-op (lambda (arg)
+       :description (:method (_self) "inner-list")
+       :bounds-op ( :method (_self arg)
                     (conn-bounds-of 'down-list arg))
-       :target-finder (lambda (_arg)
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))
 
@@ -511,7 +511,7 @@
   ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
        'char
-       :default-action (lambda ()
+       :default-action ( :method (_self)
                          (let ((jump (conn-make-action 'conn-dispatch-jump)))
                            (oclosure-lambda (conn-action
                                              (description "Previous Emacs State")
@@ -519,20 +519,20 @@
                                (&rest args)
                              (apply jump args)
                              (conn-push-state 'conn-emacs-state))))
-       :target-finder (lambda (_arg) (conn-dispatch-previous-emacs-state)))
+       :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "g y" (conn-anonymous-thing
          'char
-         :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-         :target-finder (lambda (_arg) (conn-dispatch-global-mark)))
+         :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+         :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
        'char
-       :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-       :target-finder (lambda (_arg) (conn-dispatch-mark-register)))
+       :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+       :target-finder (:method (_self _arg) (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
    'char
-   :default-action (lambda () (conn-make-action 'conn-dispatch-jump))
-   :target-finder (lambda (_arg) (conn-dispatch-mark-ring))))
+   :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+   :target-finder (:method (_self _arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State
 
@@ -552,13 +552,13 @@
   "C-o" 'other-window
   "o" (conn-anonymous-thing
        'word
-       :description "all-words"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-words")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-all-things 'word)))
   "u" (conn-anonymous-thing
        'symbol
-       :description "all-symbols"
-       :target-finder (lambda (_arg)
+       :description (:method (_self) "all-symbols")
+       :target-finder ( :method (_self _arg)
                         (conn-dispatch-all-things 'symbol))))
 
 (define-keymap

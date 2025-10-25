@@ -982,11 +982,7 @@ With a prefix ARG `push-mark' without activating it."
                thing-arg))))
 
 (cl-defgeneric conn-perform-transpose (cmd arg)
-  (declare (conn-anonymous-thing-property :transpose-op))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
-    (if-let* ((transpose-op (conn-anonymous-thing-property cmd :transpose-op)))
-        (funcall transpose-op arg)
-      (cl-call-next-method))))
+  (declare (conn-anonymous-thing-property :transpose-op)))
 
 (cl-defmethod conn-perform-transpose :before (_cmd _arg)
   (conn-make-command-repeatable))
@@ -1038,12 +1034,12 @@ With a prefix ARG `push-mark' without activating it."
     (conn--dispatch-transpose-subr
      buf (car bounds1) (conn-anonymous-thing
                         'region
-                        :bounds-op (lambda (_)
+                        :bounds-op ( :method (_)
                                      (conn-make-bounds 'region nil bounds1)))
      (current-buffer) (point) (let ((bounds2 (cons (region-beginning) (region-end))))
                                 (conn-anonymous-thing
                                  'region
-                                 :bounds-op (lambda (_)
+                                 :bounds-op ( :method (_)
                                               (conn-make-bounds 'region nil bounds2))))
      nil)))
 
@@ -1071,7 +1067,7 @@ With a prefix ARG `push-mark' without activating it."
                                                   'region nil
                                                   (cons (region-beginning)
                                                         (region-end)))))
-                                     (lambda (_) bounds)))))
+                                     (:method (_self _arg) bounds)))))
                     (window-predicate
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
@@ -1838,12 +1834,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                    delete
                                    register
                                    fixup-whitespace)
-  (declare (conn-anonymous-thing-property :kill-op))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg transform
-             &optional append delete register fixup-whitespace)
-    (if-let* ((kill-op (conn-anonymous-thing-property cmd :kill-op)))
-        (funcall kill-op arg transform append delete register fixup-whitespace)
-      (cl-call-next-method))))
+  (declare (conn-anonymous-thing-property :kill-op)))
 
 (cl-defmethod conn-perform-kill :before ( _cmd _arg _transform
                                           &optional
@@ -2098,11 +2089,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (conn-perform-copy thing arg transform append register))
 
 (cl-defgeneric conn-perform-copy (cmd arg &optional transform append register)
-  (declare (conn-anonymous-thing-property :copy-op))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg &optional transform append register)
-    (if-let* ((copy-op (conn-anonymous-thing-property cmd :copy-op)))
-        (funcall copy-op arg transform append register)
-      (cl-call-next-method))))
+  (declare (conn-anonymous-thing-property :copy-op)))
 
 (cl-defmethod conn-perform-copy (cmd arg &optional transform append register)
   (pcase (conn-bounds-of cmd arg)
@@ -2424,11 +2411,7 @@ Interactively `region-beginning' and `region-end'."
   "M-RET" 'conn-emacs-state-overwrite-binary)
 
 (cl-defgeneric conn-perform-change (cmd arg transform)
-  (declare (conn-anonymous-thing-property :change-op))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg transform)
-    (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
-        (funcall change-op arg transform)
-      (cl-call-next-method))))
+  (declare (conn-anonymous-thing-property :change-op)))
 
 (cl-defmethod conn-perform-change (cmd arg transform)
   (pcase-let (((conn-bounds `(,beg . ,end) transform)

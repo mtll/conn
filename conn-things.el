@@ -126,17 +126,30 @@
   (parent nil :read-only t)
   (properties nil))
 
-(defun conn-anonymous-thing (parent &rest properties)
+(defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
-  (declare (important-return-value t)
-           (compiler-macro
-            (lambda (_exp)
-              `(conn--make-anonymous-thing
-                :parent ,parent
-                :properties (list ,@properties)))))
-  (conn--make-anonymous-thing
-   :parent parent
-   :properties properties))
+  `(conn--make-anonymous-thing
+    :parent ,parent
+    :properties ,(cl-loop
+                  for (key var) on properties by #'cddr
+                  if (assq key (get 'conn-anonymous-thing :known-properties))
+                  nconc (let* ((cnm (gensym "thing--cnm"))
+                               (method-expander
+                                (lambda (args &rest body)
+                                  `(lambda ,(cons cnm args)
+                                     (ignore ,cnm)
+                                     ,@(macroexp-unprogn
+                                        (macroexpand-all
+                                         `(cl-flet ((cl-call-next-method ,cnm))
+                                            ,@body)))))))
+                          (list key
+                                (macroexpand-all
+                                 var
+                                 (cons (cons :method method-expander)
+                                       macroexpand-all-environment))))
+                  into result
+                  else nconc (list key var) into result
+                  finally return (cons 'list result))))
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
@@ -160,9 +173,16 @@
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-  (defun conn--set-anonymous-thing-property (f _args property &optional description)
-    `(setf (alist-get ,property (get 'conn-anonymous-thing :known-properties))
-           (or ,description ',f)))
+  (defun conn--set-anonymous-thing-property (f args property &optional description)
+    `(progn
+       (setf (alist-get ,property (get 'conn-anonymous-thing :known-properties))
+             (or ,description ',f))
+       :autoload-end
+       (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
+                         &rest rest)
+         (if-let* ((op (conn-anonymous-thing-property ,(car args) ,property)))
+             (apply op #'cl-call-next-method ,(car args) rest)
+           (cl-call-next-method)))))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
 
@@ -287,6 +307,12 @@ order to mark the region that should be defined by any of COMMANDS."
         conn--thing-generalizer))
 
 ;;;; Read Things
+
+(cl-defgeneric conn-pretty-print-thing (thing)
+  (declare (conn-anonymous-thing-property
+            :description "pretty description for this thing")
+           (side-effect-free t))
+  (:method (thing) (copy-sequence (symbol-name thing))))
 
 ;;;;; Thing Args
 
@@ -665,11 +691,7 @@ words."))
 
 (cl-defgeneric conn-bounds-of (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
-           (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
-    (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
-        (funcall bounds-op arg)
-      (cl-call-next-method))))
+           (important-return-value t)))
 
 (cl-defmethod conn-bounds-of :around (_cmd _arg)
   (if conn--bounds-of-in-progress
@@ -957,10 +979,6 @@ words."))
 (cl-defgeneric conn-bounds-of-remote (cmd arg pt)
   (declare (conn-anonymous-thing-property :bounds-op-remote)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg pt)
-    (if-let* ((remote (conn-anonymous-thing-property cmd :bounds-op-remote)))
-        (funcall remote arg pt)
-      (cl-call-next-method)))
   ( :method (cmd arg pt)
     (save-excursion
       (goto-char pt)
@@ -1004,11 +1022,7 @@ words."))
 
 (cl-defgeneric conn-get-things-in-region (thing beg end)
   (declare (conn-anonymous-thing-property :things-in-region)
-           (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) beg end)
-    (if-let* ((op (conn-anonymous-thing-property cmd :things-in-region)))
-        (funcall op beg end)
-      (cl-call-next-method))))
+           (important-return-value t)))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing thing))
                                          beg end)

@@ -504,11 +504,7 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-make-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
-           (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)))
-    (if-let* ((action (conn-anonymous-thing-property cmd :default-action)))
-        (funcall action)
-      (cl-call-next-method))))
+           (important-return-value t)))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
   (conn-make-action 'conn-dispatch-goto))
@@ -520,11 +516,7 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)
-           (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
-    (if-let* ((tf (conn-anonymous-thing-property cmd :target-finder)))
-        (funcall tf arg)
-      (cl-call-next-method))))
+           (important-return-value t)))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
@@ -749,7 +741,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
-    (propertize (conn-describe-action action)
+    (propertize (conn-pretty-print-action action)
                 'face 'eldoc-highlight-function-argument)))
 
 ;;;;;; Other End
@@ -1754,7 +1746,8 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-targets-other-end (target-finder)
   "Default value for :other-end parameter in `conn-perform-dispatch'."
-  (declare (important-return-value t))
+  (declare (conn-anonymous-thing-property :other-end)
+           (important-return-value t))
   (:method (_) nil))
 
 (cl-defgeneric conn-dispatch-target-save-state (target-finder)
@@ -2111,7 +2104,7 @@ contain targets."
               (overlay-put (conn-make-target-overlay beg 0)
                            'thing (conn-anonymous-thing
                                    'region
-                                   :bounds-op (lambda (_arg)
+                                   :bounds-op ( :method (_self _arg)
                                                 (conn-make-bounds
                                                  'region nil
                                                  (cons beg end)))))
@@ -2127,7 +2120,7 @@ contain targets."
               (overlay-put (conn-make-target-overlay beg 0)
                            'thing (conn-anonymous-thing
                                    'region
-                                   :bounds-op (lambda (_arg)
+                                   :bounds-op ( :method (_self _arg)
                                                 (conn-make-bounds
                                                  'region nil
                                                  (cons beg end)))))
@@ -2469,7 +2462,7 @@ contain targets."
   (let ((thing (conn-anonymous-thing
                 'inner-line
                 :bounds-op
-                (lambda (arg)
+                ( :method (arg)
                   (save-excursion
                     (goto-char (pos-bol))
                     (conn-bounds-of 'conn-forward-inner-line arg))))))
@@ -2489,13 +2482,13 @@ contain targets."
 
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((thing (conn-anonymous-thing
-                'inner-line
+                'conn-forward-inner-line
                 :description "end-of-inner-line"
                 :bounds-op
-                (lambda (arg)
+                ( :method (_self _arg)
                   (save-excursion
                     (goto-char (pos-bol))
-                    (conn-bounds-of 'conn-forward-inner-line arg))))))
+                    (cl-call-next-method))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -2639,7 +2632,7 @@ contain targets."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
-(cl-defgeneric conn-describe-action (action &optional short)
+(cl-defgeneric conn-pretty-print-action (action &optional short)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method ((action conn-action) &optional _)
@@ -2793,7 +2786,7 @@ contain targets."
                   (- (point) (length str))
                   (point)))))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-copy-to--separator action))))
       (format "Copy To <%s>" sep)
@@ -2929,7 +2922,7 @@ contain targets."
               (- (point) (length str))
               (point)))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
       (format "Yank To <%s>" (if (eq sep 'register)
                                  (get-register register-separator)
@@ -2979,7 +2972,7 @@ contain targets."
              (- (point) (length str))
              (point))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-reading-yank-to--separator action))))
       (format "Yank To <%s>" sep)
@@ -3119,7 +3112,7 @@ contain targets."
            (goto-char (if conn-dispatch-other-end end beg))
            (conn-register-load register)))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-register-load) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-register-load) &optional short)
   (if short "Register"
     (format "Register <%c>" (conn-dispatch-register-load--register action))))
 
@@ -3143,7 +3136,7 @@ contain targets."
            (conn-register-load register))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-register-load-replace) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-register-load-replace) &optional short)
   (if short "Register Replace"
     (format "Register Replace <%c>" (conn-dispatch-register-load-replace--register action))))
 
@@ -3392,7 +3385,7 @@ contain targets."
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-kapply) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-kapply) &optional short)
   (if short "Kapply"
     (concat "Kapply"
             (when-let* ((macro (oref action macro)))
@@ -3421,7 +3414,7 @@ contain targets."
              (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
              (eval command))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-repeat-command) &optional short)
+(cl-defmethod conn-pretty-print-action ((action conn-dispatch-repeat-command) &optional short)
   (if short "Repeat Cmd"
     (format "Repeat <%s>" (car (oref action command)))))
 
@@ -3568,16 +3561,10 @@ contain targets."
   (conn-action-cleanup (conn-previous-dispatch-action dispatch)))
 
 (defun conn-describe-dispatch (dispatch)
-  (declare (conn-anonymous-thing-property
-            :description "dispatch description for this thing")
-           (side-effect-free t))
+  (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
-          (conn-describe-action (conn-previous-dispatch-action dispatch))
-          (pcase (conn-previous-dispatch-thing dispatch)
-            ((and op (cl-type conn-anonymous-thing))
-             (or (conn-anonymous-thing-property op :description)
-                 (conn-anonymous-thing-parent op)))
-            (op op))
+          (conn-pretty-print-action (conn-previous-dispatch-action dispatch))
+          (conn-pretty-print-thing (conn-previous-dispatch-thing dispatch))
           (conn-previous-dispatch-thing-arg dispatch)
           (if-let* ((ts (conn-previous-dispatch-thing-transform dispatch)))
               (concat
@@ -3712,7 +3699,7 @@ contain targets."
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
          (conn--dispatch-read-event-message-prefixes
-          `(,(propertize (conn-describe-action action t)
+          `(,(propertize (conn-pretty-print-action action t)
                          'face 'eldoc-highlight-function-argument)
             ,(lambda ()
                (conn-dispatch-target-message-prefixes
@@ -3954,9 +3941,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-push-button)
    (conn-anonymous-thing
     'button
-    :description "all-buttons"
-    :target-finder (lambda (_arg) 'conn-dispatch-all-buttons)
-    :other-end :no-other-end)
+    :description ( :method (_self) "all-buttons")
+    :target-finder ( :method (_self _arg) 'conn-dispatch-all-buttons)
+    :other-end ( :method (_self) :no-other-end))
    nil nil))
 
 (defun conn-dispatch-isearch ()
@@ -3972,7 +3959,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
-       (conn-anonymous-thing nil :target-finder (lambda (_arg) target-finder))
+       (conn-anonymous-thing
+        nil
+        :target-finder ( :method (_self _arg) target-finder))
        nil nil
        :restrict-windows t
        :other-end :no-other-end))))
