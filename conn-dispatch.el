@@ -2559,9 +2559,13 @@ contain targets."
 (defmacro conn-dispatch-undo-case (depth &rest body)
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
-  (cl-with-gensyms (do)
+  (cl-with-gensyms (do buf)
     `(progn
-       (push (cons ,depth (lambda (,do) (pcase ,do ,@body)))
+       (push (cons ,depth
+                   (let ((,buf (current-buffer)))
+                     (lambda (,do)
+                       (with-current-buffer ,buf
+                         (pcase ,do ,@body)))))
              (car conn--dispatch-undo-change-groups))
        (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
          :key #'car
