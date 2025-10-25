@@ -2184,11 +2184,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   :lighter "COMMENT")
 
 (cl-defgeneric conn-perform-comment (thing thing-arg transform)
-  (declare (conn-anonymous-thing-property :comment-op))
-  ( :method (thing arg transform)
-    (if-let* ((comment-op (conn-anonymous-thing-property thing :comment-op)))
-        (funcall comment-op arg transform)
-      (conn-perform-comment))))
+  (declare (conn-anonymous-thing-property :comment-op)))
 
 (cl-defmethod conn-perform-comment (thing thing-arg transform)
   (pcase (conn-bounds-of thing thing-arg)
@@ -2238,11 +2234,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       self)))
 
 (cl-defgeneric conn-perform-duplicate (cmd arg transform &optional comment)
-  (declare (conn-anonymous-thing-property :duplicate-op))
-  ( :method (cmd arg transform &optional comment)
-    (if-let* ((dup-op (conn-anonymous-thing-property cmd :duplicate-op)))
-        (funcall dup-op arg transform comment)
-      (cl-call-next-method))))
+  (declare (conn-anonymous-thing-property :duplicate-op)))
 
 (cl-defmethod conn-perform-duplicate (cmd arg transform &optional comment)
   (pcase (conn-bounds-of cmd arg)

@@ -131,8 +131,13 @@
   `(conn--make-anonymous-thing
     :parent ,parent
     :properties ,(cl-loop
+                  with known = (get 'conn-anonymous-thing :known-properties)
+                  with seen = nil
                   for (key var) on properties by #'cddr
-                  if (assq key (get 'conn-anonymous-thing :known-properties))
+                  if (when-let* ((fn (alist-get key known)))
+                       (cl-assert (not (memq fn seen))
+                                  "Duplicate method in anonymous thing definition")
+                       (push fn seen))
                   nconc (let* ((cnm (gensym "thing--cnm"))
                                (method-expander
                                 (lambda (args &rest body)
@@ -142,7 +147,7 @@
                                         (macroexpand-all
                                          `(cl-flet ((cl-call-next-method ,cnm))
                                             ,@body)))))))
-                          (list key
+                          (list (intern (concat ":" (symbol-name (car seen))))
                                 (macroexpand-all
                                  var
                                  (cons (cons :method method-expander)
@@ -159,10 +164,9 @@
     (with-temp-buffer
       (insert (or (cdr ud) main ""))
       (insert "\n\n\tCurrently supported properties for anonymous things:\n\n")
-      (pcase-dolist (`(,prop . ,fn) (get 'conn-anonymous-thing :known-properties))
-        (if (stringp fn)
-            (insert (format "%s - %s" prop fn))
-          (insert (format "%s - `%s' method for this thing" prop fn)))
+      (pcase-dolist (`(,fn . ,props)
+                     (seq-group-by #'cdr (get 'conn-anonymous-thing :known-properties)))
+        (insert (format "`%s' - %s" fn (mapcar #'car props)))
         (insert "\n\n"))
       (let ((combined-doc (buffer-string)))
         (if ud
@@ -173,16 +177,18 @@
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-  (defun conn--set-anonymous-thing-property (f args property &optional description)
-    `(progn
-       (setf (alist-get ,property (get 'conn-anonymous-thing :known-properties))
-             (or ,description ',f))
-       :autoload-end
-       (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
-                         &rest rest)
-         (if-let* ((op (conn-anonymous-thing-property ,(car args) ,property)))
-             (apply op #'cl-call-next-method ,(car args) rest)
-           (cl-call-next-method)))))
+  (defun conn--set-anonymous-thing-property (f args &rest properties)
+    (let ((prop-name (intern (concat ":" (symbol-name f)))))
+      `(progn
+         (dolist (prop ',(cons prop-name properties))
+           (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
+                 ',f))
+         :autoload-end
+         (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
+                           &rest rest)
+           (if-let* ((op (conn-anonymous-thing-property ,(car args) ,prop-name)))
+               (apply op #'cl-call-next-method ,(car args) rest)
+             (cl-call-next-method))))))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
 
@@ -309,8 +315,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;; Read Things
 
 (cl-defgeneric conn-pretty-print-thing (thing)
-  (declare (conn-anonymous-thing-property
-            :description "pretty description for this thing")
+  (declare (conn-anonymous-thing-property :description)
            (side-effect-free t))
   (:method (thing) (copy-sequence (symbol-name thing))))
 

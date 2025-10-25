@@ -2483,12 +2483,11 @@ contain targets."
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((thing (conn-anonymous-thing
                 'conn-forward-inner-line
-                :description "end-of-inner-line"
-                :bounds-op
-                ( :method (_self _arg)
-                  (save-excursion
-                    (goto-char (pos-bol))
-                    (cl-call-next-method))))))
+                :description ( :method (_self) "end-of-inner-line")
+                :bounds-op ( :method (_self _arg)
+                             (save-excursion
+                               (goto-char (pos-bol))
+                               (cl-call-next-method))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
