@@ -1359,11 +1359,11 @@ associated with that command (see `conn-register-thing')."
            finally return (cons (cons narrow-beg narrow-end)
                                 narrowings)))
 
-(conn-register-thing-commands
- 'narrowing nil
- 'narrow-to-region 'widen
- 'conn-narrow-to-thing
- 'conn-narrow-ring-prefix)
+;; (conn-register-thing-commands
+;;  'narrowing nil
+;;  'narrow-to-region 'widen
+;;  'conn-narrow-to-thing
+;;  'conn-narrow-ring-prefix)
 
 ;;;;; Register Setting and Loading
 
