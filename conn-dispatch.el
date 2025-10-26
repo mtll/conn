@@ -738,7 +738,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
-    (propertize (conn-pretty-print-action action)
+    (propertize (conn-action-pretty-print action)
                 'face 'eldoc-highlight-function-argument)))
 
 ;;;;;; Other End
@@ -2640,7 +2640,7 @@ contain targets."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
-(cl-defgeneric conn-pretty-print-action (action &optional short)
+(cl-defgeneric conn-action-pretty-print (action &optional short)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method ((action conn-action) &optional _)
@@ -2794,7 +2794,7 @@ contain targets."
                   (- (point) (length str))
                   (point)))))))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-copy-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-copy-to--separator action))))
       (format "Copy To <%s>" sep)
@@ -2930,7 +2930,7 @@ contain targets."
               (- (point) (length str))
               (point)))))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-yank-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
       (format "Yank To <%s>" (if (eq sep 'register)
                                  (get-register register-separator)
@@ -2980,7 +2980,7 @@ contain targets."
              (- (point) (length str))
              (point))))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-reading-yank-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-reading-yank-to--separator action))))
       (format "Yank To <%s>" sep)
@@ -3120,7 +3120,7 @@ contain targets."
            (goto-char (if conn-dispatch-other-end end beg))
            (conn-register-load register)))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-register-load) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load) &optional short)
   (if short "Register"
     (format "Register <%c>" (conn-dispatch-register-load--register action))))
 
@@ -3144,7 +3144,7 @@ contain targets."
            (conn-register-load register))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-register-load-replace) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load-replace) &optional short)
   (if short "Register Replace"
     (format "Register Replace <%c>" (conn-dispatch-register-load-replace--register action))))
 
@@ -3393,7 +3393,7 @@ contain targets."
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-kapply) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-kapply) &optional short)
   (if short "Kapply"
     (concat "Kapply"
             (when-let* ((macro (oref action macro)))
@@ -3422,7 +3422,7 @@ contain targets."
              (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
              (eval command))))))))
 
-(cl-defmethod conn-pretty-print-action ((action conn-dispatch-repeat-command) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command) &optional short)
   (if short "Repeat Cmd"
     (format "Repeat <%s>" (car (oref action command)))))
 
@@ -3571,8 +3571,8 @@ contain targets."
 (defun conn-describe-dispatch (dispatch)
   (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
-          (conn-pretty-print-action (conn-previous-dispatch-action dispatch))
-          (conn-pretty-print-thing (conn-previous-dispatch-thing dispatch))
+          (conn-action-pretty-print (conn-previous-dispatch-action dispatch))
+          (conn-thing-print-pretty (conn-previous-dispatch-thing dispatch))
           (conn-previous-dispatch-thing-arg dispatch)
           (if-let* ((ts (conn-previous-dispatch-thing-transform dispatch)))
               (concat
@@ -3707,7 +3707,7 @@ contain targets."
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
          (conn--dispatch-read-event-message-prefixes
-          `(,(propertize (conn-pretty-print-action action t)
+          `(,(propertize (conn-action-pretty-print action t)
                          'face 'eldoc-highlight-function-argument)
             ,(lambda ()
                (conn-dispatch-target-message-prefixes

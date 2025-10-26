@@ -313,7 +313,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;; Read Things
 
-(cl-defgeneric conn-pretty-print-thing (thing)
+(cl-defgeneric conn-thing-print-pretty (thing)
   (declare (conn-anonymous-thing-property :description)
            (side-effect-free t))
   (:method (thing) (copy-sequence (symbol-name thing))))
