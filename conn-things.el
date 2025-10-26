@@ -1131,18 +1131,22 @@ words."))
  'region
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
-(conn-register-thing
- 'buffer-after-point
- :bounds-op (lambda () (cons (point) (point-max))))
-
-(conn-register-thing
- 'buffer-before-point
- :bounds-op (lambda () (cons (point-min) (point))))
+(conn-register-thing-commands
+ 'region nil
+ 'conn-previous-mark-command
+ 'conn-toggle-mark-command
+ 'conn-set-mark-command)
 
 (conn-register-thing
  'visible
  :bounds-op (lambda () (cons (window-start) (window-end)))
  :properties '(:linewise t))
+
+(conn-register-thing-commands
+ 'visible nil
+ 'conn-scroll-up 'conn-scroll-down
+ 'scroll-up-command 'scroll-down-command
+ 'conn-mark-visible)
 
 (conn-define-mark-command conn-mark-visible visible)
 
@@ -1166,18 +1170,6 @@ words."))
  'isearch-forward-word
  'isearch-forward-symbol-at-point
  'isearch-forward-thing-at-point)
-
-(conn-register-thing-commands
- 'visible nil
- 'conn-scroll-up 'conn-scroll-down
- 'scroll-up-command 'scroll-down-command
- 'conn-mark-visible)
-
-(conn-register-thing-commands
- 'region nil
- 'conn-previous-mark-command
- 'conn-toggle-mark-command
- 'conn-set-mark-command)
 
 (conn-register-thing 'symbol :forward-op 'forward-symbol)
 
