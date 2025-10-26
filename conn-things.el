@@ -198,10 +198,15 @@
 (eval-and-compile
   (defun conn--set-anonymous-thing-property (f args &rest properties)
     `(progn
-       (dolist (prop ',(cons (intern (concat ":" (symbol-name f)))
-                             properties))
-         (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
-               ',f))
+       (let ((props ',(cons (intern (concat ":" (symbol-name f)))
+                            properties)))
+         (dolist (prop props)
+           (when-let* ((gfn (alist-get prop (get 'conn-anonymous-thing :known-properties)))
+                       (_ (not (eq gfn ',f))))
+             (error "%s already an anonymous thing property for %s" prop gfn)))
+         (dolist (prop props)
+           (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
+                 ',f)))
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
                          &rest rest)
