@@ -265,12 +265,12 @@
             (lambda (fn &rest args)
               (interactive
                (lambda (spec)
-                 (let ((debugger exit-and-debug)
-                       (abort t))
+                 (let ((abort t))
                    (unwind-protect
-                       (prog1
-                           (advice-eval-interactive-spec spec)
-                         (setq abort nil))
+                       (let ((debugger exit-and-debug))
+                         (prog1
+                             (advice-eval-interactive-spec spec)
+                           (setq abort nil)))
                      (when (and abort command)
                        (remove-function (symbol-function command) advice))))))
               (unwind-protect
@@ -306,7 +306,9 @@
    (t (conn--wincontrol-message))))
 
 (defun conn--wincontrol-new-frame (frame)
-  (set-face-inverse-video 'mode-line t frame))
+  (set-face-inverse-video 'mode-line t frame)
+  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
+  (set-face-inverse-video 'mode-line-active t frame))
 
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
@@ -319,13 +321,15 @@
               (if conn--wincontrol-error-message " ")
               conn--wincontrol-error-message))))
 
+(defalias 'conn--wincontrol-ignore 'ignore)
+
 (defun conn--wincontrol-setup (&optional preserve-state)
   (unless (memq conn-wincontrol-map overriding-terminal-local-map)
     (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
-    (add-hook 'post-command-hook 'conn--wincontrol-post-command)
-    (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+    (add-hook 'post-command-hook 'conn--wincontrol-post-command 98)
+    (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
     (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
-    (add-function :override eldoc-message-function 'ignore)
+    (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
     (unless preserve-state
       (setq conn--wincontrol-arg (when current-prefix-arg
                                    (prefix-numeric-value current-prefix-arg))
@@ -333,17 +337,21 @@
             conn--wincontrol-initial-window (selected-window)
             conn--wincontrol-initial-winconf (current-window-configuration)))
     (set-face-inverse-video 'mode-line t)
+    ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
+    (set-face-inverse-video 'mode-line-active t)
     (conn--wincontrol-message)))
 
 (defun conn--wincontrol-exit ()
   (when (memq conn-wincontrol-map overriding-terminal-local-map)
-    (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
-    (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-    (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-    (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
-    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (remove-function eldoc-message-function 'ignore)
-    (set-face-inverse-video 'mode-line nil)))
+    (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map))
+  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
+  (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
+  (remove-function eldoc-message-function 'conn--wincontrol-ignore)
+  (set-face-inverse-video 'mode-line nil)
+  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
+  (set-face-inverse-video 'mode-line-active nil))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
@@ -601,7 +609,7 @@
 
 (defun conn-goto-window (&optional arg)
   "Prompt for a window and then select it."
-  (interactive "P")
+  (interactive "p")
   (let ((windows (delq (selected-window)
                        (conn--get-windows
                         nil 'nomini
