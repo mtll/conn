@@ -148,11 +148,11 @@
                                  (macroexpand-all
                                   `(cl-flet ((cl-call-next-method ,cnm))
                                      ,@body)))))))
-                   (list (intern (concat ":" (symbol-name (car seen))))
-                         (macroexpand-all
-                          var
-                          (cons (cons :method method-expander)
-                                macroexpand-all-environment))))
+                   `(',(car seen)
+                     ,(macroexpand-all
+                       var
+                       (cons (cons :method method-expander)
+                             macroexpand-all-environment))))
            into methods
            else nconc (list key var) into props
            finally return `(conn--make-anonymous-thing
@@ -196,17 +196,17 @@
 
 (eval-and-compile
   (defun conn--set-anonymous-thing-property (f args &rest properties)
-    (let ((prop-name (intern (concat ":" (symbol-name f)))))
-      `(progn
-         (dolist (prop ',(cons prop-name properties))
-           (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
-                 ',f))
-         :autoload-end
-         (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
-                           &rest rest)
-           (if-let* ((op (conn--anonymous-thing-method ,(car args) ,prop-name)))
-               (apply op #'cl-call-next-method ,(car args) rest)
-             (cl-call-next-method))))))
+    `(progn
+       (dolist (prop ',(cons (intern (concat ":" (symbol-name f)))
+                             properties))
+         (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
+               ',f))
+       :autoload-end
+       (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
+                         &rest rest)
+         (if-let* ((op (conn--anonymous-thing-method ,(car args) ',f)))
+             (apply op #'cl-call-next-method ,(car args) rest)
+           (cl-call-next-method)))))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
 
