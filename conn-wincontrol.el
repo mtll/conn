@@ -324,26 +324,25 @@
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-setup (&optional preserve-state)
-  (unless (memq conn-wincontrol-map overriding-terminal-local-map)
-    (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
-    (add-hook 'post-command-hook 'conn--wincontrol-post-command 98)
-    (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-    (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
-    (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
-    (unless preserve-state
-      (setq conn--wincontrol-arg (when current-prefix-arg
-                                   (prefix-numeric-value current-prefix-arg))
-            conn--wincontrol-arg-sign 1
-            conn--wincontrol-initial-window (selected-window)
-            conn--wincontrol-initial-winconf (current-window-configuration)))
-    (set-face-inverse-video 'mode-line t)
-    ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
-    (set-face-inverse-video 'mode-line-active t)
-    (conn--wincontrol-message)))
+  (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
+  ;; Must be before 'repeat-post-hook
+  (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
+  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
+  (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
+  (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
+  (unless preserve-state
+    (setq conn--wincontrol-arg (when current-prefix-arg
+                                 (prefix-numeric-value current-prefix-arg))
+          conn--wincontrol-arg-sign 1
+          conn--wincontrol-initial-window (selected-window)
+          conn--wincontrol-initial-winconf (current-window-configuration)))
+  (set-face-inverse-video 'mode-line t)
+  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
+  (set-face-inverse-video 'mode-line-active t)
+  (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
-  (when (memq conn-wincontrol-map overriding-terminal-local-map)
-    (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map))
+  (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
