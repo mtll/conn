@@ -228,6 +228,7 @@
   "M-g" nil
   "C-x" nil
   "C-h" nil
+  "C-g" 'keyboard-quit
   "<t>" 'conn-wincontrol-ignore)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
