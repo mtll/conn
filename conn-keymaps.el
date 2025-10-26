@@ -92,8 +92,8 @@
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
   "<backspace>" 'clear-rectangle
-  "d" 'open-rectangle
-  "C-d" 'delete-whitespace-rectangle
+  "SPC d" 'delete-whitespace-rectangle
+  "SPC o" 'open-rectangle
   "#" 'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
@@ -229,26 +229,39 @@
   "M-H" 'conn-wincontrol-maximize-horizontally
   "M-V" 'conn-wincontrol-maximize-vertically)
 
-(define-keymap
-  :keymap global-map
-  "<conn-region-map>" conn-default-region-map
-  "<conn-edit-map>" conn-default-edit-map
-  "<conn-thing-map> >" 'forward-line
-  "<conn-thing-map> <" 'conn-backward-line
-  "<conn-thing-map> ;" 'conn-mark-comment
-  "<conn-thing-map> V" 'conn-mark-visual-line
-  "<conn-thing-map> ," 'conn-goto-line
-  "<conn-thing-map> /" 'conn-mark-filename
-  "<conn-thing-map> U" 'conn-mark-uuid
-  "<conn-thing-map> s" 'conn-mark-string
-  "<conn-thing-map> @" 'conn-mark-email
-  "<conn-thing-map> v" 'conn-mark-visible
-  "<conn-thing-map> L" 'forward-line
-  "<conn-thing-map> )" 'forward-list
-  "<conn-thing-map> (" 'backward-list
-  "<conn-thing-map> a" 'beginning-of-buffer
-  "<conn-thing-map> e" 'end-of-buffer
-  "<conn-thing-map> h" 'outline-previous-visible-heading)
+(defvar-keymap conn-whitespace-repeat-map
+  :repeat t
+  "w" 'forward-whitespace
+  "W" 'conn-backward-whitespace)
+
+(defvar-keymap conn-line-repeat-map
+  :repeat t
+  ">" 'forward-line
+  "<" 'conn-backward-line)
+
+(defvar-keymap conn-list-repeat-map
+  :repeat t
+  ")" 'forward-list
+  "(" 'backward-list)
+
+(defvar-keymap conn-default-thing-map
+  "w" 'forward-whitespace
+  "W" 'conn-backward-whitespace
+  ">" 'forward-line
+  "<" 'conn-backward-line
+  ";" 'conn-mark-comment
+  "v" 'conn-mark-visual-line
+  "V" 'conn-mark-visible
+  "," 'conn-goto-line
+  "/" 'conn-mark-filename
+  "U" 'conn-mark-uuid
+  "s" 'conn-mark-string
+  "@" 'conn-mark-email
+  ")" 'forward-list
+  "(" 'backward-list
+  "a" 'beginning-of-buffer
+  "e" 'end-of-buffer
+  "h" 'outline-previous-visible-heading)
 
 (static-if (<= 30 emacs-major-version)
     (progn

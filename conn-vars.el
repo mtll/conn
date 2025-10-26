@@ -231,9 +231,13 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
                                (push `(conn--without-conn-maps
                                         (key-binding ,key t))
                                      maps))
-                              (key
+                              ((and key (pred stringp))
                                (if (stringp key) (setq key (key-parse key)))
-                               (push `(key-binding ,key t) maps))))
+                               (push `(key-binding ,key t) maps))
+                              ((and key (pred vectorp))
+                               (push `(key-binding ,key t) maps))
+                              (map
+                               (push map maps))))
                           `(make-composed-keymap
                             (delq nil (list ,@(nreverse maps))))))))))
 
@@ -269,7 +273,8 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 
 (conn-define-remap-keymap conn-thing-remap
     "Conn Search Map"
-  [conn-thing-map])
+  [conn-thing-map]
+  conn-default-thing-map)
 
 (conn-define-remap-keymap conn-thing-inner-remap
     "Conn Search Map"
@@ -277,11 +282,13 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 
 (conn-define-remap-keymap conn-region-remap
     "Conn Search Map"
-  [conn-region-map])
+  [conn-region-map]
+  conn-default-region-map)
 
 (conn-define-remap-keymap conn-edit-remap
     "Conn Search Map"
-  [conn-edit-map])
+  [conn-edit-map]
+  conn-default-edit-map)
 
 (defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
 (defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
