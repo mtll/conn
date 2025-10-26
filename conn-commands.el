@@ -2035,22 +2035,24 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                  fixup-whitespace)
   (cl-call-next-method cmd arg transform append t register fixup-whitespace))
 
-(cl-defmethod conn-perform-kill ( (cmd (conn-thing region))
-                                  arg transform
-                                  &optional
-                                  _append
-                                  delete
-                                  register
-                                  _fixup-whitespace)
-  (conn-disable-repeating)
-  (pcase (conn-bounds-of cmd arg)
-    ((and (conn-bounds-get :subregions nil
-                           (and r (guard (length> r 1))))
-          (conn-bounds `(,beg . ,end)))
-     (cond (register (copy-rectangle-to-register register beg end t))
-           (delete (delete-rectangle beg end))
-           (t (kill-rectangle beg end))))
-    (_ (cl-call-next-method))))
+(cl-defmethod conn-perform-kill :extra "rmm" ( (_cmd (conn-thing region))
+                                               _arg _transform
+                                               &optional
+                                               _append
+                                               delete
+                                               register
+                                               _fixup-whitespace)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (cond (register (copy-rectangle-to-register register beg end t))
+              (delete (delete-rectangle beg end))
+              (t (kill-rectangle beg end))))
+    (cl-call-next-method)))
+
+(cl-defmethod conn-perform-kill :before ((_cmd (conn-thing region))
+                                         &rest _)
+  (conn-disable-repeating))
 
 ;;;;; Copy Thing
 
