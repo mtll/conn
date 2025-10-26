@@ -489,40 +489,45 @@ words."))
   "X" 'conn-transform-reset)
 
 (oclosure-define (conn-transform-argument
-                  (:parent conn-read-args-argument)))
+                  (:parent conn-read-args-wrapper)))
 
-(defun conn-transform-argument (&rest value)
+(cl-defmethod conn-argument-required-p ((_arg conn-transform-argument)) nil)
+
+(defun conn-transform-argument (&rest initial)
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-transform-argument
-                    (value value)
+                    (name "transforms")
+                    (separator "∘")
+                    (contents initial)
                     (keymap conn-transform-map))
       (self cmd)
-    (let ((val (cl-loop for tform in (conn-read-args-argument-value self)
-                        for update = (conn-argument-update tform cmd)
-                        when update collect update)))
+    (let ((next
+           (cl-loop for tform in (conn-read-args-wrapper-contents self)
+                    for update = (conn-argument-update tform cmd)
+                    when update collect update)))
       (pcase cmd
         ('conn-transform-reset
-         (conn-set-argument self nil))
+         (conn-set-wrapper self nil))
         ((and (guard (symbolp cmd))
               (let (and handler (pred identity))
                 (get cmd :conn-bounds-transform)))
-         (cond ((memq cmd val)
-                (conn-set-argument self (remq cmd val)))
+         (cond ((memq cmd next)
+                (conn-set-wrapper self (remq cmd next)))
                ((functionp handler)
                 (funcall handler cmd self))
-               (t (conn-set-argument self (cons cmd val)))))
+               (t (conn-set-wrapper self (cons cmd next)))))
         (_
-         (if (equal val value)
+         (if (equal next contents)
              self
-           (conn-set-argument self val)))))))
+           (conn-set-wrapper self next)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
   (get sym :conn-bounds-transform))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
-  (when-let* ((ts (conn-read-args-argument-value arg)))
+  (when-let* ((ts (conn-read-args-wrapper-contents arg)))
     (concat
      "transforms: "
      (propertize
@@ -531,8 +536,8 @@ words."))
                  ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
-(cl-defmethod conn-argument-value ((arg conn-transform-argument))
-  (nreverse (conn-read-args-argument-value arg)))
+(cl-defmethod conn-argument-value ((_arg conn-transform-argument))
+  (nreverse (cl-call-next-method)))
 
 ;;;;; Read Mover State
 

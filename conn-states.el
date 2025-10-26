@@ -1530,11 +1530,26 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (set-flag :type boolean)
   (required :type boolean)
   (name :type (or nil string function))
-  (reference :type function)
   (keymap :type keymap))
 
-(oclosure-define (conn-read-args-argument-wrapper)
-  (wrapped :type list))
+(oclosure-define (conn-read-args-wrapper
+                  (:copier conn-set-wrapper (contents)))
+  (contents :type list)
+  (keymap :type keymap)
+  (separator :type string)
+  (name :type (or nil string function)))
+
+(defalias 'conn-read-args-wrapper-contents
+  'conn-read-args-wrapper--contents)
+
+(defalias 'conn-read-args-wrapper-keymap
+  'conn-read-args-wrapper--keymap)
+
+(defalias 'conn-read-args-wrapper-name
+  'conn-read-args-wrapper--name)
+
+(defalias 'conn-read-args-wrapper-separator
+  'conn-read-args-wrapper--separator)
 
 (defalias 'conn-read-args-argument-name
   'conn-read-args-argument--name)
@@ -1546,10 +1561,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   'conn-read-args-argument--keymap)
 
 (cl-defgeneric conn-argument-cancel (argument)
-  ( :method (arg) arg)
-  ( :method ((arg conn-read-args-argument-wrapper))
+  ( :method (_arg) nil)
+  ( :method ((arg conn-read-args-wrapper))
     (mapc #'conn-argument-cancel
-          (conn-read-args-argument-wrapper--wrapped arg))))
+          (conn-read-args-wrapper--contents arg))))
 
 (cl-defgeneric conn-argument-required-p (argument)
   (declare (important-return-value t)
@@ -1558,16 +1573,16 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg conn-read-args-argument))
     (and (conn-read-args-argument--required arg)
          (not (conn-read-args-argument--set-flag arg))))
-  ( :method ((arg conn-read-args-argument-wrapper))
+  ( :method ((arg conn-read-args-wrapper))
     (and (seq-find #'conn-argument-required-p
-                   (conn-read-args-argument-wrapper--wrapped arg))
+                   (conn-read-args-wrapper--contents arg))
          t)))
 
 (cl-defgeneric conn-argument-update (argument form)
   ( :method (arg _form) arg)
   ( :method ((arg conn-read-args-argument) form)
     (funcall arg arg form))
-  ( :method ((arg conn-read-args-argument-wrapper) form)
+  ( :method ((arg conn-read-args-wrapper) form)
     (funcall arg arg form)))
 
 (cl-defgeneric conn-argument-value (argument)
@@ -1575,35 +1590,44 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method (arg) arg)
   ( :method ((arg conn-read-args-argument))
     (conn-read-args-argument-value arg))
-  ( :method ((arg conn-read-args-argument-wrapper))
-    (mapcar #'conn-read-args-argument-value
-            (conn-read-args-argument-wrapper--wrapped arg))))
+  ( :method ((arg conn-read-args-wrapper))
+    (mapcar #'conn-argument-value
+            (conn-read-args-wrapper--contents arg))))
 
 (cl-defgeneric conn-argument-display (argument)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg string)) arg)
   ( :method ((arg conn-read-args-argument))
     (pcase (conn-read-args-argument-name arg)
       ((and (pred stringp) str)
        str)
-      ((and (pred functionp) fn)
-       (and-let* ((str (funcall fn arg))
-                  ((stringp str)))
-         str))))
-  ( :method ((arg conn-read-args-argument-wrapper))
-    (thread-last
-      (conn-read-args-argument-wrapper--wrapped arg)
-      (mapcar #'conn-argument-display)
-      (delq nil))))
+      ((and fn (pred functionp)
+            (let (and str (pred stringp))
+              (funcall fn arg)))
+       str)))
+  ( :method ((arg conn-read-args-wrapper))
+    (concat (pcase (conn-read-args-wrapper--name arg)
+              ((and str (pred stringp))
+               str)
+              ((and fn (pred functionp)
+                    (let (and str (pred stringp))
+                      (funcall fn arg)))
+               str))
+            ": "
+            (mapconcat (thread-last
+                         (conn-read-args-wrapper--contents arg)
+                         (mapcar #'conn-argument-display)
+                         (delq nil))
+                       (or (conn-read-args-wrapper--separator arg)
+                           " ")))))
 
 (cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg _val) nil)
-  ( :method ((arg conn-read-args-argument-wrapper) val)
-    (cl-loop for arg in (conn-read-args-argument-wrapper--wrapped arg)
+  ( :method ((arg conn-read-args-wrapper) val)
+    (cl-loop for arg in (conn-read-args-wrapper--contents arg)
              thereis (conn-argument-predicate arg val))))
 
 (cl-defgeneric conn-argument-keymaps (argument)
@@ -1614,11 +1638,16 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
     (conn-argument-keymaps (cdr arg)))
   ( :method ((arg conn-read-args-argument))
     (conn-read-args-argument-keymap arg))
-  ( :method ((arg conn-read-args-argument-wrapper))
-    (when-let* ((maps (thread-last
-                        (conn-read-args-argument-wrapper--wrapped arg)
-                        (mapcar #'conn-argument-keymaps)
-                        (delq nil))))
-      (make-composed-keymap maps))))
+  ( :method ((arg conn-read-args-wrapper))
+    (let ((maps (thread-last
+                  (conn-read-args-wrapper--contents arg)
+                  (mapcar #'conn-argument-keymaps)
+                  (delq nil)))
+          (wrapper-map (conn-read-args-wrapper-keymap arg)))
+      (when (or maps wrapper-map)
+        (make-composed-keymap
+         (if wrapper-map
+             (cons (conn-read-args-wrapper-keymap arg) maps)
+           maps))))))
 
 (provide 'conn-states)
