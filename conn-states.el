@@ -340,6 +340,8 @@ The composed keymap is of the form:
 
 (defun conn--ensure-major-mode-map (state mode)
   (declare (important-return-value t))
+  (cl-assert (not (conn-state-get state :no-keymap)) nil
+             "%s :no-keymap property non-nil" state)
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--major-mode-maps-cache))
                 (get-composed-map (state)
@@ -391,20 +393,6 @@ return it."
         (unless dont-create
           (setf (conn-get-major-mode-map state mode)
                 (make-sparse-keymap))))))
-
-(defconst conn--composed-major-mode-maps (make-hash-table :test 'equal))
-
-(defun conn--compose-major-mode-map (mode)
-  (declare (important-return-value t))
-  (with-memoization
-      (gethash (cons conn-current-state
-                     (copy-sequence (conn--derived-mode-all-parents mode)))
-               conn--composed-major-mode-maps)
-    (cl-assert (not (conn-state-get conn-current-state :no-keymap))
-               nil "%s :no-keymap property is non-nil" conn-current-state)
-    (make-composed-keymap
-     (cl-loop for sym in (conn--derived-mode-all-parents mode)
-              collect (conn--ensure-major-mode-map conn-current-state sym)))))
 
 ;;;;;; Minor Mode Maps
 
@@ -811,14 +799,18 @@ If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
-(defun conn-set-major-mode-maps (&rest maps)
+(defun conn-set-major-mode-maps (maps)
   (setf conn--active-major-mode-maps maps
         conn--major-mode-map `((conn-local-mode
                                 . ,(make-composed-keymap
-                                    (mapcar #'conn--compose-major-mode-map
+                                    (mapcar (lambda (mode)
+                                              (conn--ensure-major-mode-map
+                                               conn-current-state
+                                               mode))
                                             conn--active-major-mode-maps))))))
 
 (defun conn-get-major-mode-maps ()
+  (declare (gv-setter conn-set-major-mode-maps))
   conn--active-major-mode-maps)
 
 (defun conn--setup-state-keymaps ()
@@ -827,12 +819,16 @@ If BUFFER is nil then use the current buffer."
             conn--major-mode-map nil
             conn--minor-mode-maps nil)
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
-          conn--active-major-mode-maps (list major-mode)
+          conn--active-major-mode-maps (conn--derived-mode-all-parents major-mode)
           conn--major-mode-map `((conn-local-mode
                                   . ,(make-composed-keymap
-                                      (mapcar #'conn--compose-major-mode-map
+                                      (mapcar (lambda (mode)
+                                                (conn--ensure-major-mode-map
+                                                 conn-current-state
+                                                 mode))
                                               conn--active-major-mode-maps))))
-          conn--minor-mode-maps (conn-state-minor-mode-maps-alist conn-current-state))))
+          conn--minor-mode-maps (conn-state-minor-mode-maps-alist
+                                 conn-current-state))))
 
 (defun conn--setup-state-properties ()
   (setf conn--disable-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
