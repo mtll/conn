@@ -2046,7 +2046,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds-get :subregions nil
                            (and r (guard (length> r 1))))
-          (conn-bounds `(,beg . ,end) transform))
+          (conn-bounds `(,beg . ,end)))
      (cond (register (copy-rectangle-to-register register beg end t))
            (delete (delete-rectangle beg end))
            (t (kill-rectangle beg end))))
