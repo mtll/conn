@@ -115,7 +115,7 @@
   (cl-loop for (prop val) on properties by #'cddr
            do (conn-set-thing-property thing prop val)))
 
-(cl-defstruct (conn-anonymous-thing
+(cl-defstruct (conn--anonymous-thing
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
                ;; This would be nice but cl-defsubst does not handle
@@ -124,7 +124,11 @@
                ;; (:constructor conn-anonymous-thing (parent &rest properties))
                )
   (parent nil :read-only t)
+  (methods nil :read-only t)
   (properties nil))
+
+(defalias 'conn-anonymous-thing-parent 'conn--anonymous-thing-parent)
+(defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
@@ -149,11 +153,26 @@
                           var
                           (cons (cons :method method-expander)
                                 macroexpand-all-environment))))
-           into result
-           else nconc (list key var) into result
+           into methods
+           else nconc (list key var) into props
            finally return `(conn--make-anonymous-thing
                             :parent ,parent
-                            :properties ,(cons 'list result))))
+                            :methods ,(cons 'list methods)
+                            :properties ,(cons 'list props))))
+
+(define-inline conn-anonymous-thing-property (object property)
+  (declare (side-effect-free t)
+           (gv-setter
+            (lambda (val)
+              `(setf (plist-get (conn-anonymous-thing-properties ,object) ,property)
+                     ,val))))
+  (inline-quote
+   (plist-get (conn--anonymous-thing-properties ,object) ,property)))
+
+(define-inline conn--anonymous-thing-method (object method)
+  (declare (side-effect-free t))
+  (inline-quote
+   (plist-get (conn--anonymous-thing-methods ,object) ,method)))
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
@@ -185,20 +204,11 @@
          :autoload-end
          (cl-defmethod ,f ((,(car args) (conn-thing anonymous-thing-override))
                            &rest rest)
-           (if-let* ((op (conn-anonymous-thing-property ,(car args) ,prop-name)))
+           (if-let* ((op (conn--anonymous-thing-method ,(car args) ,prop-name)))
                (apply op #'cl-call-next-method ,(car args) rest)
              (cl-call-next-method))))))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
-
-(define-inline conn-anonymous-thing-property (object property)
-  (declare (side-effect-free t)
-           (gv-setter
-            (lambda (val)
-              `(setf (plist-get (conn-anonymous-thing-properties ,object) ,property)
-                     ,val))))
-  (inline-quote
-   (plist-get (conn-anonymous-thing-properties ,object) ,property)))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER.
