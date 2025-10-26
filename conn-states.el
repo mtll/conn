@@ -1481,7 +1481,8 @@ chooses to handle a command."
                                     (make-composed-keymap))))
                       ,@emulation-mode-map-alists)))
                (while (continue-p)
-                 (display-message)
+                 (unless executing-kbd-macro
+                   (display-message))
                  (read-command))))
            (setq local-exit t)))
       (apply
@@ -1490,7 +1491,8 @@ chooses to handle a command."
              (if around (funcall around #'cont) (cont))
            (unless local-exit
              (mapc #'conn-argument-cancel arguments))
-           (message nil))
+           (unless executing-kbd-macro
+             (message nil)))
          (cons callback (mapcar #'conn-argument-value arguments)))))))
 
 (defmacro conn-read-args-return (&rest body)
