@@ -1033,14 +1033,14 @@ With a prefix ARG `push-mark' without activating it."
       (conn-transpose-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
      buf (car bounds1) (conn-anonymous-thing
-                        'region
-                        :bounds-op ( :method (_)
-                                     (conn-make-bounds 'region nil bounds1)))
+                         'region
+                         :bounds-op ( :method (_)
+                                      (conn-make-bounds 'region nil bounds1)))
      (current-buffer) (point) (let ((bounds2 (cons (region-beginning) (region-end))))
                                 (conn-anonymous-thing
-                                 'region
-                                 :bounds-op ( :method (_)
-                                              (conn-make-bounds 'region nil bounds2))))
+                                  'region
+                                  :bounds-op ( :method (_)
+                                               (conn-make-bounds 'region nil bounds2))))
      nil)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
@@ -1062,12 +1062,12 @@ With a prefix ARG `push-mark' without activating it."
                     (thing1
                      (when (use-region-p)
                        (conn-anonymous-thing
-                        'region
-                        :bounds-op (let ((bounds (conn-make-bounds
-                                                  'region nil
-                                                  (cons (region-beginning)
-                                                        (region-end)))))
-                                     (:method (_self _arg) bounds)))))
+                         'region
+                         :bounds-op (let ((bounds (conn-make-bounds
+                                                   'region nil
+                                                   (cons (region-beginning)
+                                                         (region-end)))))
+                                      (:method (_self _arg) bounds)))))
                     (window-predicate
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only

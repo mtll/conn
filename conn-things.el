@@ -132,6 +132,7 @@
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
+  (declare (indent 0))
   (cl-assert (plistp properties))
   (cl-loop with known = (get 'conn-anonymous-thing :known-properties)
            with seen = nil

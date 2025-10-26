@@ -2111,11 +2111,11 @@ contain targets."
                   (end (match-end 0)))
               (overlay-put (conn-make-target-overlay beg 0)
                            'thing (conn-anonymous-thing
-                                   'region
-                                   :bounds-op ( :method (_self _arg)
-                                                (conn-make-bounds
-                                                 'region nil
-                                                 (cons beg end)))))
+                                    'region
+                                    :bounds-op ( :method (_self _arg)
+                                                 (conn-make-bounds
+                                                  'region nil
+                                                  (cons beg end)))))
               (when (<= beg (pos-eol) prev)
                 (cl-incf line-count))
               (setq prev beg))))
@@ -2127,11 +2127,11 @@ contain targets."
                   (end (match-end 0)))
               (overlay-put (conn-make-target-overlay beg 0)
                            'thing (conn-anonymous-thing
-                                   'region
-                                   :bounds-op ( :method (_self _arg)
-                                                (conn-make-bounds
-                                                 'region nil
-                                                 (cons beg end)))))
+                                    'region
+                                    :bounds-op ( :method (_self _arg)
+                                                 (conn-make-bounds
+                                                  'region nil
+                                                  (cons beg end)))))
               (when (<= prev (pos-bol) beg)
                 (cl-incf line-count))
               (setq prev beg)))))))
@@ -2468,11 +2468,11 @@ contain targets."
 
 (defun conn-dispatch-inner-lines ()
   (let ((thing (conn-anonymous-thing
-                'conn-forward-inner-line
-                :description ( :method (_self) "inner-line")
-                :bounds-op ( :method (_self _arg)
-                             (goto-char (pos-bol))
-                             (cl-call-next-method)))))
+                 'conn-forward-inner-line
+                 :description ( :method (_self) "inner-line")
+                 :bounds-op ( :method (_self _arg)
+                              (goto-char (pos-bol))
+                              (cl-call-next-method)))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -2489,11 +2489,11 @@ contain targets."
 
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((thing (conn-anonymous-thing
-                'conn-forward-inner-line
-                :description ( :method (_self) "end-of-inner-line")
-                :bounds-op ( :method (_self _arg)
-                             (goto-char (pos-bol))
-                             (cl-call-next-method)))))
+                 'conn-forward-inner-line
+                 :description ( :method (_self) "end-of-inner-line")
+                 :bounds-op ( :method (_self _arg)
+                              (goto-char (pos-bol))
+                              (cl-call-next-method)))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -3945,10 +3945,10 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-push-button)
    (conn-anonymous-thing
-    'button
-    :description ( :method (_self) "all-buttons")
-    :target-finder ( :method (_self _arg) 'conn-dispatch-all-buttons)
-    :other-end ( :method (_self) :no-other-end))
+     'button
+     :description ( :method (_self) "all-buttons")
+     :target-finder ( :method (_self _arg) 'conn-dispatch-all-buttons)
+     :other-end ( :method (_self) :no-other-end))
    nil nil))
 
 (defun conn-dispatch-isearch ()
@@ -3965,8 +3965,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
        (conn-anonymous-thing
-        nil
-        :target-finder ( :method (_self _arg) target-finder))
+         nil
+         :target-finder ( :method (_self _arg) target-finder))
        nil nil
        :restrict-windows t
        :other-end :no-other-end))))

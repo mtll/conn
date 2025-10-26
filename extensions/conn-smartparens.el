@@ -196,21 +196,21 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'smartparens-mode)
   ")" (conn-anonymous-thing
-       'forward-sexp
-       :description (:method (_self) "list")
-       :target-finder ( :method (_self _arg)
-                        (conn-dispatch-things-with-re-prefix
-                         'sexp (rx (or (syntax open-parenthesis)
-                                       (syntax string-quote))))))
+        'forward-sexp
+        :description (:method (_self) "list")
+        :target-finder ( :method (_self _arg)
+                         (conn-dispatch-things-with-re-prefix
+                          'sexp (rx (or (syntax open-parenthesis)
+                                        (syntax string-quote))))))
   "]" (conn-anonymous-thing
-       'sexp
-       :description (:method (_self) "inner-list")
-       :bounds-op ( :method (_self arg)
-                    (conn-bounds-of 'sp-down-sexp arg))
-       :target-finder ( :method (_self _arg)
-                        (conn-dispatch-things-with-re-prefix
-                         'sexp (rx (or (syntax open-parenthesis)
-                                       (syntax string-quote)))))))
+        'sexp
+        :description (:method (_self) "inner-list")
+        :bounds-op ( :method (_self arg)
+                     (conn-bounds-of 'sp-down-sexp arg))
+        :target-finder ( :method (_self _arg)
+                         (conn-dispatch-things-with-re-prefix
+                          'sexp (rx (or (syntax open-parenthesis)
+                                        (syntax string-quote)))))))
 
 (defun conntext-paren-state ()
   (conn-push-state 'conntext-paren-state)

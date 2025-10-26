@@ -272,13 +272,13 @@
                   (overlay-put
                    (conn-make-target-overlay beg 0)
                    'thing (conn-anonymous-thing
-                           'conn-etts-thing
-                           :nodes (list (cons group (cons beg end)))
-                           :bounds-op ( :method (self _arg)
-                                        (thread-first
-                                          self
-                                          (conn-anonymous-thing-property :nodes)
-                                          (conn-etts-select-node)))))))))))))
+                            'conn-etts-thing
+                            :nodes (list (cons group (cons beg end)))
+                            :bounds-op ( :method (self _arg)
+                                         (thread-first
+                                           self
+                                           (conn-anonymous-thing-property :nodes)
+                                           (conn-etts-select-node)))))))))))))
   (cl-call-next-method))
 
 (defclass conn-etts-targets (conn-dispatch-target-window-predicate)
@@ -657,10 +657,10 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-etts-things-mode)
   "h" (conn-anonymous-thing
-       'conn-etts-thing
-       :target-finder ( :method (_self _arg)
-                        (conn-etts-parents-targets
-                         :things conn-etts-parent-things))))
+        'conn-etts-thing
+        :target-finder ( :method (_self _arg)
+                         (conn-etts-parents-targets
+                          :things conn-etts-parent-things))))
 
 ;; fix etts comment thing overriding ours
 (conn-register-thing
