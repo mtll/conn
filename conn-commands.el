@@ -1836,21 +1836,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                    fixup-whitespace)
   (declare (conn-anonymous-thing-property :kill-op)))
 
-(cl-defmethod conn-perform-kill :before ( _cmd _arg _transform
-                                          &optional
-                                          _append
-                                          _delete
-                                          _register
-                                          _fixup-whitespace)
+(cl-defmethod conn-perform-kill :before (&rest _)
   (conn-make-command-repeatable))
 
-(cl-defmethod conn-perform-kill ( (_cmd (conn-thing expansion))
-                                  _arg _transform
-                                  &optional
-                                  _append
-                                  _delete
-                                  _register
-                                  _fixup-whitespace)
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing expansion)) &rest _)
   (conn-disable-repeating)
   (cl-call-next-method))
 
@@ -2032,9 +2021,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (when fixup-whitespace
        (funcall conn-kill-fixup-whitespace-function bounds)))))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing line))
-                                 _arg _transform
-                                 &optional _ _ _ _)
+(cl-defmethod conn-perform-kill ((_cmd (conn-thing line)) &rest _)
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
@@ -2101,12 +2088,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
 
-(cl-defmethod conn-perform-copy ((_cmd (conn-thing expansion))
-                                 _arg
-                                 &optional
-                                 _transform
-                                 _append
-                                 _register)
+(cl-defmethod conn-perform-copy ((_cmd (conn-thing expansion)) &rest _)
   (conn-disable-repeating)
   (cl-call-next-method))
 
