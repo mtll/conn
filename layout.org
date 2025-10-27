@@ -1,0 +1,62 @@
+* Emacs State
+
+Emacs state binds no keys by default except <escape> to pop the state
+stack.  If emacs state is the base state in the stack then popping the
+state enters command state.
+
+* Command State Map
+
+┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
+┃ ~        │ !        │ @ append │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _        │ +        │ Backspace    ┃
+┃          │          │   next   │          │          │          │          │  other   │          │  ←list   │  →list   │          │          │              ┃
+┃          │          │   kill   │          │          │          │          │  buffer  │          │          │          │          │          │  ←delete     ┃
+┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
+┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ = repeat │              ┃
+┃  MRU     │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  complex │              ┃
+┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
+┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
+┃ TAB          │ Q        │ W        │ E emacs  │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
+┃              │          │  widen   │   state  │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│ shell cmd┃
+┃              │          │          │  at mark │          │          │   read   │          │          │          │          │          │          │ on region┃
+┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
+┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
+┃              │ transpose│  change  │  emacs   │  region  │   copy   │   yank   │  ←word   │  ↑column │  →word   │   window │  ↑list   │  ↓list   │ conntext ┃
+┃              │          │          │  state   │   map    │          │          │          │          │          │   prefix │          │          │  state   ┃
+┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
+┃                │ A        │ S        │ D        │ F bind   │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
+┃                │   M-X    │          │ duplicate│   last   │ surround │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │          │          │ dispatch │          │  region  │   line   │          │   line   │          │          │                   ┃
+┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
+┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
+┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
+┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
+┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
+┃                      │ Z         │ X        │ C        │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
+┃                      │  pop to   │  narrow  │   copy   │   mark   │          │ ←defun   │ →defun   │ register │ register │   redo   │                       ┃
+┃                      │  mark     │  prefix  │  region  │   state  │          │          │          │  prefix  │ replace  │          │                       ┃
+┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
+┃                      │ z         │ x        │ c        │ v        │ b  set   │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │ swap pt   │   C-x    │   C-c    │  mark    │ and mark │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
+┃                      │ and mark  │          │          │  state   │  state   │          │          │   map    │   load   │          │                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
+                                                         ┃ SPC                                       ┃
+                                                         ┃                 edit map                  ┃
+                                                         ┃                                           ┃
+                                                         ┃                                           ┃
+                                                         ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+* Mark State Map
+
+Most mark state bindings are inherited from =conn-command-state=, with
+the following additions:
+
+| Key   | Binding                        |
+|-------+--------------------------------|
+| "TAB" | indent-rigidly                 |
+| "Y"   | completing yank replace region |
+| "y"   | yank replace region            |
+| "*"   | calc-grab-region               |
+| "v"   | rectangle-mark-mode            |
+| "g"   | surround region                |
+| "RET" | duplicate region               |
+
