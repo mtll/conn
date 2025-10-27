@@ -1296,7 +1296,7 @@ A zero means repeat until error."
      ("i" "Increment" increment-register)
      ("L" "List" list-registers)]
    [ :description "Register Store"
-     ("<" "Point" point-to-register)
+     (">" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
      ("b" "Buffer" buffer-to-register :if (lambda () (<= 31 emacs-major-version)))
@@ -1310,8 +1310,8 @@ A zero means repeat until error."
    [ "Bookmarks"
      ("l" "List" (lambda ()
                    (interactive)
-                   ;; Do this so that called-interactively will return
-                   ;; t in bookmark-bmenu-list.
+                   ;; Do this so that called-interactively will
+                   ;; return t in bookmark-bmenu-list.
                    (call-interactively #'bookmark-bmenu-list)))
      ("m" "Set" bookmark-set)
      ("M" "Push" (lambda ()
