@@ -68,14 +68,6 @@
 
 ;;;;; Mode Keymaps
 
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-major-mode-map state 'occur-mode)
-              "C-c e" 'occur-edit-mode))
-
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-major-mode-map state 'occur-edit-mode)
-              "C-c e" 'occur-cease-edit))
-
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-command-state 'compilation-mode)
   "<" 'previous-error-no-select
