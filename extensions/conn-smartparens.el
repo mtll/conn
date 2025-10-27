@@ -25,6 +25,14 @@
 (require 'conn-surround)
 (require 'smartparens)
 
+;;;###autoload
+(define-minor-mode conn-sp-sexp-include-prefix-chars-mode
+  "Include prefix chars in smartparens sexp movement."
+  :global t
+  :group 'conn-smartparens
+  :keymap (define-keymap
+            "<remap> <sp-backward-sexp>" 'conn-sp-backward-sexp))
+
 (defun conn-sp-forward-sexp-op (arg)
   (let ((backward (< arg 0))
         (N (abs arg)))
@@ -111,16 +119,31 @@
   (unless (= (point) beg)
     (save-excursion
       (cond ((< (point) beg)
-             (let ((beg-sexp (save-excursion
-                               (goto-char beg)
-                               (min (point) (plist-get (sp-get-thing t) :end)))))
+             (let ((beg-sexp
+                    (save-excursion
+                      (goto-char beg)
+                      (min (point) (plist-get (sp-get-thing t) :end)))))
                (while (and (< (point) beg-sexp) (sp-forward-sexp)))))
             ((> (point) beg)
-             (let ((beg-sexp (save-excursion
-                               (goto-char beg)
-                               (max (point) (plist-get (sp-get-thing) :beg)))))
-               (while (and (> (point) beg-sexp) (sp-backward-sexp))))))
+             (let ((beg-sexp
+                    (save-excursion
+                      (goto-char beg)
+                      (max (point)
+                           (plist-get (sp-get-thing) :beg)))))
+               (while (and (> (point) beg-sexp) (sp-backward-sexp)))
+               (when conn-sp-sexp-include-prefix-chars-mode
+                 (backward-prefix-chars)))))
       (conn--push-ephemeral-mark))))
+
+(defun conn-sp-backward-sexp (&optional arg)
+  (interactive "^p")
+  (sp-backward-sexp arg)
+  (when conn-sp-sexp-include-prefix-chars-mode
+    (backward-prefix-chars)))
+
+(conn-register-thing-commands
+ 'sp-sexp 'conn-sp-sexp-handler
+ 'conn-sp-backward-sexp)
 
 (conn-register-thing
  'sp-sexp
