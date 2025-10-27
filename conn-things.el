@@ -693,6 +693,21 @@ words."))
 
 (defvar conn--bounds-of-in-progress nil)
 
+(defun conn-get-boundable-thing (thing &optional ignore-anonymous)
+  (catch 'boundable
+    (while (pcase thing
+             ((or (and (pred conn-thing-command-p)
+                       (pred conn-command-mark-handler))
+                  (pred conn-thing-p))
+              (throw 'boundable thing))
+             ((pred conn-anonymous-thing-p)
+              (if (and (conn-anonymous-thing-property thing :bounds-op)
+                       (not ignore-anonymous))
+                  (throw 'boundable thing)
+                (setq thing (conn-anonymous-thing-parent thing))))
+             ((pred conn-bounds-p)
+              (setq thing (conn-bounds-thing thing)))))))
+
 (cl-defgeneric conn-bounds-of (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t)))
@@ -706,12 +721,14 @@ words."))
               (cl-call-next-method))))))
 
 (cl-defmethod conn-bounds-of ((thing (conn-thing t)) arg)
-  (pcase (conn-get-thing thing)
+  (pcase (conn-get-boundable-thing thing t)
     ((and thing (pred conn-thing-p))
      (conn-make-bounds
       thing arg
       (bounds-of-thing-at-point thing)))
-    ((and thing (pred conn-thing-command-p))
+    ((let (and conn-this-command-handler
+               (pred identity))
+       (conn-command-mark-handler thing))
      (let (conn--last-perform-bounds)
        (deactivate-mark t)
        (pcase (prefix-numeric-value arg)
@@ -720,7 +737,6 @@ words."))
           (let ((pt (point))
                 (mk (mark))
                 (current-prefix-arg n)
-                (conn-this-command-handler (conn-command-mark-handler thing))
                 (conn-this-command-thing (conn-command-thing thing))
                 (conn-this-command-start (point-marker))
                 (this-command thing))
@@ -1032,27 +1048,28 @@ words."))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
                                          beg end)
-  (pcase (conn-get-thing thing)
-    ((and thing (pred conn-thing-p))
-     (save-excursion
-       (goto-char beg)
-       (forward-thing thing 1)
-       (cl-loop for bd = (cons (save-excursion
-                                 (forward-thing thing -1)
-                                 (point))
-                               (point))
-                while (and bd (< (car bd) end))
-                collect (conn-make-bounds thing nil bd) into sr
-                minimize (car bd) into b
-                maximize (cdr bd) into e
-                while (and (< (point) end)
-                           (ignore-errors
-                             (forward-thing thing 1)
-                             t))
-                finally return (conn-make-bounds
-                                thing nil
-                                (cons b e)
-                                :subregions sr))))))
+  (setf thing (conn-get-boundable-thing thing t))
+  (when (or (conn-thing-p thing)
+            (conn-thing-p (setf thing (conn-command-thing thing))))
+    (save-excursion
+      (goto-char beg)
+      (forward-thing thing 1)
+      (cl-loop for bd = (cons (save-excursion
+                                (forward-thing thing -1)
+                                (point))
+                              (point))
+               while (and bd (< (car bd) end))
+               collect (conn-make-bounds thing nil bd) into sr
+               minimize (car bd) into b
+               maximize (cdr bd) into e
+               while (and (< (point) end)
+                          (ignore-errors
+                            (forward-thing thing 1)
+                            t))
+               finally return (conn-make-bounds
+                               thing nil
+                               (cons b e)
+                               :subregions sr)))))
 
 (conn-register-thing 'conn-things-in-region)
 
