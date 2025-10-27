@@ -1341,13 +1341,13 @@ Target overlays may override this default by setting the
         (overlay-get overlay 'window)
         (overlay-get overlay 'thing)))
 
-(defun conn--dispatch-read-event-prefix ()
+(defun conn--dispatch-read-event-prefix (keymap)
   (declare (important-return-value t))
   (when-let* ((prefix
                (flatten-tree
                 (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
                          for str = (pcase pfx
-                                     ((pred functionp) (funcall pfx))
+                                     ((pred functionp) (funcall pfx keymap))
                                      ((pred stringp) pfx))
                          if str collect str))))
     (concat " (" (string-join prefix "; ") ")")))
@@ -1362,7 +1362,9 @@ Target overlays may override this default by setting the
         (prompt-suffix (concat prompt-suffix " "
                                (when conn--read-args-error-message
                                  (propertize conn--read-args-error-message
-                                             'face 'error)))))
+                                             'face 'error))))
+        (keymap (make-composed-keymap conn--dispatch-event-handler-maps
+                                      conn-dispatch-read-event-map)))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
@@ -1371,12 +1373,10 @@ Target overlays may override this default by setting the
             (when (characterp ev)
               (throw 'return ev)))
         (while t
-          (pcase (conn-with-overriding-map
-                     (make-composed-keymap conn--dispatch-event-handler-maps
-                                           conn-dispatch-read-event-map)
+          (pcase (conn-with-overriding-map keymap
                    (thread-first
                      (concat prompt
-                             (conn--dispatch-read-event-prefix)
+                             (conn--dispatch-read-event-prefix keymap)
                              ":" prompt-suffix)
                      (read-key-sequence-vector)
                      (key-binding t)))
@@ -1387,7 +1387,7 @@ Target overlays may override this default by setting the
                     (conn-with-input-method
                       (read-event
                        (concat prompt
-                               (conn--dispatch-read-event-prefix)
+                               (conn--dispatch-read-event-prefix keymap)
                                ":" prompt-suffix)
                        inherit-input-method))))
             (cmd
@@ -3706,15 +3706,13 @@ contain targets."
          (conn--dispatch-read-event-message-prefixes
           `(,(propertize (conn-action-pretty-print action t)
                          'face 'eldoc-highlight-function-argument)
-            ,(lambda ()
+            ,(lambda (_keymap)
                (conn-dispatch-target-message-prefixes
                 conn-dispatch-target-finder))
             ,(unless conn-dispatch-no-other-end
-               (lambda ()
+               (lambda (keymap)
                  (when-let* ((binding
-                              (where-is-internal 'dispatch-other-end
-                                                 conn-dispatch-read-event-map
-                                                 t)))
+                              (where-is-internal 'dispatch-other-end keymap t)))
                    (concat
                     (propertize (key-description binding)
                                 'face 'help-key-binding)
@@ -3723,14 +3721,12 @@ contain targets."
                      "other end"
                      'face (when conn-dispatch-other-end
                              'eldoc-highlight-function-argument))))))
-            ,(lambda ()
+            ,(lambda (keymap)
                (when-let* (((or (length> conn-targets 1)
                                 (advice-function-member-p 'conn--dispatch-restrict-windows
                                                           conn-target-window-predicate)))
                            (binding
-                            (where-is-internal 'restrict-windows
-                                               conn-dispatch-read-event-map
-                                               t)))
+                            (where-is-internal 'restrict-windows keymap t)))
                  (concat
                   (propertize (key-description binding)
                               'face 'help-key-binding)

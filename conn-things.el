@@ -723,9 +723,10 @@ words."))
      (conn-make-bounds
       thing arg
       (bounds-of-thing-at-point thing)))
-    ((let (and conn-this-command-handler
-               (pred identity))
-       (conn-command-mark-handler thing))
+    ((and thing
+          (let (and conn-this-command-handler
+                    (pred identity))
+            (conn-command-mark-handler thing)))
      (let (conn--last-perform-bounds)
        (deactivate-mark t)
        (pcase (prefix-numeric-value arg)
@@ -932,10 +933,7 @@ words."))
 (defun conn-bounds-before-point-exclusive (bounds)
   (conn-bounds-before-point bounds t))
 
-;;;;;; Check Region
-
-(put 'conn-check-bounds :conn-bounds-transform t)
-(put 'conn-check-bounds :conn-transform-description "check")
+;;;;;; Check Bounds
 
 (defvar-local conn-check-bounds-functions nil)
 

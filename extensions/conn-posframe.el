@@ -512,6 +512,7 @@
           (conn-with-dispatch-event-handler 'backspace
               (define-keymap
                 "<remap> <backward-delete-char>" 'backspace)
+              nil
               (lambda (cmd)
                 (when (and (eq cmd 'backspace)
                            (length> so-far 0))
