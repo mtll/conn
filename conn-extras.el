@@ -712,15 +712,15 @@
     ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
       ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
       ("annotations/all"
-       bookmark-show-annotation
-       bookmark-show-annotation-all)
-      ("select" bookmark-bmenu-select)
-      ("jump" bookmark-bmenu-jump)
+       bookmark-bmenu-show-annotation
+       bookmark-bmenu-show-all-annotations)
+      ("edit annotation" bookmark-bmenu-edit-annotation)
       ("this window" bookmark-bmenu-this-window))
-     (("mark for deletion" bookmark-bmenu-delete)
+     (("select" bookmark-bmenu-select)
+      ("mark for deletion" bookmark-bmenu-delete)
       ("execute delete" bookmark-bmenu-execute-deletions)
       ("save" bookmark-bmenu-save)
-      ("edit" bookmark-bmenu-edit))
+      ("jump" bookmark-jump))
      (("scroll up/down"
        scroll-up-command
        scroll-down-command)
@@ -735,9 +735,10 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'bookmark-bmenu-mode)
   "C-q" 'conn-bookmark-bmenu-quick-ref
+  "e" 'bookmark-bmenu-edit-annotation
   "a" 'execute-extended-command
-  "n" 'bookmark-show-annotation
-  "N" 'bookmark-show-all-annotations
+  "n" 'bookmark-bmenu-show-annotation
+  "N" 'bookmark-bmenu-show-all-annotations
   "v" 'bookmark-bmenu-mark
   "V" 'bookmark-bmenu-mark-all
   "K" 'scroll-up-command
