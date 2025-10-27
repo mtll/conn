@@ -463,8 +463,6 @@
                             :bounds-op ( :method (_self arg)
                                          (conn--push-ephemeral-mark)
                                          (conn-bounds-of 'conn-expand arg)))
-  "m" 'forward-sexp
-  ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
   "O" (conn-anonymous-thing
