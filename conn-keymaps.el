@@ -341,7 +341,6 @@
   "C-5" (conn-remap-key "C-x 5" t)
   "G" 'conn-surround
   "<escape>" 'conn-pop-state
-  "R" 'conn-emacs-state-overwrite
   "D" 'conn-duplicate
   "+" 'conn-set-register-separator
   "H" 'conn-expand

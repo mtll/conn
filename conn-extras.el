@@ -815,8 +815,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-integration-state 'help-mode)
-  "m" 'end-of-buffer
-  "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -834,8 +832,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-integration-state 'helpful-mode)
-  "m" 'end-of-buffer
-  "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer

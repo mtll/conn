@@ -2443,8 +2443,8 @@ Interactively `region-beginning' and `region-end'."
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
   "w" 'quoted-insert
-  "RET" 'conn-emacs-state-overwrite
-  "M-RET" 'conn-emacs-state-overwrite-binary)
+  "e" 'conn-emacs-state-overwrite
+  "E" 'conn-emacs-state-overwrite-binary)
 
 (cl-defgeneric conn-perform-change (cmd arg transform)
   (declare (conn-anonymous-thing-property :change-op)))
