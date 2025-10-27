@@ -693,7 +693,7 @@ words."))
 
 (defvar conn--bounds-of-in-progress nil)
 
-(defun conn-get-boundable-thing (thing &optional ignore-anonymous)
+(defun conn--get-boundable-thing (thing)
   (catch 'boundable
     (while (pcase thing
              ((or (and (pred conn-thing-command-p)
@@ -701,10 +701,7 @@ words."))
                   (pred conn-thing-p))
               (throw 'boundable thing))
              ((pred conn-anonymous-thing-p)
-              (if (and (conn-anonymous-thing-property thing :bounds-op)
-                       (not ignore-anonymous))
-                  (throw 'boundable thing)
-                (setq thing (conn-anonymous-thing-parent thing))))
+              (setq thing (conn-anonymous-thing-parent thing)))
              ((pred conn-bounds-p)
               (setq thing (conn-bounds-thing thing)))))))
 
@@ -721,7 +718,7 @@ words."))
               (cl-call-next-method))))))
 
 (cl-defmethod conn-bounds-of ((thing (conn-thing t)) arg)
-  (pcase (conn-get-boundable-thing thing t)
+  (pcase (conn--get-boundable-thing thing)
     ((and thing (pred conn-thing-p))
      (conn-make-bounds
       thing arg
@@ -1048,7 +1045,7 @@ words."))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
                                          beg end)
-  (setf thing (conn-get-boundable-thing thing t))
+  (setf thing (conn--get-boundable-thing thing))
   (when (or (conn-thing-p thing)
             (conn-thing-p (setf thing (conn-command-thing thing))))
     (save-excursion
