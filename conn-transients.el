@@ -324,6 +324,13 @@ of highlighting."
              ("forward" . identity)
              ("reverse" . nreverse)))
 
+(transient-define-argument conn--kapply-empty-infix ()
+  :class 'conn-transient-kapply-pipeline
+  :description "Empty"
+  :key "0"
+  :choices `(nil
+             ("skip" . conn--kapply-skip-empty)))
+
 (transient-define-argument conn--kapply-ibuffer-infix ()
   "Display buffers touched in an `ibuffer' buffer."
   :class 'conn-transient-kapply-pipeline
@@ -881,13 +888,13 @@ A zero means repeat until error."
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
+    [ ("E" "Edit Macro"
        (lambda (arg)
          (interactive "P")
          (conn-recursive-edit-kmacro arg)
          (transient-resume))
        :transient transient--do-suspend)
-      ("E" "Edit Lossage"
+      ("L" "Edit Lossage"
        (lambda ()
          (interactive)
          (conn-recursive-edit-lossage)
@@ -896,12 +903,14 @@ A zero means repeat until error."
   [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-state-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-macro-infix)
+      (conn--kapply-empty-infix)]]
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
       (conn--kapply-state-infix)
-      (conn--kapply-sort-infix)]
+      (conn--kapply-sort-infix)
+      (conn--kapply-empty-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)
       (conn--kapply-query-infix)]]
@@ -927,99 +936,6 @@ A zero means repeat until error."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix nil nil :scope arg))
 
-;;;###autoload (autoload 'conn-kapply-on-rectangle-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kapply-on-rectangle-prefix (arg)
-  "Transient menu for keyboard macro application on regions."
-  [ :description conn--kmacro-ring-display
-    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
-      ("p" "Previous" kmacro-cycle-ring-next :transient t)
-      ("M" "Display"
-       (lambda ()
-         (interactive)
-         (kmacro-display last-kbd-macro t))
-       :transient t)]
-    [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("F" "Set Format" conn--set-counter-format-infix)
-      ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
-       (lambda (arg)
-         (interactive "P")
-         (conn-recursive-edit-kmacro arg)
-         (transient-resume))
-       :transient transient--do-suspend)
-      ("E" "Edit Lossage"
-       (lambda ()
-         (interactive)
-         (conn-recursive-edit-lossage)
-         (transient-resume))
-       :transient transient--do-suspend)]]
-  [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
-    :description "Options:"
-    [ (conn--kapply-state-infix)
-      (conn--kapply-macro-infix)]]
-  [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
-    :description "Options:"
-    [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)
-      (conn--kapply-query-infix)]
-    [ (conn--kapply-macro-infix)
-      (conn--kapply-ibuffer-infix)]]
-  [ [ :description "With State:"
-      (conn--kapply-replace-rectangle-suffix)
-      (conn--kapply-emacs-rectangle-suffix)
-      (conn--kapply-command-rectangle-suffix)]
-    [ :description "Save State:"
-      (conn--kapply-merge-undo-infix)
-      (conn--kapply-save-windows-infix)
-      (conn--kapply-save-restriction-infix)
-      (conn--kapply-save-excursion-infix)]]
-  (interactive "P")
-  (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-on-rectangle-prefix nil nil :scope arg))
-
-;;;###autoload (autoload 'conn-kapply-on-thing-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kapply-on-thing-prefix (arg)
-  "Transient menu for keyboard macro application on regions."
-  [ :description conn--kmacro-ring-display
-    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
-      ("p" "Previous" kmacro-cycle-ring-next :transient t)
-      ("M" "Display"
-       (lambda ()
-         (interactive)
-         (kmacro-display last-kbd-macro t))
-       :transient t)]
-    [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("F" "Set Format" conn--set-counter-format-infix)
-      ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
-       (lambda (arg)
-         (interactive "P")
-         (conn-recursive-edit-kmacro arg)
-         (transient-resume))
-       :transient transient--do-suspend)
-      ("E" "Edit Lossage"
-       (lambda ()
-         (interactive)
-         (conn-recursive-edit-lossage)
-         (transient-resume))
-       :transient transient--do-suspend)]]
-  [ :description "Options:"
-    [ (conn--kapply-macro-infix)
-      (conn--kapply-ibuffer-infix)
-      (conn--kapply-query-infix)]]
-  [ [ :description "With State:"
-      (conn--kapply-replace-region-string)
-      (conn--kapply-emacs-region-string)
-      (conn--kapply-command-region-string)]
-    [ :description "Save State:"
-      (conn--kapply-merge-undo-infix)
-      (conn--kapply-save-windows-infix)
-      (conn--kapply-save-restriction-infix)
-      (conn--kapply-save-excursion-infix)]]
-  (interactive "P")
-  (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-on-thing-prefix nil nil :scope arg))
-
 ;;;###autoload (autoload 'conn-kapply-hightlight-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-hightlight-prefix ()
   "Transient menu for keyboard macro application on highlights."
@@ -1034,13 +950,13 @@ A zero means repeat until error."
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
+    [ ("E" "Edit Macro"
        (lambda (arg)
          (interactive "P")
          (conn-recursive-edit-kmacro arg)
          (transient-resume))
        :transient transient--do-suspend)
-      ("E" "Edit Lossage"
+      ("L" "Edit Lossage"
        (lambda ()
          (interactive)
          (conn-recursive-edit-lossage)
@@ -1080,13 +996,13 @@ A zero means repeat until error."
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
+    [ ("E" "Edit Macro"
        (lambda (arg)
          (interactive "P")
          (conn-recursive-edit-kmacro arg)
          (transient-resume))
        :transient transient--do-suspend)
-      ("E" "Edit Lossage"
+      ("L" "Edit Lossage"
        (lambda ()
          (interactive)
          (conn-recursive-edit-lossage)
@@ -1125,13 +1041,13 @@ A zero means repeat until error."
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
+    [ ("E" "Edit Macro"
        (lambda (arg)
          (interactive "P")
          (conn-recursive-edit-kmacro arg)
          (transient-resume))
        :transient transient--do-suspend)
-      ("E" "Edit Lossage"
+      ("L" "Edit Lossage"
        (lambda ()
          (interactive)
          (conn-recursive-edit-lossage)
@@ -1139,9 +1055,9 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)
-      (conn--kapply-query-infix)]
-    [ (conn--kapply-macro-infix)
+      (conn--kapply-state-infix)]
+    [ (conn--kapply-query-infix)
+      (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-regions-suffix)]
@@ -1169,13 +1085,13 @@ A zero means repeat until error."
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
-    [ ("e" "Edit Macro"
+    [ ("E" "Edit Macro"
        (lambda (arg)
          (interactive "P")
          (conn-recursive-edit-kmacro arg)
          (transient-resume))
        :transient transient--do-suspend)
-      ("E" "Edit Lossage"
+      ("L" "Edit Lossage"
        (lambda ()
          (interactive)
          (conn-recursive-edit-lossage)
@@ -1243,8 +1159,8 @@ A zero means repeat until error."
       ("A" "Append w/o Executing" (lambda ()
                                     (interactive)
                                     (kmacro-start-macro '(16))))]
-    [ ("e" "Edit Macro" kmacro-edit-macro)
-      ("E" "Edit Lossage" kmacro-edit-lossage)
+    [ ("E" "Edit Macro" kmacro-edit-macro)
+      ("L" "Edit Lossage" kmacro-edit-lossage)
       ("s" "Register Save" kmacro-to-register)
       ("c" "Apply Macro on Lines" apply-macro-to-region-lines)]
     [ ("b" "Bind Last Macro" conn-bind-last-kmacro-to-key)
@@ -1376,21 +1292,32 @@ A zero means repeat until error."
   [[ :description "Register"
      ("e" "Load" conn-register-load)
      ("u" "Unset" conn-unset-register)
-     ("s" "Set Separator" conn-set-register-separator)
+     ("+" "Set Separator" conn-set-register-separator)
      ("i" "Increment" increment-register)
-     ("l" "List" list-registers)]
+     ("L" "List" list-registers)]
    [ :description "Register Store"
-     ("j" "Point" point-to-register)
+     ("<" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
      ("b" "Buffer" buffer-to-register :if (lambda () (<= 31 emacs-major-version)))
      ("o" "File" file-to-register :if (lambda () (<= 31 emacs-major-version)))]
    [ ""
      ("f" "Dispatch" conn-last-dispatch-to-register)
-     ("m" "Macro" kmacro-to-register)
+     ("k" "Keyboard Macro" kmacro-to-register)
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
-     ("5" "Frameset" frameset-to-register)]])
+     ("5" "Frameset" frameset-to-register)]
+   [ "Bookmarks"
+     ("l" "List" (lambda ()
+                   (interactive)
+                   ;; Do this so that called-interactively will return
+                   ;; t in bookmark-bmenu-list.
+                   (call-interactively #'bookmark-bmenu-list)))
+     ("m" "Set" bookmark-set)
+     ("M" "Push" (lambda ()
+                   (interactive)
+                   (bookmark-set-no-overwrite nil t)))
+     ("j" "Jump" bookmark-jump)]])
 
 ;;;; Fill Prefix
 
