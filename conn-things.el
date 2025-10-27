@@ -41,6 +41,15 @@
      (and (symbolp ,cmd)
           (get ,cmd :conn-command-thing)))))
 
+(define-inline conn-thing-command-p (cmd)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (inline-letevals (cmd)
+    (inline-quote
+     (and (symbolp ,cmd)
+          (get ,cmd :conn-command-thing)
+          t))))
+
 (defun conn-set-command-thing (cmd thing)
   (put cmd :conn-command-thing thing))
 
@@ -257,7 +266,7 @@ order to mark the region that should be defined by any of COMMANDS."
     ((pred conn-anonymous-thing-p)
      (conn-anonymous-thing-parent thing))
     ((or (pred conn-thing-p)
-         (pred conn-command-thing))
+         (pred conn-thing-command-p))
      thing)))
 
 ;;;; Specializers
@@ -265,7 +274,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
        `(or (and (or (conn-thing-p ,thing)
-                     (conn-command-thing ,thing))
+                     (conn-thing-command-p ,thing))
                  ,thing)
             (and (conn-bounds-p ,thing)
                  (conn-bounds-thing ,thing))))
@@ -702,7 +711,7 @@ words."))
      (conn-make-bounds
       thing arg
       (bounds-of-thing-at-point thing)))
-    ((and thing (pred conn-command-thing))
+    ((and thing (pred conn-thing-command-p))
      (let (conn--last-perform-bounds)
        (deactivate-mark t)
        (pcase (prefix-numeric-value arg)
