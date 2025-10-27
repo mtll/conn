@@ -1770,7 +1770,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 (when backward (forward-line -1))
                 (cl-loop for i from 0
                          while (and (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
-                                    (not (bobp)))
+                                    (not (or (eobp) (bobp))))
                          do (forward-line (if backward -1 1))
                          finally return i))))
     (when (or (looking-at (rx (syntax whitespace)))
