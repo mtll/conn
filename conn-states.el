@@ -1256,13 +1256,6 @@ the state stays active if the previous command was a prefix command."
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state -80)
 
-(defun conn-setup-dired-state ()
-  "Set the base state to `conn-emacs-state' in dired buffers."
-  (when (derived-mode-p 'dired-mode)
-    (conn-push-state 'conn-emacs-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-dired-state -50)
-
 (defun conn-setup-null-state ()
   "Set the base state to `conn-null-state' in `conn-null-state-modes' buffers."
   (when (derived-mode-p conn-null-state-modes)

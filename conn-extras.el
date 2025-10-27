@@ -21,6 +21,33 @@
 
 (declare-function outline-previous-visible-heading "outline")
 
+;;; State
+
+(defvar conn-integration-modes nil)
+
+(conn-define-state conn-integration-state ()
+  :lighter "I"
+  :pop-alternate 'conn-emacs-state)
+
+(conn-define-state conn-one-emacs-state (conn-emacs-state
+                                         conn-autopop-state)
+  "Execute one command in `conn-emacs-state'."
+  :lighter "1E")
+
+(defun conn-one-emacs-state ()
+  (interactive)
+  (conn-push-state 'conn-one-emacs-state))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-integration-state)
+  "SPC" 'conn-one-emacs-state)
+
+(defun conn-setup-integration-state ()
+  (when (derived-mode-p conn-integration-modes)
+    (conn-push-state 'conn-integration-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-integration-state -20)
+
 ;;; Load Extensions
 
 ;;;; Calc
@@ -176,6 +203,8 @@
 
 ;;;; Dired
 
+(cl-pushnew 'dired-mode conn-integration-modes)
+
 (conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
@@ -237,9 +266,8 @@
   "M-s")
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'dired-mode)
   "C-q" 'conn-dired-quick-ref
-  "SPC <t>" conn-demap-key
   "<conn-dired-search-map> s" 'dired-do-isearch
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
   "<conn-dired-search-map> q" 'dired-do-find-regexp
@@ -428,6 +456,8 @@
 
 ;;;; Magit
 
+(cl-pushnew 'magit-section-mode conn-integration-modes)
+
 (conn-set-mode-property 'magit-section-mode :disable-mark-cursor t)
 
 (defvar conn-magit-ref
@@ -444,9 +474,8 @@
   (conn-quick-reference (list conn-magit-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'magit-section-mode)
   "C-q" 'conn-magit-quick-ref
-  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
   "i" 'magit-section-backward
@@ -459,6 +488,8 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Ibuffer
+
+(cl-pushnew 'ibuffer-mode conn-integration-modes)
 
 (conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
   "State for dispatch in `ibuffer-mode'."
@@ -597,10 +628,9 @@
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'ibuffer-mode)
   "f" 'conn-ibuffer-dispatch-state
   "C-q" 'conn-ibuffer-quick-ref
-  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   ";" 'conn-wincontrol
@@ -642,6 +672,8 @@
   "RET" 'ibuffer-visit-buffer)
 
 ;;;; Bookmark Bmenu
+
+(cl-pushnew 'bookmark-bmenu-mode conn-integration-modes)
 
 (declare-function bookmark-bmenu-unmark "bookmark")
 (declare-function bookmark-bmenu-mark "bookmark")
@@ -733,7 +765,7 @@
   (conn-quick-reference (list conn-bookmark-bmenu-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'bookmark-bmenu-mode)
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'bookmark-bmenu-mode)
   "C-q" 'conn-bookmark-bmenu-quick-ref
   "e" 'bookmark-bmenu-edit-annotation
   "a" 'execute-extended-command
@@ -779,9 +811,10 @@
 
 ;;;; Help
 
+(cl-pushnew 'help-mode conn-integration-modes)
+
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'help-mode)
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
@@ -797,9 +830,10 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
+(cl-pushnew 'helpful-mode conn-integration-modes)
+
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'helpful-mode)
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
   "h" 'conn-wincontrol-one-command
@@ -816,6 +850,8 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Info
+
+(cl-pushnew 'Info-mode conn-integration-modes)
 
 (declare-function Info-prev-reference "info")
 (declare-function Info-follow-nearest-node "info")
@@ -866,8 +902,7 @@
   (conn-quick-reference (list conn-info-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'Info-mode)
   "C-q" 'conn-info-quick-ref
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
@@ -890,10 +925,11 @@
 
 ;;;; Treemacs
 
+(cl-pushnew 'treemacs-mode conn-integration-modes)
+
 (conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'treemacs-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'treemacs-select-window
@@ -905,10 +941,11 @@
 
 ;;;; Messages
 
+(cl-pushnew 'messages-buffer-mode conn-integration-modes)
+
 (conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'messages-buffer-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -922,10 +959,11 @@
 
 ;;;; Debugger mode
 
+(cl-pushnew 'debugger-mode conn-integration-modes)
+
 (conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'debugger-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'debugger-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
@@ -937,11 +975,12 @@
 
 ;;;; Occur mode
 
+(cl-pushnew 'occur-mode conn-integration-modes)
+
 (conn-set-mode-property 'occur-mode :disable-mark-cursor t)
 (conn-set-mode-property 'occur-edit-mode :disable-mark-cursor nil)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'occur-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'occur-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
@@ -957,12 +996,13 @@
 
 ;;;; Compile mode
 
+(cl-pushnew 'compilation-mode conn-integration-modes)
+
 (conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
 (static-if (<= 31 emacs-major-version)
     (conn-set-mode-property 'grep-edit-mode :disable-mark-cursor nil))
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
-  "SPC <t>" conn-demap-key
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'compilation-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
