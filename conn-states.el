@@ -1206,8 +1206,14 @@ the state stays active if the previous command was a prefix command."
                                     (rectangle--pos-cols (point) (mark))))
                          nil))))
 
+(defun conn-pop-mark-state ()
+  (interactive)
+  (setq deactivate-mark t))
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "<remap> <conn-pop-state>" 'conn-pop-mark-state
+  "e" 'conn-emacs-state
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace
@@ -1225,7 +1231,6 @@ the state stays active if the previous command was a prefix command."
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
   (conn-state-defer
-    (setq deactivate-mark t)
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit))
       (unless conn-previous-mark-state
