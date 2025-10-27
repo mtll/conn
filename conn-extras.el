@@ -189,12 +189,11 @@
       ((action (conn-dispatch-action-argument))
        (`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument))
-       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+       (repeat (conn-dispatch-repeat-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
-     :restrict-windows restrict-windows
+     :restrict-windows t
      :other-end :no-other-end)))
 
 (define-keymap
@@ -344,7 +343,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-line))
                                       _arg)
-  'conn--dispatch-dired-lines)
+  #'conn--dispatch-dired-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
   (conn-make-action 'conn-dispatch-jump))
@@ -356,7 +355,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir))
                                       _arg)
-  'conn--dispatch-dired-subdir)
+  #'conn--dispatch-dired-subdir)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
   (conn-make-action 'conn-dispatch-jump))
@@ -367,7 +366,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline))
                                       _arg)
-  'conn--dispatch-dired-dirline)
+  #'conn--dispatch-dired-dirline)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
   (conn-make-action 'conn-dispatch-jump))
@@ -467,6 +466,21 @@
   :disable-mark-cursor t
   :suppress-input-method t)
 
+(defun conn-ibuffer-dispatch-state (&optional initial-arg)
+  (interactive "P")
+  (conn-read-args (conn-ibuffer-dispatch-state
+                   :prefix initial-arg
+                   :prompt "Ibuffer Dispatch")
+      ((action (conn-dispatch-action-argument))
+       (`(,thing ,thing-arg) (conn-thing-argument))
+       (transform (conn-transform-argument))
+       (repeat (conn-dispatch-repeat-argument)))
+    (conn-perform-dispatch
+     action thing thing-arg transform
+     :repeat repeat
+     :restrict-windows t
+     :other-end :no-other-end)))
+
 (conn-set-mode-property 'ibuffer-mode :disable-mark-cursor t)
 
 (defvar ibuffer-movement-cycle)
@@ -507,7 +521,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line))
                                       _arg)
-  'conn--dispatch-ibuffer-lines)
+  #'conn--dispatch-ibuffer-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
   (conn-make-action 'conn-dispatch-jump))
@@ -519,7 +533,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group))
                                       _arg)
-  'conn--dispatch-ibuffer-filter-group)
+  #'conn--dispatch-ibuffer-filter-group)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
   (conn-make-action 'conn-dispatch-jump))
@@ -579,11 +593,12 @@
   (interactive)
   (conn-quick-reference (list conn-ibuffer-ref conn-ibuffer-mark-ref)))
 
-(keymap-set (conn-get-major-mode-map 'conn-dispatch-state 'ibuffer-mode)
+(keymap-set (conn-get-state-map 'conn-ibuffer-dispatch-state)
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+  "f" 'conn-ibuffer-dispatch-state
   "C-q" 'conn-ibuffer-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
@@ -625,6 +640,120 @@
   "C" 'ibuffer-unmark-backward
   "o" 'ibuffer-visit-buffer-other-window
   "RET" 'ibuffer-visit-buffer)
+
+;;;; Bookmark Bmenu
+
+(declare-function bookmark-bmenu-unmark "bookmark")
+(declare-function bookmark-bmenu-mark "bookmark")
+
+(conn-define-state conn-bmenu-dispatch-state (conn-dispatch-targets-state)
+  "State for dispatch in `bookmark-bmenu-mode'."
+  :disable-mark-cursor t
+  :suppress-input-method t)
+
+(defun conn-bmenu-dispatch-state (&optional initial-arg)
+  (interactive "P")
+  (conn-read-args (conn-bmenu-dispatch-state
+                   :prefix initial-arg
+                   :prompt "Bookmark Dispatch")
+      ((action (conn-dispatch-action-argument))
+       (`(,thing ,thing-arg) (conn-thing-argument))
+       (transform (conn-transform-argument))
+       (repeat (conn-dispatch-repeat-argument)))
+    (conn-perform-dispatch
+     action thing thing-arg transform
+     :repeat repeat
+     :restrict-windows t
+     :other-end :no-other-end)))
+
+(oclosure-define (conn-dispatch-bmenu-mark
+                  (:parent conn-action)))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-bmenu-mark)))
+  (oclosure-lambda (conn-dispatch-bmenu-mark
+                    (description "Mark")
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode
+                                               (window-buffer win))
+                           'bookmark-bmenu-mode))))
+      (window pt _thing _thing-arg _transform)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (beginning-of-line)
+        (when (tabulated-list-get-entry)
+          (if (search-forward ">" (+ (point) tabulated-list-padding) t)
+              (bookmark-bmenu-unmark)
+            (bookmark-bmenu-mark)))))))
+
+(defun conn-bmenu-target-finder ()
+  (save-excursion
+    (with-restriction (window-start) (window-end)
+      (goto-char (point-min))
+      (while (progn
+               (when (tabulated-list-get-entry)
+                 (conn-make-target-overlay
+                  (+ (point) tabulated-list-padding) 0))
+               (forward-line)
+               (not (eobp)))))))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-bmenu-dispatch-state)
+  "f" 'conn-dispatch-bmenu-mark
+  "k" (conn-anonymous-thing
+        'line
+        :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
+
+(conn-set-mode-property 'bookmark-bmenu-mode :disable-mark-cursor t)
+
+(defvar conn-bookmark-bmenu-ref
+  (conn-reference-page "Bookmark Menu"
+    ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
+      ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
+      ("annotations/all"
+       bookmark-show-annotation
+       bookmark-show-annotation-all)
+      ("select" bookmark-bmenu-select)
+      ("jump" bookmark-bmenu-jump)
+      ("this window" bookmark-bmenu-this-window))
+     (("mark for deletion" bookmark-bmenu-delete)
+      ("execute delete" bookmark-bmenu-execute-deletions)
+      ("save" bookmark-bmenu-save)
+      ("edit" bookmark-bmenu-edit))
+     (("scroll up/down"
+       scroll-up-command
+       scroll-down-command)
+      ("line next/prev" next-line previous-line)
+      ("revert buffer" revert-buffer)
+      ("locate" bookmark-locate)))))
+
+(defun conn-bookmark-bmenu-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-bookmark-bmenu-ref)))
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'bookmark-bmenu-mode)
+  "C-q" 'conn-bookmark-bmenu-quick-ref
+  "a" 'execute-extended-command
+  "n" 'bookmark-show-annotation
+  "N" 'bookmark-show-all-annotations
+  "v" 'bookmark-bmenu-mark
+  "V" 'bookmark-bmenu-mark-all
+  "K" 'scroll-up-command
+  "I" 'scroll-down-command
+  "i" 'previous-line
+  "k" 'next-line
+  "h" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol
+  "j" 'bookmark-bmenu-select
+  "f" 'conn-bmenu-dispatch-state
+  "w" 'bookmark-bmenu-this-window
+  "b" 'bookmark-bmenu-unmark
+  "B" 'bookmark-bmenu-unmark-all
+  "L" 'bookmark-locate
+  "u" 'bookmark-bmenu-execute-deletions
+  "y" 'tabulated-list-sort)
 
 ;;;; Markdown
 
