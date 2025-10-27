@@ -153,6 +153,7 @@
   "C-s" 'conn-wincontrol-isearch
   "C-u" 'conn-wincontrol-universal-arg
   "DEL" 'conn-wincontrol-backward-delete-arg
+  "<backspace>" 'conn-wincontrol-backward-delete-arg
   "M-/" 'undelete-frame
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-<down>" 'windmove-swap-states-down
@@ -178,7 +179,7 @@
   "<up>" 'conn-wincontrol-windmove-up
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "<return>" 'conn-other-place-prefix
+  "h" 'conn-other-place-prefix
   "<tab>" 'other-window
   "TAB" 'other-window
   "B" 'tab-bar-move-window-to-tab
@@ -204,7 +205,8 @@
   "e" 'conn-wincontrol-exit
   "f" 'conn-goto-window
   "g" (conn-remap-key "M-g" t t)
-  "h" 'kill-buffer-and-window
+  "X" 'kill-buffer-and-window
+  "[" 'kill-buffer-and-window
   "i" 'conn-wincontrol-scroll-down
   "j" 'conn-previous-buffer
   "k" 'conn-wincontrol-scroll-up
@@ -325,6 +327,7 @@
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-setup (&optional preserve-state)
+  (setq conn--wincontrol-error-message nil)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   ;; Must be before 'repeat-post-hook
   (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
