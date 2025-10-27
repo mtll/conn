@@ -1775,8 +1775,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          finally return i))))
     (when (or (looking-at (rx (syntax whitespace)))
               (looking-back (rx (syntax whitespace)) 1))
-      (save-excursion
-        (fixup-whitespace)))
+      (fixup-whitespace)
+      (when (looking-at "[ \t]")
+        (forward-char 1)))
     (when (and (conn-get-thing-property bounds :linewise)
                (save-excursion
                  (beginning-of-line)
