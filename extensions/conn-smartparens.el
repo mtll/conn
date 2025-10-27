@@ -129,17 +129,19 @@
                     (save-excursion
                       (goto-char beg)
                       (max (point)
-                           (plist-get (sp-get-thing) :beg)))))
-               (while (and (> (point) beg-sexp) (sp-backward-sexp)))
+                           (plist-get (sp-get-thing) :beg))))
+                   thing)
+               (while (and (> (point) beg-sexp)
+                           (setq thing (sp-backward-sexp))))
                (when conn-sp-sexp-include-prefix-chars-mode
-                 (backward-prefix-chars)))))
+                 (backward-char (length (sp-get thing :prefix)))))))
       (conn--push-ephemeral-mark))))
 
 (defun conn-sp-backward-sexp (&optional arg)
   (interactive "^p")
-  (sp-backward-sexp arg)
-  (when conn-sp-sexp-include-prefix-chars-mode
-    (backward-prefix-chars)))
+  (let ((thing (sp-backward-sexp arg)))
+    (when conn-sp-sexp-include-prefix-chars-mode
+      (backward-char (length (sp-get thing :prefix))))))
 
 (conn-register-thing-commands
  'sp-sexp 'conn-sp-sexp-handler
