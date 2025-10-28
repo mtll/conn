@@ -68,10 +68,10 @@
 
 ;;;;; Mode Keymaps
 
-(define-keymap
-  :keymap (conn-get-major-mode-map 'conn-command-state 'compilation-mode)
-  "<" 'previous-error-no-select
-  ">" 'next-error-no-select)
+(defvar-keymap conn-error-repeat-map
+  :repeat t
+  "i" 'previous-error
+  "k" 'next-error)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
@@ -151,6 +151,9 @@
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
+  "i" 'previous-error
+  "k" 'next-error
+  "m" 'imenu
   "r" 'xref-find-references
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
@@ -169,11 +172,6 @@
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
   "p" 'pop-global-mark)
-
-(defvar-keymap conn-error-repeat-map
-  :repeat t
-  "l" 'previous-error
-  "j" 'next-error)
 
 ;;;;; Misc Maps
 

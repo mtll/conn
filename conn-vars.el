@@ -269,6 +269,7 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 (conn-define-remap-keymap conn-goto-remap
     "Conn Search Map"
   [conn-goto-map]
+  conn-goto-map
   (:without-conn-maps "M-g"))
 
 (conn-define-remap-keymap conn-thing-remap
