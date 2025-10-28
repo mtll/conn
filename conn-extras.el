@@ -218,11 +218,12 @@
       ((action (conn-dispatch-action-argument))
        (`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument)))
+       (repeat (conn-dispatch-repeat-argument))
+       (restrict-windows (conn-dispatch-restrict-windows-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
-     :restrict-windows t
+     :restrict-windows restrict-windows
      :other-end :no-other-end)))
 
 (define-keymap
@@ -505,11 +506,12 @@
       ((action (conn-dispatch-action-argument))
        (`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument)))
+       (repeat (conn-dispatch-repeat-argument))
+       (restrict-windows (conn-dispatch-restrict-windows-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
-     :restrict-windows t
+     :restrict-windows restrict-windows
      :other-end :no-other-end)))
 
 (conn-set-mode-property 'ibuffer-mode :disable-mark-cursor t)
