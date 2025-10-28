@@ -967,8 +967,10 @@
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
-  "i" 'scroll-down
-  "k" 'scroll-up
+  "i" 'backtrace-backward-frame
+  "k" 'backtrace-forward-frame
+  "I" 'scroll-down
+  "K" 'scroll-up
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))

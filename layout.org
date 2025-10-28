@@ -59,4 +59,3 @@ the following additions:
 | "v"   | rectangle-mark-mode            |
 | "g"   | surround region                |
 | "RET" | duplicate region               |
-
