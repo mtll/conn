@@ -39,8 +39,10 @@
   (conn-push-state 'conn-one-emacs-state))
 
 (define-keymap
+  :suppress t
   :keymap (conn-get-state-map 'conn-integration-state)
-  "SPC" 'conn-one-emacs-state)
+  "SPC" 'conn-one-emacs-state
+  "<escape>" 'conn-pop-state)
 
 (defun conn-setup-integration-state ()
   (when (derived-mode-p conn-integration-modes)
