@@ -83,13 +83,11 @@
 
 ;;;; Edebug
 
-(with-eval-after-load 'edebug
-  (defvar edebug-mode)
-  (defun conn--edebug-toggle-emacs-state ()
-    (if edebug-mode
-        (conn-push-state 'conn-emacs-state)
-      (conn-pop-state)))
-  (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
+(defun conn--edebug-toggle-emacs-state ()
+  (if (bound-and-true-p edebug-mode)
+      (conn-push-state 'conn-emacs-state)
+    (conn-pop-state)))
+(add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state)
 
 ;;;; Outline
 
