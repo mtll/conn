@@ -99,7 +99,8 @@
 
 ;;;;; Top-level Command State Maps
 
-(defvar-keymap conn-default-region-map
+(define-keymap
+  :keymap conn-default-region-map
   "m" 'conn-replace
   "u" 'conn-regexp-replace
   "'" 'conn-kapply-on-thing-prefix
@@ -117,7 +118,8 @@
   "N" 'conn-narrow-indirect
   "n" 'conn-narrow-to-thing)
 
-(defvar-keymap conn-default-edit-map
+(define-keymap
+  :keymap conn-default-edit-map
   "v" 'diff-buffer-with-file
   "SPC" 'whitespace-cleanup
   "f" 'conn-fill-prefix
@@ -137,7 +139,8 @@
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule)
 
-(defvar-keymap conn-search-map
+(define-keymap
+  :keymap conn-search-map
   "f" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-hightlight-prefix
   "s" 'conn-isearch-forward
@@ -154,7 +157,8 @@
   :repeat t
   "n" 'pop-global-mark)
 
-(defvar-keymap conn-goto-map
+(define-keymap
+  :keymap conn-goto-map
   "i" 'previous-error
   "k" 'next-error
   "n" 'pop-global-mark
@@ -234,7 +238,8 @@
   ")" 'forward-list
   "(" 'backward-list)
 
-(defvar-keymap conn-default-thing-map
+(define-keymap
+  :keymap conn-default-thing-map
   "w" 'forward-whitespace
   "W" 'conn-backward-whitespace
   ">" 'forward-line
@@ -437,7 +442,7 @@
   "O" (conn-anonymous-thing
         'forward-word
         :description (:method (_self) "all-words")
-        :target-finder ( :method (_arg)
+        :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
         'forward-symbol

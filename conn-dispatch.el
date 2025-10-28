@@ -170,6 +170,7 @@ strings have `conn-dispatch-label-face'."
 
 (defvar conn--dispatch-event-handler-maps nil)
 (defvar conn--dispatch-read-event-handlers nil)
+(defvar conn--dispatch-read-event-message-prefixes nil)
 
 (defmacro conn-with-dispatch-event-handler (tag keymap message-fn handler &rest body)
   (declare (indent 4))
@@ -452,6 +453,8 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
+
+(defvar conn-dispatch-override-target-finders nil)
 
 (defvar dispatch-quit-flag nil)
 
@@ -997,8 +1000,6 @@ Optionally the overlay may have an associated THING."
 
 (defvar conn-dispatch-target-finder nil)
 
-(defvar conn--dispatch-read-event-message-prefixes nil)
-
 (defvar conn-dispatch-label-function 'conn-dispatch-smart-labels)
 
 (defvar conn-default-label-padding-function 'conn--centered-padding
@@ -1450,6 +1451,9 @@ Target overlays may override this default by setting the
 
 ;;;;; Perform Dispatch Loop
 
+(defvar conn-dispatch-in-progress nil)
+(defvar conn--dispatch-undo-change-groups nil)
+
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
@@ -1679,8 +1683,6 @@ Target overlays may override this default by setting the
   '((t (:inherit (shadow tooltip) :extend t)))
   "Face for context region separator."
   :group 'conn)
-
-(defvar conn-dispatch-override-target-finders nil)
 
 (defun conn-target-nearest-op (a b)
   (declare (side-effect-free t)
@@ -2539,8 +2541,6 @@ contain targets."
 
 ;;;;; Dispatch Actions
 
-(defvar conn-dispatch-in-progress nil)
-
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
@@ -2553,8 +2553,6 @@ contain targets."
   (always-prompt :type boolean))
 
 (defvar conn-dispatch-amalgamate-undo nil)
-
-(defvar conn--dispatch-undo-change-groups nil)
 
 (defmacro conn-dispatch-undo-case (depth &rest body)
   (declare (indent 1))
@@ -4058,7 +4056,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line))
                                       _arg)
-  'conn-dispatch-visual-lines)
+  #'conn-dispatch-visual-lines)
 
 (conn-register-thing-commands 'dispatch nil 'conn-dispatch)
 
@@ -4091,29 +4089,29 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line))
                                       _arg)
-  'conn-dispatch-lines)
+  #'conn-dispatch-lines)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column))
                                       _arg)
-  'conn-dispatch-columns)
+  #'conn-dispatch-columns)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
   (conn-make-action 'conn-dispatch-jump))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line))
                                       _arg)
-  'conn-dispatch-lines)
+  #'conn-dispatch-lines)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line))
                                       _arg)
-  'conn-dispatch-inner-lines)
+  #'conn-dispatch-inner-lines)
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line))
                                       _arg)
-  'conn-dispatch-end-of-inner-lines)
+  #'conn-dispatch-end-of-inner-lines)
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line-dwim))
                                       _arg)
-  'conn-dispatch-end-of-inner-lines)
+  #'conn-dispatch-end-of-inner-lines)
 
 (provide 'conn-dispatch)

@@ -25,6 +25,12 @@
 (defvar conn--last-perform-bounds nil)
 (defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
 
+(defvar-keymap conn-goto-map)
+(defvar-keymap conn-default-thing-map)
+(defvar-keymap conn-default-region-map)
+(defvar-keymap conn-default-edit-map)
+(defvar-keymap conn-search-map)
+
 ;;;; Custom Variables
 
 (defgroup conn nil
