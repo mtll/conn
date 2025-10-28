@@ -150,9 +150,14 @@
   "m p" 'conn-multi-isearch-project
   "m f" 'multi-isearch-files)
 
+(defvar-keymap conn-global-mark-repeat-map
+  :repeat t
+  "n" 'pop-global-mark)
+
 (defvar-keymap conn-goto-map
   "i" 'previous-error
   "k" 'next-error
+  "n" 'pop-global-mark
   "m" 'imenu
   "r" 'xref-find-references
   "d" 'xref-find-definitions
@@ -168,10 +173,6 @@
   "L" 'conn-unpop-movement-ring
   "j" 'conn-pop-movement-ring
   "l" 'conn-unpop-movement-ring)
-
-(defvar-keymap conn-global-mark-repeat-map
-  :repeat t
-  "p" 'pop-global-mark)
 
 ;;;;; Misc Maps
 
