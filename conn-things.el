@@ -150,14 +150,19 @@
                 (cl-assert (not (memq fn seen)) nil
                            "Duplicate method in anonymous thing definition")
                 (push fn seen))
-           nconc (let* ((cnm (gensym "thing--cnm"))
-                        (method-expander
-                         (lambda (args &rest body)
-                           `(lambda ,(cons cnm args)
-                              ,@(macroexp-unprogn
-                                 (macroexpand-all
-                                  `(cl-flet ((cl-call-next-method ,cnm))
-                                     ,@body)))))))
+           nconc (let ((method-expander
+                        (lambda (args &rest body)
+                          (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                            (`#'(lambda ,args . ,body)
+                             (let ((parsed-body (macroexp-parse-body body))
+                                   (cnm (gensym "thing--cnm")))
+                               `#'(lambda ,(cons cnm args)
+                                    ,@(car parsed-body)
+                                    ,(macroexpand-all
+                                      `(cl-flet ((cl-call-next-method ,cnm))
+                                         ,@(cdr parsed-body))))))
+                            (result (error "Unexpected macroexpansion result :%S"
+                                           result))))))
                    `(',(car seen)
                      ,(macroexpand-all
                        var
@@ -207,15 +212,16 @@
 (eval-and-compile
   (defun conn--set-anonymous-thing-property (f args &rest properties)
     `(progn
-       (let ((props ',(cons (intern (concat ":" (symbol-name f)))
-                            properties)))
-         (dolist (prop props)
-           (when-let* ((gfn (alist-get prop (get 'conn-anonymous-thing :known-properties)))
-                       (_ (not (eq gfn ',f))))
-             (error "%s already an anonymous thing property for %s" prop gfn)))
-         (dolist (prop props)
-           (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
-                 ',f)))
+       (eval-and-compile
+         (let ((props ',(cons (intern (concat ":" (symbol-name f)))
+                              properties)))
+           (dolist (prop props)
+             (when-let* ((gfn (alist-get prop (get 'conn-anonymous-thing :known-properties)))
+                         (_ (not (eq gfn ',f))))
+               (error "%s already an anonymous thing property for %s" prop gfn)))
+           (dolist (prop props)
+             (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
+                   ',f))))
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
                          &rest rest)
