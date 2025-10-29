@@ -142,10 +142,10 @@
        (cl-callf sort nodes
          :key (pcase-lambda (`(,_ ,beg . ,end))
                 (- end beg)))
-       (pcase (car nodes)
+       (pcase-exhaustive (car nodes)
          (`(,_ ,beg . ,end)
-          (goto-char beg)
-          (conn--push-ephemeral-mark end)
+          (goto-char end)
+          (conn--push-ephemeral-mark beg)
           (activate-mark)))
        (cl-flet ((display-handler (prompt _args)
                    (message
@@ -175,16 +175,16 @@
                     (setq nodes (nconc (last nodes) (butlast nodes)))
                     (pcase (car nodes)
                       (`(,_ ,beg . ,end)
-                       (goto-char beg)
-                       (conn--push-ephemeral-mark end)))
+                       (goto-char end)
+                       (conn--push-ephemeral-mark beg)))
                     (conn-read-args-handle)
                     self)
                    ('conn-expand
                     (setq nodes (nconc (cdr nodes) (list (car nodes))))
                     (pcase (car nodes)
                       (`(,_ ,beg . ,end)
-                       (goto-char beg)
-                       (conn--push-ephemeral-mark end)))
+                       (goto-char end)
+                       (conn--push-ephemeral-mark beg)))
                     (conn-read-args-handle)
                     self)
                    ((or 'end 'exit-recursive-edit)
@@ -267,8 +267,7 @@
                                                :key #'cdr
                                                :test #'equal)
                                    2)
-                      (move-overlay ov (overlay-start ov) (1+ (overlay-start ov)))
-                      (overlay-put ov 'display (truncate-string-ellipsis)))
+                      (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
                   (overlay-put
                    (conn-make-target-overlay beg 0)
                    'thing (conn-anonymous-thing
