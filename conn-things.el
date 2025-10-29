@@ -143,7 +143,6 @@
   "Make an anonymous thing."
   (declare (indent 0))
   (cl-assert (plistp properties))
-  (require 'cl-lib)
   (cl-loop with known = (get 'conn-anonymous-thing :known-properties)
            with seen = nil
            for (key var) on properties by #'cddr
@@ -159,10 +158,9 @@
                                    (cnm (gensym "thing--cnm")))
                                `#'(lambda ,(cons cnm args)
                                     ,@(car parsed-body)
-                                    ,@(macroexp-unprogn
-                                       (macroexpand-all
-                                        `(cl-flet ((cl-call-next-method ,cnm))
-                                           ,@(cdr parsed-body)))))))
+                                    ,(macroexpand-all
+                                      `(cl-flet ((cl-call-next-method ,cnm))
+                                         ,@(cdr parsed-body))))))
                             (result (error "Unexpected macroexpansion result :%S"
                                            result))))))
                    `(',(car seen)
