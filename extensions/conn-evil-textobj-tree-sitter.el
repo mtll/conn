@@ -30,7 +30,7 @@
   (groups nil :type (or cons symbol) :read-only t)
   (query nil :type list :read-only t))
 
-(defvar conn-etts--block-size 10000)
+(defvar conn-etts--chunk-size 10000)
 
 (defconst conn-etts--query-cache
   (make-hash-table :test 'eq))
@@ -58,6 +58,7 @@
   (let (regions)
     (pcase-dolist (`(,group ,tbeg . ,tend) groups)
       (dolist (capture captures)
+        (cl-callf nreverse capture)
         (if-let* ((beg (alist-get tbeg capture)))
             (when-let* ((end (alist-get tend capture)))
               (push (cons (treesit-node-start beg)
@@ -89,8 +90,8 @@
                    (> beg (point-min))
                  (< beg (point-max)))
           (setq end (if (< arg 0)
-                        (max (point-min) (- beg conn-etts--block-size))
-                      (min (point-max) (+ beg conn-etts--block-size)))
+                        (max (point-min) (- beg conn-etts--chunk-size))
+                      (min (point-max) (+ beg conn-etts--chunk-size)))
                 captures (conn-etts--get-captures thing beg end)
                 beg end)
           (let ((pending (conn-etts--filter-captures groups captures)))
