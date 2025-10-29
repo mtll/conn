@@ -106,6 +106,8 @@ which see.")
 
 (cl-defstruct (conn-dispatch-label)
   "State for a dispatch label."
+  (prefix nil :type (or string nil))
+  (suffix nil :type (or string nil))
   (string nil :type string)
   (narrowed-string nil :type string)
   (overlay nil :type overlay)
@@ -1072,14 +1074,17 @@ Target overlays may override this default by setting the
            return (1- end)))
 
 (defun conn--dispatch-setup-label-pixelwise (label)
-  (pcase-let (((cl-struct conn-dispatch-label
-                          (narrowed-string string)
-                          overlay
-                          target
-                          padding-function)
-               label))
+  (pcase-let* (((cl-struct conn-dispatch-label
+                           prefix
+                           suffix
+                           (narrowed-string string)
+                           overlay
+                           target
+                           padding-function)
+                label)
+               (full-string (concat prefix string suffix)))
     (let ((display-width
-           (conn--string-pixel-width string
+           (conn--string-pixel-width full-string
                                      (thread-first
                                        (overlay-get overlay 'window)
                                        (window-buffer))))
@@ -1167,11 +1172,11 @@ Target overlays may override this default by setting the
                 (move-overlay overlay (overlay-start overlay) end)))
             (cond
              ((= (overlay-start overlay) (overlay-end overlay))
-              (overlay-put overlay 'before-string string))
+              (overlay-put overlay 'before-string full-string))
              ((overlay-get overlay 'after-string)
-              (overlay-put overlay 'display string))
+              (overlay-put overlay 'display full-string))
              (t
-              (overlay-put overlay 'display string)
+              (overlay-put overlay 'display full-string)
               (if padding-function
                   (funcall padding-function
                            overlay
@@ -1184,11 +1189,14 @@ Target overlays may override this default by setting the
         (buffer-local-restore-state old-state)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
-  (pcase-let (((cl-struct conn-dispatch-label
-                          (narrowed-string string)
-                          overlay
-                          target)
-               label))
+  (pcase-let* (((cl-struct conn-dispatch-label
+                           prefix
+                           suffix
+                           (narrowed-string string)
+                           overlay
+                           target)
+                label)
+               (full-string (concat prefix string suffix)))
     (unless (= (overlay-start overlay) (point-max))
       (let* ((win (overlay-get overlay 'window))
              (beg (overlay-start overlay))
@@ -1213,7 +1221,7 @@ Target overlays may override this default by setting the
                  str)
                 (overlay-put overlay 'after-string str))))
            ((or (= pt (point-max))
-                (= (- pt beg) (length string)))
+                (= (- pt beg) (length full-string)))
             (setq end pt))
            ((dolist (ov (overlays-in pt (1+ pt)) end)
               (when (and (eq 'conn-target-overlay
@@ -1226,8 +1234,8 @@ Target overlays may override this default by setting the
            (t (cl-incf pt))))
         (move-overlay overlay (overlay-start overlay) end)))
     (if (= (overlay-start overlay) (overlay-end overlay))
-        (overlay-put overlay 'before-string string)
-      (overlay-put overlay 'display string))))
+        (overlay-put overlay 'before-string full-string)
+      (overlay-put overlay 'display full-string))))
 
 (defconst conn--dispatch-window-lines-cache (make-hash-table :test 'eq))
 
@@ -1267,9 +1275,9 @@ Target overlays may override this default by setting the
           ((beg (overlay-end target))
            (ov (make-overlay beg beg (overlay-buffer target))
                (delete-overlay ov))
-           (str (propertize string
-                            'face (or (overlay-get target 'label-face)
-                                      'conn-dispatch-label-face))))
+           (face (or (overlay-get target 'label-face)
+                     'conn-dispatch-label-face))
+           (str (propertize string 'face face)))
         (setf (overlay-get ov 'category) 'conn-label-overlay
               (overlay-get ov 'window) window
               (overlay-get target 'conn-label)
@@ -1279,6 +1287,10 @@ Target overlays may override this default by setting the
                                  'conn--dispatch-setup-label-charwise)
                :padding-function (overlay-get target 'padding-function)
                :string str
+               :prefix (when-let* ((pfx (overlay-get target 'label-prefix)))
+                         (propertize pfx 'face face))
+               :suffix (when-let* ((sfx (overlay-get target 'label-suffix)))
+                         (propertize sfx 'face face))
                :narrowed-string str
                :overlay ov
                :target target))))))
