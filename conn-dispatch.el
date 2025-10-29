@@ -1039,27 +1039,31 @@ Target overlays may override this default by setting the
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
-(defun conn--right-justify-padding (overlay width)
+(defun conn--right-justify-padding (overlay width face)
   (overlay-put overlay 'after-string
-               (propertize " " 'display `(space :width (,width)))))
+               (propertize " "
+                           'display `(space :width (,width))
+                           'face face)))
 
-(defun conn--left-justify-padding (overlay width)
+(defun conn--left-justify-padding (overlay width face)
   (overlay-put overlay 'before-string
-               (propertize " " 'display `(space :width (,width)))))
+               (propertize " "
+                           'display `(space :width (,width))
+                           'face face)))
 
-(defun conn--centered-padding (overlay width)
+(defun conn--centered-padding (overlay width face)
   (let* ((left (min 15 (floor width 2)))
          (right (max (- width 15) (ceiling width 2))))
     (overlay-put overlay 'before-string
                  (propertize
                   " "
                   'display `(space :width (,left))
-                  'face 'conn-dispatch-label-face))
+                  'face face))
     (overlay-put overlay 'after-string
                  (propertize
                   " "
                   'display `(space :width (,right))
-                  'face 'conn-dispatch-label-face))))
+                  'face face))))
 
 (defun conn--dispatch-eol (pt window)
   (declare (important-return-value t))
@@ -1091,6 +1095,7 @@ Target overlays may override this default by setting the
             (unless (= (overlay-start overlay) (point-max))
               (let* ((win (overlay-get target 'window))
                      (beg (overlay-end target))
+                     (beg-width nil)
                      (end nil)
                      (line-end
                       (or (conn--dispatch-eol beg win)
@@ -1123,16 +1128,28 @@ Target overlays may override this default by setting the
                         (overlay-put overlay 'after-string str))))
                    ;; If the label overlay is wider than the label
                    ;; string we are done.
-                   ((pcase-let ((`(,width . ,_)
-                                 (save-excursion
+                   ((let ((width (save-excursion
                                    (with-restriction beg pt
-                                     (window-text-pixel-size
-                                      (overlay-get overlay 'window)
-                                      beg pt)))))
-                      (when (or (= pt (point-max))
-                                (>= width display-width))
-                        (setq padding-width (max (- width display-width) 0)
-                              end pt))))
+                                     (- (car (window-text-pixel-size
+                                              (overlay-get overlay 'window)
+                                              beg pt))
+                                        ;; Subtract the width of any
+                                        ;; before strings
+                                        (with-memoization beg-width
+                                          (car (window-text-pixel-size
+                                                (overlay-get overlay 'window)
+                                                beg beg))))))))
+                      ;; FIXME: This doesn't handle zero length
+                      ;;        overlays with after strings.
+                      (cond ((and (get-char-property pt 'after-string)
+                                  (= (1+ pt)
+                                     (next-single-char-property-change
+                                      pt 'after-string nil (+ 2 pt))))
+                             (setq end (1+ pt)))
+                            ((or (= pt (point-max))
+                                 (>= width display-width))
+                             (setq padding-width (max (- width display-width) 0)
+                                   end pt)))))
                    ;; If we are abutting another target overlay then end
                    ;; the label overlay here so that we don't hide it.
                    ((dolist (ov (overlays-in pt (1+ pt)) end)
@@ -1156,8 +1173,14 @@ Target overlays may override this default by setting the
              (t
               (overlay-put overlay 'display string)
               (if padding-function
-                  (funcall padding-function overlay padding-width)
-                (funcall conn-default-label-padding-function overlay padding-width)))))
+                  (funcall padding-function
+                           overlay
+                           padding-width
+                           (overlay-get target 'label-face))
+                (funcall conn-default-label-padding-function
+                         overlay
+                         padding-width
+                         (overlay-get target 'label-face))))))
         (buffer-local-restore-state old-state)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
@@ -1725,7 +1748,7 @@ Target overlays may override this default by setting the
                             nil
                             'default)))))
         (apply #'color-rgb-to-hex
-               (color-hsl-to-rgb h s (* l 0.8))))))
+               (color-hsl-to-rgb h s (* l 1.1))))))
 
 (cl-defgeneric conn-dispatch-setup-label-faces (target-finder)
   ( :method (_target-finder)
@@ -2425,7 +2448,8 @@ contain targets."
                      (not (invisible-p (point))))
             (conn-make-target-overlay
              (point) 0
-             :padding-function 'conn--right-justify-padding))
+             :padding-function (lambda (ov width _face)
+                                 (conn--right-justify-padding ov width nil))))
           (while (/= (point) (point-max))
             (forward-line)
             (when (and (bolp)
@@ -2441,7 +2465,8 @@ contain targets."
                                  (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay
                  (point) 0
-                 :padding-function 'conn--right-justify-padding)))))))))
+                 :padding-function (lambda (ov width _face)
+                                     (conn--right-justify-padding ov width nil)))))))))))
 
 (defun conn-dispatch-end-of-lines ()
   (dolist (win (conn--get-target-windows))
@@ -2523,7 +2548,8 @@ contain targets."
         (conn-make-target-overlay
          (point) 0
          :thing 'char
-         :padding-function 'conn--right-justify-padding)
+         :padding-function (lambda (ov width _face)
+                             (conn--right-justify-padding ov width nil)))
         (vertical-motion 1)
         (while (<= (point) (window-end))
           (if (= (point) (point-max))
@@ -2536,7 +2562,8 @@ contain targets."
             (conn-make-target-overlay
              (point) 0
              :thing 'char
-             :padding-function 'conn--right-justify-padding))
+             :padding-function (lambda (ov width _face)
+                                 (conn--right-justify-padding ov width nil))))
           (vertical-motion 1))))))
 
 ;;;;; Dispatch Actions
