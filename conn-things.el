@@ -29,6 +29,17 @@
 
 ;;;; Thing Types
 
+(cl-defstruct (conn-bounds
+               (:constructor conn--make-bounds)
+               (:conc-name conn-bounds--))
+  (thing nil :type symbol :read-only t)
+  (arg nil :type (or nil integer) :read-only t)
+  (whole nil :type cons)
+  (properties nil :type list))
+
+(defalias 'conn-bounds-thing 'conn-bounds--thing)
+(defalias 'conn-bounds-arg 'conn-bounds--arg)
+
 (cl-deftype conn-thing-function () '(satisfies conn-command-thing))
 
 (cl-deftype conn-thing () '(satisfies conn-thing-p))
@@ -179,7 +190,7 @@
   (declare (side-effect-free t)
            (gv-setter
             (lambda (val)
-              `(setf (plist-get (conn-anonymous-thing-properties ,object) ,property)
+              `(setf (plist-get (conn--anonymous-thing-properties ,object) ,property)
                      ,val))))
   (inline-quote
    (plist-get (conn--anonymous-thing-properties ,object) ,property)))
@@ -578,17 +589,6 @@ words."))
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
 ;;;; Bounds of Thing
-
-(cl-defstruct (conn-bounds
-               (:constructor conn--make-bounds)
-               (:conc-name conn-bounds--))
-  (thing nil :type symbol :read-only t)
-  (arg nil :type (or nil integer) :read-only t)
-  (whole nil :type cons)
-  (properties nil :type list))
-
-(defalias 'conn-bounds-thing 'conn-bounds--thing)
-(defalias 'conn-bounds-arg 'conn-bounds--arg)
 
 (defun conn-bounds (bounds &optional transform)
   (declare (gv-setter
