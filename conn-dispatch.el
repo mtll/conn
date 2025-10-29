@@ -1690,9 +1690,10 @@ Target overlays may override this default by setting the
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
   (when conn--dispatch-undo-change-groups
     ;; pop the current loop's change group first
-    (pop conn--dispatch-undo-change-groups)
-    (pcase-dolist (`(,_ . ,undo-fn) (pop conn--dispatch-undo-change-groups))
-      (funcall undo-fn :undo)))
+    (dotimes (_ 2)
+      (pcase-dolist (`(,_ . ,undo-fn)
+                     (pop conn--dispatch-undo-change-groups))
+        (funcall undo-fn :undo))))
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-change-target (thing thing-arg thing-transform)
@@ -1740,15 +1741,13 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-label-alt-background ()
   (or conn-dispatch-label-alt-face
-      (pcase-let ((`(,h ,s ,l)
-                   (apply #'color-rgb-to-hsl
-                          (color-name-to-rgb
-                           (face-background
-                            'conn-dispatch-label-face
-                            nil
-                            'default)))))
-        (apply #'color-rgb-to-hex
-               (color-hsl-to-rgb h s (* l 1.1))))))
+      (pcase (thread-last
+               (face-background 'conn-dispatch-label-face)
+               (color-name-to-rgb)
+               (apply #'color-rgb-to-hsl))
+        (`(,h ,s ,l)
+         (apply #'color-rgb-to-hex (color-hsl-to-rgb h s (* l 1.1))))
+        (_ 'conn-dispatch-label-face))))
 
 (cl-defgeneric conn-dispatch-setup-label-faces (target-finder)
   ( :method (_target-finder)
