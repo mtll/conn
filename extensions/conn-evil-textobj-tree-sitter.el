@@ -153,7 +153,6 @@
                      (concat
                       (propertize prompt 'face 'minibuffer-prompt)
                       " ("
-                      "Node: "
                       (propertize (format "%s" (caar nodes))
                                   'face 'eldoc-highlight-function-argument)
                       "; "
