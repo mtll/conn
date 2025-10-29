@@ -1383,25 +1383,28 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (let ((inhibit-message conn-read-args-inhibit-message)
         (message-log-max nil)
-        (prompt-suffix (concat prompt-suffix " "
-                               (when conn--read-args-error-message
-                                 (propertize conn--read-args-error-message
-                                             'face 'error))))
+        (prompt-suffix (unless inhibit-message
+                         (concat prompt-suffix " "
+                                 (when conn--read-args-error-message
+                                   (propertize conn--read-args-error-message
+                                               'face 'error)))))
         (keymap (make-composed-keymap conn--dispatch-event-handler-maps
                                       conn-dispatch-read-event-map)))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
-                            (read-event (concat prompt ": " prompt-suffix)
+                            (read-event (unless inhibit-message
+                                          (concat prompt ": " prompt-suffix))
                                         inherit-input-method seconds))))
             (when (characterp ev)
               (throw 'return ev)))
         (while t
           (pcase (conn-with-overriding-map keymap
                    (thread-first
-                     (concat prompt
-                             (conn--dispatch-read-event-prefix keymap)
-                             ":" prompt-suffix)
+                     (unless inhibit-message
+                       (concat prompt
+                               (conn--dispatch-read-event-prefix keymap)
+                               ":" prompt-suffix))
                      (read-key-sequence-vector)
                      (key-binding t)))
             ('dispatch-character-event
@@ -1410,9 +1413,10 @@ Target overlays may override this default by setting the
              (throw 'return
                     (conn-with-input-method
                       (read-event
-                       (concat prompt
-                               (conn--dispatch-read-event-prefix keymap)
-                               ":" prompt-suffix)
+                       (unless inhibit-message
+                         (concat prompt
+                                 (conn--dispatch-read-event-prefix keymap)
+                                 ":" prompt-suffix))
                        inherit-input-method))))
             (cmd
              (let ((unhandled nil))
