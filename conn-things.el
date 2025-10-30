@@ -998,20 +998,21 @@ words."))
     (conn-bounds-of 'region nil)))
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) _arg)
-  (let ((subregions nil)
-        (beg most-positive-fixnum)
-        (end most-negative-fixnum))
-    (pcase-dolist ((and bound `(,b . ,e))
-                   (conn-ring-list conn-narrow-ring))
-      (cl-callf max end e)
-      (cl-callf min beg b)
-      (push (conn-make-bounds 'region nil bound)
-            subregions))
-    (when subregions
-      (conn-make-bounds
-       'narrow-ring nil
-       (cons beg end)
-       :subregions subregions))))
+  (when conn-narrow-ring
+    (let ((subregions nil)
+          (beg most-positive-fixnum)
+          (end most-negative-fixnum))
+      (pcase-dolist ((and bound `(,b . ,e))
+                     (conn-ring-list conn-narrow-ring))
+        (cl-callf max end e)
+        (cl-callf min beg b)
+        (push (conn-make-bounds 'region nil bound)
+              subregions))
+      (when subregions
+        (conn-make-bounds
+         'narrow-ring nil
+         (cons beg end)
+         :subregions subregions)))))
 
 ;;;;; Bounds of Remote Thing
 
