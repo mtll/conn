@@ -242,8 +242,9 @@
              (cl-loop for thing in (oref state things)
                       append (conn--etts-thing-groups
                               (get thing :conn-etts-thing)))))
-        (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-          (dolist (capture captures)
+        (dolist (capture captures)
+          (cl-callf nreverse capture)
+          (pcase-dolist (`(,group ,tbeg . ,tend) groups)
             (let ((beg nil)
                   (end nil))
               (if-let* ((nbeg (alist-get tbeg capture)))
