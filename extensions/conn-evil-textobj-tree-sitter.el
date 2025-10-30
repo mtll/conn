@@ -233,7 +233,8 @@
 (cl-defmethod conn-dispatch-update-targets ((state conn-etts-parents-targets))
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (let ((captures
+      (let ((truncate-string-ellipsis nil)
+            (captures
              (treesit-query-capture (treesit-buffer-root-node)
                                     (conn-etts--get-query)
                                     (window-start) (window-end)
@@ -241,44 +242,44 @@
             (groups
              (cl-loop for thing in (oref state things)
                       append (conn--etts-thing-groups
-                              (get thing :conn-etts-thing)))))
+                              (get thing :conn-etts-thing))))
+            (beg nil)
+            (end nil))
         (dolist (capture captures)
           (cl-callf nreverse capture)
           (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-            (let ((beg nil)
-                  (end nil))
-              (if-let* ((nbeg (alist-get tbeg capture)))
-                  (when-let* ((nend (alist-get tend capture))
-                              (_(and (<= (treesit-node-start nbeg) (point))
-                                     (<= (point) (treesit-node-end nend)))))
-                    (setq beg (treesit-node-start nbeg)
-                          end (treesit-node-end nend)))
-                (when-let* ((n (alist-get group capture))
-                            (_(and (<= (treesit-node-start n) (point))
-                                   (<= (point) (treesit-node-end n)))))
-                  (setq beg (treesit-node-start n)
-                        end (treesit-node-end n))))
-              (when beg
-                (if-let* ((ov (car (conn--overlays-in-of-type
-                                    beg (1+ beg) 'conn-target-overlay))))
-                    (when (length= (cl-pushnew (cons group (cons beg end))
-                                               (conn-anonymous-thing-property
-                                                (overlay-get ov 'thing)
-                                                :nodes)
-                                               :key #'cdr
-                                               :test #'equal)
-                                   2)
-                      (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
-                  (overlay-put
-                   (conn-make-target-overlay beg 0)
-                   'thing (conn-anonymous-thing
-                            'conn-etts-thing
-                            :nodes (list (cons group (cons beg end)))
-                            :bounds-op ( :method (self _arg)
-                                         (thread-first
-                                           self
-                                           (conn-anonymous-thing-property :nodes)
-                                           (conn-etts-select-node)))))))))))))
+            (if-let* ((nbeg (alist-get tbeg capture)))
+                (when-let* ((nend (alist-get tend capture))
+                            (_(and (<= (treesit-node-start nbeg) (point))
+                                   (<= (point) (treesit-node-end nend)))))
+                  (setq beg (treesit-node-start nbeg)
+                        end (treesit-node-end nend)))
+              (when-let* ((n (alist-get group capture))
+                          (_(and (<= (treesit-node-start n) (point))
+                                 (<= (point) (treesit-node-end n)))))
+                (setq beg (treesit-node-start n)
+                      end (treesit-node-end n))))
+            (when beg
+              (if-let* ((ov (car (conn--overlays-in-of-type
+                                  beg (1+ beg) 'conn-target-overlay))))
+                  (when (length= (cl-pushnew (cons group (cons beg end))
+                                             (conn-anonymous-thing-property
+                                              (overlay-get ov 'thing)
+                                              :nodes)
+                                             :key #'cdr
+                                             :test #'equal)
+                                 2)
+                    (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
+                (overlay-put
+                 (conn-make-target-overlay beg 0)
+                 'thing (conn-anonymous-thing
+                          'conn-etts-thing
+                          :nodes (list (cons group (cons beg end)))
+                          :bounds-op ( :method (self _arg)
+                                       (thread-first
+                                         self
+                                         (conn-anonymous-thing-property :nodes)
+                                         (conn-etts-select-node))))))))))))
   (cl-call-next-method))
 
 (defclass conn-etts-node-targets (conn-dispatch-target-window-predicate)
@@ -289,7 +290,8 @@
 (cl-defmethod conn-dispatch-update-targets ((state conn-etts-node-targets))
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (let ((captures
+      (let ((truncate-string-ellipsis nil)
+            (captures
              (treesit-query-capture (treesit-buffer-root-node)
                                     (conn-etts--get-query)
                                     (window-start) (window-end)
@@ -297,40 +299,40 @@
             (groups
              (cl-loop for thing in (oref state things)
                       append (conn--etts-thing-groups
-                              (get thing :conn-etts-thing)))))
+                              (get thing :conn-etts-thing))))
+            (beg nil)
+            (end nil))
         (dolist (capture captures)
           (cl-callf nreverse capture)
           (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-            (let ((beg nil)
-                  (end nil))
-              (if-let* ((nbeg (alist-get tbeg capture)))
-                  (when-let* ((nend (alist-get tend capture)))
-                    (setq beg (treesit-node-start nbeg)
-                          end (treesit-node-end nend)))
-                (when-let* ((n (alist-get group capture)))
-                  (setq beg (treesit-node-start n)
-                        end (treesit-node-end n))))
-              (when beg
-                (if-let* ((ov (car (conn--overlays-in-of-type
-                                    beg (1+ beg) 'conn-target-overlay))))
-                    (when (length= (cl-pushnew (cons group (cons beg end))
-                                               (conn-anonymous-thing-property
-                                                (overlay-get ov 'thing)
-                                                :nodes)
-                                               :key #'cdr
-                                               :test #'equal)
-                                   2)
-                      (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
-                  (overlay-put
-                   (conn-make-target-overlay beg 0)
-                   'thing (conn-anonymous-thing
-                            'conn-etts-thing
-                            :nodes (list (cons group (cons beg end)))
-                            :bounds-op ( :method (self _arg)
-                                         (thread-first
-                                           self
-                                           (conn-anonymous-thing-property :nodes)
-                                           (conn-etts-select-node)))))))))))))
+            (if-let* ((nbeg (alist-get tbeg capture)))
+                (when-let* ((nend (alist-get tend capture)))
+                  (setq beg (treesit-node-start nbeg)
+                        end (treesit-node-end nend)))
+              (when-let* ((n (alist-get group capture)))
+                (setq beg (treesit-node-start n)
+                      end (treesit-node-end n))))
+            (when beg
+              (if-let* ((ov (car (conn--overlays-in-of-type
+                                  beg (1+ beg) 'conn-target-overlay))))
+                  (when (length= (cl-pushnew (cons group (cons beg end))
+                                             (conn-anonymous-thing-property
+                                              (overlay-get ov 'thing)
+                                              :nodes)
+                                             :key #'cdr
+                                             :test #'equal)
+                                 2)
+                    (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
+                (overlay-put
+                 (conn-make-target-overlay beg 0)
+                 'thing (conn-anonymous-thing
+                          'conn-etts-thing
+                          :nodes (list (cons group (cons beg end)))
+                          :bounds-op ( :method (self _arg)
+                                       (thread-first
+                                         self
+                                         (conn-anonymous-thing-property :nodes)
+                                         (conn-etts-select-node))))))))))))
   (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (eql conn-etts-all-nodes))
