@@ -1042,30 +1042,34 @@ Target overlays may override this default by setting the
 (put 'conn-label-overlay 'conn-overlay t)
 
 (defun conn--right-justify-padding (overlay width face)
-  (overlay-put overlay 'after-string
-               (propertize " "
-                           'display `(space :width (,width))
-                           'face face)))
+  (when (> width 0)
+    (overlay-put overlay 'after-string
+                 (propertize " "
+                             'display `(space :width (,width))
+                             'face face))))
 
 (defun conn--left-justify-padding (overlay width face)
-  (overlay-put overlay 'before-string
-               (propertize " "
-                           'display `(space :width (,width))
-                           'face face)))
+  (when (> width 0)
+    (overlay-put overlay 'before-string
+                 (propertize " "
+                             'display `(space :width (,width))
+                             'face face))))
 
 (defun conn--centered-padding (overlay width face)
   (let* ((left (min 15 (floor width 2)))
          (right (max (- width 15) (ceiling width 2))))
-    (overlay-put overlay 'before-string
-                 (propertize
-                  " "
-                  'display `(space :width (,left))
-                  'face face))
-    (overlay-put overlay 'after-string
-                 (propertize
-                  " "
-                  'display `(space :width (,right))
-                  'face face))))
+    (when (> left 0)
+      (overlay-put overlay 'before-string
+                   (propertize
+                    " "
+                    'display `(space :width (,left))
+                    'face face)))
+    (when (> right 0)
+      (overlay-put overlay 'after-string
+                   (propertize
+                    " "
+                    'display `(space :width (,right))
+                    'face face)))))
 
 (defun conn--dispatch-eol (pt window)
   (declare (important-return-value t))
