@@ -671,26 +671,30 @@ Exiting the recursive edit will resume the isearch."
        (recursive-edit)))))
 
 (cl-defun conn--isearch-in-thing (thing-cmd thing-arg &key backward regexp subregions-p)
-  (pcase-let* ((bounds
-                (conn-bounds-of thing-cmd thing-arg))
-               (regions
-                (mapcar (pcase-lambda (`(,beg . ,end))
-                          (cons (conn--create-marker beg)
-                                (conn--create-marker end nil t)))
-                        (or (if (and subregions-p (conn-bounds-get bounds :subregions))
-                                (conn--merge-overlapping-regions
-                                 (cl-loop for bound in (conn-bounds-get bounds :subregions)
-                                          collect (conn-bounds bound))
-                                 t)
-                              (list (conn-bounds bounds))))))
-               (depth (recursion-depth))
-               (in-regions-p (lambda (beg end)
-                               (or (/= depth (recursion-depth))
-                                   (cl-loop for (nbeg . nend) in regions
-                                            thereis (<= nbeg beg end nend)))))
-               (thing (upcase (symbol-name (or (conn-command-thing thing-cmd)
-                                               thing-cmd))))
-               (prefix (concat "[in " thing "] ")))
+  (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
+         (regions
+          (if (and subregions-p
+                   (conn-bounds-get bounds :subregions))
+              (conn--merge-overlapping-regions
+               (cl-loop for bound in (conn-bounds-get bounds :subregions)
+                        collect (conn-bounds bound))
+               t)
+            (list (conn-bounds bounds))))
+         (regions
+          (cl-loop for (beg . end) in regions
+                   collect (cons (conn--create-marker beg)
+                                 (conn--create-marker end nil t))))
+         (depth (recursion-depth))
+         (in-regions-p
+          (lambda (beg end)
+            (or (/= depth (recursion-depth))
+                (cl-loop for (nbeg . nend) in regions
+                         thereis (<= nbeg beg end nend)))))
+         (thing (upcase
+                 (symbol-name
+                  (or (conn-command-thing thing-cmd)
+                      thing-cmd))))
+         (prefix (concat "[in " thing "] ")))
     (letrec ((setup
               (lambda ()
                 (when (= depth (recursion-depth))
