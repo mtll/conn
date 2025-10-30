@@ -70,7 +70,8 @@
                   regions)))))
     regions))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-etts-thing)) arg
+                              &key flat)
   (setq arg (prefix-numeric-value arg))
   (unless (= 0 arg)
     (let* ((seen (when (> arg 100)
@@ -78,6 +79,7 @@
            (thing (get (or (get cmd :conn-command-thing) cmd)
                        :conn-etts-thing))
            (groups (conn--etts-thing-groups thing))
+           (at (point))
            (beg (point))
            (end nil)
            (captures nil)
@@ -95,23 +97,48 @@
                 captures (conn-etts--get-captures thing beg end)
                 beg end)
           (let ((pending (conn-etts--filter-captures groups captures)))
-            (cl-callf sort pending
-              :key (if (< arg 0) #'car #'cdr)
-              :reverse (< arg 0)
-              :in-place t)
-            (dolist (node pending)
-              (when (and (if (< arg 0)
-                             (< (car node) (point))
-                           (> (cdr node) (point)))
-                         (if seen
-                             (or (not (gethash node seen))
-                                 (setf (gethash node seen) t))
-                           (not (member node nodes))))
-                (cl-callf max max (cdr node))
-                (cl-callf min min (car node))
-                (push (conn-make-bounds cmd 1 node) nodes)
-                (when (= (cl-incf count) (abs arg))
-                  (throw 'done nil)))))))
+            (if flat
+                (progn
+                  (cl-callf sort pending
+                    :key #'car
+                    :reverse (< arg 0)
+                    :in-place t)
+                  (dolist (node pending)
+                    (when (and (if (< arg 0)
+                                   (< (car node) at)
+                                 (> (car node) at))
+                               (if seen
+                                   (or (not (gethash node seen))
+                                       (setf (gethash node seen) t))
+                                 (not (member node nodes))))
+                      (cl-callf max max (cdr node))
+                      (cl-callf min min (car node))
+                      (push (conn-make-bounds cmd 1 node) nodes)
+                      (setq at (car node))
+                      (when (= (cl-incf count) (abs arg))
+                        (throw 'done nil)))))
+              (cl-callf sort pending
+                :key (if (< arg 0)
+                         (lambda (n)
+                           (if (>= at (cdr n)) (cdr n) (car n)))
+                       (lambda (n)
+                         (if (<= at (car n)) (car n) (cdr n))))
+                :reverse (< arg 0)
+                :in-place t)
+              (dolist (node pending)
+                (when (and (if (< arg 0)
+                               (< (car node) at)
+                             (> (cdr node) at))
+                           (if seen
+                               (or (not (gethash node seen))
+                                   (setf (gethash node seen) t))
+                             (not (member node nodes))))
+                  (cl-callf max max (cdr node))
+                  (cl-callf min min (car node))
+                  (push (conn-make-bounds cmd 1 node) nodes)
+                  (setq at (if (< arg 0) (car node) (cdr node)))
+                  (when (= (cl-incf count) (abs arg))
+                    (throw 'done nil))))))))
       (when nodes
         (conn-make-bounds
          thing arg
@@ -353,7 +380,9 @@
 (defmacro conn-etts-define-thing (name group &optional query)
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
+        (forward-flat-cmd (intern (format "%s-forward-flat" name)))
         (backward-cmd (intern (format "%s-backward" name)))
+        (backward-flat-cmd (intern (format "%s-backward-flat" name)))
         (groups (cl-loop
                  for group in (ensure-list group)
                  collect (cons (intern group)
@@ -371,22 +400,14 @@
 
        (defun ,forward-cmd (&optional arg)
          (interactive "p")
-         (let (start)
-           (dotimes (_ (abs arg))
-             (pcase (conn-bounds-of ',name (cl-signum arg))
-               ((conn-bounds `(,beg . ,end))
-                (if (> arg 0)
-                    (progn
-                      (goto-char end)
-                      (unless (or (region-active-p) start)
-                        (setq start beg)))
-                  (goto-char beg)
-                  (unless (or (region-active-p) start)
-                    (setq start end))))
-               (_ (signal 'scan-error
-                          (list (format-message "No more %S to move across" ',name)
-                                (point) (point))))))
-           (when start (conn--push-ephemeral-mark start))))
+         (pcase (conn-bounds-of ',name arg)
+           ((conn-bounds `(,beg . ,end))
+            (goto-char (if (> arg 0) end beg))
+            (unless (region-active-p)
+              (conn--push-ephemeral-mark (if (> arg 0) beg end))))
+           (_ (signal 'scan-error
+                      (list (format-message "No more %S to move across" ',name)
+                            (point) (point))))))
        (put ',forward-cmd 'repeat-check-key 'no)
 
        (defun ,backward-cmd (&optional arg)
@@ -394,10 +415,31 @@
          (,forward-cmd (- arg)))
        (put ',backward-cmd 'repeat-check-key 'no)
 
+       (defun ,forward-flat-cmd (&optional arg)
+         (interactive "p")
+         (pcase (thread-first
+                  (conn-bounds-of ',name arg :flat t)
+                  (conn-bounds-get :subregions)
+                  last car)
+           ((conn-bounds `(,beg . ,end))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end))
+           (_ (signal 'scan-error
+                      (list (format-message "No more %S to move across" ',name)
+                            (point) (point))))))
+       (put ',forward-flat-cmd 'repeat-check-key 'no)
+
+       (defun ,backward-flat-cmd (&optional arg)
+         (interactive "p")
+         (,forward-flat-cmd (- arg)))
+       (put ',backward-flat-cmd 'repeat-check-key 'no)
+
        (conn-register-thing-commands
         ',name 'ignore
         ',forward-cmd
-        ',backward-cmd))))
+        ',backward-cmd
+        ',forward-flat-cmd
+        ',backward-flat-cmd))))
 
 (conn-etts-define-thing conn-etts-assignment-inner "assignment.inner")
 (conn-etts-define-thing conn-etts-assignment-outer "assignment.outer")
@@ -433,7 +475,9 @@
 (defvar-keymap conn-etts-assignment-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-assignment-inner-forward
-  "j" 'conn-etts-assignment-inner-backward)
+  "j" 'conn-etts-assignment-inner-backward
+  "k" 'conn-etts-assignment-inner-forward-flat
+  "i" 'conn-etts-assignment-inner-backward-flat)
 (keymap-set conn-etts-assignment-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
@@ -447,249 +491,355 @@
 (defvar-keymap conn-etts-assignment-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-assignment-outer-forward
-  "j" 'conn-etts-assignment-outer-backward)
+  "j" 'conn-etts-assignment-outer-backward
+  "k" 'conn-etts-assignment-outer-forward-flat
+  "i" 'conn-etts-assignment-outer-backward-flat)
 (keymap-set conn-etts-assignment-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-attribute-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-attribute-inner-forward
-  "j" 'conn-etts-attribute-inner-backward)
+  "j" 'conn-etts-attribute-inner-backward
+  "k" 'conn-etts-attribute-inner-forward-flat
+  "i" 'conn-etts-attribute-inner-backward-flat)
 (keymap-set conn-etts-attribute-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-attribute-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-attribute-outer-forward
-  "j" 'conn-etts-attribute-outer-backward)
+  "j" 'conn-etts-attribute-outer-backward
+  "k" 'conn-etts-attribute-outer-forward-flat
+  "i" 'conn-etts-attribute-outer-backward-flat)
 (keymap-set conn-etts-attribute-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-block-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-block-inner-forward
-  "j" 'conn-etts-block-inner-backward)
+  "j" 'conn-etts-block-inner-backward
+  "k" 'conn-etts-block-inner-forward-flat
+  "i" 'conn-etts-block-inner-backward-flat)
 (keymap-set conn-etts-block-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-block-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-block-outer-forward
-  "j" 'conn-etts-block-outer-backward)
+  "j" 'conn-etts-block-outer-backward
+  "k" 'conn-etts-block-outer-forward-flat
+  "i" 'conn-etts-block-outer-backward-flat)
 (keymap-set conn-etts-block-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-call-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-call-inner-forward
-  "j" 'conn-etts-call-inner-backward)
+  "j" 'conn-etts-call-inner-backward
+  "k" 'conn-etts-call-inner-forward-flat
+  "i" 'conn-etts-call-inner-backward-flat)
 (keymap-set conn-etts-call-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-call-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-call-outer-forward
-  "j" 'conn-etts-call-outer-backward)
+  "j" 'conn-etts-call-outer-backward
+  "k" 'conn-etts-call-outer-forward-flat
+  "i" 'conn-etts-call-outer-backward-flat)
 (keymap-set conn-etts-call-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-class-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-class-inner-forward
-  "j" 'conn-etts-class-inner-backward)
+  "j" 'conn-etts-class-inner-backward
+  "k" 'conn-etts-class-inner-forward-flat
+  "i" 'conn-etts-class-inner-backward-flat)
 (keymap-set conn-etts-class-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-class-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-class-outer-forward
-  "j" 'conn-etts-class-outer-backward)
+  "j" 'conn-etts-class-outer-backward
+  "k" 'conn-etts-class-outer-forward-flat
+  "i" 'conn-etts-class-outer-backward-flat)
 (keymap-set conn-etts-class-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-comment-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-comment-inner-forward
-  "j" 'conn-etts-comment-inner-backward)
+  "j" 'conn-etts-comment-inner-backward
+  "k" 'conn-etts-comment-inner-forward-flat
+  "i" 'conn-etts-comment-inner-backward-flat)
 (keymap-set conn-etts-comment-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-comment-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-comment-outer-forward
-  "j" 'conn-etts-comment-outer-backward)
+  "j" 'conn-etts-comment-outer-backward
+  "k" 'conn-etts-comment-outer-forward-flat
+  "i" 'conn-etts-comment-outer-backward-flat)
 (keymap-set conn-etts-comment-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-conditional-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-conditional-inner-forward
-  "j" 'conn-etts-conditional-inner-backward)
+  "j" 'conn-etts-conditional-inner-backward
+  "k" 'conn-etts-conditional-inner-forward-flat
+  "i" 'conn-etts-conditional-inner-backward-flat)
 (keymap-set conn-etts-conditional-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-conditional-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-conditional-outer-forward
-  "j" 'conn-etts-conditional-outer-backward)
+  "j" 'conn-etts-conditional-outer-backward
+  "k" 'conn-etts-conditional-outer-forward-flat
+  "i" 'conn-etts-conditional-outer-backward-flat)
 (keymap-set conn-etts-conditional-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-frame-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-frame-inner-forward
-  "j" 'conn-etts-frame-inner-backward)
+  "j" 'conn-etts-frame-inner-backward
+  "k" 'conn-etts-frame-inner-forward-flat
+  "i" 'conn-etts-frame-inner-backward-flat)
 (keymap-set conn-etts-frame-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-frame-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-frame-outer-forward
-  "j" 'conn-etts-frame-outer-backward)
+  "j" 'conn-etts-frame-outer-backward
+  "k" 'conn-etts-frame-outer-forward-flat
+  "i" 'conn-etts-frame-outer-backward-flat)
 (keymap-set conn-etts-frame-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-function-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-function-inner-forward
-  "j" 'conn-etts-function-inner-backward)
+  "j" 'conn-etts-function-inner-backward
+  "k" 'conn-etts-function-inner-forward-flat
+  "i" 'conn-etts-function-inner-backward-flat)
 (keymap-set conn-etts-function-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-function-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-function-outer-forward
-  "j" 'conn-etts-function-outer-backward)
+  "j" 'conn-etts-function-outer-backward
+  "k" 'conn-etts-function-outer-forward-flat
+  "i" 'conn-etts-function-outer-backward-flat)
 (keymap-set conn-etts-function-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-loop-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-loop-inner-forward
-  "j" 'conn-etts-loop-inner-backward)
+  "j" 'conn-etts-loop-inner-backward
+  "k" 'conn-etts-loop-inner-forward-flat
+  "i" 'conn-etts-loop-inner-backward-flat)
 (keymap-set conn-etts-loop-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-loop-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-loop-outer-forward
-  "j" 'conn-etts-loop-outer-backward)
+  "j" 'conn-etts-loop-outer-backward
+  "k" 'conn-etts-loop-outer-forward-flat
+  "i" 'conn-etts-loop-outer-backward-flat)
 (keymap-set conn-etts-loop-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-number-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-number-forward
-  "j" 'conn-etts-number-backward)
+  "j" 'conn-etts-number-backward
+  "k" 'conn-etts-number-forward-flat
+  "i" 'conn-etts-number-backward-flat)
 (keymap-set conn-etts-number-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-parameter-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-parameter-inner-forward
-  "j" 'conn-etts-parameter-inner-backward)
+  "j" 'conn-etts-parameter-inner-backward
+  "k" 'conn-etts-parameter-inner-forward-flat
+  "i" 'conn-etts-parameter-inner-backward-flat)
 (keymap-set conn-etts-parameter-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-parameter-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-parameter-outer-forward
-  "j" 'conn-etts-parameter-outer-backward)
+  "j" 'conn-etts-parameter-outer-backward
+  "k" 'conn-etts-parameter-outer-forward-flat
+  "i" 'conn-etts-parameter-outer-backward-flat)
 (keymap-set conn-etts-parameter-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-regex-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-regex-inner-forward
-  "j" 'conn-etts-regex-inner-backward)
+  "j" 'conn-etts-regex-inner-backward
+  "k" 'conn-etts-regex-inner-forward-flat
+  "i" 'conn-etts-regex-inner-backward-flat)
 (keymap-set conn-etts-regex-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-regex-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-regex-outer-forward
-  "j" 'conn-etts-regex-outer-backward)
+  "j" 'conn-etts-regex-outer-backward
+  "k" 'conn-etts-regex-outer-forward-flat
+  "i" 'conn-etts-regex-outer-backward-flat)
 (keymap-set conn-etts-regex-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-return-inner-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-return-inner-forward
-  "j" 'conn-etts-return-inner-backward)
+  "j" 'conn-etts-return-inner-backward
+  "k" 'conn-etts-return-inner-forward-flat
+  "i" 'conn-etts-return-inner-backward-flat)
 (keymap-set conn-etts-return-inner-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-return-outer-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-return-outer-forward
-  "j" 'conn-etts-return-outer-backward)
+  "j" 'conn-etts-return-outer-backward
+  "k" 'conn-etts-return-outer-forward-flat
+  "i" 'conn-etts-return-outer-backward-flat)
 (keymap-set conn-etts-return-outer-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-scopename-repeat-map
   :repeat (:continue (conn-toggle-mark-command))
   "l" 'conn-etts-scopename-forward
-  "j" 'conn-etts-scopename-backward)
+  "j" 'conn-etts-scopename-backward
+  "k" 'conn-etts-scopename-forward-flat
+  "i" 'conn-etts-scopename-backward-flat)
 (keymap-set conn-etts-scopename-repeat-map
             "v" 'conn-toggle-mark-command)
 
 (defvar-keymap conn-etts-things-mode-map
   "<conn-thing-map> i w l" 'conn-etts-assignment-inner-forward
   "<conn-thing-map> i w j" 'conn-etts-assignment-inner-backward
+  "<conn-thing-map> i w k" 'conn-etts-assignment-inner-forward-flat
+  "<conn-thing-map> i w i" 'conn-etts-assignment-inner-backward-flat
   "<conn-thing-map> w m" 'conn-etts-assignment-side-forward
   "<conn-thing-map> w n" 'conn-etts-assignment-side-backward
   "<conn-thing-map> w l" 'conn-etts-assignment-outer-forward
   "<conn-thing-map> w j" 'conn-etts-assignment-outer-backward
+  "<conn-thing-map> w k" 'conn-etts-assignment-outer-forward-flat
+  "<conn-thing-map> w i" 'conn-etts-assignment-outer-backward-flat
   "<conn-thing-map> i @ l" 'conn-etts-attribute-inner-forward
   "<conn-thing-map> i @ j" 'conn-etts-attribute-inner-backward
+  "<conn-thing-map> i @ k" 'conn-etts-attribute-inner-forward-flat
+  "<conn-thing-map> i @ i" 'conn-etts-attribute-inner-backward-flat
   "<conn-thing-map> @ l" 'conn-etts-attribute-outer-forward
   "<conn-thing-map> @ j" 'conn-etts-attribute-outer-backward
+  "<conn-thing-map> @ k" 'conn-etts-attribute-outer-forward-flat
+  "<conn-thing-map> @ i" 'conn-etts-attribute-outer-backward-flat
   "<conn-thing-map> i b l" 'conn-etts-block-inner-forward
   "<conn-thing-map> i b j" 'conn-etts-block-inner-backward
+  "<conn-thing-map> i b k" 'conn-etts-block-inner-forward-flat
+  "<conn-thing-map> i b i" 'conn-etts-block-inner-backward-flat
   "<conn-thing-map> b l" 'conn-etts-block-outer-forward
   "<conn-thing-map> b j" 'conn-etts-block-outer-backward
+  "<conn-thing-map> b k" 'conn-etts-block-outer-forward-flat
+  "<conn-thing-map> b i" 'conn-etts-block-outer-backward-flat
   "<conn-thing-map> i . l" 'conn-etts-call-inner-forward
   "<conn-thing-map> i . j" 'conn-etts-call-inner-backward
+  "<conn-thing-map> i . k" 'conn-etts-call-inner-forward-flat
+  "<conn-thing-map> i . i" 'conn-etts-call-inner-backward-flat
   "<conn-thing-map> . l" 'conn-etts-call-outer-forward
   "<conn-thing-map> . j" 'conn-etts-call-outer-backward
+  "<conn-thing-map> . k" 'conn-etts-call-outer-forward-flat
+  "<conn-thing-map> . i" 'conn-etts-call-outer-backward-flat
   "<conn-thing-map> i C l" 'conn-etts-class-inner-forward
   "<conn-thing-map> i C j" 'conn-etts-class-inner-backward
+  "<conn-thing-map> i C k" 'conn-etts-class-inner-forward-flat
+  "<conn-thing-map> i C i" 'conn-etts-class-inner-backward-flat
   "<conn-thing-map> C l" 'conn-etts-class-outer-forward
   "<conn-thing-map> C j" 'conn-etts-class-outer-backward
+  "<conn-thing-map> C k" 'conn-etts-class-outer-forward-flat
+  "<conn-thing-map> C i" 'conn-etts-class-outer-backward-flat
   "<conn-thing-map> i c l" 'conn-etts-comment-inner-forward
   "<conn-thing-map> i c j" 'conn-etts-comment-inner-backward
+  "<conn-thing-map> i c k" 'conn-etts-comment-inner-forward-flat
+  "<conn-thing-map> i c i" 'conn-etts-comment-inner-backward-flat
   "<conn-thing-map> c l" 'conn-etts-comment-outer-forward
   "<conn-thing-map> c j" 'conn-etts-comment-outer-backward
+  "<conn-thing-map> c k" 'conn-etts-comment-outer-forward-flat
+  "<conn-thing-map> c i" 'conn-etts-comment-outer-backward-flat
   "<conn-thing-map> i q l" 'conn-etts-conditional-inner-forward
   "<conn-thing-map> i q j" 'conn-etts-conditional-inner-backward
+  "<conn-thing-map> i q k" 'conn-etts-conditional-inner-forward-flat
+  "<conn-thing-map> i q i" 'conn-etts-conditional-inner-backward-flat
   "<conn-thing-map> q l" 'conn-etts-conditional-outer-forward
   "<conn-thing-map> q j" 'conn-etts-conditional-outer-backward
+  "<conn-thing-map> q k" 'conn-etts-conditional-outer-forward-flat
+  "<conn-thing-map> q i" 'conn-etts-conditional-outer-backward-flat
   "<conn-thing-map> i [ l" 'conn-etts-frame-inner-forward
   "<conn-thing-map> i [ j" 'conn-etts-frame-inner-backward
+  "<conn-thing-map> i [ k" 'conn-etts-frame-inner-forward-flat
+  "<conn-thing-map> i [ i" 'conn-etts-frame-inner-backward-flat
   "<conn-thing-map> [ l" 'conn-etts-frame-outer-forward
   "<conn-thing-map> [ j" 'conn-etts-frame-outer-backward
+  "<conn-thing-map> [ k" 'conn-etts-frame-outer-forward-flat
+  "<conn-thing-map> [ i" 'conn-etts-frame-outer-backward-flat
   "<conn-thing-map> i f l" 'conn-etts-function-inner-forward
   "<conn-thing-map> i f j" 'conn-etts-function-inner-backward
+  "<conn-thing-map> i f k" 'conn-etts-function-inner-forward-flat
+  "<conn-thing-map> i f i" 'conn-etts-function-inner-backward-flat
   "<conn-thing-map> f l" 'conn-etts-function-outer-forward
   "<conn-thing-map> f j" 'conn-etts-function-outer-backward
+  "<conn-thing-map> f k" 'conn-etts-function-outer-forward-flat
+  "<conn-thing-map> f i" 'conn-etts-function-outer-backward-flat
   "<conn-thing-map> i r l" 'conn-etts-loop-inner-forward
   "<conn-thing-map> i r j" 'conn-etts-loop-inner-backward
+  "<conn-thing-map> i r k" 'conn-etts-loop-inner-forward-flat
+  "<conn-thing-map> i r i" 'conn-etts-loop-inner-backward-flat
   "<conn-thing-map> r l" 'conn-etts-loop-outer-forward
   "<conn-thing-map> r j" 'conn-etts-loop-outer-backward
+  "<conn-thing-map> r k" 'conn-etts-loop-outer-forward-flat
+  "<conn-thing-map> r i" 'conn-etts-loop-outer-backward-flat
   "<conn-thing-map> n l" 'conn-etts-number-forward
   "<conn-thing-map> n j" 'conn-etts-number-backward
   "<conn-thing-map> i d l" 'conn-etts-parameter-inner-forward
   "<conn-thing-map> i d j" 'conn-etts-parameter-inner-backward
+  "<conn-thing-map> i d k" 'conn-etts-parameter-inner-forward-flat
+  "<conn-thing-map> i d i" 'conn-etts-parameter-inner-backward-flat
   "<conn-thing-map> d l" 'conn-etts-parameter-outer-forward
   "<conn-thing-map> d j" 'conn-etts-parameter-outer-backward
+  "<conn-thing-map> d k" 'conn-etts-parameter-outer-forward-flat
+  "<conn-thing-map> d i" 'conn-etts-parameter-outer-backward-flat
   "<conn-thing-map> i x l" 'conn-etts-regex-inner-forward
   "<conn-thing-map> i x j" 'conn-etts-regex-inner-backward
+  "<conn-thing-map> i x k" 'conn-etts-regex-inner-forward-flat
+  "<conn-thing-map> i x i" 'conn-etts-regex-inner-backward-flat
   "<conn-thing-map> x l" 'conn-etts-regex-outer-forward
   "<conn-thing-map> x j" 'conn-etts-regex-outer-backward
+  "<conn-thing-map> x k" 'conn-etts-regex-outer-forward-flat
+  "<conn-thing-map> x i" 'conn-etts-regex-outer-backward-flat
   "<conn-thing-map> i t l" 'conn-etts-return-inner-forward
   "<conn-thing-map> i t j" 'conn-etts-return-inner-backward
+  "<conn-thing-map> i t k" 'conn-etts-return-inner-forward-flat
+  "<conn-thing-map> i t i" 'conn-etts-return-inner-backward-flat
   "<conn-thing-map> t l" 'conn-etts-return-outer-forward
   "<conn-thing-map> t j" 'conn-etts-return-outer-backward
+  "<conn-thing-map> t k" 'conn-etts-return-outer-forward-flat
+  "<conn-thing-map> t i" 'conn-etts-return-outer-backward-flat
   "<conn-thing-map> S l" 'conn-etts-scopename-forward
   "<conn-thing-map> S j" 'conn-etts-scopename-backward)
 
