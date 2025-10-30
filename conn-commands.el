@@ -1259,7 +1259,7 @@ With arg N, insert N newlines."
           (conn-ring-history conn-narrow-ring) (copy-sequence new)))
   (when (and interactive (not executing-kbd-macro))
     (message "Narrow ring merged into %s region"
-             (length conn-narrow-ring))))
+             (length (conn-ring-list conn-narrow-ring)))))
 
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
