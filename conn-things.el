@@ -997,7 +997,7 @@ words."))
        (rectangle--col-pos pc 'point)))
     (conn-bounds-of 'region nil)))
 
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) arg)
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) _arg)
   (let ((subregions nil)
         (beg most-positive-fixnum)
         (end most-negative-fixnum))
