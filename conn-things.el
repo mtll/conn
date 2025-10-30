@@ -711,11 +711,11 @@ words."))
              ((pred conn-bounds-p)
               (setq thing (conn-bounds-thing thing)))))))
 
-(cl-defgeneric conn-bounds-of (cmd arg)
+(cl-defgeneric conn-bounds-of (cmd arg &key &allow-other-keys)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t)))
 
-(cl-defmethod conn-bounds-of :around (_cmd _arg)
+(cl-defmethod conn-bounds-of :around (&rest _)
   (if conn--bounds-of-in-progress
       (cl-call-next-method)
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
@@ -997,6 +997,22 @@ words."))
        (rectangle--col-pos pc 'point)))
     (conn-bounds-of 'region nil)))
 
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) arg)
+  (let ((subregions nil)
+        (beg most-positive-fixnum)
+        (end most-negative-fixnum))
+    (pcase-dolist ((and bound `(,b . ,e))
+                   (conn-ring-list conn-narrow-ring))
+      (cl-callf max end e)
+      (cl-callf min beg b)
+      (push (conn-make-bounds 'region nil bound)
+            subregions))
+    (when subregions
+      (conn-make-bounds
+       'narrow-ring nil
+       (cons beg end)
+       :subregions subregions))))
+
 ;;;;; Bounds of Remote Thing
 
 (cl-defgeneric conn-bounds-of-remote (cmd arg pt)
@@ -1103,6 +1119,13 @@ words."))
  'kmacro-call-macro
  'start-kbd-macro
  'end-kbd-macro)
+
+(conn-register-thing 'narrow-ring)
+
+(conn-register-thing-commands
+ 'narrow-ring nil
+ 'conn-cycle-narrowings
+ 'conn-narrow-ring-prefix)
 
 (conn-register-thing
  'comment
