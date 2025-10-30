@@ -886,7 +886,7 @@ with `conn-dispatch-thing-ignored-modes'."
 
 (defvar conn-targets nil)
 
-(defvar conn-target-count 0)
+(defvar conn-target-count nil)
 
 (defvar conn-target-sort-function 'conn-target-nearest-op)
 
@@ -907,6 +907,9 @@ be ignored by during dispatch.")
 
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
+
+(defun conn-get-target-count ()
+  (cl-loop for (_win . count) in conn-target-count sum count))
 
 (defun conn--overlays-in-of-type (beg end category &optional window)
   (declare (important-return-value t))
@@ -1302,16 +1305,17 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-get-targets (&optional sort-function)
   (declare (important-return-value t))
   (let ((result nil))
-    (setq conn-target-count 0)
     (pcase-dolist (`(,window . ,targets) conn-targets)
-      (let ((filtered
-             (cl-loop for tar in targets
-                      when (<= (window-start window)
-                               (overlay-start tar)
-                               (overlay-end tar)
-                               (window-end window))
-                      do (cl-incf conn-target-count)
-                      and collect tar)))
+      (let* ((count 0)
+             (filtered
+              (cl-loop for tar in targets
+                       when (<= (window-start window)
+                                (overlay-start tar)
+                                (overlay-end tar)
+                                (window-end window))
+                       do (cl-incf count)
+                       and collect tar)))
+        (setf (alist-get window conn-target-count) count)
         (push (cons window
                     (if sort-function
                         (compat-call sort filtered
@@ -1325,7 +1329,7 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (let* ((current-window (selected-window))
          (all-targets (conn-dispatch-get-targets conn-target-sort-function))
-         (label-strings (conn-simple-labels conn-target-count))
+         (label-strings (conn-simple-labels (conn-get-target-count)))
          (labels nil))
     (pcase-dolist (`(,window . ,targets) all-targets)
       (dolist (tar targets)
@@ -1486,7 +1490,7 @@ Target overlays may override this default by setting the
           (funcall conn-dispatch-label-function)
           (conn-label-select #'conn-dispatch-read-event
                              (concat "Label ["
-                                     (number-to-string conn-target-count)
+                                     (number-to-string (conn-get-target-count))
                                      "]")
                              (conn-dispatch-prompt-p))
           (conn--target-label-payload)))
@@ -1496,6 +1500,7 @@ Target overlays may override this default by setting the
 
 (defvar conn-dispatch-in-progress nil)
 (defvar conn--dispatch-undo-change-groups nil)
+(defvar conn--prev-scroll-conservatively nil)
 
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
@@ -1526,6 +1531,8 @@ Target overlays may override this default by setting the
        (catch 'dispatch-select-exit
          (let* ((,rep nil)
                 (,display-always nil)
+                (conn--prev-scroll-conservatively scroll-conservatively)
+                (scroll-conservatively 100)
                 (conn-dispatch-repeating (and ,repeat t))
                 (conn--dispatch-undo-change-groups nil)
                 (conn--read-args-error-message nil)
@@ -1560,6 +1567,7 @@ Target overlays may override this default by setting the
                       ,conn-target-predicate
                       ,conn-target-sort-function)
                     conn--dispatch-init-state)
+                   (scroll-conservatively conn--prev-scroll-conservatively)
                    (conn-dispatch-target-finder nil)
                    (conn-dispatch-in-progress nil)
                    (conn--dispatch-undo-change-groups nil)
@@ -1744,7 +1752,7 @@ Target overlays may override this default by setting the
   (clrhash conn--pixelwise-window-cache)
   (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
-        conn-target-count 0
+        conn-target-count nil
         conn-dispatch--window-shadow-overlays nil)
   (conn-dispatch-suspend-targets conn-dispatch-target-finder))
 
