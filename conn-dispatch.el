@@ -2206,7 +2206,8 @@ contain targets."
       (with-selected-window win
         (let ((points (conn-ring-list conn-mark-ring)))
           (dolist (pt points)
-            (conn-make-target-overlay pt 0)))))
+            (unless (invisible-p pt)
+              (conn-make-target-overlay pt 0))))))
     (cl-call-next-method)))
 
 (defclass conn-dispatch-global-mark (conn-dispatch-focus-targets
@@ -2228,7 +2229,8 @@ contain targets."
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (dolist (mk global-mark-ring)
-          (when (eq (current-buffer) (marker-buffer mk))
+          (when (and (eq (current-buffer) (marker-buffer mk))
+                     (not (invisible-p mk)))
             (conn-make-target-overlay mk 0)))))
     (cl-call-next-method)))
 
@@ -2254,7 +2256,8 @@ contain targets."
       (with-selected-window win
         (pcase-dolist (`(,key . ,obj) register-alist)
           (when (and (markerp obj)
-                     (eq (current-buffer) (marker-buffer obj)))
+                     (eq (current-buffer) (marker-buffer obj))
+                     (not (invisible-p obj)))
             (conn-make-target-overlay
              obj 0
              :properties `(label-key ,(key-description (vector key))))))))
@@ -2274,7 +2277,8 @@ contain targets."
       (with-selected-window win
         (let ((points (conn-ring-list conn-emacs-state-ring)))
           (dolist (pt points)
-            (conn-make-target-overlay pt 0))))))
+            (unless (invisible-p pt)
+              (conn-make-target-overlay pt 0)))))))
   (cl-call-next-method))
 
 (defun conn-dispatch-chars-in-thing (thing)
