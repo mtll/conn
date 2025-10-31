@@ -224,8 +224,8 @@
                    (_ self)))))
            (conn-make-bounds 'conn-etts-thing nil bounds)))))))
 
-(defvar conn-etts-all-things
-  '(conn-etts-assignment-inner
+(defvar conn-etts-parent-things
+  `(conn-etts-assignment-inner
     conn-etts-assignment-outer
     conn-etts-assignment-side
     conn-etts-attribute-inner
@@ -254,6 +254,8 @@
     conn-etts-return-inner
     conn-etts-return-outer
     conn-etts-scopename))
+
+(defvar conn-etts-all-things conn-etts-parent-things)
 
 (defclass conn-etts-parents-targets (conn-dispatch-target-window-predicate)
   ((things :initarg :things)
@@ -1090,7 +1092,7 @@
         'conn-etts-thing
         :target-finder ( :method (_self _arg)
                          (conn-etts-parents-targets
-                          :things conn-etts-all-things))))
+                          :things conn-etts-parent-things))))
 
 ;; fix etts comment thing overriding ours
 (conn-register-thing
