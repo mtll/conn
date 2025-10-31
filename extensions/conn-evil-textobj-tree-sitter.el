@@ -375,10 +375,15 @@
                                            (conn-etts-select-node)))))))))))))
   (cl-call-next-method))
 
-(cl-defmethod conn-get-target-finder ((cmd (eql conn-etts-all-nodes))
+(cl-defmethod conn-get-target-finder ((_cmd (eql conn-etts-all-nodes))
                                       _arg)
-  conn-etts-node-targets
-  :thing conn-etts-parent-things)
+  (conn-etts-node-targets
+   :things conn-etts-parent-things))
+
+(cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
+                                      _arg)
+  (conn-etts-node-targets
+   :things (list (or (get cmd :conn-command-thing) cmd))))
 
 (defmacro conn-etts-define-thing (name group &optional query)
   (declare (indent defun))
