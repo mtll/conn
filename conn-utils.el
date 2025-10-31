@@ -492,6 +492,19 @@ be restricted to those before or after the current match inclusive."
         (nreverse visible)
       visible)))
 
+(defmacro conn-for-each-visible (beg end &rest body)
+  (declare (indent 2))
+  (cl-with-gensyms (vbeg vend)
+    (cl-once-only (beg end)
+      `(save-excursion
+         (pcase-dolist (`(,,vbeg . ,,vend)
+                        (conn--visible-regions (if (>= ,end ,beg) ,beg ,end)
+                                               (if (>= ,end ,beg) ,end ,beg)
+                                               (>= ,end ,beg)))
+           (with-restriction ,vbeg ,vend
+             :label 'conn-for-each-visible
+             ,@body))))))
+
 (defun conn--visible-matches (string &optional predicate)
   "Return all matches for STRING visible in the selected window."
   (let ((case-fold-search (conn--string-no-upper-case-p string))
