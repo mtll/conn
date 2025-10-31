@@ -1198,6 +1198,23 @@ With arg N, insert N newlines."
 (conn-define-state conn-narrow-state (conn-read-thing-state)
   :lighter "NARROW")
 
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) _arg)
+  (when conn-narrow-ring
+    (let ((subregions nil)
+          (beg most-positive-fixnum)
+          (end most-negative-fixnum))
+      (pcase-dolist ((and bound `(,b . ,e))
+                     (conn-ring-list conn-narrow-ring))
+        (cl-callf max end e)
+        (cl-callf min beg b)
+        (push (conn-make-bounds 'region nil bound)
+              subregions))
+      (when subregions
+        (conn-make-bounds
+         'narrow-ring nil
+         (cons beg end)
+         :subregions subregions)))))
+
 (defun conn-thing-to-narrow-ring ( thing-cmd thing-arg thing-transform
                                    &optional subregions-p)
   "Push thing regions to narrow ring."
