@@ -79,8 +79,7 @@
   "o" 'conn-wincontrol-next-window)
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
+  :repeat t
   "i" 'conn-wincontrol-scroll-down
   "k" 'conn-wincontrol-scroll-up
   "K" 'conn-wincontrol-other-window-scroll-up
@@ -92,8 +91,7 @@
   "Z" 'text-scale-increase)
 
 (defvar-keymap conn-wincontrol-tab-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
+  :repeat t
   "C" 'tab-bar-duplicate-tab
   "O" 'tab-new
   "o" 'tab-next
@@ -125,8 +123,7 @@
 (defalias 'conn-previous-buffer 'previous-buffer)
 
 (defvar-keymap conn-buffer-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
+  :repeat t
   "l" 'conn-next-buffer
   "j" 'conn-previous-buffer)
 
@@ -781,8 +778,7 @@ Operates with the selected windows parent window."
         ">" 'window-layout-rotate-clockwise)
 
       (defvar-keymap conn-window-rotate-repeat-map
-        :repeat (:exit (ignore))
-        "e" 'ignore
+        :repeat t
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise
         "u" 'rotate-windows-back
