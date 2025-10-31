@@ -2563,15 +2563,21 @@ contain targets."
 (defun conn-dispatch-columns ()
   (let ((line-move-visual nil)
         (goal-column (or goal-column (current-column))))
-    (conn-for-each-visible (window-start) (window-end)
-      (save-excursion
-        (while (and (< (point) (point-max))
-                    (line-move-1 1 t))
-          (conn-make-target-overlay (point) 0)))
-      (save-excursion
-        (while (and (< (point-min) (point))
-                    (line-move -1 t))
-          (conn-make-target-overlay (point) 0))))))
+    (save-excursion
+      (pcase-dolist (`(,vbeg . ,vend)
+                     (conn--visible-regions (window-start) (window-end)))
+        (goto-char vbeg)
+        (unless (zerop goal-column)
+          (move-to-column goal-column))
+        (unless (and (bolp) (not (bobp))
+                     (invisible-p (1- (point))))
+          (conn-make-target-overlay (point) 0))
+        (while (< (point) vend)
+          (forward-line)
+          (unless (zerop goal-column)
+            (move-to-column goal-column))
+          (unless (and (bolp) (invisible-p (1- (point))))
+            (conn-make-target-overlay (point) 0)))))))
 
 (cl-defmethod conn-dispatch-setup-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
@@ -2579,34 +2585,8 @@ contain targets."
 (defun conn-dispatch-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (conn-for-each-visible (window-start) (window-end)
-        (goto-char (point-min))
-        (when (and (bolp)
-                   (<= (+ (point) (window-hscroll)) (pos-eol))
-                   (goto-char (+ (point) (window-hscroll)))
-                   (not (invisible-p (point))))
-          (conn-make-target-overlay
-           (point) 0
-           :padding-function (lambda (ov width _face)
-                               (conn--right-justify-padding ov width nil))))
-        (while (/= (point) (point-max))
-          (forward-line)
-          (when (and (bolp)
-                     (<= (+ (point) (window-hscroll))
-                         (pos-eol) (point-max))
-                     (goto-char (+ (point) (window-hscroll)))
-                     (not (invisible-p (point)))
-                     (not (invisible-p (1- (point)))))
-            (if (= (point) (point-max))
-                (conn-make-target-overlay
-                 (point) 0
-                 ;; hack to get the label displayed on its own line
-                 :properties `(after-string
-                               ,(propertize " " 'display '(space :width 0))))
-              (conn-make-target-overlay
-               (point) 0
-               :padding-function (lambda (ov width _face)
-                                   (conn--right-justify-padding ov width nil))))))))))
+      (let ((goal-column (window-hscroll)))
+        (conn-dispatch-columns)))))
 
 (defun conn-dispatch-end-of-lines ()
   (dolist (win (conn--get-target-windows))
