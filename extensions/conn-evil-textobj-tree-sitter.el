@@ -224,7 +224,7 @@
                    (_ self)))))
            (conn-make-bounds 'conn-etts-thing nil bounds)))))))
 
-(defvar conn-etts-parent-things
+(defvar conn-etts-all-things
   '(conn-etts-assignment-inner
     conn-etts-assignment-outer
     conn-etts-assignment-side
@@ -378,7 +378,7 @@
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-etts-all-nodes))
                                       _arg)
   (conn-etts-node-targets
-   :things conn-etts-parent-things))
+   :things conn-etts-all-things))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
                                       _arg)
@@ -918,12 +918,12 @@
         'conn-etts-thing
         :target-finder ( :method (_self _arg)
                          (conn-etts-node-targets
-                          :things conn-etts-parent-things)))
+                          :things conn-etts-all-things)))
   "h" (conn-anonymous-thing
         'conn-etts-thing
         :target-finder ( :method (_self _arg)
                          (conn-etts-parents-targets
-                          :things conn-etts-parent-things))))
+                          :things conn-etts-all-things))))
 
 ;; fix etts comment thing overriding ours
 (conn-register-thing
