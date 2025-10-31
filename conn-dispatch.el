@@ -1587,10 +1587,16 @@ Target overlays may override this default by setting the
   :lighter " SELECT"
   :group 'conn
   (if conn-dispatch-select-mode
-      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
-        (face-remap-add-relative
-         'mode-line
-         (conn-state-get 'conn-dispatch-state :mode-line-face)))
+      (progn
+        (setq conn--hide-mark-cursor t)
+        (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+          (face-remap-add-relative
+           'mode-line
+           (conn-state-get 'conn-dispatch-state :mode-line-face)))
+        ;; Redisplay here so that the mark cursor overlays will be
+        ;; deleted before we begin calling window-text-pixel-size.
+        (redisplay))
+    (setq conn--hide-mark-cursor nil)
     (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
       (with-current-buffer buf
         (face-remap-remove-relative cookie)))))

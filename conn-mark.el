@@ -114,6 +114,7 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--disable-mark-cursor nil)
+(defvar conn--hide-mark-cursor nil)
 
 (defvar-local conn--ephemeral-mark nil)
 
@@ -128,6 +129,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defun conn--mark-cursor-redisplay (win)
   (if (or (not conn-local-mode)
           conn--disable-mark-cursor
+          conn--hide-mark-cursor
           (null (mark t))
           (and (window-minibuffer-p win)
                (not (eq win (active-minibuffer-window)))))
@@ -136,7 +138,7 @@ Used to restore previous value when `conn-mode' is disabled.")
           (delete-overlay conn--mark-cursor))
         (setf conn--mark-cursor nil))
     (unless conn--mark-cursor
-      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t))))
+      (setf conn--mark-cursor (make-overlay (mark t) (mark t)))
       (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
     (cond ((or (use-region-p)
                (= (point-max) (mark t) (point)))
