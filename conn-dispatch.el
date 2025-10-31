@@ -888,11 +888,27 @@ with `conn-dispatch-thing-ignored-modes'."
   "Face for matches when reading strings."
   :group 'conn-faces)
 
-(defvar conn-targets nil)
+(defvar conn-targets nil
+  "Alist of (WINDOW . TARGETS).")
 
-(defvar conn-target-count nil)
+(defvar conn-target-count nil
+  "Alist of (WINODW . TARGET-COUNT).
 
-(defvar conn-target-sort-function 'conn-target-nearest-op)
+Updated by `conn-dispatch-get-targets' and only counts targets that
+would have visible labels.")
+
+(defvar conn-target-sort-function 'conn-target-nearest-op
+  "Sort function for targets in each window.
+
+Labels are sorted first by length and then lexicographically by the
+position of the characters in `conn-simple-label-characters'.  Then the
+target that is sorted into first position by `conn-target-sort-function'
+will received the first label, the second the second label and so one.
+Thus a target sorted before another target has higher priority for a
+shorter label.
+
+A sort function should take two targets as arguments and return non-nil
+if the first should be sorted before the second.")
 
 (defvar conn-target-window-predicate 'conn-dispatch-ignored-mode
   "Predicate which windows must satisfy in order to be considered during
@@ -905,7 +921,13 @@ be ignored by during dispatch.")
   (lambda (pt length window)
     (not (conn--overlays-in-of-type pt (+ pt length)
                                     'conn-target-overlay
-                                    window))))
+                                    window)))
+  "Predicate which a buffer position must satisfy in order to be a valid
+target.
+
+A target predicate function should take POINT, LENGTH, and WINDOW as
+arguments and return non-nil if a target at POINT of LENGTH in WINDOW's
+buffer is a valid target.")
 
 (defvar conn--dispatch-init-state nil)
 
@@ -1012,11 +1034,13 @@ Optionally the overlay may have an associated THING."
 
 ;;;;; Dispatch Labels
 
-(defvar conn-dispatch-label-state nil)
-
 (defvar conn-dispatch-target-finder nil)
 
-(defvar conn-dispatch-label-function 'conn-dispatch-smart-labels)
+(defvar conn-dispatch-label-function 'conn-dispatch-smart-labels
+  "Function responsible for labeling all `conn-targets'.")
+
+(defvar conn-dispatch-label-state nil
+  "The state for `conn-dispatch-label-function' during dispatch.")
 
 (defvar conn-default-label-padding-function 'conn--centered-padding
   "Default function for padding dispatch labels.
@@ -1338,52 +1362,60 @@ Target overlays may override this default by setting the
 
 (cl-defstruct (conn-simple-label-state)
   pool
-  used
+  in-use
   size)
 
 (defun conn-dispatch-simple-labels ()
+  "Create simple labels for all targets."
   (declare (important-return-value t))
   (with-memoization conn-dispatch-label-state
     (make-conn-simple-label-state
      :pool nil
-     :used (make-hash-table :test 'equal)
+     :in-use (make-hash-table :test 'equal)
      :size 0))
   (cl-symbol-macrolet ((pool (conn-simple-label-state-pool
                               conn-dispatch-label-state))
-                       (used (conn-simple-label-state-used
-                              conn-dispatch-label-state))
+                       (in-use (conn-simple-label-state-in-use
+                                conn-dispatch-label-state))
                        (size (conn-simple-label-state-size
                               conn-dispatch-label-state)))
     (let ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
           (count (conn-get-target-count))
           (unlabeled nil)
           (labels nil))
-      (clrhash used)
+      (clrhash in-use)
       (when (> count size)
+        ;; Use the in-use table to find labels that are being removed
+        ;; to be used as prefixes for new labels.  Later this will be
+        ;; used to ensure any target having its label string reused in
+        ;; this way maintains the same prefix.
         (dolist (str pool)
-          (puthash str 'removed used))
+          (puthash str t in-use))
         (setf size (max (ceiling (* 1.8 count))
                         (let ((len (length conn-simple-label-characters)))
                           (+ (- len 3)
                              (* len 3))))
               pool (conn-simple-labels size))
         (dolist (str pool)
-          (remhash str used)))
+          (remhash str in-use)))
       (pcase-dolist (`(,_win . ,targets) all-targets)
         (dolist (tar targets)
           (if-let* ((str (overlay-get tar 'label-string)))
+              ;; Try to reuse a target's existing label.
               (progn
-                (when (gethash str used)
-                  (remhash str used)
+                (when (gethash str in-use)
+                  ;; This target has had its label string reused as a
+                  ;; prefix for new labels, ensure that it gets a new
+                  ;; label that has its old label as a prefix.
                   (setf str (concat str (car conn-simple-label-characters))
                         (overlay-get tar 'label-string) str))
-                (puthash str t used)
+                (puthash str t in-use)
                 (push (conn-disptach-label-target tar str) labels))
             (push tar unlabeled))))
       (cl-callf nreverse unlabeled)
       (cl-loop for str in pool
                while unlabeled
-               unless (gethash str used)
+               unless (gethash str in-use)
                do (let ((tar (pop unlabeled)))
                     (overlay-put tar 'label-string str)
                     (push (conn-disptach-label-target tar str) labels)))
@@ -2255,13 +2287,14 @@ contain targets."
                       (search-forward string nil t))
             (let ((beg (match-beginning 0))
                   (end (match-end 0)))
-              (overlay-put (conn-make-target-overlay beg 0)
-                           'thing (conn-anonymous-thing
-                                    'region
-                                    :bounds-op ( :method (_self _arg)
-                                                 (conn-make-bounds
-                                                  'region nil
-                                                  (cons beg end)))))
+              (conn-make-target-overlay
+               beg 0
+               :thing (conn-anonymous-thing
+                        'region
+                        :bounds-op ( :method (_self _arg)
+                                     (conn-make-bounds
+                                      'region nil
+                                      (cons beg end)))))
               (when (<= prev (pos-bol) beg)
                 (cl-incf line-count))
               (setq prev beg)))))))
@@ -2418,13 +2451,14 @@ contain targets."
    (lambda (node)
      (save-excursion
        (goto-char (treesit-node-start node))
-       (overlay-put
-        (conn-make-target-overlay (point) 0 :window win)
-        'context (cons (pos-bol)
-                       (progn
-                         (when-let* ((name (treesit-defun-name node)))
-                           (search-forward name))
-                         (pos-bol 2))))))))
+       (conn-make-target-overlay
+        (point) 0
+        :window win
+        :properties `(context ,(cons (pos-bol)
+                                     (progn
+                                       (when-let* ((name (treesit-defun-name node)))
+                                         (search-forward name))
+                                       (pos-bol 2)))))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-all-defuns))
   (dolist (win (conn--get-target-windows))
@@ -2568,10 +2602,11 @@ contain targets."
                        (not (invisible-p (point)))
                        (not (invisible-p (1- (point)))))
               (if (= (point) (point-max))
-                  ;; hack to get the label displayed on its own line
-                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
-                    (overlay-put ov 'after-string
-                                 (propertize " " 'display '(space :width 0))))
+                  (conn-make-target-overlay
+                   (point) 0
+                   ;; hack to get the label displayed on its own line
+                   :properties `(after-string
+                                 ,(propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay
                  (point) 0
                  :padding-function (lambda (ov width _face)
@@ -2593,10 +2628,11 @@ contain targets."
                        (not (invisible-p (point)))
                        (not (invisible-p (1- (point)))))
               (if (= (point-max) (point))
-                  ;; hack to get the label displayed on its own line
-                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
-                    (overlay-put ov 'after-string
-                                 (propertize " " 'display '(space :width 0))))
+                  (conn-make-target-overlay
+                   (point) 0
+                   ;; hack to get the label displayed on its own line
+                   :properties `(after-string
+                                 ,(propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay (point) 0)))))))))
 
 (cl-defmethod conn-dispatch-targets-other-end ((_ (eql conn-dispatch-end-of-lines)))
@@ -2662,12 +2698,12 @@ contain targets."
         (vertical-motion 1)
         (while (<= (point) (window-end))
           (if (= (point) (point-max))
-              ;; hack to get the label displayed on its own line
-              (when-let* ((ov (conn-make-target-overlay
-                               (point) 0
-                               :thing 'char)))
-                (overlay-put ov 'after-string
-                             (propertize " " 'display '(space :width 0))))
+              (conn-make-target-overlay
+               (point) 0
+               :thing 'char
+               ;; hack to get the label displayed on its own line
+               :properties `(after-string
+                             ,(propertize " " 'display '(space :width 0))))
             (conn-make-target-overlay
              (point) 0
              :thing 'char
