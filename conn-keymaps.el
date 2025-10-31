@@ -53,7 +53,8 @@
 ;;;;; Repeat Map
 
 (defvar-keymap conn-pop-mark-repeat-map
-  :repeat t
+  :repeat (:exit (ignore))
+  "e" 'ignore
   "u" 'conn-pop-mark-ring
   "o" 'conn-unpop-mark-ring)
 
@@ -69,7 +70,8 @@
 ;;;;; Mode Keymaps
 
 (defvar-keymap conn-error-repeat-map
-  :repeat t
+  :repeat (:exit (ignore))
+  "e" 'ignore
   "i" 'previous-error
   "k" 'next-error)
 
@@ -172,7 +174,8 @@
   "L" 'conn-unpop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
-  :repeat t
+  :repeat (:exit (ignore))
+  "e" 'ignore
   "J" 'conn-pop-movement-ring
   "L" 'conn-unpop-movement-ring
   "j" 'conn-pop-movement-ring
@@ -189,7 +192,8 @@
 ;;;;; Global Bindings
 
 (defvar-keymap conn-dispatch-cycle-map
-  :repeat t
+  :repeat (:exit (ignore))
+  "e" 'ignore
   "l" 'conn-dispatch-cycle-ring-next
   "j" 'conn-dispatch-cycle-ring-previous)
 
@@ -240,6 +244,8 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "." conn-thing-inner-remap
+  "," conn-thing-inner-remap
   "w" 'forward-whitespace
   "W" 'conn-backward-whitespace
   ">" 'forward-line
@@ -247,7 +253,7 @@
   ";" 'conn-mark-comment
   "v" 'conn-mark-visual-line
   "V" 'conn-mark-visible
-  "," 'conn-goto-line
+  "g" 'conn-goto-line
   "/" 'conn-mark-filename
   "U" 'conn-mark-uuid
   "s" 'conn-mark-string
