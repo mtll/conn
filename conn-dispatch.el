@@ -335,6 +335,8 @@ themselves once the selection process has concluded."
        (`(,it . nil)
         (unless prompt-flag
           (cl-return (conn-label-payload it)))))
+     (while-no-input
+       (mapc #'conn-label-redisplay candidates))
      (setq prompt-flag nil)
      (let ((next nil)
            (c (funcall char-reader prompt)))
@@ -342,9 +344,7 @@ themselves once the selection process has concluded."
              current (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
                          (push l next)))
-             conn--read-args-error-message nil)
-       (while-no-input
-         (mapc #'conn-label-redisplay candidates))))))
+             conn--read-args-error-message nil)))))
 
 ;;;;; Window Header-line Labels
 
