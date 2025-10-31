@@ -257,7 +257,7 @@ returned."
                           setup-function)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (if narrowed-string
+      (if (length> narrowed-string 0)
           (progn
             (overlay-put overlay 'display nil)
             (overlay-put overlay 'before-string nil)
