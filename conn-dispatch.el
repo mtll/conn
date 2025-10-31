@@ -135,7 +135,7 @@ which see.")
                          nil conn-target-window-predicate)
     (list (selected-window))))
 
-(defun conn-simple-labels (count &optional face)
+(defun conn-simple-labels (count)
   "Return a list of label strings of length COUNT.
 
 If FACE is non-nil set label string face to FACE.  Otherwise label
@@ -169,8 +169,6 @@ strings have `conn-dispatch-label-face'."
                     (throw 'done nil))))))
           (let ((result (cl-loop for bucket across buckets
                                  nconc (nreverse bucket))))
-            (dolist (label result)
-              (put-text-property 0 (length label) 'face face label))
             result))))))
 
 ;;;;; Label Reading
@@ -365,7 +363,7 @@ themselves once the selection process has concluded."
       (concat padding label))))
 
 (defvar conn--window-label-pool
-  (conn-simple-labels 30 'conn-window-label-face))
+  (conn-simple-labels 30))
 
 (defun conn--ensure-window-labels ()
   (let* ((windows (conn--get-windows nil 'nomini t))
@@ -395,7 +393,8 @@ themselves once the selection process has concluded."
         (setq-local header-line-format
                     `(,header-line-label (nil ,header-line-format))))
       (prog1
-          (conn-window-label (propertize string 'face 'conn-window-label-face) window)
+          (conn-window-label (propertize string 'face 'conn-window-label-face)
+                             window)
         (goto-char (window-start))))))
 
 ;; From ace-window
@@ -1344,45 +1343,56 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-simple-labels ()
   (declare (important-return-value t))
-  (pcase (with-memoization conn-dispatch-label-state
-           (make-conn-simple-label-state
-            :pool nil
-            :used (make-hash-table :test 'equal)
-            :size 0))
-    ((cl-struct conn-simple-label-state pool used size)
-     (clrhash used)
-     (let ((current-window (selected-window))
-           (all-targets (conn-dispatch-get-targets conn-target-sort-function))
-           (count (conn-get-target-count))
-           (unlabeled nil)
-           (labels nil))
-       (when (> count size)
-         (dolist (str pool)
-           (puthash str t used))
-         (setf size (max (ceiling (* 1.8 count)) 100)
-               pool (conn-simple-labels size))
-         (dolist (str pool)
-           (remhash str used)))
-       (pcase-dolist (`(,window . ,targets) all-targets)
-         (dolist (tar targets)
-           (if-let* ((str (overlay-get tar 'label-string))
-                     (_ (not (gethash str used))))
-               (progn
-                 (puthash str t used)
-                 (unless (and (eq window current-window)
-                              (= (window-point window) (overlay-start tar)))
-                   (push (conn-disptach-label-target tar str) labels)))
-             (unless (and (eq window current-window)
-                          (= (window-point window) (overlay-start tar)))
-               (push tar unlabeled)))))
-       (cl-callf nreverse unlabeled)
-       (cl-loop for str in pool
-                while unlabeled
-                unless (gethash str used)
-                do (let ((tar (pop unlabeled)))
-                     (overlay-put tar 'label-string str)
-                     (push (conn-disptach-label-target tar str) labels)))
-       labels))))
+  (with-memoization conn-dispatch-label-state
+    (make-conn-simple-label-state
+     :pool nil
+     :used (make-hash-table :test 'equal)
+     :size 0))
+  (cl-symbol-macrolet ((pool (conn-simple-label-state-pool
+                              conn-dispatch-label-state))
+                       (used (conn-simple-label-state-used
+                              conn-dispatch-label-state))
+                       (size (conn-simple-label-state-size
+                              conn-dispatch-label-state)))
+    (let ((current-window (selected-window))
+          (all-targets (conn-dispatch-get-targets conn-target-sort-function))
+          (count (conn-get-target-count))
+          (unlabeled nil)
+          (labels nil))
+      (clrhash used)
+      (when (> count size)
+        (dolist (str pool)
+          (puthash str 'removed used))
+        (setf size (max (ceiling (* 1.8 count))
+                        (let ((len (length conn-simple-label-characters)))
+                          (+ (- len 3)
+                             (* len 3))))
+              pool (conn-simple-labels size))
+        (dolist (str pool)
+          (remhash str used)))
+      (pcase-dolist (`(,window . ,targets) all-targets)
+        (dolist (tar targets)
+          (if-let* ((str (overlay-get tar 'label-string)))
+              (progn
+                (when (gethash str used)
+                  (remhash str used)
+                  (setf str (concat str (car conn-simple-label-characters))
+                        (overlay-get tar 'label-string) str))
+                (puthash str t used)
+                (unless (and (eq window current-window)
+                             (= (window-point window) (overlay-start tar)))
+                  (push (conn-disptach-label-target tar str) labels)))
+            (unless (and (eq window current-window)
+                         (= (window-point window) (overlay-start tar)))
+              (push tar unlabeled)))))
+      (cl-callf nreverse unlabeled)
+      (cl-loop for str in pool
+               while unlabeled
+               unless (gethash str used)
+               do (let ((tar (pop unlabeled)))
+                    (overlay-put tar 'label-string str)
+                    (push (conn-disptach-label-target tar str) labels)))
+      labels)))
 
 (defun conn--stable-label-subr (window targets characters)
   (let ((group 0)
