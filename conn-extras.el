@@ -647,7 +647,6 @@
   "j" 'ibuffer-backward-filter-group
   "m" 'ibuffer-jump-to-filter-group
   "n" 'conn-ibuffer-filter-prefix
-  "f" 'conn-dispatch
   "k" 'ibuffer-forward-line
   "i" 'ibuffer-backward-line
   "w" 'ibuffer-do-kill-lines
