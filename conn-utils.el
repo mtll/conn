@@ -473,7 +473,7 @@ be restricted to those before or after the current match inclusive."
   "Return t if STRING contains no upper case characters."
   (cl-loop for char across string always (eql char (downcase char))))
 
-(defun conn--visible-regions (beg end &optional forward)
+(defun conn--visible-regions (beg end &optional backward)
   (while (and (invisible-p beg)
               (/= end (setq beg (next-single-char-property-change
                                  beg 'invisible nil end)))))
@@ -488,9 +488,7 @@ be restricted to those before or after the current match inclusive."
                                       next 'invisible nil end)))
                   (invisible-p next)))
       (setq beg next))
-    (if forward
-        (nreverse visible)
-      visible)))
+    (if backward visible (nreverse visible))))
 
 (defmacro conn-for-each-visible (beg end &rest body)
   (declare (indent 2))
@@ -500,7 +498,7 @@ be restricted to those before or after the current match inclusive."
          (pcase-dolist (`(,,vbeg . ,,vend)
                         (conn--visible-regions (if (>= ,end ,beg) ,beg ,end)
                                                (if (>= ,end ,beg) ,end ,beg)
-                                               (>= ,end ,beg)))
+                                               (< ,end ,beg)))
            (with-restriction ,vbeg ,vend
              :label 'conn-for-each-visible
              ,@body))))))
@@ -511,7 +509,7 @@ be restricted to those before or after the current match inclusive."
         matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end)
-                     (conn--visible-regions (window-start) (window-end)))
+                     (conn--visible-regions (window-start) (window-end) t))
         (goto-char beg)
         (while (search-forward string end t)
           (when (or (null predicate)
@@ -525,7 +523,7 @@ be restricted to those before or after the current match inclusive."
   (let (matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end)
-                     (conn--visible-regions (window-start) (window-end)))
+                     (conn--visible-regions (window-start) (window-end) t))
         (goto-char beg)
         (while (re-search-forward regexp end t)
           (when (or (null predicate)
