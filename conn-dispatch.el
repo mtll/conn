@@ -1354,8 +1354,7 @@ Target overlays may override this default by setting the
                               conn-dispatch-label-state))
                        (size (conn-simple-label-state-size
                               conn-dispatch-label-state)))
-    (let ((current-window (selected-window))
-          (all-targets (conn-dispatch-get-targets conn-target-sort-function))
+    (let ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
           (count (conn-get-target-count))
           (unlabeled nil)
           (labels nil))
@@ -1370,7 +1369,7 @@ Target overlays may override this default by setting the
               pool (conn-simple-labels size))
         (dolist (str pool)
           (remhash str used)))
-      (pcase-dolist (`(,window . ,targets) all-targets)
+      (pcase-dolist (`(,_win . ,targets) all-targets)
         (dolist (tar targets)
           (if-let* ((str (overlay-get tar 'label-string)))
               (progn
@@ -1379,12 +1378,8 @@ Target overlays may override this default by setting the
                   (setf str (concat str (car conn-simple-label-characters))
                         (overlay-get tar 'label-string) str))
                 (puthash str t used)
-                (unless (and (eq window current-window)
-                             (= (window-point window) (overlay-start tar)))
-                  (push (conn-disptach-label-target tar str) labels)))
-            (unless (and (eq window current-window)
-                         (= (window-point window) (overlay-start tar)))
-              (push tar unlabeled)))))
+                (push (conn-disptach-label-target tar str) labels))
+            (push tar unlabeled))))
       (cl-callf nreverse unlabeled)
       (cl-loop for str in pool
                while unlabeled
@@ -1618,19 +1613,21 @@ Target overlays may override this default by setting the
        (pcase-dolist (`(_ . ,targets) conn-targets)
          (dolist (target targets)
            (conn-label-delete (overlay-get target 'conn-label))
-           (overlay-put target 'category 'conn-old-target)))
+           (overlay-put target 'conn-label nil)
+           (overlay-put target 'category 'conn-old-target)
+           (overlay-put target 'face nil)))
        (dolist (ov conn-dispatch--window-shadow-overlays)
          (delete-overlay ov))
        (clrhash conn--pixelwise-window-cache)
        (clrhash conn--dispatch-window-lines-cache)
-       (setq conn-targets nil
-             conn-target-count nil
+       (setq conn-target-count nil
              conn-dispatch--window-shadow-overlays nil)
        (conn-dispatch-suspend-targets conn-dispatch-target-finder)
        (pcase-let ((`(,conn-target-window-predicate
                       ,conn-target-predicate
                       ,conn-target-sort-function)
                     conn--dispatch-init-state)
+                   (conn-targets nil)
                    (conn-dispatch-label-state nil)
                    (scroll-conservatively conn--prev-scroll-conservatively)
                    (conn-dispatch-target-finder nil)
