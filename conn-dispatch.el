@@ -1379,7 +1379,8 @@ Target overlays may override this default by setting the
                                 conn-dispatch-label-state))
                        (size (conn-simple-label-state-size
                               conn-dispatch-label-state)))
-    (let ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
+    (let ((sel-win (selected-window))
+          (all-targets (conn-dispatch-get-targets conn-target-sort-function))
           (count (conn-get-target-count))
           (unlabeled nil)
           (labels nil))
@@ -1398,7 +1399,7 @@ Target overlays may override this default by setting the
               pool (conn-simple-labels size))
         (dolist (str pool)
           (remhash str in-use)))
-      (pcase-dolist (`(,_win . ,targets) all-targets)
+      (pcase-dolist (`(,win . ,targets) all-targets)
         (dolist (tar targets)
           (if-let* ((str (overlay-get tar 'label-string)))
               ;; Try to reuse a target's existing label.
@@ -1410,7 +1411,11 @@ Target overlays may override this default by setting the
                   (setf str (concat str (car conn-simple-label-characters))
                         (overlay-get tar 'label-string) str))
                 (puthash str t in-use)
-                (push (conn-disptach-label-target tar str) labels))
+                (unless (and (eq win sel-win)
+                             (<= (overlay-start tar)
+                                 (point)
+                                 (overlay-end tar)))
+                  (push (conn-disptach-label-target tar str) labels)))
             (push tar unlabeled))))
       (cl-callf nreverse unlabeled)
       (cl-loop for str in pool
@@ -1418,7 +1423,11 @@ Target overlays may override this default by setting the
                unless (gethash str in-use)
                do (let ((tar (pop unlabeled)))
                     (overlay-put tar 'label-string str)
-                    (push (conn-disptach-label-target tar str) labels)))
+                    (unless (and (eq (overlay-get tar 'window) sel-win)
+                                 (<= (overlay-start tar)
+                                     (point)
+                                     (overlay-end tar)))
+                      (push (conn-disptach-label-target tar str) labels))))
       labels)))
 
 (defun conn--stable-label-subr (window targets characters)
@@ -1588,11 +1597,11 @@ Target overlays may override this default by setting the
   :group 'conn
   (if conn-dispatch-select-mode
       (progn
-        (setq conn--hide-mark-cursor t)
         (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
           (face-remap-add-relative
            'mode-line
            (conn-state-get 'conn-dispatch-state :mode-line-face)))
+        (setq conn--hide-mark-cursor t)
         ;; Redisplay here so that the mark cursor overlays will be
         ;; deleted before we begin calling window-text-pixel-size.
         (redisplay))
