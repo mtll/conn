@@ -192,7 +192,10 @@
                       (conn--read-args-display-message))))))
          (conn-read-args (conn-etts-expand-state
                           :prompt "Node"
-                          :display-handler #'display-handler)
+                          :display-handler #'display-handler
+                          :around (lambda (cont)
+                                    (conn-with-dispatch-suspended
+                                      (funcall cont))))
              ((bounds
                (oclosure-lambda (conn-read-args-argument
                                  (required t))
