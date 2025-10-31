@@ -56,9 +56,9 @@
 
 (defun conn-etts--filter-captures (groups captures)
   (let (regions)
-    (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-      (dolist (capture captures)
-        (cl-callf nreverse capture)
+    (dolist (capture captures)
+      (cl-callf nreverse capture)
+      (pcase-dolist (`(,group ,tbeg . ,tend) groups)
         (if-let* ((beg (alist-get tbeg capture)))
             (when-let* ((end (alist-get tend capture)))
               (push (cons (treesit-node-start beg)
