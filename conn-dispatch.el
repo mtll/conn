@@ -2561,8 +2561,12 @@ contain targets."
           (conn-make-target-overlay beg (or fixed-length (- end beg))))))))
 
 (defun conn-dispatch-columns ()
-  (let ((line-move-visual nil)
-        (goal-column (or goal-column (current-column))))
+  (let* ((line-move-visual nil)
+         (goal-column (or goal-column (current-column)))
+         (padding-function
+          (when (= goal-column (window-hscroll))
+            (lambda (ov width _face)
+              (conn--right-justify-padding ov width nil)))))
     (save-excursion
       (pcase-dolist (`(,vbeg . ,vend)
                      (conn--visible-regions (window-start) (window-end)))
@@ -2571,13 +2575,17 @@ contain targets."
           (move-to-column goal-column))
         (unless (and (bolp) (not (bobp))
                      (invisible-p (1- (point))))
-          (conn-make-target-overlay (point) 0))
+          (conn-make-target-overlay
+           (point) 0
+           :padding-function padding-function))
         (while (< (point) vend)
           (forward-line)
           (unless (zerop goal-column)
             (move-to-column goal-column))
           (unless (and (bolp) (invisible-p (1- (point))))
-            (conn-make-target-overlay (point) 0)))))))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function padding-function)))))))
 
 (cl-defmethod conn-dispatch-setup-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
