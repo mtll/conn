@@ -175,24 +175,30 @@
           (goto-char end)
           (conn--push-ephemeral-mark beg)
           (activate-mark)))
-       (cl-flet ((display-handler (prompt _args)
-                   (message
-                    (substitute-command-keys
-                     (concat
-                      (propertize prompt 'face 'minibuffer-prompt)
-                      " ("
-                      (propertize (format "%s" (caar nodes))
-                                  'face 'eldoc-highlight-function-argument)
-                      "; "
-                      (concat
-                       "\\[conn-expand] expand; "
-                       "\\[conn-contract] contract; "
-                       "\\[end] finish")
-                      "): "
-                      (conn--read-args-display-message))))))
+       (let* ((curr 0)
+              (size (length nodes))
+              (display-handler
+               (lambda (prompt _args)
+                 (message
+                  (substitute-command-keys
+                   (concat
+                    (propertize prompt 'face 'minibuffer-prompt)
+                    " ("
+                    (mapconcat
+                     (lambda (node)
+                       (propertize
+                        (format "%s" (car node))
+                        'face (when (eq (nth curr nodes) node)
+                                'eldoc-highlight-function-argument)))
+                     nodes ", ")
+                    "): "
+                    "\\[conn-expand] next; "
+                    "\\[conn-contract] prev; "
+                    "\\[end] done "
+                    (conn--read-args-display-message)))))))
          (conn-read-args (conn-etts-expand-state
                           :prompt "Node"
-                          :display-handler #'display-handler
+                          :display-handler display-handler
                           :around (lambda (cont)
                                     (conn-with-dispatch-suspended
                                       (funcall cont))))
@@ -202,16 +208,16 @@
                    (self command)
                  (pcase command
                    ('conn-contract
-                    (setq nodes (nconc (last nodes) (butlast nodes)))
-                    (pcase (car nodes)
+                    (setq curr (mod (1- curr) size))
+                    (pcase (nth curr nodes)
                       (`(,_ ,beg . ,end)
                        (goto-char end)
                        (conn--push-ephemeral-mark beg)))
                     (conn-read-args-handle)
                     self)
                    ('conn-expand
-                    (setq nodes (nconc (cdr nodes) (list (car nodes))))
-                    (pcase (car nodes)
+                    (setq curr (mod (1+ curr) size))
+                    (pcase (nth curr nodes)
                       (`(,_ ,beg . ,end)
                        (goto-char end)
                        (conn--push-ephemeral-mark beg)))
