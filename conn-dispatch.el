@@ -1173,11 +1173,6 @@ Target overlays may override this default by setting the
                          `(invisible ,(get-char-property pt 'invisible win))
                          str)
                         (overlay-put overlay 'after-string str))))
-                   ((and (get-char-property pt 'after-string)
-                         (= (1+ pt)
-                            (next-single-char-property-change
-                             pt 'after-string nil (+ 2 pt))))
-                    (setq end pt))
                    ;; If the label overlay is wider than the label
                    ;; string we are done.
                    ((let ((width (save-excursion
@@ -1197,6 +1192,10 @@ Target overlays may override this default by setting the
                                 (>= width display-width))
                         (setq padding-width (max (- width display-width) 0)
                               end pt))))
+                   ((and (get-char-property pt 'after-string)
+                         (= pt (next-single-char-property-change
+                                (1- pt) 'after-string nil (1+ pt))))
+                    (setq end (1+ pt)))
                    ;; If we are abutting another target overlay then end
                    ;; the label overlay here so that we don't hide it.
                    ((dolist (ov (overlays-in pt (1+ pt)) end)
