@@ -325,11 +325,6 @@
                                              (conn-etts-select-node))))))))))))))
   (cl-call-next-method))
 
-(cl-defmethod conn-get-target-finder ((_cmd (eql conn-etts-all-nodes))
-                                      _arg)
-  (conn-etts-node-targets
-   :things conn-etts-all-things))
-
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-etts-thing))
                                       _arg)
   (conn-etts-node-targets
