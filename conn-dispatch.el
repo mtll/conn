@@ -1768,16 +1768,14 @@ Target overlays may override this default by setting the
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
-                                       (floor (window-height) 2.5))))
-    (conn-scroll-up)
-    (goto-char (window-start (selected-window))))
+                                       next-screen-context-lines)))
+    (conn-scroll-up))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
-                                       (floor (window-height) 2.5))))
-    (conn-scroll-down)
-    (goto-char (window-start (selected-window))))
+                                       next-screen-context-lines)))
+    (conn-scroll-down))
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-goto-window (window)
