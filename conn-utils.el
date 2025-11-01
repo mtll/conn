@@ -539,4 +539,12 @@ be restricted to those before or after the current match inclusive."
   (without-restriction
     (remove-overlays nil nil 'conn-overlay t)))
 
+(defun conn--overlays-in-of-type (beg end category &optional window)
+  (declare (important-return-value t))
+  (cl-loop for ov in (overlays-in beg end)
+           when (and (eq (overlay-get ov 'category) category)
+                     (or (null window)
+                         (eq (overlay-get ov 'window) window)))
+           collect ov))
+
 (provide 'conn-utils)

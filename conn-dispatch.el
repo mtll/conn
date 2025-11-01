@@ -958,8 +958,8 @@ Optionally the overlay may have an associated THING."
           (when composition-end
             (previous-single-property-change
              composition-end 'composition nil (car line-bounds))))
-         (old (car (conn--overlays-in-of-type pt (+ pt (max length 1))
-                                              'conn-old-target)))
+         (old (conn--overlays-in-of-type pt (+ pt (max length 1))
+                                         'conn-old-target window))
          (ov (if composition-start
                  (if (> length 0)
                      (make-overlay composition-start composition-end nil nil t)
@@ -971,9 +971,12 @@ Optionally the overlay may have an associated THING."
       (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
       (overlay-put ov 'padding-function padding-function)
-      (when-let* ((str (and old (overlay-get old 'label-string))))
-        (setf (overlay-get ov 'label-string) str
-              (overlay-get old 'label-string) nil))
+      (catch 'done
+        (dolist (o old)
+          (when-let* ((str (overlay-get o 'label-string)))
+            (setf (overlay-get ov 'label-string) str
+                  (overlay-get o 'label-string) nil)
+            (throw 'done nil))))
       (when thing (overlay-put ov 'thing thing))
       (cl-loop for (prop val) on properties by #'cddr
                do (overlay-put ov prop val))
@@ -982,14 +985,6 @@ Optionally the overlay may have an associated THING."
 
 (defun conn-get-target-count ()
   (cl-loop for (_win . count) in conn-target-count sum count))
-
-(defun conn--overlays-in-of-type (beg end category &optional window)
-  (declare (important-return-value t))
-  (cl-loop for ov in (overlays-in beg end)
-           when (and (eq (overlay-get ov 'category) category)
-                     (or (null window)
-                         (eq (overlay-get ov 'window) window)))
-           collect ov))
 
 (defun conn-delete-target-overlay (ov)
   (let ((win (overlay-get ov 'window)))
