@@ -1120,18 +1120,16 @@ Target overlays may override this default by setting the
                            padding-function)
                 label)
                (full-string (concat prefix string suffix)))
-    (let ((display-width
-           (conn--string-pixel-width full-string
-                                     (thread-first
-                                       (overlay-get overlay 'window)
-                                       (window-buffer))))
-          (padding-width 0)
-          ;; display-line-numbers, line-prefix and wrap-prefix break
-          ;; width calculations, temporarily disable them.
-          (old-state (buffer-local-set-state
-                      display-line-numbers nil
-                      line-prefix nil
-                      wrap-prefix nil)))
+    (let* ((window (overlay-get overlay 'window))
+           (display-width
+            (conn--string-pixel-width full-string (window-buffer window)))
+           (padding-width 0)
+           ;; display-line-numbers, line-prefix and wrap-prefix break
+           ;; width calculations, temporarily disable them.
+           (old-state (buffer-local-set-state
+                       display-line-numbers nil
+                       line-prefix nil
+                       wrap-prefix nil)))
       (unwind-protect
           (progn
             (unless (= (overlay-start overlay) (point-max))
@@ -1151,6 +1149,11 @@ Target overlays may override this default by setting the
                 ;; be wider than the label string.
                 (while (not end)
                   (cond
+                   ((and (/= beg pt)
+                         (conn--overlays-in-of-type pt (1+ pt)
+                                                    'conn-target-overlay
+                                                    window))
+                    (setq end pt))
                    ;; If we are at the end of a line than end the label overlay.
                    ((= line-end pt)
                     (if (and (not (invisible-p pt))
@@ -1170,17 +1173,14 @@ Target overlays may override this default by setting the
                         (overlay-put overlay 'after-string str))))
                    ;; If the label overlay is wider than the label
                    ;; string we are done.
-                   ((let ((width (save-excursion
-                                   (with-restriction beg pt
-                                     (- (car (window-text-pixel-size
-                                              (overlay-get overlay 'window)
-                                              beg pt))
-                                        ;; Subtract the width of any
-                                        ;; before strings
-                                        (with-memoization beg-width
-                                          (car (window-text-pixel-size
-                                                (overlay-get overlay 'window)
-                                                beg beg))))))))
+                   ((let ((width
+                           (save-excursion
+                             (with-restriction beg pt
+                               (- (car (window-text-pixel-size window beg pt))
+                                  ;; Subtract the width of any
+                                  ;; before strings
+                                  (with-memoization beg-width
+                                    (car (window-text-pixel-size window beg beg))))))))
                       ;; FIXME: This doesn't handle zero length
                       ;;        overlays with after strings.
                       (when (or (= pt (point-max))
