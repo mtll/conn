@@ -728,8 +728,6 @@ A zero means repeat until error."
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil))
           (window pt thing thing-arg thing-transform)
-        (unless macro
-          (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder))
         (conn-dispatch-loop-undo-boundary (window-buffer window))
         (let ((conn-kapply-suppress-message t))
           (conn-with-dispatch-suspended

@@ -263,7 +263,7 @@
     :initform (lambda (win) (eq win (selected-window))))
    (region-predicate :initarg :region-predicate)))
 
-(cl-defmethod conn-dispatch-update-targets ((state conn-etts-node-targets))
+(cl-defmethod conn-dispatch-targets-update ((state conn-etts-node-targets))
   (let ((region-pred (ignore-error unbound-slot
                        (oref state region-predicate))))
     (dolist (win (conn--get-target-windows))

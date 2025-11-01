@@ -980,7 +980,7 @@ With a prefix ARG `push-mark' without activating it."
   (conn-perform-dispatch-loop nil
     (pcase-let* ((`(,pt ,win ,thing-override)
                   (save-mark-and-excursion
-                    (conn-dispatch-select-target))))
+                    (conn-select-target))))
       (funcall action win pt
                (or thing-override thing)
                thing-arg))))
