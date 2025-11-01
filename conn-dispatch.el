@@ -1518,6 +1518,7 @@ Target overlays may override this default by setting the
                                ":" prompt-suffix))
                      (read-key-sequence-vector)
                      (key-binding t)))
+            ('restart (throw 'return ?\8))
             ('dispatch-character-event
              (setq conn--dispatch-must-prompt nil)
              (push `(no-record . ,last-input-event) unread-command-events)

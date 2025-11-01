@@ -395,13 +395,13 @@
 (define-keymap
   :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
+  "DEL" 'restart
+  "<backspace>" 'restart
   "C-q" 'help
   "C-/" 'undo
   "C-'" 'recursive-edit
   "<mouse-1>" 'act
   "<mouse-3>" 'undo
-  "DEL" 'backward-delete-char
-  "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   ;; "C-f" 'retarget
