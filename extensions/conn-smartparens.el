@@ -153,10 +153,6 @@
  :forward-op 'conn-sp-forward-sexp-op
  :bounds-op 'conn-sp-bounds-of-sexp)
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sp-sexp))
-                                      _arg)
-  (conn-dispatch-things-read-prefix 'sp-sexp 1))
-
 (conn-register-thing-commands
  'sp-sexp 'conn-sp-sexp-handler
  'sp-forward-sexp 'sp-backward-sexp
