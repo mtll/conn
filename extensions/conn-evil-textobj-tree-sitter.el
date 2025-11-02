@@ -196,39 +196,40 @@
                     "\\[conn-contract] prev; "
                     "\\[end] done "
                     (conn--read-args-display-message)))))))
-         (conn-read-args (conn-etts-expand-state
-                          :prompt "Node"
-                          :display-handler display-handler
-                          :around (lambda (cont)
-                                    (conn-with-dispatch-suspended
-                                      (funcall cont))))
-             ((bounds
-               (oclosure-lambda (conn-read-args-argument
-                                 (required t))
-                   (self command)
-                 (pcase command
-                   ('conn-contract
-                    (setq curr (mod (1- curr) size))
-                    (pcase (nth curr nodes)
-                      (`(,_ ,beg . ,end)
-                       (goto-char end)
-                       (conn--push-ephemeral-mark beg)))
-                    (conn-read-args-handle)
-                    self)
-                   ('conn-expand
-                    (setq curr (mod (1+ curr) size))
-                    (pcase (nth curr nodes)
-                      (`(,_ ,beg . ,end)
-                       (goto-char end)
-                       (conn--push-ephemeral-mark beg)))
-                    (conn-read-args-handle)
-                    self)
-                   ((or 'end 'exit-recursive-edit)
-                    (conn-set-argument
-                     self
-                     (cons (region-beginning) (region-end))))
-                   (_ self)))))
-           (conn-make-bounds 'conn-etts-thing nil bounds)))))))
+         (ignore-error quit
+           (conn-read-args (conn-etts-expand-state
+                            :prompt "Node"
+                            :display-handler display-handler
+                            :around (lambda (cont)
+                                      (conn-with-dispatch-suspended
+                                        (funcall cont))))
+               ((bounds
+                 (oclosure-lambda (conn-read-args-argument
+                                   (required t))
+                     (self command)
+                   (pcase command
+                     ('conn-contract
+                      (setq curr (mod (1- curr) size))
+                      (pcase (nth curr nodes)
+                        (`(,_ ,beg . ,end)
+                         (goto-char end)
+                         (conn--push-ephemeral-mark beg)))
+                      (conn-read-args-handle)
+                      self)
+                     ('conn-expand
+                      (setq curr (mod (1+ curr) size))
+                      (pcase (nth curr nodes)
+                        (`(,_ ,beg . ,end)
+                         (goto-char end)
+                         (conn--push-ephemeral-mark beg)))
+                      (conn-read-args-handle)
+                      self)
+                     ((or 'end 'exit-recursive-edit)
+                      (conn-set-argument
+                       self
+                       (cons (region-beginning) (region-end))))
+                     (_ self)))))
+             (conn-make-bounds 'conn-etts-thing nil bounds))))))))
 
 (defvar conn-etts-parent-things
   `(conn-etts-assignment-inner

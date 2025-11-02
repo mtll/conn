@@ -1582,50 +1582,43 @@ Target overlays may override this default by setting the
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (rep display-always saved-pt saved-mk buf)
-    `(progn
-       (catch 'dispatch-select-exit
-         (let* ((,rep nil)
-                (,display-always nil)
-                (conn--dispatch-label-state nil)
-                (conn--prev-scroll-conservatively scroll-conservatively)
-                (scroll-conservatively 100)
-                (conn-dispatch-repeating (and ,repeat t))
-                (conn--dispatch-undo-change-groups nil)
-                (conn--read-args-error-message nil)
-                (conn--dispatch-read-event-message-prefixes
-                 `(,(car conn--dispatch-read-event-message-prefixes)
-                   ,@(cdr conn--dispatch-read-event-message-prefixes))))
-           (unwind-protect
-               (cl-flet ((conn-select-target ()
-                           (conn-dispatch-select-target
-                            conn-dispatch-target-finder)))
-                 (let ((conn-dispatch-in-progress t))
-                   (while (or (setq ,rep ,repeat)
-                              (< conn-dispatch-repeat-count 1))
-                     (catch 'dispatch-redisplay
-                       (let ((,saved-pt (point))
-                             (,saved-mk (mark t))
-                             (,buf (current-buffer)))
-                         (condition-case err
-                             (progn
-                               (push nil conn--dispatch-undo-change-groups)
-                               ,@body
-                               (cl-incf conn-dispatch-repeat-count))
-                           (user-error
-                            (setf conn--read-args-error-message
-                                  (error-message-string err)))
-                           (quit
-                            (pcase-dolist (`(,_ . ,undo-fn)
-                                           (pop conn--dispatch-undo-change-groups))
-                              (funcall undo-fn :undo))
-                            (with-current-buffer ,buf
-                              (goto-char ,saved-pt)
-                              (conn--push-ephemeral-mark ,saved-mk)))))))))
-             (dolist (undo conn--dispatch-undo-change-groups)
-               (pcase-dolist (`(,_ . ,undo-fn) undo)
-                 (funcall undo-fn
-                          (if dispatch-quit-flag :cancel :accept)))))))
+  (cl-with-gensyms (rep display-always success)
+    `(let* ((,rep nil)
+            (,display-always nil)
+            (,success nil)
+            (conn--dispatch-label-state nil)
+            (conn--prev-scroll-conservatively scroll-conservatively)
+            (scroll-conservatively 100)
+            (conn-dispatch-repeating (and ,repeat t))
+            (conn--dispatch-undo-change-groups nil)
+            (conn--read-args-error-message nil)
+            (conn--dispatch-read-event-message-prefixes
+             `(,(car conn--dispatch-read-event-message-prefixes)
+               ,@(cdr conn--dispatch-read-event-message-prefixes))))
+       (unwind-protect
+           (cl-flet ((conn-select-target ()
+                       (conn-dispatch-select-target
+                        conn-dispatch-target-finder)))
+             (catch 'dispatch-select-exit
+               (let ((conn-dispatch-in-progress t))
+                 (while (or (setq ,rep ,repeat)
+                            (< conn-dispatch-repeat-count 1))
+                   (catch 'dispatch-redisplay
+                     (condition-case err
+                         (progn
+                           (push nil conn--dispatch-undo-change-groups)
+                           ,@body
+                           (cl-incf conn-dispatch-repeat-count))
+                       (user-error
+                        (pcase-dolist (`(,_ . ,undo-fn)
+                                       (pop conn--dispatch-undo-change-groups))
+                          (funcall undo-fn :undo))
+                        (setf conn--read-args-error-message
+                              (error-message-string err))))))))
+             (setq ,success (not dispatch-quit-flag)))
+         (dolist (undo conn--dispatch-undo-change-groups)
+           (pcase-dolist (`(,_ . ,undo-fn) undo)
+             (funcall undo-fn (if ,success :accept :cancel)))))
        (when dispatch-quit-flag (keyboard-quit)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -2568,6 +2561,9 @@ contain targets."
       (let ((goal-column (window-hscroll)))
         (conn-dispatch-columns)))))
 
+(cl-defmethod conn-targets-label-faces ((_ (eql conn-dispatch-lines)))
+  nil)
+
 (defun conn-dispatch-end-of-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
@@ -2694,16 +2690,26 @@ contain targets."
          :in-place t))))
 
 (defun conn-dispatch-loop-undo-boundary (&rest buffers)
+  (unless buffers (setq buffers (list (current-buffer))))
   (when conn-dispatch-in-progress
     (let ((cg (mapcan #'prepare-change-group
-                      (or buffers (list (current-buffer))))))
+                      (or buffers (list (current-buffer)))))
+          (saved-pos (cl-loop for buf in buffers
+                              collect (with-current-buffer buf
+                                        (cons (point) (mark t))))))
       (when (and conn--dispatch-undo-change-groups
                  (not conn-dispatch-amalgamate-undo))
         (dolist (b (or buffers (list (current-buffer))))
           (with-current-buffer b
             (undo-boundary))))
       (conn-dispatch-undo-case 0
-        ((or :cancel :undo) (cancel-change-group cg))
+        ((or :cancel :undo)
+         (cancel-change-group cg)
+         (cl-loop for buf in buffers
+                  for (pt . mk) in saved-pos
+                  do (with-current-buffer buf
+                       (goto-char pt)
+                       (conn--push-ephemeral-mark mk))))
         (:accept (accept-change-group cg))))))
 
 (defun conn-dispatch-action-pulse (beg end)
@@ -2837,6 +2843,7 @@ contain targets."
                     (description "Goto"))
       (window pt thing thing-arg transform)
     (select-window window)
+    (conn-dispatch-loop-undo-boundary)
     (unless (and (= pt (point))
                  (region-active-p))
       (let ((forward (< (point) pt)))
@@ -2913,7 +2920,8 @@ contain targets."
                (unless executing-kbd-macro
                  (conn-dispatch-action-pulse
                   (- (point) (length str))
-                  (point)))))))))))
+                  (point))))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -2935,7 +2943,8 @@ contain targets."
                   (save-mark-and-excursion
                     (goto-char beg)
                     (conn--push-ephemeral-mark end)
-                    (funcall region-extract-function nil))))))
+                    (funcall region-extract-function nil)))
+                 (_ (user-error "Cannot find thing at point")))))
       (oclosure-lambda (conn-dispatch-copy-replace-to
                         (description "Copy and Replace To")
                         (str str)
@@ -3049,7 +3058,8 @@ contain targets."
            (unless executing-kbd-macro
              (conn-dispatch-action-pulse
               (- (point) (length str))
-              (point)))))))))
+              (point))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
@@ -3095,7 +3105,8 @@ contain targets."
              (unless executing-kbd-macro
                (conn-dispatch-action-pulse
                 (- (point) (length str))
-                (point)))))
+                (point))))
+            (_ (user-error "Cannot find thing at point")))
           (unless executing-kbd-macro
             (conn-dispatch-action-pulse
              (- (point) (length str))
@@ -3159,7 +3170,8 @@ contain targets."
                (unless executing-kbd-macro
                  (conn-dispatch-action-pulse
                   (- (point) (length str))
-                  (point)))))
+                  (point))))
+              (_ (user-error "Cannot find thing at point")))
             (unless executing-kbd-macro
               (conn-dispatch-action-pulse
                (- (point) (length str))
@@ -3239,7 +3251,8 @@ contain targets."
         (pcase (conn-bounds-of thing thing-arg)
           ((conn-bounds `(,beg . ,end) transform)
            (goto-char (if conn-dispatch-other-end end beg))
-           (conn-register-load register)))))))
+           (conn-register-load register))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load) &optional short)
   (if short "Register"
@@ -3300,7 +3313,8 @@ contain targets."
             ((conn-bounds `(,beg . ,end) transform)
              (conn-dispatch-action-pulse
               beg end)
-             (setq str (filter-buffer-substring beg end))))))
+             (setq str (filter-buffer-substring beg end)))
+            (_ (user-error "Cannot find thing at point")))))
       (with-current-buffer (marker-buffer opoint)
         (conn-dispatch-loop-undo-boundary)
         (cond ((null str)
@@ -3488,10 +3502,12 @@ contain targets."
   (oclosure-lambda (conn-dispatch-jump
                     (description "Jump"))
       (window pt _thing _thing-arg _transform)
-    (with-current-buffer (window-buffer window)
-      (unless (= pt (point))
-        (select-window window)
-        (goto-char pt)))))
+    (select-window window)
+    (conn-dispatch-loop-undo-boundary)
+    (unless (= pt (point))
+      (unless (region-active-p)
+        (push-mark nil t))
+      (goto-char pt))))
 
 (oclosure-define (conn-dispatch-kapply
                   (:parent conn-action))
@@ -3541,7 +3557,8 @@ contain targets."
             ((conn-bounds `(,beg . ,end) transform)
              (goto-char (if conn-dispatch-other-end end beg))
              (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
-             (eval command))))))))
+             (eval command))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command) &optional short)
   (if short "Repeat Cmd"
