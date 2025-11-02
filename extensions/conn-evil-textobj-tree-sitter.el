@@ -234,7 +234,7 @@ Only the background color is used."
                     "): "
                     "\\[conn-expand] next; "
                     "\\[conn-contract] prev; "
-                    "\\[end] select; "
+                    "\\[select] select; "
                     "\\[abort] abort "
                     (when-let* ((msg (conn--read-args-display-message)))
                       (concat " " msg))))))))
@@ -1068,7 +1068,7 @@ Only the background color is used."
   "<conn-thing-map> S j" 'conn-ts-scopename-backward)
 
 (define-minor-mode conn-ts-things-mode
-  "Minor mode for conn-ts things")
+  "Minor mode for conn-ts thing bindings.")
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
