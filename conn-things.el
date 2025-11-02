@@ -143,7 +143,7 @@
                ;; gets evaluated twice in the expansion.
                ;; (:constructor conn-anonymous-thing (parent &rest properties))
                )
-  (parent nil :read-only t)
+  (parent nil)
   (methods nil :read-only t)
   (properties nil))
 
