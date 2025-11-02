@@ -179,7 +179,7 @@ Only the background color is used.")
                               ,(face-background
                                 'conn-etts-pip-selected-face nil t)))))
          (unselected (if asciip "." "◯")))
-    (cons selected unselected))prompt)
+    (cons selected unselected)))
 
 (defun conn-etts-select-node (nodes)
   (pcase nodes
