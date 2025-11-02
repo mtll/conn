@@ -3734,7 +3734,7 @@ contain targets."
   (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
           (conn-action-pretty-print (conn-previous-dispatch-action dispatch))
-          (conn-thing-print-pretty (conn-previous-dispatch-thing dispatch))
+          (conn-thing-pretty-print (conn-previous-dispatch-thing dispatch))
           (conn-previous-dispatch-thing-arg dispatch)
           (if-let* ((ts (conn-previous-dispatch-thing-transform dispatch)))
               (concat
