@@ -54,6 +54,15 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
         (_ (protect (car rest) (cdr rest)
                     (macroexp-let* (list binding) body)))))))
 
+(defmacro conn--unwind-protect-all (&rest body)
+  (declare (indent 0))
+  (named-let wrap ((wrapped (car body))
+                   (to-wrap (cdr body)))
+    (if to-wrap
+        (wrap `(unwind-protect ,wrapped ,(car to-wrap))
+              (cdr to-wrap))
+      wrapped)))
+
 (defmacro conn-anaphoricate (name lambda)
   (declare (indent 1))
   `(letrec ((,name ,lambda)) ,name))

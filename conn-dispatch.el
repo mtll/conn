@@ -1582,6 +1582,19 @@ Target overlays may override this default by setting the
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
+  (setq body `(progn
+                (push nil conn--dispatch-undo-change-groups)
+                ,@body
+                (cl-incf conn-dispatch-repeat-count)))
+  (when repeat
+    (setq body `(condition-case err
+                    ,body
+                  (user-error
+                   (pcase-dolist (`(,_ . ,undo-fn)
+                                  (pop conn--dispatch-undo-change-groups))
+                     (funcall undo-fn :undo))
+                   (setf conn--read-args-error-message
+                         (error-message-string err))))))
   (cl-with-gensyms (rep display-always success)
     `(let* ((,rep nil)
             (,display-always nil)
@@ -1604,17 +1617,7 @@ Target overlays may override this default by setting the
                  (while (or (setq ,rep ,repeat)
                             (< conn-dispatch-repeat-count 1))
                    (catch 'dispatch-redisplay
-                     (condition-case err
-                         (progn
-                           (push nil conn--dispatch-undo-change-groups)
-                           ,@body
-                           (cl-incf conn-dispatch-repeat-count))
-                       (user-error
-                        (pcase-dolist (`(,_ . ,undo-fn)
-                                       (pop conn--dispatch-undo-change-groups))
-                          (funcall undo-fn :undo))
-                        (setf conn--read-args-error-message
-                              (error-message-string err))))))))
+                     ,body))))
              (setq ,success (not dispatch-quit-flag)))
          (dolist (undo conn--dispatch-undo-change-groups)
            (pcase-dolist (`(,_ . ,undo-fn) undo)
