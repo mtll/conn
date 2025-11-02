@@ -220,7 +220,10 @@ returned."
   (declare (important-return-value t)))
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (conn-dispatch-label-target label))
+  (let ((overlay (conn-dispatch-label-target label)))
+    (list (overlay-start overlay)
+          (overlay-get overlay 'window)
+          (overlay-get overlay 'thing))))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
   (setf (conn-dispatch-label-narrowed-string label)
@@ -883,10 +886,7 @@ with `conn-dispatch-thing-ignored-modes'."
   "Alist of (WINDOW . TARGETS).")
 
 (defvar conn-target-count nil
-  "Alist of (WINODW . TARGET-COUNT).
-
-Updated by `conn-dispatch-get-targets' and only counts targets that
-would have visible labels.")
+  "Alist of (WINODW . TARGET-COUNT).")
 
 (defvar conn-target-sort-function 'conn-target-nearest-op
   "Sort function for targets in each window.
@@ -920,7 +920,7 @@ A target predicate function should take POINT, LENGTH, and WINDOW as
 arguments and return non-nil if a target at POINT of LENGTH in WINDOW's
 buffer is a valid target.")
 
-(defvar conn--dispatch-init-state nil)
+(defvar conn--dispatch-prev-state nil)
 
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
@@ -974,17 +974,6 @@ Optionally the overlay may have an associated THING."
       (push ov (alist-get window conn-targets))
       ov)))
 
-(defun conn-get-target-count ()
-  (cl-loop for (_win . count) in conn-target-count sum count))
-
-(defun conn-delete-target-overlay (ov)
-  (let ((win (overlay-get ov 'window)))
-    (cl-assert (memq ov (alist-get win conn-targets))
-               nil "Not a target overlay")
-    (conn-label-delete (overlay-get ov 'conn-label))
-    (cl-callf2 delq ov (alist-get win conn-targets)))
-  (delete-overlay ov))
-
 (defun conn-make-string-target-overlays (string &optional predicate fixed-length)
   (when (length> string 0)
     (dolist (win (conn--get-target-windows))
@@ -1023,9 +1012,16 @@ Optionally the overlay may have an associated THING."
 (defvar conn-dispatch-target-finder nil)
 
 (defvar conn-dispatch-label-function 'conn-dispatch-smart-labels
-  "Function responsible for labeling all `conn-targets'.")
+  "Function responsible for labeling all `conn-targets'.
 
-(defvar conn-dispatch-label-state nil
+A labeling function should take a single argument STATE and
+return either a list of labels or a list of the form
+(:state NEW-STATE . LABELS).  If the labeling function returns such a
+list then NEW-STATE will be passed to the labeling function the next
+time it is called.  The first time the labeling function is called STATE
+will be nil.")
+
+(defvar conn--dispatch-label-state nil
   "The state for `conn-dispatch-label-function' during dispatch.")
 
 (defvar conn-default-label-padding-function 'conn--centered-padding
@@ -1049,8 +1045,8 @@ Target overlays may override this default by setting the
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
   (and (eq (selected-frame) (window-frame win))
-       (length< (alist-get win conn-targets)
-                conn-pixelwise-label-target-limit)))
+       (< (alist-get win conn-target-count)
+          conn-pixelwise-label-target-limit)))
 
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
@@ -1322,51 +1318,24 @@ Target overlays may override this default by setting the
                :overlay ov
                :target target))))))
 
-(defun conn-dispatch-get-targets (&optional sort-function)
-  (declare (important-return-value t))
-  (let ((result nil))
-    (pcase-dolist (`(,window . ,targets) conn-targets)
-      (let* ((count 0)
-             (filtered
-              (cl-loop for tar in targets
-                       when (<= (window-start window)
-                                (overlay-start tar)
-                                (overlay-end tar)
-                                (window-end window))
-                       do (cl-incf count)
-                       and collect tar)))
-        (setf (alist-get window conn-target-count) count)
-        (push (cons window
-                    (if sort-function
-                        (compat-call sort filtered
-                                     :lessp sort-function
-                                     :in-place t)
-                      filtered))
-              result)))
-    result))
-
 (cl-defstruct (conn-simple-label-state)
   pool
   in-use
   size)
 
-(defun conn-dispatch-simple-labels ()
+(defun conn-dispatch-simple-labels (state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
-  (with-memoization conn-dispatch-label-state
-    (make-conn-simple-label-state
-     :pool nil
-     :in-use (make-hash-table :test 'equal)
-     :size 0))
-  (cl-symbol-macrolet ((pool (conn-simple-label-state-pool
-                              conn-dispatch-label-state))
-                       (in-use (conn-simple-label-state-in-use
-                                conn-dispatch-label-state))
-                       (size (conn-simple-label-state-size
-                              conn-dispatch-label-state)))
+  (unless state
+    (setq state (make-conn-simple-label-state
+                 :pool nil
+                 :in-use (make-hash-table :test 'equal)
+                 :size 0)))
+  (cl-symbol-macrolet ((pool (conn-simple-label-state-pool state))
+                       (in-use (conn-simple-label-state-in-use state))
+                       (size (conn-simple-label-state-size state)))
     (let ((sel-win (selected-window))
-          (all-targets (conn-dispatch-get-targets conn-target-sort-function))
-          (count (conn-get-target-count))
+          (count (cl-loop for (_ . c) in conn-target-count sum c))
           (unlabeled nil)
           (labels nil))
       (clrhash in-use)
@@ -1384,8 +1353,13 @@ Target overlays may override this default by setting the
               pool (conn-simple-labels size))
         (dolist (str pool)
           (remhash str in-use)))
-      (pcase-dolist (`(,win . ,targets) all-targets)
-        (dolist (tar targets)
+      (pcase-dolist (`(,win . ,targets) conn-targets)
+        (when-let* ((ov (buffer-local-value 'conn--mark-cursor
+                                            (window-buffer win))))
+          (delete-overlay ov))
+        (dolist (tar (if (eq win (selected-window))
+                         (sort targets conn-target-sort-function)
+                       targets))
           (if-let* ((str (overlay-get tar 'label-string)))
               ;; Try to reuse a target's existing label.
               (progn
@@ -1413,7 +1387,7 @@ Target overlays may override this default by setting the
                                      (point)
                                      (overlay-end tar)))
                       (push (conn-disptach-label-target tar str) labels))))
-      labels)))
+      `(:state ,state ,@labels))))
 
 (defun conn--stable-label-subr (window targets characters)
   (let ((group 0)
@@ -1433,15 +1407,21 @@ Target overlays may override this default by setting the
                          (pop chars)))
             labels))))
 
-(defun conn-dispatch-stable-labels ()
+(defun conn-dispatch-stable-labels (_state)
   (declare (important-return-value t))
   (conn--ensure-window-labels)
   (pcase-let* ((`(,bchars ,achars) conn-disptach-stable-label-characters)
                (labels nil))
-    (pcase-dolist (`(,win . ,targets)
-                   (conn-dispatch-get-targets 'conn-target-nearest-op))
+    (pcase-dolist (`(,win . ,targets) conn-targets)
+      (when-let* ((ov (buffer-local-value 'conn--mark-cursor
+                                          (window-buffer win))))
+        (delete-overlay ov))
       (let (before after)
-        (dolist (tar targets)
+        (dolist (tar (sort targets (lambda (a b)
+                                     (< (abs (- (overlay-end a)
+                                                (window-point win)))
+                                        (abs (- (overlay-end b)
+                                                (window-point win)))))))
           (if (> (window-point win) (overlay-start tar))
               (push tar before)
             (push tar after)))
@@ -1449,17 +1429,11 @@ Target overlays may override this default by setting the
         (push (conn--stable-label-subr win (nreverse before) bchars) labels)))
     (apply #'nconc labels)))
 
-(defun conn-dispatch-smart-labels ()
+(defun conn-dispatch-smart-labels (state)
   (declare (important-return-value t))
   (if (or executing-kbd-macro defining-kbd-macro)
-      (conn-dispatch-stable-labels)
-    (conn-dispatch-simple-labels)))
-
-(defun conn--target-label-payload (overlay)
-  (declare (important-return-value t))
-  (list (overlay-start overlay)
-        (overlay-get overlay 'window)
-        (overlay-get overlay 'thing)))
+      (conn-dispatch-stable-labels state)
+    (conn-dispatch-simple-labels state)))
 
 (defun conn--dispatch-read-event-prefix (keymap)
   (declare (important-return-value t))
@@ -1561,22 +1535,19 @@ Target overlays may override this default by setting the
         (conn-dispatch-select-mode -1)))))
 
 (cl-defmethod conn-dispatch-select-target (target-finder)
-  (when conn--dispatch-always-retarget
-    (conn-targets-retarget target-finder))
-  (conn-targets-update target-finder)
-  (conn-targets-label-faces target-finder)
-  (dolist (win (conn--get-target-windows))
-    (when-let* ((ov (buffer-local-value 'conn--mark-cursor
-                                        (window-buffer win))))
-      (delete-overlay ov)))
+  (conn-setup-targets target-finder)
   (thread-first
-    (funcall conn-dispatch-label-function)
+    (pcase (funcall conn-dispatch-label-function
+                    conn--dispatch-label-state)
+      (`(:state ,state . ,labels)
+       (setq conn--dispatch-label-state state)
+       labels)
+      (labels labels))
     (conn-label-select #'conn-dispatch-read-event
-                       (concat "Label ["
-                               (number-to-string (conn-get-target-count))
-                               "]")
-                       (conn-dispatch-prompt-p))
-    (conn--target-label-payload)))
+                       (cl-loop for (_ . c) in conn-target-count
+                                sum c into count
+                                finally return (format "Label [%s]" count))
+                       (conn-dispatch-prompt-p))))
 
 ;;;;; Perform Dispatch Loop
 
@@ -1616,7 +1587,7 @@ Target overlays may override this default by setting the
        (catch 'dispatch-select-exit
          (let* ((,rep nil)
                 (,display-always nil)
-                (conn-dispatch-label-state nil)
+                (conn--dispatch-label-state nil)
                 (conn--prev-scroll-conservatively scroll-conservatively)
                 (scroll-conservatively 100)
                 (conn-dispatch-repeating (and ,repeat t))
@@ -1665,9 +1636,9 @@ Target overlays may override this default by setting the
        (pcase-let ((`(,conn-target-window-predicate
                       ,conn-target-predicate
                       ,conn-target-sort-function)
-                    conn--dispatch-init-state)
+                    conn--dispatch-prev-state)
                    (conn-targets nil)
-                   (conn-dispatch-label-state nil)
+                   (conn--dispatch-label-state nil)
                    (scroll-conservatively conn--prev-scroll-conservatively)
                    (conn-dispatch-target-finder nil)
                    (conn-dispatch-in-progress nil)
@@ -1851,26 +1822,13 @@ Target overlays may override this default by setting the
   (setq conn-targets nil
         conn-target-count nil))
 
-(cl-defgeneric conn-targets-update (target-finder)
-  ( :method (target-finder)
-    (when (functionp target-finder)
-      (funcall target-finder))))
+(defun conn-filter-targets ())
 
-(cl-defmethod conn-targets-update :around (_target-finder)
-  (let ((old nil))
-    (unwind-protect
-        (progn
-          (pcase-dolist (`(_ . ,targets) conn-targets)
-            (dolist (target targets)
-              (conn-label-delete (overlay-get target 'conn-label))
-              (overlay-put target 'category 'conn-old-target)
-              (push target old)))
-          (clrhash conn--pixelwise-window-cache)
-          (clrhash conn--dispatch-window-lines-cache)
-          (setq conn-targets nil
-                conn-target-count nil)
-          (cl-call-next-method))
-      (mapc #'delete-overlay old))))
+(cl-defgeneric conn-targets-update (target-finder))
+
+(cl-defmethod conn-targets-update (target-finder)
+  (when (functionp target-finder)
+    (funcall target-finder)))
 
 (defun conn-dispatch-label-alt-background ()
   (or conn-dispatch-label-alt-face
@@ -1924,6 +1882,37 @@ type and initialize it to contain the same state as TARGET-FINDER."
 (cl-defgeneric conn-targets-prompt-p (target-finder)
   ( :method (_target-finder) nil))
 
+(defun conn-setup-targets (target-finder)
+  (when conn--dispatch-always-retarget
+    (conn-targets-retarget target-finder))
+  (let ((old nil))
+    (unwind-protect
+        (progn
+          (pcase-dolist (`(_ . ,targets) conn-targets)
+            (dolist (target targets)
+              (conn-label-delete (overlay-get target 'conn-label))
+              (overlay-put target 'category 'conn-old-target)
+              (push target old)))
+          (clrhash conn--pixelwise-window-cache)
+          (clrhash conn--dispatch-window-lines-cache)
+          (setq conn-targets nil
+                conn-target-count nil)
+          (conn-targets-update target-finder)
+          (pcase-dolist ((and cons `(,window . ,targets))
+                         conn-targets)
+            (cl-loop for tar in targets
+                     if (<= (window-start window)
+                            (overlay-start tar)
+                            (overlay-end tar)
+                            (window-end window))
+                     collect tar into filtered
+                     and sum 1 into count
+                     else do (delete-overlay tar)
+                     finally (setf (alist-get window conn-target-count) count
+                                   (cdr cons) filtered))))
+      (mapc #'delete-overlay old)))
+  (conn-targets-label-faces target-finder))
+
 (defclass conn-dispatch-target-key-labels ()
   ()
   "Abstract type for target finders which use key-bindings as labels.
@@ -1935,9 +1924,8 @@ to the key binding for that target."
 
 (defun conn-dispatch-key-labels ()
   (declare (important-return-value t))
-  (let ((targets (conn-dispatch-get-targets))
-        (labels nil))
-    (pcase-dolist (`(,_window . ,targets) targets)
+  (let ((labels nil))
+    (pcase-dolist (`(,_window . ,targets) conn-targets)
       (dolist (tar targets)
         (push (conn-disptach-label-target
                tar (overlay-get tar 'label-key))
@@ -1946,31 +1934,27 @@ to the key binding for that target."
 
 (cl-defmethod conn-dispatch-select-target ((target-finder
                                             conn-dispatch-target-key-labels))
-  (when conn--dispatch-always-retarget
-    (conn-targets-retarget target-finder))
-  (conn-targets-update target-finder)
-  (conn-targets-label-faces target-finder)
-  (conn--target-label-payload
-   (conn-label-payload
-    (conn-with-dispatch-event-handler 'label
-        (let ((labels (conn-dispatch-key-labels))
-              (map (make-sparse-keymap)))
-          (cl-loop for label in labels
-                   for key = (conn-dispatch-label-string label)
-                   do (keymap-set map key label))
-          (mapc #'conn-label-redisplay labels)
-          map)
-        nil
-        (lambda (obj)
-          (when (conn-dispatch-label-p obj)
-            (throw 'label obj)))
-      (progn
-        (ignore (conn-dispatch-read-event "Register"))
-        (while t
-          (ignore
-           (conn-dispatch-read-event
-            "Register" nil nil
-            (propertize "Invalid key" 'face 'error)))))))))
+  (conn-setup-targets target-finder)
+  (conn-label-payload
+   (conn-with-dispatch-event-handler 'label
+       (let ((labels (conn-dispatch-key-labels))
+             (map (make-sparse-keymap)))
+         (cl-loop for label in labels
+                  for key = (conn-dispatch-label-string label)
+                  do (keymap-set map key label))
+         (mapc #'conn-label-redisplay labels)
+         map)
+       nil
+       (lambda (obj)
+         (when (conn-dispatch-label-p obj)
+           (throw 'label obj)))
+     (progn
+       (ignore (conn-dispatch-read-event "Register"))
+       (while t
+         (ignore
+          (conn-dispatch-read-event
+           "Register" nil nil
+           (propertize "Invalid key" 'face 'error))))))))
 
 (defclass conn-dispatch-target-window-predicate ()
   ((window-predicate :initform (lambda (&rest _) t)
@@ -3807,7 +3791,7 @@ contain targets."
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-read-args-last-command nil)
-         (conn--dispatch-init-state
+         (conn--dispatch-prev-state
           (list conn-target-window-predicate
                 conn-target-predicate
                 conn-target-sort-function))
