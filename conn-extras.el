@@ -462,8 +462,33 @@
 
 (conn-set-mode-property 'diff-mode :disable-mark-cursor t)
 
+(defvar conn-diff-ref
+  (conn-reference-page "Diff"
+    ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
+      ("file next/prev" diff-file-next diff-file-prev)
+      ("apply hunk/buffer" diff-apply-hunk diff-apply-buffer)
+      ("revert hunk" diff-revert-and-kill-hunk)
+      ("next" next-error-follow-minor-mode)
+      ("scroll up/down" conn-scroll-down conn-scroll-up))
+     (("kill ring save" diff-kill-ring-save)
+      ("kill hunk/file" diff-hunk-kill diff-file-kill)
+      ("delete other hunks" diff-delete-other-hunks)
+      ("split hunk" diff-split-hunk)
+      ("test hunk" diff-test-hunk)
+      ("reverse direction" diff-reverse-direction))
+     (("goto source" diff-goto-source)
+      ("narrow/widen" diff-restrict-view widen)
+      ("context->unified" diff-context->unified)
+      ("unified->context" diff-unified->context)
+      ("ignore whitespace" diff-ignore-whitespace-hunk)))))
+
+(defun conn-diff-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-diff-ref)))
+
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-integration-state 'diff-mode)
+  "C-q" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
   "DEL" 'diff-hunk-kill
