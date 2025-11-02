@@ -206,11 +206,6 @@ Only the background color is used.")
                  (message
                   (substitute-command-keys
                    (concat
-                    "\\[conn-expand] next; "
-                    "\\[conn-contract] prev; "
-                    "\\[end] done; "
-                    "\\[abort] abort "
-                    "\n"
                     (propertize prompt 'face 'minibuffer-prompt)
                     " ("
                     (cl-loop for i below size
@@ -220,9 +215,13 @@ Only the background color is used.")
                     "; "
                     (propertize (symbol-name (car (nth curr nodes)))
                                 'face 'eldoc-highlight-function-argument)
-                    ")"
+                    "): "
+                    "\\[conn-expand] next; "
+                    "\\[conn-contract] prev; "
+                    "\\[end] done; "
+                    "\\[abort] abort "
                     (when-let* ((msg (conn--read-args-display-message)))
-                      (concat ": " msg))))))))
+                      (concat " " msg))))))))
          (conn-read-args (conn-etts-expand-state
                           :prompt "Node"
                           :display-handler display-handler
