@@ -456,6 +456,43 @@
         (goto-char pt)
         (dired-kill-subdir)))))
 
+;;;; Diff
+
+(cl-pushnew 'diff-mode conn-integration-modes)
+
+(conn-set-mode-property 'diff-mode :disable-mark-cursor t)
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-integration-state 'diff-mode)
+  "q" 'quit-window
+  "/" 'diff-undo
+  "DEL" 'diff-hunk-kill
+  "M-DEL" 'diff-file-kill
+  "i" 'diff-hunk-prev
+  "I" 'conn-scroll-down
+  "K" 'conn-scroll-up
+  "k" 'diff-hunk-next
+  "C" 'diff-kill-ring-save
+  "TAB" 'diff-goto-source
+  "l" 'diff-file-next
+  "j" 'diff-file-prev
+  "p" 'diff-ediff-patch
+  "n" 'diff-restrict-view
+  "R" 'diff-reverse-direction
+  "d" 'diff-revert-and-kill-hunk
+  "u" 'diff-context->unified
+  "U" 'diff-unified->context
+  "w" 'diff-ignore-whitespace-hunk
+  "m" 'next-error-follow-minor-mode
+  "f" 'diff-refine-hunk
+  "g" 'diff-refresh-hunk
+  "a" 'diff-apply-hunk
+  "A" 'diff-apply-buffer
+  "t" 'diff-test-hunk
+  "s" 'diff-split-hunk
+  "X" 'diff-delete-other-hunks
+  "x" (conn-remap-key "C-x" t))
+
 ;;;; Magit
 
 (cl-pushnew 'magit-section-mode conn-integration-modes)
@@ -482,7 +519,8 @@
   "," 'magit-dispatch
   "i" 'magit-section-backward
   "k" 'magit-section-forward
-  "w" 'magit-delete-thing
+  "d" 'magit-delete-thing
+  "w" 'magit-diff
   "p" 'magit-reset-quickly
   "n" 'magit-gitignore
   "`" 'conn-wincontrol-mru-window
