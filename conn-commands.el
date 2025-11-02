@@ -1052,6 +1052,7 @@ With a prefix ARG `push-mark' without activating it."
      nil)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
+  (conn-disable-repeating)
   (while
       (condition-case err
           (progn
@@ -1082,8 +1083,8 @@ With a prefix ARG `push-mark' without activating it."
                                                 (window-buffer win))))))
                    (window2 pt2 thing2 thing-arg)
                  (conn--dispatch-transpose-subr
-                  buffer point (or thing1 thing2)
                   (window-buffer window2) pt2 thing2
+                  buffer point (or thing1 thing2)
                   thing-arg))
                thing thing-arg nil
                :other-end :no-other-end
