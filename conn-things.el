@@ -1084,6 +1084,145 @@ words."))
                finally (user-error "Not a valid things in region thing"))
       (conn-get-things-in-region (region-beginning) (region-end)))))
 
+;;;; Multi Things
+
+(conn-define-state conn-multi-thing-select-state (conn-mode-line-face-state)
+  "State for selecting a tree sit node."
+  :lighter "THING"
+  :mode-line-face 'conn-read-thing-mode-line-face)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-multi-thing-select-state)
+  "l" 'conn-expand
+  "j" 'conn-contract
+  "e" 'select
+  "a" 'abort
+  "<escape>" 'abort)
+
+(defface conn-multi-thing-selected-face
+  '((t (:inherit cursor)))
+  "Face for selected pip in multi thing select state.
+
+Only the background color is used."
+  :group 'conn-faces)
+
+(defun conn--multi-thing-pip-strings ()
+  (let* ((asciip (not (and (char-displayable-p ?⬤)
+                           (char-displayable-p ?◯))))
+         (selected (if asciip
+                       (propertize
+                        "@"
+                        'face 'eldoc-highlight-function-argument)
+                     (propertize
+                      "⬤"
+                      'face `(:foreground
+                              ,(face-background
+                                'conn-multi-thing-selected-face nil t)))))
+         (unselected (if asciip "." "◯")))
+    (cons selected unselected)))
+
+(defun conn-multi-thing-select (thing)
+  (pcase (conn-anonymous-thing-property thing :things)
+    ('nil)
+    ((and `(,thing . nil))
+     (pcase (conn-bounds-of thing nil)
+       ((and bounds
+             (conn-bounds `(,beg . ,end))
+             (guard (<= beg (point) end)))
+        bounds)
+       (_ (user-error "No %s found at point" thing))))
+    ((and things
+          (let (and unfiltered (pred identity))
+            (thread-last
+              (cl-loop for thing in things
+                       collect (conn-bounds-of thing nil))
+              (delq nil)
+              (seq-filter (pcase-lambda ((conn-bounds `(,beg . ,end)))
+                            (<= beg (point) end)))
+              (conn--flip-first
+               sort :key (lambda (bound)
+                           (cdr (conn-bounds bound)))))))
+     (cl-flet ((eql-bounds (bound)
+                 (cl-loop for bd in unfiltered
+                          when (equal (conn-bounds bound)
+                                      (conn-bounds bd))
+                          collect (conn-bounds-thing bd))))
+       (let* ((bounds (seq-uniq unfiltered
+                                (lambda (a b)
+                                  (equal (conn-bounds a)
+                                         (conn-bounds b)))))
+              (curr 0)
+              (size (length bounds))
+              (pips (conn--multi-thing-pip-strings))
+              (display-handler
+               (lambda (prompt _args)
+                 (message
+                  (substitute-command-keys
+                   (concat
+                    (propertize prompt 'face 'minibuffer-prompt)
+                    " ("
+                    (cl-loop for i below size
+                             when (> i 0) concat " "
+                             if (= i curr) concat (car pips)
+                             else concat (cdr pips))
+                    "; "
+                    (mapconcat (lambda (thing)
+                                 (propertize
+                                  (conn-thing-pretty-print thing)
+                                  'face 'eldoc-highlight-function-argument))
+                               (eql-bounds (nth curr bounds))
+                               " & ")
+                    "): "
+                    (when-let* ((msg (conn--read-args-display-message)))
+                      (concat " " msg))
+                    "\n\\[conn-expand] next; "
+                    "\\[conn-contract] prev; "
+                    "\\[select] select; "
+                    "\\[abort] abort "))))))
+         (pcase-exhaustive bounds
+           ('nil
+            (user-error "No things found at point"))
+           (`(,bound . nil) bound)
+           (`(,(conn-bounds `(,beg . ,end)) . ,_)
+            (save-mark-and-excursion
+              (goto-char end)
+              (conn--push-ephemeral-mark beg)
+              (activate-mark)
+              (conn-read-args (conn-multi-thing-select-state
+                               :prompt "Thing"
+                               :display-handler display-handler)
+                  ((bound
+                    (oclosure-lambda (conn-read-args-argument
+                                      (required t))
+                        (self command)
+                      (pcase command
+                        ('conn-contract
+                         (setq curr (mod (1- curr) size))
+                         (pcase (nth curr bounds)
+                           ((conn-bounds `(,beg . ,end))
+                            (goto-char end)
+                            (conn--push-ephemeral-mark beg)))
+                         (conn-read-args-handle)
+                         self)
+                        ('conn-expand
+                         (setq curr (mod (1+ curr) size))
+                         (pcase (nth curr bounds)
+                           ((conn-bounds `(,beg . ,end))
+                            (goto-char end)
+                            (conn--push-ephemeral-mark beg)))
+                         (conn-read-args-handle)
+                         self)
+                        ('select
+                         (conn-set-argument self (nth curr bounds)))
+                        ('abort
+                         (conn-set-argument self nil))
+                        (_ self)))))
+                (when bound
+                  (setf (conn-anonymous-thing-property thing :things)
+                        (eql-bounds bound))
+                  bound))))))))
+    (_ (user-error "No things found at point"))))
+
 ;;;; Thing Definitions
 
 (conn-define-mark-command conn-mark-email email)

@@ -164,117 +164,6 @@
 
 (conn-register-thing 'conn-ts-thing)
 
-(conn-define-state conn-ts-expand-state (conn-mode-line-face-state)
-  "State for selecting a tree sit node."
-  :lighter "NODE"
-  :mode-line-face 'conn-read-thing-mode-line-face)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-ts-expand-state)
-  "l" 'conn-expand
-  "j" 'conn-contract
-  "e" 'select
-  "a" 'abort
-  "<escape>" 'abort)
-
-(defface conn-ts-pip-selected-face
-  '((t (:inherit cursor)))
-  "Face for selected pip in ts select.
-
-Only the background color is used."
-  :group 'conn-faces)
-
-(defun conn--ts-node-pip-strings ()
-  (let* ((asciip (not (and (char-displayable-p ?⬤)
-                           (char-displayable-p ?◯))))
-         (selected (if asciip
-                       (propertize
-                        "@"
-                        'face 'eldoc-highlight-function-argument)
-                     (propertize
-                      "⬤"
-                      'face `(:foreground
-                              ,(face-background
-                                'conn-ts-pip-selected-face nil t)))))
-         (unselected (if asciip "." "◯")))
-    (cons selected unselected)))
-
-(defun conn-ts-select-node (nodes)
-  (pcase nodes
-    ('nil)
-    (`((,thing ,beg . ,end) . nil)
-     (conn-make-bounds thing nil (cons beg end)))
-    (_
-     (save-mark-and-excursion
-       (cl-callf sort nodes
-         :key (pcase-lambda (`(,_thing ,beg . ,end))
-                (- end beg)))
-       (pcase-exhaustive (car nodes)
-         (`(,_thing ,beg . ,end)
-          (goto-char end)
-          (conn--push-ephemeral-mark beg)
-          (activate-mark)))
-       (let* ((curr 0)
-              (size (length nodes))
-              (pips (conn--ts-node-pip-strings))
-              (display-handler
-               (lambda (prompt _args)
-                 (message
-                  (substitute-command-keys
-                   (concat
-                    (propertize prompt 'face 'minibuffer-prompt)
-                    " ("
-                    (cl-loop for i below size
-                             when (> i 0) concat " "
-                             if (= i curr) concat (car pips)
-                             else concat (cdr pips))
-                    "; "
-                    (propertize (symbol-name (car (nth curr nodes)))
-                                'face 'eldoc-highlight-function-argument)
-                    "): "
-                    "\\[conn-expand] next; "
-                    "\\[conn-contract] prev; "
-                    "\\[select] select; "
-                    "\\[abort] abort "
-                    (when-let* ((msg (conn--read-args-display-message)))
-                      (concat " " msg))))))))
-         (conn-read-args (conn-ts-expand-state
-                          :prompt "Node"
-                          :display-handler display-handler
-                          :around (lambda (cont)
-                                    (conn-with-dispatch-suspended
-                                      (funcall cont))))
-             ((`(,thing . ,bounds)
-               (oclosure-lambda (conn-read-args-argument
-                                 (required t))
-                   (self command)
-                 (pcase command
-                   ('conn-contract
-                    (setq curr (mod (1- curr) size))
-                    (pcase (nth curr nodes)
-                      (`(,_ ,beg . ,end)
-                       (goto-char end)
-                       (conn--push-ephemeral-mark beg)))
-                    (conn-read-args-handle)
-                    self)
-                   ('conn-expand
-                    (setq curr (mod (1+ curr) size))
-                    (pcase (nth curr nodes)
-                      (`(,_ ,beg . ,end)
-                       (goto-char end)
-                       (conn--push-ephemeral-mark beg)))
-                    (conn-read-args-handle)
-                    self)
-                   ('select
-                    (conn-set-argument
-                     self
-                     (cons (car (nth curr nodes))
-                           (cons (region-beginning) (region-end)))))
-                   ('abort
-                    (conn-set-argument self nil))
-                   (_ self)))))
-           (conn-make-bounds thing nil bounds)))))))
-
 (defvar conn-ts-parent-things
   `(conn-ts-assignment-inner
     conn-ts-assignment-outer
@@ -315,26 +204,15 @@ Only the background color is used."
    (region-predicate :initarg :region-predicate)))
 
 (cl-defmethod conn-targets-update ((state conn-ts-node-targets))
-  (cl-macrolet ((make-target (thing beg end)
+  (cl-macrolet ((make-ts-target (thing beg end)
                   `(conn-make-target-overlay
                     ,beg 0
-                    :thing
-                    (conn-anonymous-thing
-                      'conn-ts-thing
-                      :nodes (list (cons ,thing (cons ,beg ,end)))
-                      :bounds-op
-                      ( :method (self _arg)
-                        (if (null (conn-anonymous-thing-property self :nodes))
-                            (cl-call-next-method)
-                          (when-let* ((bounds
-                                       (thread-first
-                                         self
-                                         (conn-anonymous-thing-property :nodes)
-                                         (conn-ts-select-node))))
-                            (setf
-                             (conn-anonymous-thing-parent self) (conn-bounds-thing bounds)
-                             (conn-anonymous-thing-property self :nodes) nil)
-                            bounds)))))))
+                    :thing (conn-anonymous-thing
+                             'conn-ts-thing
+                             :things (list ,thing)
+                             :bounds-op ( :method (self _arg)
+                                          (conn-with-dispatch-suspended
+                                            (conn-multi-thing-select self)))))))
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
           (things (oref state things)))
@@ -359,20 +237,29 @@ Only the background color is used."
                              (if region-pred (funcall region-pred beg end) t))
                     (if-let* ((ov (car (conn--overlays-in-of-type
                                         beg (1+ beg) 'conn-target-overlay))))
-                        (when (length= (cl-pushnew (cons thing (cons beg end))
-                                                   (conn-anonymous-thing-property
-                                                    (overlay-get ov 'thing)
-                                                    :nodes)
-                                                   :key #'car)
-                                       2)
-                          (overlay-put ov 'label-suffix (truncate-string-ellipsis)))
-                      (make-target thing beg end)))))))))))
+                        (progn
+                          (cl-pushnew thing (conn-anonymous-thing-property
+                                             (overlay-get ov 'thing)
+                                             :things))
+                          (when (length=
+                                 (cl-pushnew (cons beg end)
+                                             (overlay-get ov 'unique-bounds)
+                                             :test #'equal)
+                                 2)
+                            (overlay-put ov 'label-suffix (truncate-string-ellipsis))))
+                      (make-ts-target thing beg end)))))))))))
   (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
                                       _arg)
   (conn-ts-node-targets
    :things (list (or (get cmd :conn-command-thing) cmd))))
+
+(cl-defmethod conn-thing-pretty-print ((_cmd (conn-thing conn-ts-thing)))
+  (let ((string (cl-call-next-method)))
+    (if (string-prefix-p "conn-ts-" string)
+        (substring string (length "conn-ts-"))
+      string)))
 
 (defmacro conn-ts-define-thing (name group &optional query)
   (declare (indent defun))
@@ -388,8 +275,8 @@ Only the background color is used."
     `(progn
        (put ',name
             :conn-ts-thing (conn--make-ts-thing
-                              :groups ',groups
-                              :query ,(macroexp-quote query)))
+                            :groups ',groups
+                            :query ,(macroexp-quote query)))
 
        (conn-register-thing ',name
                             :parent 'conn-ts-thing
@@ -1077,7 +964,7 @@ Only the background color is used."
         :target-finder ( :method (_self _arg)
                          (conn-ts-node-targets
                           :things conn-ts-all-things)))
-  "h" (conn-anonymous-thing
+  "W" (conn-anonymous-thing
         'conn-ts-thing
         :target-finder ( :method (_self _arg)
                          (conn-ts-node-targets
