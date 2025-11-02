@@ -1053,45 +1053,39 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
   (conn-disable-repeating)
-  (while
-      (condition-case err
-          (progn
-            (conn-read-args (conn-dispatch-transpose-state
-                             :prompt "Transpose Dispatch"
-                             :prefix arg)
-                ((`(,thing ,thing-arg) (conn-thing-argument t))
-                 (restrict-windows (conn-dispatch-restrict-windows-argument)))
-              (conn-perform-dispatch
-               (oclosure-lambda
-                   (conn-transpose-command
-                    (description "Transpose")
-                    (no-history t)
-                    (buffer (current-buffer))
-                    (point (point))
-                    (thing1
-                     (when (use-region-p)
-                       (conn-anonymous-thing
-                         'region
-                         :bounds-op (let ((bounds (conn-make-bounds
-                                                   'region nil
-                                                   (cons (region-beginning)
-                                                         (region-end)))))
-                                      (:method (_self _arg) bounds)))))
-                    (window-predicate
-                     (lambda (win)
-                       (not (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-                   (window2 pt2 thing2 thing-arg)
-                 (conn--dispatch-transpose-subr
-                  (window-buffer window2) pt2 thing2
-                  buffer point (or thing1 thing2)
-                  thing-arg))
-               thing thing-arg nil
-               :other-end :no-other-end
-               :restrict-windows restrict-windows))
-            nil)
-        ;; TODO: make this display somehow
-        (user-error (message "%s" (cadr err)) t))))
+  (conn-read-args (conn-dispatch-transpose-state
+                   :prompt "Transpose Dispatch"
+                   :prefix arg)
+      ((`(,thing ,thing-arg) (conn-thing-argument t))
+       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+    (conn-perform-dispatch
+     (oclosure-lambda
+         (conn-transpose-command
+          (description "Transpose")
+          (no-history t)
+          (buffer (current-buffer))
+          (point (point))
+          (thing1
+           (when (use-region-p)
+             (conn-anonymous-thing
+               'region
+               :bounds-op (let ((bounds (conn-make-bounds
+                                         'region nil
+                                         (cons (region-beginning)
+                                               (region-end)))))
+                            (:method (_self _arg) bounds)))))
+          (window-predicate
+           (lambda (win)
+             (not (buffer-local-value 'buffer-read-only
+                                      (window-buffer win))))))
+         (window2 pt2 thing2 thing-arg)
+       (conn--dispatch-transpose-subr
+        (window-buffer window2) pt2 thing2
+        buffer point (or thing1 thing2)
+        thing-arg))
+     thing thing-arg nil
+     :other-end :no-other-end
+     :restrict-windows restrict-windows)))
 
 (defvar conn-transpose-reference
   (list (conn-reference-page "Transpose"
