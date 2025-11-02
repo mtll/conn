@@ -173,7 +173,7 @@
   :keymap (conn-get-state-map 'conn-ts-expand-state)
   "l" 'conn-expand
   "j" 'conn-contract
-  "e" 'end
+  "e" 'select
   "a" 'abort
   "<escape>" 'abort)
 
@@ -234,7 +234,7 @@ Only the background color is used."
                     "): "
                     "\\[conn-expand] next; "
                     "\\[conn-contract] prev; "
-                    "\\[end] done; "
+                    "\\[end] select; "
                     "\\[abort] abort "
                     (when-let* ((msg (conn--read-args-display-message)))
                       (concat " " msg))))))))
@@ -265,7 +265,7 @@ Only the background color is used."
                        (conn--push-ephemeral-mark beg)))
                     (conn-read-args-handle)
                     self)
-                   ('end
+                   ('select
                     (conn-set-argument
                      self
                      (cons (car (nth curr nodes))
