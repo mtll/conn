@@ -191,24 +191,27 @@ Expansions and contractions are provided by functions in
   "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
-(defun conn--read-expand-message (_arg)
-  (substitute-command-keys
+(defun conn--read-expand-display (prompt args)
+  (message
    (concat
-    "\\[conn-expand] expand; "
-    "\\[conn-contract] contract; "
-    "\\[conn-toggle-mark-command] toggle mark; "
-    "\\[end] finish")))
+    (substitute-command-keys
+     (concat
+      "\\[conn-expand] expand; "
+      "\\[conn-contract] contract; "
+      "\\[conn-toggle-mark-command] toggle mark; "
+      "\\[end] finish\n"))
+    (conn--read-args-prompt prompt args))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (conn--push-ephemeral-mark (point))
   (call-interactively cmd)
   (conn-read-args (conn-expand-state
                    :prompt "Expansion"
-                   :prefix arg)
+                   :prefix arg
+                   :display-handler #'conn--read-expand-display)
       ((bounds
         (oclosure-lambda (conn-read-args-argument
-                          (required t)
-                          (name 'conn--read-expand-message))
+                          (required t))
             (self command)
           (pcase command
             ('conn-expand-exchange

@@ -1330,31 +1330,36 @@ chooses to handle a command."
     (setq conn--read-args-message (apply #'format format-string args)
           conn--read-args-message-timeout (time-add nil minibuffer-message-timeout))))
 
-
 (defun conn--read-args-display-message ()
-  (concat
-   (when conn--read-args-message (format "[%s] " conn--read-args-message))
-   (propertize conn--read-args-error-message 'face 'error)))
+  (let ((msg (concat
+              (when conn--read-args-message
+                (format "[%s] " conn--read-args-message))
+              (propertize conn--read-args-error-message
+                          'face 'error))))
+    (unless (equal msg "") msg)))
 
 (defun conn--read-args-prompt (prompt arguments)
-  (message
-   (substitute-command-keys
-    (concat
-     (propertize prompt 'face 'minibuffer-prompt)
-     " (arg: "
-     (propertize
-      (cond (conn--read-args-prefix-mag
-             (number-to-string
-              (* (if conn--read-args-prefix-sign -1 1)
-                 conn--read-args-prefix-mag)))
-            (conn--read-args-prefix-sign "[-1]")
-            (t "[1]"))
-      'face 'read-multiple-choice-face)
-     ", \\[reset-arg] reset"
-     (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
-       (string-join (cons nil args) "; "))
-     "): "
-     (conn--read-args-display-message)))))
+  (substitute-command-keys
+   (concat
+    (propertize prompt 'face 'minibuffer-prompt)
+    " (arg: "
+    (propertize
+     (cond (conn--read-args-prefix-mag
+            (number-to-string
+             (* (if conn--read-args-prefix-sign -1 1)
+                conn--read-args-prefix-mag)))
+           (conn--read-args-prefix-sign "[-1]")
+           (t "[1]"))
+     'face 'read-multiple-choice-face)
+    ", \\[reset-arg] reset"
+    (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
+      (string-join (cons nil args) "; "))
+    ")"
+    (when-let ((msg (conn--read-args-display-message)))
+      (concat ": " msg)))))
+
+(defun conn--read-args-display (prompt arguments)
+  (message (conn--read-args-prompt-string)))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -1392,7 +1397,7 @@ chooses to handle a command."
                             &key
                             command-handler
                             update-handler
-                            (display-handler #'conn--read-args-prompt)
+                            (display-handler #'conn--read-args-display)
                             around
                             overriding-map
                             prompt
