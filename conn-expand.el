@@ -193,14 +193,14 @@ Expansions and contractions are provided by functions in
 
 (defun conn--read-expand-display (prompt args)
   (message
-   (concat
-    (substitute-command-keys
-     (concat
-      "\\[conn-expand] expand; "
-      "\\[conn-contract] contract; "
-      "\\[conn-toggle-mark-command] toggle mark; "
-      "\\[end] finish\n"))
-    (conn--read-args-prompt prompt args))))
+   (substitute-command-keys
+    (concat
+     (conn--read-args-prompt prompt args)
+     "\n"
+     "\\[conn-expand] expand; "
+     "\\[conn-contract] contract; "
+     "\\[conn-toggle-mark-command] toggle mark; "
+     "\\[end] finish"))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (conn--push-ephemeral-mark (point))
