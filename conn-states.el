@@ -1355,11 +1355,11 @@ chooses to handle a command."
     (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
       (string-join (cons nil args) "; "))
     ")"
-    (when-let ((msg (conn--read-args-display-message)))
+    (when-let* ((msg (conn--read-args-display-message)))
       (concat ": " msg)))))
 
 (defun conn--read-args-display (prompt arguments)
-  (message (conn--read-args-prompt-string)))
+  (message (conn--read-args-prompt prompt arguments)))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
