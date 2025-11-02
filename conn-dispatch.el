@@ -1822,8 +1822,6 @@ Target overlays may override this default by setting the
   (setq conn-targets nil
         conn-target-count nil))
 
-(defun conn-filter-targets ())
-
 (cl-defgeneric conn-targets-update (target-finder))
 
 (cl-defmethod conn-targets-update (target-finder)
