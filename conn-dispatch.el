@@ -1582,7 +1582,7 @@ Target overlays may override this default by setting the
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (rep display-always)
+  (cl-with-gensyms (rep display-always saved-pt saved-mk buf)
     `(progn
        (catch 'dispatch-select-exit
          (let* ((,rep nil)
@@ -1597,22 +1597,31 @@ Target overlays may override this default by setting the
                  `(,(car conn--dispatch-read-event-message-prefixes)
                    ,@(cdr conn--dispatch-read-event-message-prefixes))))
            (unwind-protect
-               ,(macroexpand-all
-                 `(cl-flet ((conn-select-target ()
-                              (conn-dispatch-select-target
-                               conn-dispatch-target-finder)))
-                    (let ((conn-dispatch-in-progress t))
-                      (while (or (setq ,rep ,repeat)
-                                 (< conn-dispatch-repeat-count 1))
-                        (catch 'dispatch-redisplay
-                          (condition-case err
-                              (progn
-                                (push nil conn--dispatch-undo-change-groups)
-                                ,@body
-                                (cl-incf conn-dispatch-repeat-count))
-                            (user-error
-                             (setf conn--read-args-error-message
-                                   (error-message-string err)))))))))
+               (cl-flet ((conn-select-target ()
+                           (conn-dispatch-select-target
+                            conn-dispatch-target-finder)))
+                 (let ((conn-dispatch-in-progress t))
+                   (while (or (setq ,rep ,repeat)
+                              (< conn-dispatch-repeat-count 1))
+                     (catch 'dispatch-redisplay
+                       (let ((,saved-pt (point))
+                             (,saved-mk (mark t))
+                             (,buf (current-buffer)))
+                         (condition-case err
+                             (progn
+                               (push nil conn--dispatch-undo-change-groups)
+                               ,@body
+                               (cl-incf conn-dispatch-repeat-count))
+                           (user-error
+                            (setf conn--read-args-error-message
+                                  (error-message-string err)))
+                           (quit
+                            (pcase-dolist (`(,_ . ,undo-fn)
+                                           (pop conn--dispatch-undo-change-groups))
+                              (funcall undo-fn :undo))
+                            (with-current-buffer ,buf
+                              (goto-char ,saved-pt)
+                              (conn--push-ephemeral-mark ,saved-mk)))))))))
              (dolist (undo conn--dispatch-undo-change-groups)
                (pcase-dolist (`(,_ . ,undo-fn) undo)
                  (funcall undo-fn
@@ -2828,7 +2837,8 @@ contain targets."
                     (description "Goto"))
       (window pt thing thing-arg transform)
     (select-window window)
-    (unless (= pt (point))
+    (unless (and (= pt (point))
+                 (region-active-p))
       (let ((forward (< (point) pt)))
         (goto-char pt)
         (pcase (conn-bounds-of thing thing-arg)
