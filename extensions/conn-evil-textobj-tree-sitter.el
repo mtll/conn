@@ -156,7 +156,30 @@
   :keymap (conn-get-state-map 'conn-etts-expand-state)
   "l" 'conn-expand
   "j" 'conn-contract
-  "e" 'end)
+  "e" 'end
+  "a" 'abort
+  "<escape>" 'abort)
+
+(defface conn-etts-pip-selected-face
+  '((t (:inherit cursor)))
+  "Face for selected pip in etts select.
+
+Only the background color is used.")
+
+(defun conn--etts-node-pip-strings ()
+  (let* ((asciip (not (and (char-displayable-p ?⬤)
+                           (char-displayable-p ?◯))))
+         (selected (if asciip
+                       (propertize
+                        "@"
+                        'face 'eldoc-highlight-function-argument)
+                     (propertize
+                      "⬤"
+                      'face `(:foreground
+                              ,(face-background
+                                'conn-etts-pip-selected-face nil t)))))
+         (unselected (if asciip "." "◯")))
+    (cons selected unselected))prompt)
 
 (defun conn-etts-select-node (nodes)
   (pcase nodes
@@ -177,59 +200,64 @@
           (activate-mark)))
        (let* ((curr 0)
               (size (length nodes))
+              (pips (conn--etts-node-pip-strings))
               (display-handler
                (lambda (prompt _args)
                  (message
                   (substitute-command-keys
                    (concat
-                    (propertize prompt 'face 'minibuffer-prompt)
-                    " ("
-                    (mapconcat
-                     (lambda (node)
-                       (propertize
-                        (format "%s" (car node))
-                        'face (when (eq (nth curr nodes) node)
-                                'eldoc-highlight-function-argument)))
-                     nodes ", ")
-                    "): "
                     "\\[conn-expand] next; "
                     "\\[conn-contract] prev; "
-                    "\\[end] done "
-                    (conn--read-args-display-message)))))))
-         (ignore-error quit
-           (conn-read-args (conn-etts-expand-state
-                            :prompt "Node"
-                            :display-handler display-handler
-                            :around (lambda (cont)
-                                      (conn-with-dispatch-suspended
-                                        (funcall cont))))
-               ((bounds
-                 (oclosure-lambda (conn-read-args-argument
-                                   (required t))
-                     (self command)
-                   (pcase command
-                     ('conn-contract
-                      (setq curr (mod (1- curr) size))
-                      (pcase (nth curr nodes)
-                        (`(,_ ,beg . ,end)
-                         (goto-char end)
-                         (conn--push-ephemeral-mark beg)))
-                      (conn-read-args-handle)
-                      self)
-                     ('conn-expand
-                      (setq curr (mod (1+ curr) size))
-                      (pcase (nth curr nodes)
-                        (`(,_ ,beg . ,end)
-                         (goto-char end)
-                         (conn--push-ephemeral-mark beg)))
-                      (conn-read-args-handle)
-                      self)
-                     ((or 'end 'exit-recursive-edit)
-                      (conn-set-argument
-                       self
-                       (cons (region-beginning) (region-end))))
-                     (_ self)))))
-             (conn-make-bounds 'conn-etts-thing nil bounds))))))))
+                    "\\[end] done; "
+                    "\\[abort] abort "
+                    "\n"
+                    (propertize prompt 'face 'minibuffer-prompt)
+                    " ("
+                    (cl-loop for i below size
+                             when (> i 0) concat " "
+                             if (= i curr) concat (car pips)
+                             else concat (cdr pips))
+                    "; "
+                    (propertize (symbol-name (car (nth curr nodes)))
+                                'face 'eldoc-highlight-function-argument)
+                    ")"
+                    (when-let* ((msg (conn--read-args-display-message)))
+                      (concat ": " msg))))))))
+         (conn-read-args (conn-etts-expand-state
+                          :prompt "Node"
+                          :display-handler display-handler
+                          :around (lambda (cont)
+                                    (conn-with-dispatch-suspended
+                                      (funcall cont))))
+             ((bounds
+               (oclosure-lambda (conn-read-args-argument
+                                 (required t))
+                   (self command)
+                 (pcase command
+                   ('conn-contract
+                    (setq curr (mod (1- curr) size))
+                    (pcase (nth curr nodes)
+                      (`(,_ ,beg . ,end)
+                       (goto-char end)
+                       (conn--push-ephemeral-mark beg)))
+                    (conn-read-args-handle)
+                    self)
+                   ('conn-expand
+                    (setq curr (mod (1+ curr) size))
+                    (pcase (nth curr nodes)
+                      (`(,_ ,beg . ,end)
+                       (goto-char end)
+                       (conn--push-ephemeral-mark beg)))
+                    (conn-read-args-handle)
+                    self)
+                   ('end
+                    (conn-set-argument
+                     self
+                     (cons (region-beginning) (region-end))))
+                   ('abort
+                    (conn-set-argument self nil))
+                   (_ self)))))
+           (conn-make-bounds 'conn-etts-thing nil bounds)))))))
 
 (defvar conn-etts-parent-things
   `(conn-etts-assignment-inner
