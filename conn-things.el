@@ -553,7 +553,7 @@ words."))
   (get sym :conn-bounds-transformation))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
-  (when-let* ((ts (conn-read-args-wrapper-contents arg)))
+  (when-let* ((ts (conn-read-args-argument-value arg)))
     (concat
      "T: "
      (propertize
