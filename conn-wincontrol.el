@@ -38,8 +38,8 @@
    (propertize "WinControl " 'face 'minibuffer-prompt)
    "(arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
-   "\\[conn-wincontrol-digit-argument-reset]: reset arg; "
-   "\\[conn-wincontrol-exit]: exit):"
+   "\\[conn-wincontrol-digit-argument-reset] reset arg; "
+   "\\[conn-wincontrol-exit] exit):"
    "%s"))
 
 (defvar conn--wincontrol-arg nil)

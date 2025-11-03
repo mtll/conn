@@ -1352,12 +1352,11 @@ chooses to handle a command."
            (conn--read-args-prefix-sign "[-1]")
            (t "[1]"))
      'face 'read-multiple-choice-face)
-    ", \\[reset-arg] reset"
-    (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
-      (string-join (cons nil args) "; "))
-    ")"
+    ", \\[reset-arg] reset)"
     (when-let* ((msg (conn--read-args-display-message)))
-      (concat ": " msg)))))
+      (concat ": " msg))
+    (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
+      (concat "\n" (string-join args "; "))))))
 
 (defun conn--read-args-display (prompt arguments)
   (message (conn--read-args-prompt prompt arguments)))

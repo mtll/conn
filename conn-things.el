@@ -454,7 +454,7 @@ words."))
 (cl-defmethod conn-argument-display ((arg conn-fixup-whitespace-argument))
   (substitute-command-keys
    (concat
-    "\\[fixup-whitespace]: "
+    "\\[fixup-whitespace] "
     (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "fixup"
@@ -487,7 +487,7 @@ words."))
 (cl-defmethod conn-argument-display ((arg conn-check-bounds-argument))
   (substitute-command-keys
    (concat
-    "\\[check-bounds]: "
+    "\\[check-bounds] "
     (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "check region"
@@ -555,7 +555,7 @@ words."))
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
   (when-let* ((ts (conn-read-args-wrapper-contents arg)))
     (concat
-     "transforms: "
+     "T: "
      (propertize
       (mapconcat (lambda (tf)
                    (or (get tf :conn-transform-description) ""))

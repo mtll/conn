@@ -1620,7 +1620,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-argument-display ((arg conn-delete-argument))
   (substitute-command-keys
    (concat
-    "\\[delete]: "
+    "\\[delete] "
     (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          "del"
@@ -1656,7 +1656,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-argument-display ((arg conn-register-argument))
   (substitute-command-keys
    (concat
-    "\\[register]: "
+    "\\[register] "
     (if-let* ((ts (conn-read-args-argument-value arg)))
         (propertize
          (format "reg <%c>" ts)
@@ -1815,9 +1815,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                    fixup-whitespace
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
-
-(cl-defmethod conn-perform-kill :before (&rest _)
-  (conn-make-command-repeatable))
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing expansion)) &rest _)
   (conn-disable-repeating)
