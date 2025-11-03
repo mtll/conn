@@ -1167,9 +1167,9 @@ Only the background color is used."
                                   'face 'eldoc-highlight-function-argument))
                                (eql-bounds (nth curr bounds))
                                " & ")
-                    "): "
+                    ")"
                     (when-let* ((msg (conn--read-args-display-message)))
-                      (concat " " msg))
+                      (concat ": " msg))
                     "\n\\[conn-expand] next; "
                     "\\[conn-contract] prev; "
                     "\\[select] select; "
