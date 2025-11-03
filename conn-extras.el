@@ -978,12 +978,14 @@
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward
-  "m" 'Info-next
-  "n" 'Info-prev
+  "L" 'Info-next
+  "J" 'Info-prev
   "k" 'Info-scroll-up
   "i" 'Info-scroll-down
-  "l" 'Info-forward-node
-  "j" 'Info-backward-node
+  "l" 'Info-next-reference
+  "j" 'Info-prev-reference
+  "m" 'Info-forward-node
+  "n" 'Info-backward-node
   "r" 'Info-up
   "a" 'execute-extended-command
   "p" 'Info-menu
