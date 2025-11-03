@@ -1465,7 +1465,7 @@ Target overlays may override this default by setting the
                      (unless inhibit-message
                        (concat prompt
                                (conn--dispatch-read-event-prefix keymap)
-                               ":" prompt-suffix))
+                               ": " prompt-suffix))
                      (read-key-sequence-vector)
                      (key-binding t)))
             ('restart (throw 'return ?\8))
@@ -1478,7 +1478,7 @@ Target overlays may override this default by setting the
                        (unless inhibit-message
                          (concat prompt
                                  (conn--dispatch-read-event-prefix keymap)
-                                 ":" prompt-suffix))
+                                 ": " prompt-suffix))
                        inherit-input-method))))
             (cmd
              (let ((unhandled nil))
