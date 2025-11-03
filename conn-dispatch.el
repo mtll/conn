@@ -1516,13 +1516,14 @@ Target overlays may override this default by setting the
            (progn ,@body)
          (clrhash conn--pixelwise-window-cache)
          (clrhash conn--dispatch-window-lines-cache)
-         (cl-labels ((cleanup (&rest _)
-                       (unwind-protect
-                           (mapc #'conn-label-delete ,(car labels))
-                         (setq conn--previous-labels-cleanup nil)
-                         (remove-hook 'pre-redisplay-functions #'cleanup))))
-           (add-hook 'pre-redisplay-functions #'cleanup)
-           (setq conn--previous-labels-cleanup #'cleanup))))))
+         (let ((fn (make-symbol "cleanup")))
+           (fset fn (lambda (&rest _)
+                      (unwind-protect
+                          (mapc #'conn-label-delete ,(car labels))
+                        (setq conn--previous-labels-cleanup nil)
+                        (remove-hook 'pre-redisplay-functions fn))))
+           (add-hook 'pre-redisplay-functions fn)
+           (setq conn--previous-labels-cleanup fn))))))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
@@ -3527,13 +3528,14 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
   (require 'conn-transients)
-  (letrec ((action nil)
-           (setup (lambda ()
-                    (conn-without-recursive-stack
-                      (conn-dispatch-kapply-prefix
-                       (lambda (kapply-action)
-                         (setf action kapply-action))))
-                    (remove-hook 'post-command-hook setup))))
+  (let ((action nil)
+        (setup (make-symbol "setup")))
+    (fset setup (lambda ()
+                  (conn-without-recursive-stack
+                    (conn-dispatch-kapply-prefix
+                     (lambda (kapply-action)
+                       (setf action kapply-action))))
+                  (remove-hook 'post-command-hook setup)))
     (add-hook 'post-command-hook setup -99)
     (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
     (unwind-protect

@@ -76,6 +76,7 @@
                   regions)))))
     (if reverse regions (nreverse regions))))
 
+;; TODO: handle multiple parsers
 (defun conn--ts-get-captures (thing start end &optional default-captures)
   (let* ((thing-query
           (cl-loop for p in (conn-thing-all-parents thing)

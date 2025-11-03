@@ -569,17 +569,17 @@ return it."
     (setq isearch-input-method-function input-method-function)
     (setq-local input-method-function nil)
     (isearch-update)
-    (add-hook 'isearch-mode-end-hook
-              (conn-anaphoricate hook
-                (lambda ()
-                  (conn--activate-input-method)
-                  (add-hook 'input-method-activate-hook
-                            #'conn--activate-input-method
-                            nil t)
-                  (add-hook 'input-method-deactivate-hook
-                            #'conn--deactivate-input-method
-                            nil t)
-                  (remove-hook 'isearch-mode-end-hook hook))))))
+    (let ((hook (make-symbol "hook")))
+      (fset hook (lambda ()
+                   (conn--activate-input-method)
+                   (add-hook 'input-method-activate-hook
+                             #'conn--activate-input-method
+                             nil t)
+                   (add-hook 'input-method-deactivate-hook
+                             #'conn--deactivate-input-method
+                             nil t)
+                   (remove-hook 'isearch-mode-end-hook hook)))
+      (add-hook 'isearch-mode-end-hook hook))))
 (put 'conn--isearch-input-method 'permanent-local-hook t)
 
 (defun conn--input-method-mode-line ()
@@ -1152,25 +1152,26 @@ the state stays active if the previous command was a prefix command."
   :pop-predicate #'always)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
-  (letrec ((prefix-command nil)
-           (preserve-state
-            (lambda ()
-              (setq prefix-command t)))
-           (msg-fn (conn-state-get state :message-function))
-           (pop-pred
-            (let ((pred (conn-state-get state :pop-predicate)))
-              (cl-check-type pred function)
-              (lambda ()
-                (unless (or (cl-shiftf prefix-command nil)
-                            (not (funcall pred))
-                            (not (eq conn-current-state state)))
-                  (conn-enter-state (conn-peek-state))))))
-           (setup
-            (lambda ()
-              (remove-hook 'post-command-hook setup t)
-              (add-hook 'prefix-command-preserve-state-hook preserve-state)
-              (when msg-fn (add-hook 'post-command-hook msg-fn 91 t))
-              (add-hook 'post-command-hook pop-pred 90 t))))
+  (let ((prefix-command nil)
+        (msg-fn (make-symbol "msg"))
+        (preserve-state (make-symbol "preserver-state"))
+        (pop-pred (make-symbol "pop-pred"))
+        (setup (make-symbol "setup")))
+    (fset msg-fn (conn-state-get state :message-function))
+    (fset preserve-state (lambda ()
+                           (setq prefix-command t)))
+    (fset pop-pred (let ((pred (conn-state-get state :pop-predicate)))
+                     (cl-check-type pred function)
+                     (lambda ()
+                       (unless (or (cl-shiftf prefix-command nil)
+                                   (not (funcall pred))
+                                   (not (eq conn-current-state state)))
+                         (conn-enter-state (conn-peek-state))))))
+    (fset setup (lambda ()
+                  (remove-hook 'post-command-hook setup t)
+                  (add-hook 'prefix-command-preserve-state-hook preserve-state)
+                  (when msg-fn (add-hook 'post-command-hook msg-fn 91 t))
+                  (add-hook 'post-command-hook pop-pred 90 t)))
     (conn-state-defer
       (cl-callf2 remq state conn--state-stack)
       (when msg-fn (remove-hook 'post-command-hook msg-fn t))
@@ -1272,17 +1273,17 @@ the state stays active if the previous command was a prefix command."
 
 (defun conn-setup-minibuffer-state ()
   "Setup `minibuffer-mode' buffer state."
-  (when (eq major-mode 'minibuffer-mode)
-    (setf (alist-get 'conn-emacs-state
-                     (conn-get-buffer-property :disable-mark-cursor))
-          t)
-    (conn-push-state 'conn-emacs-state)
-    (add-hook 'minibuffer-setup-hook
-              (conn-anaphoricate hook
-                (lambda ()
-                  (conn--push-ephemeral-mark)
-                  (remove-hook 'minibuffer-setup-hook hook))))
-    t))
+  (let ((fn (make-symbol "hook")))
+    (fset fn (lambda ()
+               (conn--push-ephemeral-mark)
+               (remove-hook 'minibuffer-setup-hook fn)))
+    (when (eq major-mode 'minibuffer-mode)
+      (setf (alist-get 'conn-emacs-state
+                       (conn-get-buffer-property :disable-mark-cursor))
+            t)
+      (conn-push-state 'conn-emacs-state)
+      (add-hook 'minibuffer-setup-hook fn)
+      t)))
 (add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
 ;;;; Read Args

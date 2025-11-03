@@ -955,12 +955,13 @@ words."))
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
   (let* ((eldoc-message-function 'ignore)
          (conn--bounds-of-recursive-edit t)
-         (pre (lambda ()
+         (pre (make-symbol "pre")))
+    (fset pre (lambda ()
                 (message
                  (substitute-command-keys
                   (concat
                    "Recursive Edit: Press \\[exit-recursive-edit] to exit, "
-                   "\\[abort-recursive-edit] to abort"))))))
+                   "\\[abort-recursive-edit] to abort")))))
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
@@ -1027,11 +1028,12 @@ words."))
       ((`(,thing ,thing-arg) (conn-thing-argument)))
     (let* ((name (symbol-name cmd))
            (at nil)
-           (quit (lambda ()
+           (quit (make-symbol "quit")))
+      (fset quit (lambda ()
                    (when (or isearch-mode-end-hook-quit
                              (null isearch-other-end))
                      (abort-recursive-edit))
-                   (setq at (min (point) isearch-other-end)))))
+                   (setq at (min (point) isearch-other-end))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)

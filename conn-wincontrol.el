@@ -365,19 +365,18 @@
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
-  (add-hook 'pre-command-hook
-            (conn-anaphoricate hook
-              (lambda ()
-                (unless (memq this-command
-                              '(conn-wincontrol-backward-delete-arg
-                                conn-wincontrol-digit-argument-reset
-                                conn-wincontrol-invert-argument
-                                conn-wincontrol-digit-argument
-                                conn-wincontrol-universal-arg
-                                conn-wincontrol-quick-ref))
-                  (remove-hook 'pre-command-hook hook)
-                  (conn-wincontrol-exit))))
-            99)
+  (let ((hook (make-symbol "hook")))
+    (fset hook (lambda ()
+                 (unless (memq this-command
+                               '(conn-wincontrol-backward-delete-arg
+                                 conn-wincontrol-digit-argument-reset
+                                 conn-wincontrol-invert-argument
+                                 conn-wincontrol-digit-argument
+                                 conn-wincontrol-universal-arg
+                                 conn-wincontrol-quick-ref))
+                   (remove-hook 'pre-command-hook hook)
+                   (conn-wincontrol-exit))))
+    (add-hook 'pre-command-hook hook 99))
   (conn-wincontrol))
 
 (defun conn-wincontrol-ignore ()
