@@ -1717,7 +1717,7 @@ Target overlays may override this default by setting the
        (transform (conn-dispatch-transform-argument)))
     (conn-target-finder-cleanup conn-dispatch-target-finder)
     (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
-    (throw 'dispatch-change-target (list thing thing-arg thing-transform))))
+    (throw 'dispatch-change-target (list thing thing-arg transform))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
