@@ -3378,10 +3378,10 @@ contain targets."
   (set-marker (conn-dispatch-take-replace--opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
-  (thread-first
+  (conn-thread-first
     (conn-dispatch-take-replace--opoint action)
     (copy-marker t)
-    (conn--flip-last conn-dispatch-take-replace-copy action)))
+    (-<> conn-dispatch-take-replace-copy action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (let ((cg (conn--action-buffer-change-group)))
@@ -3433,10 +3433,10 @@ contain targets."
   (set-marker (conn-dispatch-take--opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
-  (thread-first
+  (conn-thread-first
     (conn-dispatch-take--opoint action)
     (copy-marker t)
-    (conn--flip-last conn-dispatch-take-copy action)))
+    (-<> conn-dispatch-take-copy action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take

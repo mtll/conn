@@ -1135,15 +1135,14 @@ Only the background color is used."
        (_ (user-error "No %s found at point" thing))))
     ((and things
           (let (and unfiltered (pred identity))
-            (thread-last
+            (conn-thread-last
               (cl-loop for thing in things
                        collect (conn-bounds-of thing nil))
               (delq nil)
               (seq-filter (pcase-lambda ((conn-bounds `(,beg . ,end)))
                             (<= beg (point) end)))
-              (conn--flip-first
-               sort :key (lambda (bound)
-                           (cdr (conn-bounds bound)))))))
+              (<>- sort :key (lambda (bound)
+                               (cdr (conn-bounds bound)))))))
      (cl-flet ((eql-bounds (bound)
                  (cl-loop for bd in unfiltered
                           when (equal (conn-bounds bound)
