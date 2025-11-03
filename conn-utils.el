@@ -189,8 +189,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-unset-buffer-property (property &optional buffer)
   (let ((buffer (or buffer (current-buffer))))
-    (cl-callf2 assq-delete-all
-        property (buffer-local-value 'conn--buffer-properties buffer))))
+    (cl-callf2 assq-delete-all property
+               (buffer-local-value 'conn--buffer-properties buffer))))
 
 ;;;;; Rings
 
@@ -505,6 +505,11 @@ be restricted to those before or after the current match inclusive."
     (if backward visible (nreverse visible))))
 
 (defmacro conn-for-each-visible (beg end &rest body)
+  "Run body with buffer narrowed to each visible region between BEG and END.
+
+If END is less than BEG then the order of iteration is reversed.
+
+\(fn BEG END [:label label] &rest BODY)"
   (declare (indent 2))
   (cl-with-gensyms (vbeg vend)
     (cl-once-only (beg end)
@@ -514,7 +519,6 @@ be restricted to those before or after the current match inclusive."
                                                (if (>= ,end ,beg) ,end ,beg)
                                                (< ,end ,beg)))
            (with-restriction ,vbeg ,vend
-             :label 'conn-for-each-visible
              ,@body))))))
 
 (defun conn--visible-matches (string &optional predicate)
