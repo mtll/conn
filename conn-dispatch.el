@@ -453,8 +453,6 @@ themselves once the selection process has concluded."
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
 
-(defvar conn-dispatch-override-target-finders nil)
-
 (defvar dispatch-quit-flag nil)
 
 (defvar conn-dispatch-read-event-map
@@ -505,11 +503,6 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
   (conn-make-action 'conn-dispatch-goto))
-
-(defun conn-dispatch-setup-target-finder (cmd arg)
-  (or (when conn-dispatch-override-target-finders
-        (funcall conn-dispatch-override-target-finders cmd arg))
-      (conn-get-target-finder cmd arg)))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)
@@ -1317,9 +1310,9 @@ Target overlays may override this default by setting the
          :target target)))))
 
 (cl-defstruct (conn-simple-label-state)
-  pool
-  in-use
-  size)
+  (pool nil :type list)
+  (in-use nil :type hash-table)
+  (size 0 :type fixnum))
 
 (defun conn-dispatch-simple-labels (state)
   "Create simple labels for all targets."
@@ -1722,7 +1715,9 @@ Target overlays may override this default by setting the
                                (funcall cont))))
       ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
-    (conn-dispatch-change-target thing thing-arg transform)))
+    (conn-target-finder-cleanup conn-dispatch-target-finder)
+    (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
+    (throw 'dispatch-change-target (list thing thing-arg thing-transform))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
@@ -1844,11 +1839,6 @@ Target overlays may override this default by setting the
         (funcall undo-fn :undo))))
   (conn-dispatch-handle-and-redisplay))
 
-(defun conn-dispatch-change-target (thing thing-arg thing-transform)
-  (conn-target-finder-cleanup conn-dispatch-target-finder)
-  (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
-  (throw 'dispatch-change-target (list thing thing-arg thing-transform)))
-
 ;;;;; Dispatch Target Finders
 
 (defface conn-dispatch-context-separator-face
@@ -1934,35 +1924,6 @@ type and initialize it to contain the same state as TARGET-FINDER."
 
 (cl-defgeneric conn-target-finder-prompt-p (target-finder)
   ( :method (_target-finder) nil))
-
-(defun conn-setup-targets (target-finder)
-  (conn-cleanup-labels)
-  (when conn--dispatch-always-retarget
-    (conn-target-finder-retarget target-finder))
-  (let ((old nil))
-    (unwind-protect
-        (progn
-          (pcase-dolist (`(_ . ,targets) conn-targets)
-            (dolist (target targets)
-              (overlay-put target 'category 'conn-old-target)
-              (push target old)))
-          (setq conn-targets nil
-                conn-target-count nil)
-          (conn-target-finder-update target-finder)
-          (pcase-dolist ((and cons `(,window . ,targets))
-                         conn-targets)
-            (cl-loop for tar in targets
-                     if (<= (window-start window)
-                            (overlay-start tar)
-                            (overlay-end tar)
-                            (window-end window))
-                     collect tar into filtered
-                     and sum 1 into count
-                     else do (delete-overlay tar)
-                     finally (setf (alist-get window conn-target-count) count
-                                   (cdr cons) filtered))))
-      (mapc #'delete-overlay old)))
-  (conn-target-finder-label-faces target-finder))
 
 (defclass conn-dispatch-target-key-labels ()
   ()
@@ -2713,6 +2674,8 @@ contain targets."
 
 ;;;;; Dispatch Actions
 
+(defvar conn-dispatch-amalgamate-undo nil)
+
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
@@ -2723,8 +2686,6 @@ contain targets."
   (thing-predicate :type function)
   (always-retarget :type boolean)
   (always-prompt :type boolean))
-
-(defvar conn-dispatch-amalgamate-undo nil)
 
 (defmacro conn-dispatch-undo-case (depth &rest body)
   (declare (indent 1))
