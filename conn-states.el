@@ -1424,16 +1424,15 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (setf conn--read-args-error-message "Invalid Command <%s>")
+           (setf conn--read-args-error-message
+                 (format "Invalid Command <%s>" cmd))
            (when command-handler
              (funcall command-handler cmd))
            (let ((next (if update-handler
                            (funcall update-handler cmd arguments)
                          (cl-loop for arg in arguments
                                   collect (conn-argument-update arg cmd)))))
-             (if (equal arguments next)
-                 (cl-callf format conn--read-args-error-message
-                   cmd)
+             (unless (equal arguments next)
                (setq conn--read-args-error-message "")
                (setq arguments next))))
          (read-command ()
