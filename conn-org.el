@@ -133,8 +133,17 @@
 (defun conn--org-window-p (win)
   (eq 'org-mode (buffer-local-value 'major-mode (window-buffer win))))
 
-(put 'org-link 'bounds-of-thing-at-point
-     (lambda () (org-in-regexp org-link-any-re)))
+(conn-register-thing
+ 'org-link
+ :bounds-op (lambda () (org-in-regexp org-link-any-re)))
+
+(conn-register-thing-commands
+ 'org-link 'conn-discrete-thing-handler
+ 'org-next-link 'org-previous-link)
+
+(conn-register-thing-commands
+ 'org-link nil
+ 'org-insert-link-global 'org-store-link 'org-insert-link)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
                                       _arg)

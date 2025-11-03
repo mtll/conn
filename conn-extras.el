@@ -367,6 +367,8 @@
           (conn-make-target-overlay
            (+ 2 marker) (- (line-end-position) marker 2)))))))
 
+(conn-register-thing 'dired-line)
+
 (conn-register-thing-commands
  'dired-line nil
  'dired-previous-line 'dired-next-line)
@@ -377,6 +379,8 @@
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
   (conn-make-action 'conn-dispatch-jump))
+
+(conn-register-thing 'dired-subdir)
 
 (conn-register-thing-commands
  'dired-subdir nil
@@ -389,6 +393,8 @@
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
   (conn-make-action 'conn-dispatch-jump))
+
+(conn-register-thing 'dired-dirline)
 
 (conn-register-thing-commands
  'dired-dirline nil
@@ -612,6 +618,8 @@
                      (point)))
           (conn-make-target-overlay (point) 0))))))
 
+(conn-register-thing 'ibuffer-line)
+
 (conn-register-thing-commands
  'ibuffer-line nil
  'ibuffer-backward-line 'ibuffer-forward-line)
@@ -622,6 +630,8 @@
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
   (conn-make-action 'conn-dispatch-jump))
+
+(conn-register-thing 'ibuffer-filter-group)
 
 (conn-register-thing-commands
  'ibuffer-filter-group nil

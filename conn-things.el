@@ -20,6 +20,7 @@
 (require 'conn-utils)
 (require 'conn-mark)
 (require 'conn-states)
+(require 'thingatpt)
 (eval-when-compile
   (require 'cl-lib))
 
@@ -249,6 +250,8 @@ HANDLER will be run from the `post-command-hook' and should be a
 function of one argument, the location of `point' before the command
 ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
 order to mark the region that should be defined by any of COMMANDS."
+  (unless (conn-thing-p thing)
+    (error "%s is not a known thing" thing))
   (dolist (cmd commands)
     (setf (conn-command-thing cmd) thing
           (conn-command-mark-handler cmd) handler)))
@@ -1492,13 +1495,7 @@ Only the background color is used."
  'conn-end-of-inner-line
  'comment-line)
 
-(conn-register-thing-commands
- 'org-link 'conn-discrete-thing-handler
- 'org-next-link 'org-previous-link)
-
-(conn-register-thing-commands
- 'org-link nil
- 'org-insert-link-global 'org-store-link 'org-insert-link)
+(conn-register-thing 'expansion)
 
 (conn-register-thing-commands
  'expansion nil

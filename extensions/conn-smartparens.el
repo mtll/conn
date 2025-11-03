@@ -143,15 +143,15 @@
     (when conn-sp-sexp-include-prefix-chars-mode
       (backward-char (length (sp-get thing :prefix))))))
 
-(conn-register-thing-commands
- 'sp-sexp 'conn-sp-sexp-handler
- 'conn-sp-backward-sexp)
-
 (conn-register-thing
  'sp-sexp
  :parent 'sexp
  :forward-op 'conn-sp-forward-sexp-op
  :bounds-op 'conn-sp-bounds-of-sexp)
+
+(conn-register-thing-commands
+ 'sp-sexp 'conn-sp-sexp-handler
+ 'conn-sp-backward-sexp)
 
 (conn-register-thing-commands
  'sp-sexp 'conn-sp-sexp-handler
