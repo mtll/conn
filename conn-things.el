@@ -515,38 +515,35 @@ words."))
   "X" 'conn-transform-reset)
 
 (oclosure-define (conn-transform-argument
-                  (:parent conn-read-args-wrapper)))
+                  (:parent conn-read-args-argument)))
 
 (cl-defmethod conn-argument-required-p ((_arg conn-transform-argument)) nil)
+
+;; TODO: better mutual exclusion checking
+(cl-defgeneric conn-transform-command-handler (cmd transform))
+
+(cl-defmethod conn-transform-command-handler (cmd transforms)
+  (if (and (symbolp cmd)
+           (get cmd :conn-bounds-transform))
+      (if (memq cmd transforms)
+          (remq cmd transforms)
+        (cons cmd transforms))
+    transforms))
 
 (defun conn-transform-argument (&rest initial)
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-transform-argument
-                    (name "transforms")
-                    (separator "∘")
-                    (contents initial)
+                    (value initial)
                     (keymap conn-transform-map))
       (self cmd)
-    (let ((next
-           (cl-loop for tform in (conn-read-args-wrapper-contents self)
-                    for update = (conn-argument-update tform cmd)
-                    when update collect update)))
+    (let* ((next (conn-transform-command-handler cmd value)))
       (pcase cmd
         ('conn-transform-reset
-         (conn-set-wrapper self nil))
-        ((and (guard (symbolp cmd))
-              (let (and handler (pred identity))
-                (get cmd :conn-bounds-transform)))
-         (cond ((memq cmd next)
-                (conn-set-wrapper self (remq cmd next)))
-               ((functionp handler)
-                (funcall handler cmd self))
-               (t (conn-set-wrapper self (cons cmd next)))))
-        (_
-         (if (equal next contents)
-             self
-           (conn-set-wrapper self next)))))))
+         (conn-set-argument self nil))
+        ((guard (not (eq next value)))
+         (conn-set-argument self next))
+        (_ self)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
@@ -830,11 +827,14 @@ words."))
 (put 'conn-bounds-last :conn-bounds-transform t)
 (put 'conn-bounds-last :conn-transform-description "last")
 
-(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-last)) form)
-  (unless (memq form '(toggle-subregions
-                       conn-bounds-after-point
-                       conn-bounds-before-point))
-    arg))
+(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-last))
+                                              transforms)
+  (if (memq cmd '(conn-bounds-before-point
+                  conn-bounds-before-point-exclusive
+                  conn-bounds-after-point
+                  conn-bounds-after-point-exclusive))
+      (remq cmd transforms)
+    (cl-call-next-method)))
 
 (cl-defgeneric conn-bounds-last (bounds)
   ( :method ((bounds (conn-thing dispatch)))
@@ -872,13 +872,14 @@ words."))
 (put 'conn-bounds-after-point :conn-bounds-transform t)
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
-(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-after-point)) form)
-  (unless (or (eq form 'conn-bounds-last)
-              (eq form 'conn-bounds-before-point)
-              (eq form 'conn-bounds-before-point-exclusive)
-              (eq form 'conn-bounds-after-point)
-              (eq form 'conn-bounds-after-point-exclusive))
-    arg))
+(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point))
+                                              transforms)
+  (if (memq cmd '(conn-bounds-last
+                  conn-bounds-before-point
+                  conn-bounds-before-point-exclusive
+                  conn-bounds-after-point-exclusive))
+      (remq cmd transforms)
+    (cl-call-next-method)))
 
 (cl-defgeneric conn-bounds-after-point (bounds &optional exclusive))
 
@@ -892,14 +893,14 @@ words."))
 (put 'conn-bounds-after-point-exclusive :conn-bounds-transform t)
 (put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
 
-(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-after-point-exclusive))
-                                    form)
-  (unless (or (eq form 'conn-bounds-last)
-              (eq form 'conn-bounds-before-point)
-              (eq form 'conn-bounds-before-point-exclusive)
-              (eq form 'conn-bounds-after-point)
-              (eq form 'conn-bounds-after-point-exclusive))
-    arg))
+(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point-exclusive))
+                                              transforms)
+  (if (memq cmd '(conn-bounds-last
+                  conn-bounds-before-point
+                  conn-bounds-before-point-exclusive
+                  conn-bounds-after-point))
+      (remq cmd transforms)
+    (cl-call-next-method)))
 
 (defun conn-bounds-after-point-exclusive (bounds)
   (conn-bounds-after-point bounds t))
@@ -907,13 +908,14 @@ words."))
 (put 'conn-bounds-before-point :conn-bounds-transform t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
 
-(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-before-point)) form)
-  (unless (or (eq form 'conn-bounds-last)
-              (eq form 'conn-bounds-before-point)
-              (eq form 'conn-bounds-before-point-exclusive)
-              (eq form 'conn-bounds-after-point)
-              (eq form 'conn-bounds-after-point-exclusive))
-    arg))
+(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point))
+                                              transforms)
+  (if (memq cmd '(conn-bounds-last
+                  conn-bounds-before-point-exclusive
+                  conn-bounds-after-point
+                  conn-bounds-after-point-exclusive))
+      (remq cmd transforms)
+    (cl-call-next-method)))
 
 (cl-defgeneric conn-bounds-before-point (bounds &optional exclusive))
 
@@ -927,14 +929,14 @@ words."))
 (put 'conn-bounds-before-point-exclusive :conn-bounds-transform t)
 (put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
 
-(cl-defmethod conn-argument-update ((arg (eql 'conn-bounds-before-point-exclusive))
-                                    form)
-  (unless (or (eq form 'conn-bounds-last)
-              (eq form 'conn-bounds-before-point)
-              (eq form 'conn-bounds-before-point-exclusive)
-              (eq form 'conn-bounds-after-point)
-              (eq form 'conn-bounds-after-point-exclusive))
-    arg))
+(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point-exclusive))
+                                              transforms)
+  (if (memq cmd '(conn-bounds-last
+                  conn-bounds-before-point
+                  conn-bounds-after-point
+                  conn-bounds-after-point-exclusive))
+      (remq cmd transforms)
+    (cl-call-next-method)))
 
 (defun conn-bounds-before-point-exclusive (bounds)
   (conn-bounds-before-point bounds t))
@@ -998,42 +1000,22 @@ words."))
        (rectangle--col-pos pc 'point)))
     (conn-bounds-of 'region nil)))
 
-;;;;; Bounds of Remote Thing
-
-(cl-defgeneric conn-bounds-of-remote (cmd arg pt)
-  (declare (conn-anonymous-thing-property :bounds-op-remote)
-           (important-return-value t))
-  ( :method (cmd arg pt)
-    (save-excursion
-      (goto-char pt)
-      (conn-bounds-of cmd arg))))
-
-(cl-defmethod conn-bounds-of-remote ((_cmd (conn-thing region))
-                                     arg pt)
-  (conn-make-bounds
-   'region arg
-   (cons (min (point) pt)
-         (max (point) pt))))
-
-(cl-defmethod conn-bounds-of-remote ((_cmd (conn-thing char))
-                                     arg pt)
-  (conn-make-bounds
-   'region arg
-   (cons (min (point) pt)
-         (max (point) pt))))
-
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch)) _arg)
   (conn-read-args (conn-read-thing-state
                    :prompt "Thing")
       ((`(,thing ,thing-arg) (conn-thing-argument)))
     (let* ((name (symbol-name cmd))
-           (at nil)
+           (start (point))
+           (exclusive nil)
+           (bounds nil)
            (quit (make-symbol "quit")))
       (fset quit (lambda ()
                    (when (or isearch-mode-end-hook-quit
                              (null isearch-other-end))
                      (abort-recursive-edit))
-                   (setq at (min (point) isearch-other-end))))
+                   (setq bounds (conn-bounds-of thing thing-arg)
+                         exclusive (< (abs (- (point) start))
+                                      (abs (- isearch-other-end start))))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)
@@ -1041,7 +1023,16 @@ words."))
                           (string-match-p "regexp" name)
                           nil t))
         (remove-hook 'isearch-mode-end-hook quit))
-      (conn-bounds-of-remote thing thing-arg at))))
+      (pcase bounds
+        ((conn-bounds `(,beg . ,end))
+         (cond ((<= beg start end)
+                (unless exclusive bounds))
+               ((< start beg)
+                (conn-make-bounds-transform
+                 bounds (cons start (if exclusive end beg))))
+               (t
+                (conn-make-bounds-transform
+                 bounds (cons (if exclusive beg end) start)))))))))
 
 ;;;; Bounds of Things in Region
 
@@ -1161,12 +1152,11 @@ Only the background color is used."
                   (substitute-command-keys
                    (concat
                     (propertize prompt 'face 'minibuffer-prompt)
-                    " ("
                     (cl-loop for i below size
-                             when (> i 0) concat " "
+                             concat " "
                              if (= i curr) concat (car pips)
                              else concat (cdr pips))
-                    "; "
+                    " ("
                     (mapconcat (lambda (thing)
                                  (propertize
                                   (conn-thing-pretty-print thing)

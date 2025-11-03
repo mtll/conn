@@ -413,28 +413,23 @@
   "C-M-s" 'isearch-regexp-forward
   "C-M-r" 'isearch-regexp-backward
   "C-v" 'scroll-up
-  "M-v" 'scroll-down
-  "C-w" 'restrict-windows)
+  "M-v" 'scroll-down)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   :parent conn-dispatch-common-map
-  "z" 'dispatch-other-end
   "<escape>" 'finish
   "C-q" 'help
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "TAB" 'repeat-dispatch
-  "C-w" 'restrict-windows
   "DEL" 'backward-delete-arg
   "<backspace>" 'backward-delete-arg
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
   "n" conn-end-of-defun-remap
-  "," conn-thing-remap
-  "<remap> <conn-bounds-after-point>" 'undefined
-  "<remap> <conn-bounds-before-point>" 'undefined)
+  "," conn-thing-remap)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-thingatpt-state)
@@ -504,7 +499,6 @@
   "M-f" 'conn-dispatch-ring-describe-head
   "t" 'conn-dispatch-copy-to
   "T" 'conn-dispatch-copy-replace-to
-  "v" 'conn-dispatch-over
   "C-y" 'conn-dispatch-yank-to-replace
   "M-y" 'conn-dispatch-reading-yank-to-replace
   "y" 'conn-dispatch-yank-to

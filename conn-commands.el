@@ -1943,32 +1943,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (throw 'sep "\n")))
          " "))))
 
-(oclosure-define (conn-kill-over-argument
-                  (:parent conn-read-args-argument)))
-
-(defvar-keymap conn-kill-over-argument-keymap
-  "v" 'kill-over)
-
-(defun conn-kill-over-argument (&optional initial-value)
-  (oclosure-lambda (conn-kill-over-argument
-                    (value initial-value)
-                    (keymap conn-kill-over-argument-keymap))
-      (self cmd)
-    (if (eq cmd 'kill-over)
-        (conn-set-argument self (not value))
-      self)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-kill-over-argument)
-                                       sym)
-  (eq sym 'kill-over))
-
-(cl-defmethod conn-argument-display ((arg conn-kill-over-argument))
-  (concat
-   "\\[kill-over] "
-   (propertize "kill-over"
-               'face (when (conn-read-args-argument-value arg)
-                       'eldoc-highlight-function-argument))))
-
 (oclosure-define (conn-kill-action
                   (:parent conn-action)))
 
@@ -1987,26 +1961,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                      :prompt "Kill"
                      :reference (list conn-dispatch-thing-ref))
         ((`(,thing ,thing-arg) (conn-thing-argument t))
+         (transform (conn-dispatch-transform-argument transform))
          (repeat (conn-dispatch-repeat-argument))
          (prepend (conn-prepend-argument (eq append 'prepend)))
          (separator (when (not delete)
                       (conn-separator-argument 'default)))
-         (restrict-windows (conn-dispatch-restrict-windows-argument t))
-         (kill-over (conn-kill-over-argument)))
+         (restrict-windows (conn-dispatch-restrict-windows-argument t)))
       (conn-with-dispatch-event-handler _
-          (define-keymap "M-v" 'kill-over)
+          nil
           (lambda (keymap)
             (list
-             (when-let* ((binding
-                          (where-is-internal 'kill-over keymap t)))
-               (concat
-                (propertize (key-description binding)
-                            'face 'help-key-binding)
-                " "
-                (propertize
-                 "kill over"
-                 'face (when kill-over
-                         'eldoc-highlight-function-argument))))
              (when-let* ((binding
                           (where-is-internal 'dispatch-other-end keymap t)))
                (concat
@@ -2021,9 +1985,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (pcase cmd
               ('dispatch-other-end
                (setq prepend (not prepend))
-               (conn-dispatch-handle))
-              ('kill-over
-               (setq kill-over (not kill-over)))))
+               (conn-dispatch-handle))))
         (let ((result nil)
               (strings nil))
           (conn-perform-dispatch
@@ -2032,41 +1994,30 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                (window pt thing thing-arg transform)
              (with-selected-window window
                (conn-dispatch-loop-undo-boundary)
-               (let ((over (when kill-over
-                             (pcase (conn-bounds-of thing nil)
-                               ((conn-bounds `(,beg . ,end) transform)
-                                (if (> pt (point))
-                                    (if (>= (point) end) (point) beg)
-                                  (if (<= (point) beg) (point) end)))))))
-                 (save-mark-and-excursion
-                   (goto-char pt)
-                   (pcase (conn-bounds-of thing thing-arg)
-                     ((and (conn-bounds `(,beg . ,end) transform)
-                           bounds)
-                      (goto-char (cond (over (if (> pt over) end beg))
-                                       (conn-dispatch-other-end end)
-                                       (t beg)))
-                      (conn--push-ephemeral-mark
-                       (cond (over over)
-                             (conn-dispatch-other-end beg)
-                             (t end)))
-                      (when check-bounds
-                        (conn-check-bounds
-                         (conn-make-bounds
-                          'region nil
-                          (cons (region-beginning) (region-end)))))
-                      (if delete
-                          (delete-region beg end)
-                        (push (cons prepend (funcall region-extract-function t))
-                              strings)
-                        (conn-dispatch-undo-case 90
-                          (:undo
-                           (pop strings)
-                           (conn-dispatch-undo-pulse beg end))
-                          (:cancel
-                           (pop strings))))
-                      (when fixup-whitespace
-                        (funcall conn-kill-fixup-whitespace-function bounds))))))))
+               (save-mark-and-excursion
+                 (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                   ((and bounds
+                         (conn-dispatch-bounds `(,beg . ,end) transform))
+                    (goto-char beg)
+                    (conn--push-ephemeral-mark end)
+                    (when check-bounds
+                      (conn-check-bounds
+                       (conn-make-bounds
+                        'region nil
+                        (cons (region-beginning) (region-end)))))
+                    (if delete
+                        (delete-region beg end)
+                      (push (cons prepend (funcall region-extract-function t))
+                            strings)
+                      (conn-dispatch-undo-case 90
+                        (:undo
+                         (pop strings)
+                         (conn-dispatch-undo-pulse beg end))
+                        (:cancel
+                         (pop strings))))
+                    (when fixup-whitespace
+                      (funcall conn-kill-fixup-whitespace-function bounds)))
+                   (_ (user-error "No %s found" thing))))))
            thing thing-arg transform
            :repeat repeat
            :other-end :no-other-end
@@ -2185,6 +2136,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                    :prompt "Copy"
                    :reference (list conn-dispatch-thing-ref))
       ((`(,thing ,thing-arg) (conn-thing-argument t))
+       (transform (conn-dispatch-transform-argument transform))
        (repeat (conn-dispatch-repeat-argument))
        (prepend (conn-prepend-argument (eq append 'prepend)))
        (separator (conn-separator-argument 'default))
@@ -2215,11 +2167,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
            (with-selected-window window
              (conn-dispatch-loop-undo-boundary)
              (save-mark-and-excursion
-               (goto-char pt)
-               (pcase (conn-bounds-of thing thing-arg)
-                 ((conn-bounds `(,beg . ,end) transform)
-                  (goto-char (if conn-dispatch-other-end end beg))
-                  (conn--push-ephemeral-mark (if conn-dispatch-other-end beg end))
+               (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                 ((conn-dispatch-bounds `(,beg . ,end) transform)
+                  (goto-char beg)
+                  (conn--push-ephemeral-mark end)
                   (push (cons prepend (funcall region-extract-function nil))
                         strings)
                   (conn-dispatch-action-pulse beg end)
@@ -2228,7 +2179,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                      (pop strings)
                      (conn-dispatch-undo-pulse beg end))
                     (:cancel
-                     (pop strings))))))))
+                     (pop strings))))
+                 (_ (user-error "No %s found" thing))))))
          thing thing-arg transform
          :repeat repeat
          :other-end :no-other-end
