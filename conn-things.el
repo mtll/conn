@@ -527,7 +527,7 @@ words."))
 
 (cl-defmethod conn-transform-command-handler (cmd transforms)
   (if (and (symbolp cmd)
-           (get cmd :conn-bounds-transform))
+           (get cmd :conn-bounds-transformation))
       (if (memq cmd transforms)
           (remq cmd transforms)
         (cons cmd transforms))
@@ -550,7 +550,7 @@ words."))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
-  (get sym :conn-bounds-transform))
+  (get sym :conn-bounds-transformation))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
   (when-let* ((ts (conn-read-args-wrapper-contents arg)))
@@ -624,26 +624,23 @@ words."))
    :whole whole
    :properties properties))
 
-(cl-defstruct (conn-bounds-transform
+(cl-defstruct (conn-transformed-bounds
                (:include conn-bounds)
-               (:constructor conn--make-bounds-transform))
-  (parent nil :type conn-bounds :read-only t))
+               (:constructor conn--make-bounds-transform)))
 
-(defun conn-make-bounds-transform (from to &rest properties)
+(defun conn-make-transformed-bounds (from to)
   (declare (compiler-macro
             (lambda (_exp)
               `(conn--make-bounds-transform
                 :thing (conn-bounds-thing ,from)
                 :arg (conn-bounds-arg ,from)
                 :whole ,to
-                :parent ,from
-                :properties (list ,@properties)))))
+                :properties (conn-bounds--properties ,from)))))
   (conn--make-bounds-transform
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)
    :whole to
-   :parent from
-   :properties properties))
+   :properties (conn-bounds--properties from)))
 
 (defun conn-bounds-set (bounds prop val)
   (setf (plist-get (conn-bounds--properties bounds) prop) val))
@@ -681,11 +678,10 @@ words."))
     (cond ((null transforms)
            bounds)
           ((consp bounds)
-           (delq nil
-                 (seq-reduce (lambda (bounds transform)
-                               (unless bounds (throw 'break nil))
-                               (mapcar transform bounds))
-                             transforms bounds)))
+           (seq-reduce (lambda (bounds transform)
+                         (unless bounds (throw 'break nil))
+                         (delq nil (mapcar transform bounds)))
+                       transforms bounds))
           (bounds
            (seq-reduce (lambda (bounds transform)
                          (unless bounds (throw 'break nil))
@@ -832,7 +828,7 @@ words."))
 
 ;;;;;; Last Bounds
 
-(put 'conn-bounds-last :conn-bounds-transform t)
+(put 'conn-bounds-last :conn-bounds-transformation t)
 (put 'conn-bounds-last :conn-transform-description "last")
 
 (cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-last))
@@ -857,7 +853,7 @@ words."))
 
 (defvar conn-bounds-trim-chars " \t\r\n")
 
-(put 'conn-bounds-trim :conn-bounds-transform t)
+(put 'conn-bounds-trim :conn-bounds-transformation t)
 (put 'conn-bounds-trim :conn-transform-description "trim")
 
 (cl-defgeneric conn-bounds-trim (bounds))
@@ -873,11 +869,11 @@ words."))
                      (skip-chars-backward conn-bounds-trim-chars beg)
                      (point))))
     (unless (> tb te)
-      (conn-make-bounds-transform bounds (cons tb te)))))
+      (conn-make-transformed-bounds bounds (cons tb te)))))
 
 ;;;;;; Bounds Before/After
 
-(put 'conn-bounds-after-point :conn-bounds-transform t)
+(put 'conn-bounds-after-point :conn-bounds-transformation t)
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
 (cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point))
@@ -894,11 +890,11 @@ words."))
 (cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (<= (point) end)
-        (conn-make-bounds-transform
+        (conn-make-transformed-bounds
          bounds (cons (point) (if exclusive beg end)))
       (error "Invalid bounds"))))
 
-(put 'conn-bounds-after-point-exclusive :conn-bounds-transform t)
+(put 'conn-bounds-after-point-exclusive :conn-bounds-transformation t)
 (put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
 
 (cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point-exclusive))
@@ -913,7 +909,7 @@ words."))
 (defun conn-bounds-after-point-exclusive (bounds)
   (conn-bounds-after-point bounds t))
 
-(put 'conn-bounds-before-point :conn-bounds-transform t)
+(put 'conn-bounds-before-point :conn-bounds-transformation t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
 
 (cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point))
@@ -930,11 +926,11 @@ words."))
 (cl-defmethod conn-bounds-before-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (>= (point) beg)
-        (conn-make-bounds-transform
+        (conn-make-transformed-bounds
          bounds (cons (if exclusive end beg) (point)))
       (error "Invalid bounds"))))
 
-(put 'conn-bounds-before-point-exclusive :conn-bounds-transform t)
+(put 'conn-bounds-before-point-exclusive :conn-bounds-transformation t)
 (put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
 
 (cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point-exclusive))
@@ -1036,10 +1032,10 @@ words."))
          (cond ((<= beg start end)
                 (unless exclusive bounds))
                ((< start beg)
-                (conn-make-bounds-transform
+                (conn-make-transformed-bounds
                  bounds (cons start (if exclusive end beg))))
                (t
-                (conn-make-bounds-transform
+                (conn-make-transformed-bounds
                  bounds (cons (if exclusive beg end) start)))))))))
 
 ;;;; Bounds of Things in Region

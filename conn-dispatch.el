@@ -879,7 +879,7 @@ themselves once the selection process has concluded."
     (setf (conn-bounds-get bounds :origin) (point))
     bounds))
 
-(put 'conn-dispatch-bounds-over :conn-bounds-transform t)
+(put 'conn-dispatch-bounds-over :conn-bounds-transformation t)
 (put 'conn-dispatch-bounds-over :conn-transform-description "over")
 
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
@@ -891,7 +891,7 @@ themselves once the selection process has concluded."
     ((conn-bounds `(,beg . ,end))
      (pcase (conn-bounds-of bounds (conn-bounds-arg bounds))
        ((conn-bounds `(,obeg . ,oend))
-        (conn-make-bounds-transform
+        (conn-make-transformed-bounds
          bounds
          (if (< oend end)
              (cons (max oend end) (min obeg beg))
