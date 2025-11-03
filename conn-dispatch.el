@@ -999,12 +999,12 @@ Optionally the overlay may have an associated THING."
           (while-let ((next-char (read-char (format (concat prompt "%s ") string)
                                             t conn-read-string-timeout)))
             (setq string (concat string (char-to-string next-char)))
-            (conn-delete-targets)
+            (conn-cleanup-targets)
             (while-no-input
               (conn-make-string-target-overlays string predicate)))
           (message nil)
           string))
-    (conn-delete-targets)))
+    (conn-cleanup-targets)))
 
 ;;;;; Dispatch Labels
 
@@ -1503,7 +1503,7 @@ Target overlays may override this default by setting the
   (or conn--dispatch-must-prompt
       conn--dispatch-action-always-prompt
       (> conn-dispatch-repeat-count 0)
-      (conn-targets-prompt-p conn-dispatch-target-finder)))
+      (conn-target-finder-prompt-p conn-dispatch-target-finder)))
 
 (defun conn-select-target (&rest _args)
   (error "conn-select-target only allowed inside conn-perform-dispatch-loop"))
@@ -1516,23 +1516,54 @@ Target overlays may override this default by setting the
 
 (defmacro conn-with-dispatch-labels (labels &rest body)
   (declare (indent 1))
-  `(let (,labels)
-     (unwind-protect
-         (progn ,@body)
-       (conn-cleanup-labels)
-       (letrec ((cleanup
-                 (lambda (&rest _)
-                   (unwind-protect
-                       (mapc #'conn-label-delete ,(car labels))
-                     (setq conn--previous-labels-cleanup nil)
-                     (remove-hook 'pre-redisplay-functions cleanup)))))
-         (add-hook 'pre-redisplay-functions cleanup)
-         (setq conn--previous-labels-cleanup cleanup)))))
+  `(progn
+     (conn-cleanup-labels)
+     (let (,labels)
+       (unwind-protect
+           (progn ,@body)
+         (clrhash conn--pixelwise-window-cache)
+         (clrhash conn--dispatch-window-lines-cache)
+         (cl-labels ((cleanup (&rest _)
+                       (unwind-protect
+                           (mapc #'conn-label-delete ,(car labels))
+                         (setq conn--previous-labels-cleanup nil)
+                         (remove-hook 'pre-redisplay-functions #'cleanup))))
+           (add-hook 'pre-redisplay-functions #'cleanup)
+           (setq conn--previous-labels-cleanup #'cleanup))))))
 
-(cl-defgeneric conn-dispatch-select-target (target-finder)
+(cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
 
-(cl-defmethod conn-dispatch-select-target :around (_target-finder)
+(cl-defmethod conn-target-finder-select :before (target-finder)
+  (conn-cleanup-labels)
+  (when conn--dispatch-always-retarget
+    (conn-target-finder-retarget target-finder))
+  (let ((old nil))
+    (unwind-protect
+        (progn
+          (pcase-dolist (`(_ . ,targets) conn-targets)
+            (dolist (target targets)
+              (overlay-put target 'category 'conn-old-target)
+              (push target old)))
+          (setq conn-targets nil
+                conn-target-count nil)
+          (conn-target-finder-update target-finder)
+          (pcase-dolist ((and cons `(,window . ,targets))
+                         conn-targets)
+            (cl-loop for tar in targets
+                     if (<= (window-start window)
+                            (overlay-start tar)
+                            (overlay-end tar)
+                            (window-end window))
+                     collect tar into filtered
+                     and sum 1 into count
+                     else do (delete-overlay tar)
+                     finally (setf (alist-get window conn-target-count) count
+                                   (cdr cons) filtered))))
+      (mapc #'delete-overlay old)))
+  (conn-target-finder-label-faces target-finder))
+
+(cl-defmethod conn-target-finder-select :around (_target-finder)
   (let ((conn--dispatch-remap-cookies nil))
     (conn-with-dispatch-event-handler 'mouse-click
         nil nil
@@ -1553,21 +1584,21 @@ Target overlays may override this default by setting the
             (cl-call-next-method))
         (conn-dispatch-select-mode -1)))))
 
-(cl-defmethod conn-dispatch-select-target (target-finder)
-  (conn-setup-targets target-finder)
+(cl-defmethod conn-target-finder-select (_target-finder)
   (conn-with-dispatch-labels
-   (labels (pcase (funcall conn-dispatch-label-function
-                           conn--dispatch-label-state)
-             (`(:state ,state . ,labels)
-              (setq conn--dispatch-label-state state)
-              labels)
-             (labels labels)))
-   (conn-label-select labels
-                      #'conn-dispatch-read-event
-                      (cl-loop for (_ . c) in conn-target-count
-                               sum c into count
-                               finally return (format "Label [%s]" count))
-                      (conn-dispatch-prompt-p))))
+      (labels (pcase (funcall conn-dispatch-label-function
+                              conn--dispatch-label-state)
+                (`(:state ,state . ,labels)
+                 (setq conn--dispatch-label-state state)
+                 labels)
+                (labels labels)))
+    (conn-label-select
+     labels
+     #'conn-dispatch-read-event
+     (cl-loop for (_ . c) in conn-target-count
+              sum c into count
+              finally return (format "Label [%s]" count))
+     (conn-dispatch-prompt-p))))
 
 ;;;;; Perform Dispatch Loop
 
@@ -1632,7 +1663,7 @@ Target overlays may override this default by setting the
                ,@(cdr conn--dispatch-read-event-message-prefixes))))
        (unwind-protect
            (cl-flet ((conn-select-target ()
-                       (conn-dispatch-select-target
+                       (conn-target-finder-select
                         conn-dispatch-target-finder)))
              (catch 'dispatch-select-exit
                (let ((conn-dispatch-in-progress t))
@@ -1650,15 +1681,8 @@ Target overlays may override this default by setting the
   (declare (indent 0))
   (cl-with-gensyms (select-mode)
     `(progn
-       (pcase-dolist (`(_ . ,targets) conn-targets)
-         (dolist (target targets)
-           (overlay-put target 'category 'conn-old-target)
-           (overlay-put target 'face nil)))
+       (conn-target-finder-suspend conn-dispatch-target-finder)
        (conn-cleanup-labels)
-       (clrhash conn--pixelwise-window-cache)
-       (clrhash conn--dispatch-window-lines-cache)
-       (setq conn-target-count nil)
-       (conn-targets-suspend conn-dispatch-target-finder)
        (pcase-let ((`(,conn-target-window-predicate
                       ,conn-target-predicate
                       ,conn-target-sort-function)
@@ -1793,7 +1817,7 @@ Target overlays may override this default by setting the
     (conn-dispatch-handle-and-redisplay :prompt nil)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
-  (conn-targets-retarget conn-dispatch-target-finder)
+  (conn-target-finder-retarget conn-dispatch-target-finder)
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
@@ -1821,7 +1845,7 @@ Target overlays may override this default by setting the
   (conn-dispatch-handle-and-redisplay))
 
 (defun conn-dispatch-change-target (thing thing-arg thing-transform)
-  (conn-targets-cleanup conn-dispatch-target-finder)
+  (conn-target-finder-cleanup conn-dispatch-target-finder)
   (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
   (throw 'dispatch-change-target (list thing thing-arg thing-transform)))
 
@@ -1838,18 +1862,12 @@ Target overlays may override this default by setting the
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
 
-(defun conn-delete-targets ()
-  (pcase-dolist (`(_ . ,targets) conn-targets)
-    (dolist (target targets)
-      (delete-overlay target)))
-  (clrhash conn--pixelwise-window-cache)
-  (clrhash conn--dispatch-window-lines-cache)
-  (setq conn-targets nil
-        conn-target-count nil))
+(defun conn-cleanup-targets ()
+  (conn-target-finder-cleanup conn-dispatch-target-finder))
 
-(cl-defgeneric conn-targets-update (target-finder))
+(cl-defgeneric conn-target-finder-update (target-finder))
 
-(cl-defmethod conn-targets-update (target-finder)
+(cl-defmethod conn-target-finder-update (target-finder)
   (when (functionp target-finder)
     (funcall target-finder)))
 
@@ -1863,9 +1881,9 @@ Target overlays may override this default by setting the
          (apply #'color-rgb-to-hex (color-hsl-to-rgb h s (* l 1.1))))
         (_ 'conn-dispatch-label-face))))
 
-(cl-defgeneric conn-targets-label-faces (target-finder))
+(cl-defgeneric conn-target-finder-label-faces (target-finder))
 
-(cl-defmethod conn-targets-label-faces (_target-finder)
+(cl-defmethod conn-target-finder-label-faces (_target-finder)
   (let ((face1 'conn-dispatch-label-face)
         (face2 `( :inherit conn-dispatch-label-face
                   :background ,(conn-dispatch-label-alt-background))))
@@ -1874,19 +1892,31 @@ Target overlays may override this default by setting the
         (overlay-put tar 'label-face face1)
         (cl-rotatef face1 face2)))))
 
-(cl-defgeneric conn-targets-cleanup (target-finder)
-  (:method (_) "Noop" nil))
+(cl-defgeneric conn-target-finder-cleanup (target-finder))
 
-(cl-defgeneric conn-targets-suspend (target-finder)
-  (:method (_) "Noop" nil))
+(cl-defmethod conn-target-finder-cleanup (_target-finder)
+  (pcase-dolist (`(_ . ,targets) conn-targets)
+    (dolist (target targets)
+      (delete-overlay target)))
+  (setq conn-targets nil
+        conn-target-count nil))
 
-(cl-defgeneric conn-targets-other-end (target-finder)
+(cl-defgeneric conn-target-finder-suspend (target-finder))
+
+(cl-defmethod conn-target-finder-suspend (_target-finder)
+  (pcase-dolist (`(_ . ,targets) conn-targets)
+    (dolist (target targets)
+      (overlay-put target 'category 'conn-old-target)
+      (overlay-put target 'face nil)))
+  (setq conn-target-count nil))
+
+(cl-defgeneric conn-target-finder-other-end (target-finder)
   "Default value for :other-end parameter in `conn-perform-dispatch'."
   (declare (conn-anonymous-thing-property :other-end)
            (important-return-value t))
   (:method (_) nil))
 
-(cl-defgeneric conn-targets-save-state (target-finder)
+(cl-defgeneric conn-target-finder-save-state (target-finder)
   "Return a list of functions to restore TARGET-FINDER\\='s state.
 
 Each function should take an uninitialized target finder of the same
@@ -1894,21 +1924,21 @@ type and initialize it to contain the same state as TARGET-FINDER."
   (declare (important-return-value t))
   (:method (_) nil))
 
-(cl-defgeneric conn-targets-keymaps (target-finder)
+(cl-defgeneric conn-target-finder-keymaps (target-finder)
   (declare (important-return-value t))
   ( :method (_) nil))
 
-(cl-defgeneric conn-targets-message-prefixes (target-finder)
+(cl-defgeneric conn-target-finder-message-prefixes (target-finder)
   (declare (important-return-value t))
   (:method (_) nil))
 
-(cl-defgeneric conn-targets-prompt-p (target-finder)
+(cl-defgeneric conn-target-finder-prompt-p (target-finder)
   ( :method (_target-finder) nil))
 
 (defun conn-setup-targets (target-finder)
   (conn-cleanup-labels)
   (when conn--dispatch-always-retarget
-    (conn-targets-retarget target-finder))
+    (conn-target-finder-retarget target-finder))
   (let ((old nil))
     (unwind-protect
         (progn
@@ -1916,11 +1946,9 @@ type and initialize it to contain the same state as TARGET-FINDER."
             (dolist (target targets)
               (overlay-put target 'category 'conn-old-target)
               (push target old)))
-          (clrhash conn--pixelwise-window-cache)
-          (clrhash conn--dispatch-window-lines-cache)
           (setq conn-targets nil
                 conn-target-count nil)
-          (conn-targets-update target-finder)
+          (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
                          conn-targets)
             (cl-loop for tar in targets
@@ -1934,13 +1962,13 @@ type and initialize it to contain the same state as TARGET-FINDER."
                      finally (setf (alist-get window conn-target-count) count
                                    (cdr cons) filtered))))
       (mapc #'delete-overlay old)))
-  (conn-targets-label-faces target-finder))
+  (conn-target-finder-label-faces target-finder))
 
 (defclass conn-dispatch-target-key-labels ()
   ()
   "Abstract type for target finders which use key-bindings as labels.
 
-The `conn-targets-update' method for any class inheriting from
+The `conn-target-finder-update' method for any class inheriting from
 this class should set the \\='label-key overlay property of each target
 to the key binding for that target."
   :abstract t)
@@ -1955,30 +1983,29 @@ to the key binding for that target."
               labels)))
     labels))
 
-(cl-defmethod conn-dispatch-select-target ((target-finder
-                                            conn-dispatch-target-key-labels))
-  (conn-setup-targets target-finder)
+(cl-defmethod conn-target-finder-select ((_target-finder
+                                          conn-dispatch-target-key-labels))
   (conn-with-dispatch-labels
-   (labels (conn-dispatch-key-labels))
-   (conn-with-dispatch-event-handler 'label
-       (let ((map (make-sparse-keymap)))
-         (cl-loop for label in labels
-                  for key = (conn-dispatch-label-string label)
-                  do (keymap-set map key label))
-         (mapc #'conn-label-redisplay labels)
-         map)
-       nil
-       (lambda (obj)
-         (when (conn-dispatch-label-p obj)
-           (throw 'label obj)))
-     (conn-label-payload
-      (progn
-        (ignore (conn-dispatch-read-event "Register"))
-        (while t
-          (ignore
-           (conn-dispatch-read-event
-            "Register" nil nil
-            (propertize "Invalid key" 'face 'error)))))))))
+      (labels (conn-dispatch-key-labels))
+    (conn-with-dispatch-event-handler 'label
+        (let ((map (make-sparse-keymap)))
+          (cl-loop for label in labels
+                   for key = (conn-dispatch-label-string label)
+                   do (keymap-set map key label))
+          (mapc #'conn-label-redisplay labels)
+          map)
+        nil
+        (lambda (obj)
+          (when (conn-dispatch-label-p obj)
+            (throw 'label obj)))
+      (conn-label-payload
+       (progn
+         (ignore (conn-dispatch-read-event "Register"))
+         (while t
+           (ignore
+            (conn-dispatch-read-event
+             "Register" nil nil
+             (propertize "Invalid key" 'face 'error)))))))))
 
 (defclass conn-dispatch-target-window-predicate ()
   ((window-predicate :initform (lambda (&rest _) t)
@@ -1986,14 +2013,14 @@ to the key binding for that target."
   "Abstract type for target finders with a window predicate."
   :abstract t)
 
-(cl-defmethod conn-targets-update :before ((state conn-dispatch-target-window-predicate))
+(cl-defmethod conn-target-finder-update :before ((state conn-dispatch-target-window-predicate))
   (let ((pred (oref state window-predicate)))
     (unless (advice-function-member-p pred conn-target-window-predicate)
       (add-function :before-while conn-target-window-predicate pred)))
   (ignore-error cl-no-next-method
     (cl-call-next-method)))
 
-(cl-defmethod conn-targets-cleanup ((state conn-dispatch-target-window-predicate))
+(cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-target-window-predicate))
   (remove-function conn-target-window-predicate
                    (oref state window-predicate))
   (ignore-error cl-no-next-method
@@ -2006,15 +2033,15 @@ to the key binding for that target."
   "M-f" 'always-retarget
   "C-f" 'retarget)
 
-(cl-defgeneric conn-targets-retarget (target-finder))
+(cl-defgeneric conn-target-finder-retarget (target-finder))
 
 (cl-defgeneric conn-dispatch-has-targets-p (target-finder)
   (declare (important-return-value t)))
 
-(cl-defmethod conn-targets-keymaps ((_ conn-dispatch-retargetable-target))
+(cl-defmethod conn-target-finder-keymaps ((_ conn-dispatch-retargetable-target))
   conn-dispatch-retargetable-map)
 
-(cl-defmethod conn-targets-message-prefixes ((state conn-dispatch-retargetable-target))
+(cl-defmethod conn-target-finder-message-prefixes ((state conn-dispatch-retargetable-target))
   (nconc
    (list (when-let* ((binding
                       (and (conn-dispatch-has-targets-p state)
@@ -2043,12 +2070,12 @@ to the key binding for that target."
   "Abstract type for target finders targeting a string."
   :abstract t)
 
-(cl-defmethod conn-targets-save-state ((target-finder conn-dispatch-string-targets))
+(cl-defmethod conn-target-finder-save-state ((target-finder conn-dispatch-string-targets))
   (cons (let ((str (oref target-finder string)))
           (lambda (tf) (setf (oref tf string) str)))
         (cl-call-next-method)))
 
-(cl-defmethod conn-targets-retarget ((state conn-dispatch-string-targets))
+(cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
 
 (cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
@@ -2059,7 +2086,7 @@ to the key binding for that target."
    (predicate :initform nil :initarg :predicate)
    (hide-target-overlays :initform nil :initarg :hide-target-overlays)))
 
-(cl-defmethod conn-targets-update ((state conn-dispatch-read-n-chars))
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-read-n-chars))
   (if-let* ((string (oref state string)))
       (conn-make-string-target-overlays
        string
@@ -2092,7 +2119,7 @@ to the key binding for that target."
                 (conn-dispatch-read-event prompt t)
                 (char-to-string)
                 (concat string))))
-          (conn-delete-targets)))
+          (conn-cleanup-targets)))
       (conn-make-string-target-overlays
        string
        predicate
@@ -2106,7 +2133,7 @@ to the key binding for that target."
   ((timeout :initform 0.5 :initarg :timeout)
    (predicate :initform nil :initarg :predicate)))
 
-(cl-defmethod conn-targets-update ((state conn-dispatch-read-with-timeout))
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-read-with-timeout))
   (with-slots (string timeout predicate) state
     (if string
         (conn-make-string-target-overlays string predicate)
@@ -2116,7 +2143,7 @@ to the key binding for that target."
           (conn-make-string-target-overlays string predicate))
         (while-let ((next-char (conn-dispatch-read-event
                                 prompt t timeout string)))
-          (conn-delete-targets)
+          (conn-cleanup-targets)
           (setq string (concat string (char-to-string next-char)))
           (while-no-input
             (conn-make-string-target-overlays string predicate))))))
@@ -2137,15 +2164,15 @@ to the key binding for that target."
 contain targets."
   :abstract t)
 
-(cl-defmethod conn-targets-prompt-p ((_state conn-dispatch-focus-targets))
+(cl-defmethod conn-target-finder-prompt-p ((_state conn-dispatch-focus-targets))
   t)
 
-(cl-defmethod conn-targets-cleanup ((state conn-dispatch-focus-targets))
+(cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden))
   (setf (oref state hidden) nil)
   (cl-call-next-method))
 
-(cl-defmethod conn-targets-suspend ((state conn-dispatch-focus-targets))
+(cl-defmethod conn-target-finder-suspend ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden))
   (setf (oref state hidden) nil)
   (cl-call-next-method))
@@ -2178,7 +2205,7 @@ contain targets."
   (pulse-momentary-highlight-one-line)
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-targets-update ((state conn-dispatch-focus-targets))
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden))
   (setf (oref state hidden) nil)
   (cl-call-next-method)
@@ -2248,7 +2275,7 @@ contain targets."
                 (eq (window-buffer win)
                     (window-buffer (selected-window)))))))
 
-(cl-defmethod conn-targets-update ((state conn-dispatch-focus-thing-at-point))
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-focus-thing-at-point))
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
       (let ((line-height (window-height))
@@ -2297,10 +2324,10 @@ contain targets."
    (window-predicate
     :initform (lambda (win) (eq win (selected-window))))))
 
-(cl-defmethod conn-targets-other-end ((_ conn-dispatch-mark-ring))
+(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-mark-ring))
   :no-other-end)
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-mark-ring))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-mark-ring))
   (unless conn-targets
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -2321,10 +2348,10 @@ contain targets."
                          for mk in global-mark-ring
                          thereis (eq buf (marker-buffer mk)))))))
 
-(cl-defmethod conn-targets-other-end ((_ conn-dispatch-global-mark))
+(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-global-mark))
   :no-other-end)
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-global-mark))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-global-mark))
   (unless conn-targets
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -2347,10 +2374,10 @@ contain targets."
                          thereis (and (markerp obj)
                                       (eq buf (marker-buffer obj))))))))
 
-(cl-defmethod conn-targets-other-end ((_ conn-dispatch-mark-register))
+(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-mark-register))
   :no-other-end)
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-mark-register))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-mark-register))
   (unless conn-targets
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -2368,10 +2395,10 @@ contain targets."
   ((context-lines :initform 1 :initarg :context-lines)
    (window-predicate :initform (lambda (win) (eq win (selected-window))))))
 
-(cl-defmethod conn-targets-other-end ((_ conn-dispatch-previous-emacs-state))
+(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-previous-emacs-state))
   :no-other-end)
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-previous-emacs-state))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-previous-emacs-state))
   (unless conn-targets
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -2401,7 +2428,7 @@ contain targets."
                        (buffer-local-value 'major-mode buf)
                        'outline-mode)))))))
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-headings))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-headings))
   (dolist (win (conn--get-target-windows))
     (with-current-buffer (window-buffer win)
       (let ((heading-regexp (concat "^\\(?:" outline-regexp "\\).*")))
@@ -2447,7 +2474,7 @@ contain targets."
                                  (search-forward name))
                                (pos-bol 2)))))))))
 
-(cl-defmethod conn-targets-update ((_state conn-dispatch-all-defuns))
+(cl-defmethod conn-target-finder-update ((_state conn-dispatch-all-defuns))
   (dolist (win (conn--get-target-windows))
     (with-current-buffer (window-buffer win)
       (funcall conn-extract-defuns-function win)))
@@ -2576,7 +2603,7 @@ contain targets."
              (point) 0
              :padding-function padding-function)))))))
 
-(cl-defmethod conn-targets-label-faces ((_ (eql conn-dispatch-columns)))
+(cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
 
 (defun conn-dispatch-lines ()
@@ -2585,7 +2612,7 @@ contain targets."
       (let ((goal-column (window-hscroll)))
         (conn-dispatch-columns)))))
 
-(cl-defmethod conn-targets-label-faces ((_ (eql conn-dispatch-lines)))
+(cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-lines)))
   nil)
 
 (defun conn-dispatch-end-of-lines ()
@@ -2610,7 +2637,7 @@ contain targets."
                                ,(propertize " " 'display '(space :width 0))))
               (conn-make-target-overlay (point) 0))))))))
 
-(cl-defmethod conn-targets-other-end ((_ (eql conn-dispatch-end-of-lines)))
+(cl-defmethod conn-target-finder-other-end ((_ (eql conn-dispatch-end-of-lines)))
   t)
 
 (defun conn-dispatch-inner-lines ()
@@ -2653,7 +2680,7 @@ contain targets."
                (point) 0
                :thing thing))))))))
 
-(cl-defmethod conn-targets-other-end
+(cl-defmethod conn-target-finder-other-end
   ((_ (eql conn-dispatch-end-of-inner-lines)))
   t)
 
@@ -3683,7 +3710,7 @@ contain targets."
                                conn-dispatch-other-end))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup
-                   (let ((fns (conn-targets-save-state conn-dispatch-target-finder)))
+                   (let ((fns (conn-target-finder-save-state conn-dispatch-target-finder)))
                      (lambda ()
                        (dolist (fn fns)
                          (funcall fn conn-dispatch-target-finder)))))))
@@ -3860,7 +3887,7 @@ contain targets."
          (conn--dispatch-always-retarget
           (or always-retarget
               (conn-action--always-retarget action)))
-         (target-other-end (conn-targets-other-end
+         (target-other-end (conn-target-finder-other-end
                             conn-dispatch-target-finder))
          (conn-dispatch-no-other-end
           (or (eq other-end :no-other-end)
@@ -3872,7 +3899,7 @@ contain targets."
           `(,(propertize (conn-action-pretty-print action t)
                          'face 'eldoc-highlight-function-argument)
             ,(lambda (_keymap)
-               (conn-targets-message-prefixes
+               (conn-target-finder-message-prefixes
                 conn-dispatch-target-finder))
             ,(unless conn-dispatch-no-other-end
                (lambda (keymap)
@@ -3918,7 +3945,7 @@ contain targets."
                        (let ((emulation-mode-map-alists
                               `(((conn-dispatch-select-mode
                                   . ,(make-composed-keymap
-                                      (conn-targets-keymaps
+                                      (conn-target-finder-keymaps
                                        conn-dispatch-target-finder))))
                                 ,@emulation-mode-map-alists)))
                          (apply #'cl-call-next-method
@@ -3929,9 +3956,8 @@ contain targets."
           (pcase-setq `(,thing ,thing-arg ,thing-transform) new-target))
         (conn-dispatch-push-history
          (conn-make-dispatch action thing thing-arg thing-transform keys)))
-      (conn-targets-cleanup conn-dispatch-target-finder)
+      (conn-cleanup-targets)
       (conn-cleanup-labels)
-      (conn-delete-targets)
       (progn
         (with-current-buffer (marker-buffer opoint)
           (if dispatch-quit-flag

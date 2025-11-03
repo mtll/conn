@@ -203,7 +203,7 @@
     :initform (lambda (win) (eq win (selected-window))))
    (region-predicate :initarg :region-predicate)))
 
-(cl-defmethod conn-targets-update ((state conn-ts-node-targets))
+(cl-defmethod conn-target-finder-update ((state conn-ts-node-targets))
   (cl-macrolet ((make-ts-target (thing beg end)
                   `(conn-make-target-overlay
                     ,beg 0
