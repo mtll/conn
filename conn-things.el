@@ -720,6 +720,11 @@ words."))
             (save-mark-and-excursion
               (cl-call-next-method))))))
 
+(cl-defmethod conn-bounds-of ((_thing (conn-thing point)) _arg)
+  (conn-make-bounds
+   'point nil
+   (cons (point) (point))))
+
 (cl-defmethod conn-bounds-of ((thing (conn-thing t)) arg)
   (pcase (conn--get-boundable-thing thing)
     ((and thing (pred conn-thing-p))
@@ -1223,6 +1228,8 @@ Only the background color is used."
 (conn-define-mark-command conn-mark-comment comment)
 
 (conn-register-thing 'kbd-macro)
+
+(conn-register-thing 'point)
 
 (conn-register-thing-commands
  'kbd-macro nil

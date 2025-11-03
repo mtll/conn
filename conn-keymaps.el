@@ -510,32 +510,28 @@
   "d" 'conn-dispatch-take
   "D" 'conn-dispatch-take-replace
   "q" 'conn-dispatch-transpose
-  "SPC" 'conn-dispatch-jump
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
-        'char
+        'point
         :default-action ( :method (_self)
-                          (let ((jump (conn-make-action 'conn-dispatch-jump)))
+                          (let ((goto (conn-make-action 'conn-dispatch-goto)))
                             (oclosure-lambda (conn-action
                                               (description "Previous Emacs State")
                                               (no-history t))
                                 (&rest args)
-                              (apply jump args)
+                              (apply goto args)
                               (conn-push-state 'conn-emacs-state))))
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "g y" (conn-anonymous-thing
-          'char
-          :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+          'point
           :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
-        'char
-        :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+        'point
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
-    'char
-    :default-action (:method (_self) (conn-make-action 'conn-dispatch-jump))
+    'point
     :target-finder (:method (_self _arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State

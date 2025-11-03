@@ -145,48 +145,6 @@ Pulses line that was the last visible line before scrolling."
       (pulse-momentary-highlight-one-line (1- end)))))
 (put 'conn-scroll-up 'scroll-command t)
 
-(defun conn-goto-string-backward (string)
-  "Go to the first visible occurrence backward of STRING in buffer.
-
-When called interactively reads STRING with timeout
-`conn-read-string-timeout'."
-  (interactive
-   (list (let ((conn-target-window-predicate nil)
-               (pt (point)))
-           (conn--read-string-with-timeout
-            (lambda (beg _end) (< (window-start) beg pt))))))
-  (let ((case-fold-search (conn--string-no-upper-case-p string)))
-    (with-restriction (window-start) (window-end)
-      (when-let* ((pos (or (save-excursion
-                             (backward-char)
-                             (cl-loop while (search-backward string nil t)
-                                      when (conn--region-visible-p (match-beginning 0)
-                                                                   (match-end 0))
-                                      return (match-beginning 0)))
-                           (user-error "\"%s\" not found." string))))
-        (goto-char pos)))))
-
-(defun conn-goto-string-forward (string)
-  "Go to the first visible occurrence forward of STRING in buffer.
-
-When called interactively reads STRING with timeout
-`conn-read-string-timeout'."
-  (interactive
-   (list (let ((conn-target-window-predicate nil)
-               (pt (point)))
-           (conn--read-string-with-timeout
-            (lambda (beg _end) (< pt beg (window-end)))))))
-  (with-restriction (window-start) (window-end)
-    (let ((case-fold-search (conn--string-no-upper-case-p string)))
-      (when-let* ((pos (or (save-excursion
-                             (forward-char)
-                             (cl-loop while (search-forward string nil t)
-                                      when (conn--region-visible-p (match-beginning 0)
-                                                                   (match-end 0))
-                                      return (match-beginning 0)))
-                           (user-error "\"%s\" not found." string))))
-        (goto-char pos)))))
-
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
   (interactive "p")

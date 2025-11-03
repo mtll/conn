@@ -558,7 +558,7 @@ themselves once the selection process has concluded."
 
 (defvar-keymap conn-dispatch-transform-map
   "x" 'conn-bounds-trim
-  "v" 'conn-bounds-over
+  "v" 'conn-dispatch-bounds-over
   "X" 'conn-transform-reset)
 
 (defun conn-dispatch-transform-argument (&optional initial)
@@ -656,7 +656,7 @@ themselves once the selection process has concluded."
        conn-dispatch-copy-to
        conn-dispatch-copy-replace-to)
       ("transpose" conn-dispatch-transpose)
-      ("over" conn-bounds-over)
+      ("over" conn-dispatch-bounds-over)
       ("kapply" conn-dispatch-kapply)
       ("register load/replace"
        conn-dispatch-register-load
@@ -879,27 +879,14 @@ themselves once the selection process has concluded."
     (setf (conn-bounds-get bounds :origin) (point))
     bounds))
 
-(cl-defgeneric conn-bounds-other-end (bounds)
-  (declare (important-return-value t)
-           (conn-anonymous-thing-property :other-end-op)))
+(put 'conn-dispatch-bounds-over :conn-bounds-transform t)
+(put 'conn-dispatch-bounds-over :conn-transform-description "over")
 
-(cl-defmethod conn-bounds-other-end (bounds)
-  (if conn-dispatch-other-end
-      (conn-make-bounds-transform
-       bounds
-       (or (conn-bounds-get bounds :other-end)
-           (let ((b (conn-bounds bounds)))
-             (cons (cdr b) (car b)))))
-    bounds))
-
-(put 'conn-bounds-over :conn-bounds-transform t)
-(put 'conn-bounds-over :conn-transform-description "over")
-
-(cl-defgeneric conn-bounds-over (bounds)
+(cl-defgeneric conn-dispatch-bounds-over (bounds)
   (declare (important-return-value t)
            (conn-anonymous-thing-property :over)))
 
-(cl-defmethod conn-bounds-over (bounds)
+(cl-defmethod conn-dispatch-bounds-over (bounds)
   (pcase bounds
     ((conn-bounds `(,beg . ,end))
      (pcase (conn-bounds-of bounds (conn-bounds-arg bounds))
@@ -908,37 +895,53 @@ themselves once the selection process has concluded."
          bounds
          (if (< oend end)
              (cons (max oend end) (min obeg beg))
-           (cons (min obeg beg) (max oend end)))
-         :other-end (cons (max obeg beg) (min oend end))))
+           (cons (min obeg beg) (max oend end)))))
        (_ bounds)))
     (_ bounds)))
 
-(cl-defgeneric conn-bounds-jump (bounds)
-  ( :method (bounds) bounds))
+(cl-defgeneric conn-dispatch-bounds (bounds &optional transforms))
 
-(cl-defmethod conn-bounds-jump ((bounds (conn-thing char)))
-  (pcase bounds
-    ((and (conn-bounds-get :origin nil
-                           (and origin (pred identity)))
-          (conn-bounds (and `(,beg . ,end)
-                            (guard (= beg end)))))
-     (conn-make-bounds-transform
-      bounds
-      (cons origin end)
-      :other-end (cons end origin)))
-    (_ bounds)))
+(cl-defmethod conn-dispatch-bounds (bounds &optional transforms)
+  (pcase (conn-transform-bounds bounds transforms)
+    ((and (guard conn-dispatch-other-end)
+          (conn-bounds `(,beg . ,end)))
+     (cons end beg))
+    ((conn-bounds bd) bd)))
 
-(defun conn-dispatch-bounds (bounds &optional transform)
-  "Like `conn-bounds' but using `conn-bounds-other-end' and `conn-bounds-jump'."
-  (conn-bounds bounds `(conn-bounds-jump
-                        ,@transform
-                        conn-bounds-other-end)))
+(cl-defmethod conn-dispatch-bounds ((bounds (conn-thing point))
+                                    &optional transforms)
+  (conn-bounds
+   (conn-transform-bounds
+    (pcase bounds
+      ((and (conn-bounds-get :origin nil
+                             (and origin (pred identity)))
+            (conn-bounds `(,beg . ,end)))
+       (conn-make-bounds
+        'point (conn-bounds-arg bounds)
+        (cons (if conn-dispatch-other-end end beg)
+              origin)))
+      (_ bounds))
+    transforms)))
 
-(pcase-defmacro conn-dispatch-bounds (pattern &optional transform)
+(cl-defmethod conn-dispatch-bounds ((bounds (conn-thing char))
+                                    &optional transforms)
+  (conn-bounds
+   (conn-transform-bounds
+    (pcase bounds
+      ((and (conn-bounds-get :origin nil
+                             (and origin (pred identity)))
+            (conn-bounds `(,beg . ,end)))
+       (conn-make-bounds 'point (conn-bounds-arg bounds)
+                         (cons (if conn-dispatch-other-end end beg)
+                               origin)))
+      (_ bounds))
+    transforms)))
+
+(pcase-defmacro conn-dispatch-bounds (pattern &optional transforms)
   `(and (pred conn-bounds-p)
         (app ,(static-if (< emacs-major-version 30)
-                  `(pcase--flip conn-dispatch-bounds ,transform)
-                `(conn-dispatch-bounds _ ,transform))
+                  `(pcase--flip conn-dispatch-bounds ,transforms)
+                `(conn-dispatch-bounds _ ,transforms))
              ,pattern)))
 
 ;;;;; Dispatch Window Filtering
@@ -1062,39 +1065,25 @@ Optionally the overlay may have an associated THING."
       (push ov (alist-get window conn-targets))
       ov)))
 
-(defun conn-make-string-target-overlays (string &optional predicate fixed-length)
+(defun conn-make-string-target-overlays (string &optional predicate fixed-length thing)
   (when (length> string 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (pcase-dolist (`(,beg . ,end)
                        (conn--visible-matches string predicate))
           (conn-make-target-overlay
-           beg (or fixed-length (- end beg))))))))
+           beg (or fixed-length (- end beg))
+           :thing thing))))))
 
-(defun conn-make-re-target-overlays (regexp &optional predicate)
+(defun conn-make-re-target-overlays (regexp &optional predicate fixed-length thing)
   (when (length> regexp 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (pcase-dolist (`(,beg . ,end)
                        (conn--visible-re-matches regexp predicate))
-          (conn-make-target-overlay beg (- end beg)))))))
-
-(defun conn--read-string-with-timeout (&optional predicate)
-  (unwind-protect
-      (conn-with-input-method
-        (let* ((prompt (propertize "String" 'face 'minibuffer-prompt))
-               (string (char-to-string (read-char prompt t))))
-          (while-no-input
-            (conn-make-string-target-overlays string predicate))
-          (while-let ((next-char (read-char (format (concat prompt "%s ") string)
-                                            t conn-read-string-timeout)))
-            (setq string (concat string (char-to-string next-char)))
-            (conn-cleanup-targets)
-            (while-no-input
-              (conn-make-string-target-overlays string predicate)))
-          (message nil)
-          string))
-    (conn-cleanup-targets)))
+          (conn-make-target-overlay
+           beg (or fixed-length (- end beg))
+           :thing thing))))))
 
 ;;;;; Dispatch Labels
 
@@ -2190,29 +2179,42 @@ to the key binding for that target."
 
 (defclass conn-dispatch-read-with-timeout (conn-dispatch-string-targets)
   ((timeout :initform 0.5 :initarg :timeout)
-   (predicate :initform nil :initarg :predicate)))
+   (thing :initform nil :initarg :thing)
+   (predicate :initform nil :initarg :predicate)
+   (regex-p :initform nil :initarg :regex-p)))
 
 (cl-defmethod conn-target-finder-update ((state conn-dispatch-read-with-timeout))
-  (with-slots (string timeout predicate) state
+  (let ((string (oref state string))
+        (timeout (oref state timeout))
+        (predicate (oref state predicate))
+        (thing (or (oref state thing)
+                   (conn-anonymous-thing
+                     'point
+                     :bounds-op ( :method (_self _arg)
+                                  (save-match-data
+                                    (when (looking-at
+                                           (if (oref state regex-p)
+                                               (oref state string)
+                                             (regexp-quote (oref state string))))
+                                      (conn-make-bounds
+                                       'point nil
+                                       (cons (point) (match-end 0)))))))))
+        (search-function (if (oref state regex-p)
+                             #'conn-make-re-target-overlays
+                           #'conn-make-string-target-overlays)))
     (if string
-        (conn-make-string-target-overlays string predicate)
+        (funcall search-function string predicate nil thing)
       (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
         (setq string (char-to-string (conn-dispatch-read-event prompt t)))
         (while-no-input
-          (conn-make-string-target-overlays string predicate))
+          (funcall search-function string predicate nil thing))
         (while-let ((next-char (conn-dispatch-read-event
                                 prompt t timeout string)))
           (conn-cleanup-targets)
           (setq string (concat string (char-to-string next-char)))
           (while-no-input
-            (conn-make-string-target-overlays string predicate))))))
-  (cl-call-next-method))
-
-(defun conn-dispatch-read-string-with-timeout (&optional predicate)
-  (declare (important-return-value t))
-  (conn-dispatch-read-with-timeout
-   :timeout conn-read-string-timeout
-   :predicate predicate))
+            (funcall search-function string predicate nil thing)))))
+    (setf (oref state string) string)))
 
 (defclass conn-dispatch-focus-targets ()
   ((hidden :initform nil)
@@ -2470,6 +2472,7 @@ contain targets."
 (defun conn-dispatch-chars-in-thing (thing)
   (declare (important-return-value t))
   (conn-dispatch-read-with-timeout
+   :thing thing
    :timeout conn-read-string-timeout
    :predicate (lambda (beg _end)
                 (goto-char beg)
@@ -2652,7 +2655,8 @@ contain targets."
                      (invisible-p (1- (point))))
           (conn-make-target-overlay
            (point) 0
-           :padding-function padding-function))
+           :padding-function padding-function
+           :thing 'point))
         (while (< (point) vend)
           (forward-line)
           (unless (zerop goal-column)
@@ -2660,7 +2664,8 @@ contain targets."
           (unless (and (bolp) (invisible-p (1- (point))))
             (conn-make-target-overlay
              (point) 0
-             :padding-function padding-function)))))))
+             :padding-function padding-function
+             :thing 'point)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
@@ -2668,8 +2673,35 @@ contain targets."
 (defun conn-dispatch-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (let ((goal-column (window-hscroll)))
-        (conn-dispatch-columns)))))
+      (let* ((line-move-visual nil)
+             (goal-column (window-hscroll))
+             (padding-function
+              (lambda (ov width _face)
+                (conn--right-justify-padding ov width nil))))
+        (cl-macrolet ((goto-col ()
+                        `(if (zerop goal-column)
+                             0
+                           (move-to-column goal-column))))
+          (save-excursion
+            (pcase-dolist (`(,vbeg . ,vend)
+                           (conn--visible-regions (window-start) (window-end)))
+              (goto-char vbeg)
+              (unless (or (and (bolp) (not (bobp))
+                               (invisible-p (1- (point))))
+                          (/= goal-column (goto-col)))
+                (conn-make-target-overlay
+                 (point) 0
+                 :padding-function padding-function))
+              (while (< (point) vend)
+                (forward-line)
+                (unless (zerop goal-column)
+                  (move-to-column goal-column))
+                (unless (or (and (bolp)
+                                 (invisible-p (1- (point))))
+                            (/= goal-column (goto-col)))
+                  (conn-make-target-overlay
+                   (point) 0
+                   :padding-function padding-function))))))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-lines)))
   nil)
@@ -2751,7 +2783,7 @@ contain targets."
         (vertical-motion 0)
         (conn-make-target-overlay
          (point) 0
-         :thing 'char
+         :thing 'point
          :padding-function (lambda (ov width _face)
                              (conn--right-justify-padding ov width nil)))
         (vertical-motion 1)
@@ -2759,13 +2791,13 @@ contain targets."
           (if (= (point) (point-max))
               (conn-make-target-overlay
                (point) 0
-               :thing 'char
+               :thing 'point
                ;; hack to get the label displayed on its own line
                :properties `(after-string
                              ,(propertize " " 'display '(space :width 0))))
             (conn-make-target-overlay
              (point) 0
-             :thing 'char
+             :thing 'point
              :padding-function (lambda (ov width _face)
                                  (conn--right-justify-padding ov width nil))))
           (vertical-motion 1))))))
@@ -4135,29 +4167,37 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (let ((targets (with-restriction (window-start) (window-end)
-                   (conn--isearch-matches))))
-    (unwind-protect ;In case this was a recursive isearch
-        (isearch-exit)
-      (conn-perform-dispatch
-       (conn-make-action 'conn-dispatch-jump)
-       (conn-anonymous-thing
-         nil
-         :target-finder ( :method (_self _arg)
-                          (lambda ()
-                            (cl-loop for (beg . end) in targets
-                                     do (conn-make-target-overlay
-                                         beg (- end beg))))))
-       nil nil
-       :restrict-windows t
-       :other-end :no-other-end))))
+  (cl-flet ((target-thing (beg end)
+              (conn-anonymous-thing
+                'point
+                :bounds-op ( :method (_self _arg)
+                             (conn-make-bounds
+                              'point nil
+                              (cons beg end))))))
+    (let ((targets (with-restriction (window-start) (window-end)
+                     (conn--isearch-matches))))
+      (unwind-protect ;In case this was a recursive isearch
+          (isearch-exit)
+        (conn-perform-dispatch
+         (conn-make-action 'conn-dispatch-goto)
+         (conn-anonymous-thing
+           'region
+           :target-finder ( :method (_self _arg)
+                            (lambda ()
+                              (cl-loop for (beg . end) in targets
+                                       do (conn-make-target-overlay
+                                           beg (- end beg)
+                                           :thing (target-thing beg end))))))
+         nil nil
+         :restrict-windows t
+         :other-end nil)))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-jump)
-   nil nil
+   nil nil nil
    :other-end :no-other-end))
 
 ;;;;; Dispatch Bounds
@@ -4275,10 +4315,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       _arg)
-  (conn-dispatch-read-string-with-timeout))
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing char)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-read-with-timeout
+   :timeout conn-read-string-timeout))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line))
                                       _arg)
@@ -4287,9 +4325,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column))
                                       _arg)
   #'conn-dispatch-columns)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
-  (conn-make-action 'conn-dispatch-jump))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line))
                                       _arg)
