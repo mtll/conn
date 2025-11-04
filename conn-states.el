@@ -1419,7 +1419,8 @@ chooses to handle a command."
              (setq conn--read-args-message nil
                    conn--read-args-message-timeout nil))
            (let ((inhibit-message conn-read-args-inhibit-message)
-                 (message-log-max nil))
+                 (message-log-max nil)
+                 (scroll-conservatively 100))
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
