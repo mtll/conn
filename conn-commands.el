@@ -998,15 +998,17 @@ With a prefix ARG `push-mark' without activating it."
           (recursive-edit))
       (conn-transpose-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
-     buf (car bounds1) (conn-anonymous-thing
-                         'region
-                         :bounds-op ( :method (_)
-                                      (conn-make-bounds 'region nil bounds1)))
-     (current-buffer) (point) (let ((bounds2 (cons (region-beginning) (region-end))))
-                                (conn-anonymous-thing
-                                  'region
-                                  :bounds-op ( :method (_)
-                                               (conn-make-bounds 'region nil bounds2))))
+     buf (car bounds1)
+     (conn-anonymous-thing
+       'region
+       :bounds-op ( :method (_)
+                    (conn-make-bounds 'region nil bounds1)))
+     (current-buffer) (point)
+     (let ((bounds2 (cons (region-beginning) (region-end))))
+       (conn-anonymous-thing
+         'region
+         :bounds-op ( :method (_)
+                      (conn-make-bounds 'region nil bounds2))))
      nil)))
 
 (cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
@@ -1814,7 +1816,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (declare (conn-anonymous-thing-property :kill-op)))
 
 (cl-defmethod conn-perform-kill ((_cmd (conn-thing expansion)) &rest _)
-  (conn-disable-repeating)
   (cl-call-next-method))
 
 (oclosure-define (conn-separator-argument
@@ -2025,10 +2026,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (t (kill-rectangle beg end))))
     (cl-call-next-method)))
 
-(cl-defmethod conn-perform-kill :before ((_cmd (conn-thing region))
-                                         &rest _)
-  (conn-disable-repeating))
-
 ;;;;; Copy Thing
 
 (conn-define-state conn-copy-state (conn-read-thing-state)
@@ -2066,12 +2063,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (pulse-momentary-highlight-region beg end)))))
 
 (cl-defmethod conn-perform-copy ((_cmd (conn-thing expansion)) &rest _)
-  (conn-disable-repeating)
   (cl-call-next-method))
 
 (cl-defmethod conn-perform-copy ((_cmd (conn-thing dispatch)) arg
                                  &optional transform append register)
-  (conn-disable-repeating)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
                    :prompt "Copy"
