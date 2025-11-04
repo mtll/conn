@@ -2239,22 +2239,6 @@ contain targets."
   (setf (oref state hidden) nil)
   (cl-call-next-method))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_ (eql scroll-down))
-                                                   &context (conn-dispatch-target-finder
-                                                             conn-dispatch-focus-targets))
-  (let ((col (current-column)))
-    (goto-char (window-start))
-    (move-to-column col))
-  (conn-dispatch-handle-and-redisplay))
-
-(cl-defmethod conn-handle-dispatch-select-command ((_ (eql scroll-up))
-                                                   &context (conn-dispatch-target-finder
-                                                             conn-dispatch-focus-targets))
-  (let ((col (current-column)))
-    (goto-char (window-end))
-    (move-to-column col))
-  (conn-dispatch-handle-and-redisplay))
-
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
                                                    &context (conn-dispatch-target-finder
                                                              conn-dispatch-focus-targets))
@@ -2267,9 +2251,11 @@ contain targets."
   (pulse-momentary-highlight-one-line)
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-target-finder-update ((state conn-dispatch-focus-targets))
+(cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden))
-  (setf (oref state hidden) nil)
+  (setf (oref state hidden) nil))
+
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-focus-targets))
   (cl-call-next-method)
   (conn-protected-let* ((hidden (list (make-overlay (point-min) (point-min)))
                                 (mapc #'delete-overlay hidden))
@@ -2509,38 +2495,49 @@ contain targets."
 (defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets
                                     conn-dispatch-target-window-predicate)
   ((window-predicate
-    :initform (lambda (win) (eq win (selected-window))))))
+    :initform (lambda (win) (eq win (selected-window))))
+   (cache :initform nil)))
 
 (defvar-local conn-extract-defuns-function
   'conn--dispatch-extract-defuns-default)
 
-(defun conn--dispatch-extract-defuns-default (win)
-  (conn-for-each-visible (point-min) (point-max)
-    (goto-char (point-max))
-    (while (beginning-of-defun)
-      (conn-make-target-overlay (point) 0 :window win))))
+(defun conn--dispatch-extract-defuns-default ()
+  (let ((pts nil))
+    (conn-for-each-visible (point-min) (point-max)
+      (goto-char (point-max))
+      (while (beginning-of-defun)
+        (push (point) pts)))
+    (lambda ()
+      (dolist (pt pts)
+        (conn-make-target-overlay pt 0)))))
 
-(defun conn--dispatch-extract-defuns-treesit (win)
-  (treesit-induce-sparse-tree
-   (treesit-buffer-root-node)
-   (or treesit-defun-type-regexp 'defun)
-   (lambda (node)
-     (save-excursion
-       (goto-char (treesit-node-start node))
-       (conn-make-target-overlay
-        (point) 0
-        :window win
-        :properties `(context
-                      ,(cons (pos-bol)
-                             (progn
-                               (when-let* ((name (treesit-defun-name node)))
-                                 (search-forward name))
-                               (pos-bol 2)))))))))
+(defun conn--dispatch-extract-defuns-treesit ()
+  (let ((pts nil))
+    (save-excursion
+      (treesit-induce-sparse-tree
+       (treesit-buffer-root-node)
+       (or treesit-defun-type-regexp 'defun)
+       (lambda (node)
+         (goto-char (treesit-node-start node))
+         (when-let* ((name (treesit-defun-name node)))
+           (search-forward name (pos-bol 6) t))
+         (push (pos-bol) pts))))
+    (lambda ()
+      (pcase-dolist (pt pts)
+        (conn-make-target-overlay pt 0)))))
 
-(cl-defmethod conn-target-finder-update ((_state conn-dispatch-all-defuns))
-  (dolist (win (conn--get-target-windows))
-    (with-current-buffer (window-buffer win)
-      (funcall conn-extract-defuns-function win)))
+(cl-defmethod conn-target-finder-update ((state conn-dispatch-all-defuns))
+  (let ((cache (oref state cache)))
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (if-let* ((cached (alist-get (window-buffer win) cache))
+                  (_ (= (buffer-chars-modified-tick)
+                        (car cached))))
+            (funcall (cdr cached))
+          (let ((setup (funcall conn-extract-defuns-function)))
+            (setf (alist-get (window-buffer win) cache)
+                  (cons (buffer-chars-modified-tick) setup))
+            (funcall setup))))))
   (cl-call-next-method))
 
 (defun conn-dispatch-all-things (thing)
