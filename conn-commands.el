@@ -1552,7 +1552,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (:parent conn-read-args-argument)))
 
 (defvar-keymap conn-kill-append-map
-  "@" 'append-next-kill)
+  "z" 'append-next-kill)
 
 (defun conn-kill-append-argument (&optional value)
   (declare (important-return-value t)
@@ -1563,14 +1563,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (self cmd)
     (pcase cmd
       ('append-next-kill
-       (cond (value
-              (conn-unset-argument self nil))
-             ((> (prefix-numeric-value
-                  (conn-read-args-consume-prefix-arg))
-                 0)
-              (conn-set-argument self t))
-             (t
-              (conn-set-argument self 'prepend))))
+       (conn-set-argument
+        self (pcase value
+               ('nil 'append)
+               ('append 'prepend)
+               ('prepend nil))))
       ('delete
        (conn-unset-argument self nil))
       (_ self))))
@@ -1820,23 +1817,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (conn-disable-repeating)
   (cl-call-next-method))
 
-(oclosure-define (conn-prepend-argument
-                  (:parent conn-read-args-argument)))
-
-(defun conn-prepend-argument (&optional value)
-  (oclosure-lambda (conn-prepend-argument
-                    (value value))
-      (self cmd)
-    (if (eq cmd 'dispatch-other-end)
-        (conn-set-argument self (not value))
-      self)))
-
-(cl-defmethod conn-argument-display ((arg conn-prepend-argument))
-  (concat "\\[dispatch-other-end] "
-          (propertize "prepend"
-                      'face (when (conn-read-args-argument-value arg)
-                              'eldoc-highlight-function-argument))))
-
 (oclosure-define (conn-separator-argument
                   (:parent conn-read-args-argument)))
 
@@ -1909,7 +1889,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                  register
                                  fixup-whitespace
                                  check-bounds)
-  (conn-disable-repeating)
   (let ((conn-dispatch-amalgamate-undo t))
     (conn-read-args (conn-dispatch-bounds-state
                      :prefix arg
@@ -1918,29 +1897,36 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         ((`(,thing ,thing-arg) (conn-thing-argument t))
          (transform (conn-dispatch-transform-argument transform))
          (repeat (conn-dispatch-repeat-argument))
-         (prepend (conn-prepend-argument (eq append 'prepend)))
+         (append (conn-kill-append-argument append))
          (separator (when (not delete)
                       (conn-separator-argument 'default)))
          (restrict-windows (conn-dispatch-restrict-windows-argument t)))
       (conn-with-dispatch-event-handler _
           nil
           (lambda (keymap)
-            (list
-             (when-let* ((binding
-                          (where-is-internal 'dispatch-other-end keymap t)))
-               (concat
-                (propertize (key-description binding)
-                            'face 'help-key-binding)
-                " "
-                (propertize
-                 "prepend"
-                 'face (when prepend
-                         'eldoc-highlight-function-argument))))))
+            (when-let* ((binding
+                         (where-is-internal 'dispatch-other-end keymap t)))
+              (concat
+               (propertize (key-description binding)
+                           'face 'help-key-binding)
+               " "
+               (pcase append
+                 ('nil "append")
+                 ('prepend
+                  (propertize
+                   "prepend"
+                   'face 'eldoc-highlight-function-argument))
+                 ('append
+                  (propertize
+                   "append"
+                   'face 'eldoc-highlight-function-argument))))))
           (lambda (cmd)
-            (pcase cmd
-              ('dispatch-other-end
-               (setq prepend (not prepend))
-               (conn-dispatch-handle))))
+            (when (eq cmd 'dispatch-other-end)
+              (setq append (pcase append
+                             ('nil 'append)
+                             ('append 'prepend)
+                             ('prepend nil)))
+              (conn-dispatch-handle)))
         (let ((result nil)
               (strings nil))
           (conn-perform-dispatch
@@ -1962,7 +1948,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                         (cons (region-beginning) (region-end)))))
                     (if delete
                         (delete-region beg end)
-                      (push (cons prepend (funcall region-extract-function t))
+                      (push (cons append (funcall region-extract-function t))
                             strings)
                       (conn-dispatch-undo-case 90
                         (:undo
@@ -1980,11 +1966,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (when strings
             (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
                                                         separator)))
-              (pcase-dolist (`(,prepend . ,string) (nreverse strings))
+              (pcase-dolist (`(,append . ,string) (nreverse strings))
                 (setq result
-                      (if prepend
-                          (concat string (and result sep) result)
-                        (concat result (and result sep) string))))
+                      (if append
+                          (concat result (and result sep) string)
+                        (concat string (and result sep) result))))
               (conn--kill-string result append register sep))))))))
 
 (cl-defmethod conn-perform-kill ( cmd arg transform
@@ -2093,7 +2079,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat (conn-dispatch-repeat-argument))
-       (prepend (conn-prepend-argument (eq append 'prepend)))
+       (append (conn-kill-append-argument append))
        (separator (conn-separator-argument 'default))
        (restrict-windows (conn-dispatch-restrict-windows-argument t)))
     (conn-with-dispatch-event-handler _
@@ -2105,13 +2091,22 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (propertize (key-description binding)
                          'face 'help-key-binding)
              " "
-             (propertize
-              "prepend"
-              'face (when prepend
-                      'eldoc-highlight-function-argument)))))
+             (pcase append
+               ('nil "append")
+               ('prepend
+                (propertize
+                 "prepend"
+                 'face 'eldoc-highlight-function-argument))
+               ('append
+                (propertize
+                 "append"
+                 'face 'eldoc-highlight-function-argument))))))
         (lambda (cmd)
           (when (eq cmd 'dispatch-other-end)
-            (setq prepend (not prepend))
+            (setq append (pcase append
+                           ('nil 'append)
+                           ('append 'prepend)
+                           ('prepend nil)))
             (conn-dispatch-handle)))
       (let ((result nil)
             (strings nil))
@@ -2126,7 +2121,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                  ((conn-dispatch-bounds `(,beg . ,end) transform)
                   (goto-char beg)
                   (conn--push-ephemeral-mark end)
-                  (push (cons prepend (funcall region-extract-function nil))
+                  (push (cons append (funcall region-extract-function nil))
                         strings)
                   (conn-dispatch-action-pulse beg end)
                   (conn-dispatch-undo-case 90

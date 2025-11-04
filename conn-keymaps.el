@@ -387,14 +387,11 @@
 
 ;;;;;; Dispatch State
 
-(defvar-keymap conn-dispatch-common-map
-  "C-z" 'dispatch-other-end
-  "C-\\" 'toggle-input-method
-  "C-M-\\" 'set-input-method)
-
 (define-keymap
   :keymap conn-dispatch-read-event-map
-  :parent conn-dispatch-common-map
+  "C-\\" 'toggle-input-method
+  "C-M-\\" 'set-input-method
+  "C-z" 'dispatch-other-end
   "DEL" 'restart
   "<backspace>" 'restart
   "C-q" 'help
@@ -417,7 +414,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
-  :parent conn-dispatch-common-map
   "<escape>" 'finish
   "C-q" 'help
   "M-DEL" 'reset-arg
