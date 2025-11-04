@@ -2645,27 +2645,33 @@ contain targets."
           (when (= goal-column (window-hscroll))
             (lambda (ov width _face)
               (conn--right-justify-padding ov width nil)))))
-    (save-excursion
-      (pcase-dolist (`(,vbeg . ,vend)
-                     (conn--visible-regions (window-start) (window-end)))
-        (goto-char vbeg)
-        (unless (zerop goal-column)
-          (move-to-column goal-column))
-        (unless (and (bolp) (not (bobp))
-                     (invisible-p (1- (point))))
-          (conn-make-target-overlay
-           (point) 0
-           :padding-function padding-function
-           :thing 'point))
-        (while (< (point) vend)
-          (forward-line)
+    (cl-macrolet ((goto-col ()
+                    `(if (zerop goal-column)
+                         0
+                       (move-to-column goal-column))))
+      (save-excursion
+        (pcase-dolist (`(,vbeg . ,vend)
+                       (conn--visible-regions (window-start) (window-end)))
+          (goto-char vbeg)
           (unless (zerop goal-column)
             (move-to-column goal-column))
-          (unless (and (bolp) (invisible-p (1- (point))))
+          (unless (or (and (bolp) (not (bobp))
+                           (invisible-p (1- (point))))
+                      (< (goto-col) (window-hscroll)))
             (conn-make-target-overlay
              (point) 0
              :padding-function padding-function
-             :thing 'point)))))))
+             :thing 'point))
+          (while (< (point) vend)
+            (forward-line)
+            (unless (zerop goal-column)
+              (move-to-column goal-column))
+            (unless (or (and (bolp) (invisible-p (1- (point))))
+                        (< (goto-col) (window-hscroll)))
+              (conn-make-target-overlay
+               (point) 0
+               :padding-function padding-function
+               :thing 'point))))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
