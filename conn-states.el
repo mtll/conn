@@ -1355,7 +1355,8 @@ chooses to handle a command."
     ", \\[reset-arg] reset)"
     (when-let* ((msg (conn--read-args-display-message)))
       (concat ": " msg))
-    (when-let* ((args (flatten-tree (mapcar #'conn-argument-display arguments))))
+    (when-let* ((args (flatten-tree
+                       (mapcar #'conn-argument-display arguments))))
       (concat "\n" (string-join args "; "))))))
 
 (defun conn--read-args-display (prompt arguments)
@@ -1398,7 +1399,9 @@ chooses to handle a command."
                             command-handler
                             update-handler
                             (display-handler #'conn--read-args-display)
-                            around
+                            (around (lambda (cont)
+                                      (save-window-excursion
+                                        (funcall cont))))
                             overriding-map
                             prompt
                             prefix

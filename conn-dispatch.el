@@ -1799,7 +1799,8 @@ Target overlays may override this default by setting the
                    :reference (list conn-dispatch-thing-ref)
                    :around (lambda (cont)
                              (conn-with-dispatch-suspended
-                               (funcall cont))))
+                               (save-window-excursion
+                                 (funcall cont)))))
       ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
     (conn-target-finder-cleanup conn-dispatch-target-finder)
