@@ -1329,21 +1329,27 @@ associated with that command (see `conn-register-thing')."
 
 ;;;;;; Bounds of Narrow Ring
 
-(defun conn--bounds-of-narrowings (_cmd _arg)
-  (unless conn-narrow-ring
-    (user-error "Narrow ring empty"))
+(conn-register-thing 'narrowing)
+
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrowing))
+                              _arg)
   (cl-loop for (beg . end) in conn-narrow-ring
            minimize beg into narrow-beg
            maximize end into narrow-end
-           collect (cons beg end) into narrowings
-           finally return (cons (cons narrow-beg narrow-end)
-                                narrowings)))
+           collect (conn-make-bounds
+                    'narrowing nil
+                    (cons beg end))
+           into narrowings
+           finally return (conn-make-bounds
+                           'narrowing nil
+                           (cons narrow-beg narrow-end)
+                           :subregions narrowings)))
 
-;; (conn-register-thing-commands
-;;  'narrowing nil
-;;  'narrow-to-region 'widen
-;;  'conn-narrow-to-thing
-;;  'conn-narrow-ring-prefix)
+(conn-register-thing-commands
+ 'narrowing nil
+ 'narrow-to-region 'widen
+ 'conn-narrow-to-thing
+ 'conn-narrow-ring-prefix)
 
 ;;;;; Register Setting and Loading
 
