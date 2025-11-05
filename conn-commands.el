@@ -130,7 +130,8 @@ Pulses line that was the first visible line before scrolling."
       (progn (beep) (message "Beginning of buffer"))
     (let ((start (window-start)))
       (scroll-down arg)
-      (pulse-momentary-highlight-one-line start))))
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-one-line start)))))
 (put 'conn-scroll-down 'scroll-command t)
 
 (defun conn-scroll-up (&optional arg)
@@ -142,7 +143,8 @@ Pulses line that was the last visible line before scrolling."
       (progn (beep) (message "End of buffer"))
     (let ((end (window-end)))
       (scroll-up arg)
-      (pulse-momentary-highlight-one-line (1- end)))))
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-one-line (1- end))))))
 (put 'conn-scroll-up 'scroll-command t)
 
 (defun conn-backward-line (N)
