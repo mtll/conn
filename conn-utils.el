@@ -279,7 +279,7 @@ If ring is (1 2 3 4) 4 would be returned."
   (when-let* ((cleanup (conn-ring-cleanup ring)))
     (funcall cleanup elem)))
 
-(defun conn-ring-remove (elem ring &optional pred)
+(defun conn-ring-delete (elem ring &optional pred)
   (cl-loop with pred = (or pred #'equal)
            for l in (conn-ring-list ring)
            for h in (conn-ring-history ring)

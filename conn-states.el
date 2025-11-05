@@ -1127,7 +1127,7 @@ argument may be supplied for the thing command.")))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (conn-ring-remove (point) conn-emacs-state-ring #'=)
+    (conn-ring-delete (point) conn-emacs-state-ring #'=)
     (let ((pt (conn--create-marker (point) nil t)))
       (conn-ring-insert-front conn-emacs-state-ring pt)
       (when conn-emacs-state-register
