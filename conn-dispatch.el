@@ -1338,6 +1338,16 @@ Target overlays may override this default by setting the
         (overlay-put overlay 'before-string full-string)
       (overlay-put overlay 'display full-string))))
 
+(defun conn-before-string-label (label)
+  (pcase-let* (((cl-struct conn-dispatch-label
+                           prefix
+                           suffix
+                           (narrowed-string string)
+                           overlay)
+                label)
+               (full-string (concat prefix string suffix)))
+    (overlay-put overlay 'before-string full-string)))
+
 (defconst conn--dispatch-window-lines-cache (make-hash-table :test 'eq))
 
 (defun conn--dispatch-window-lines (window)
@@ -1368,32 +1378,31 @@ Target overlays may override this default by setting the
 (defun conn-disptach-label-target (target string)
   (declare (important-return-value t))
   (let ((window (overlay-get target 'window)))
-    (when (<= (window-start window)
-              (overlay-start target)
-              (overlay-end target)
-              (window-end window))
-      (conn-protected-let*
-          ((beg (overlay-end target))
-           (ov (make-overlay beg beg (overlay-buffer target))
-               (delete-overlay ov))
-           (face (or (overlay-get target 'label-face)
-                     'conn-dispatch-label-face))
-           (str (propertize string 'face face)))
-        (setf (overlay-get ov 'category) 'conn-label-overlay
-              (overlay-get ov 'window) window)
-        (make-conn-dispatch-label
-         :setup-function (if (conn-dispatch-pixelwise-label-p ov)
-                             'conn--dispatch-setup-label-pixelwise
-                           'conn--dispatch-setup-label-charwise)
-         :padding-function (overlay-get target 'padding-function)
-         :string str
-         :prefix (when-let* ((pfx (overlay-get target 'label-prefix)))
-                   (propertize pfx 'face face))
-         :suffix (when-let* ((sfx (overlay-get target 'label-suffix)))
-                   (propertize sfx 'face face))
-         :narrowed-string str
-         :overlay ov
-         :target target)))))
+    (conn-protected-let*
+        ((beg (overlay-end target))
+         (ov (make-overlay beg beg (overlay-buffer target))
+             (delete-overlay ov))
+         (face (or (overlay-get target 'label-face)
+                   'conn-dispatch-label-face))
+         (str (propertize string 'face face)))
+      (setf (overlay-get ov 'category) 'conn-label-overlay
+            (overlay-get ov 'window) window)
+      (make-conn-dispatch-label
+       :setup-function (cond ((overlay-get target 'no-hide)
+                              'conn-before-string-label)
+                             ((conn-dispatch-pixelwise-label-p ov)
+                              'conn--dispatch-setup-label-pixelwise)
+                             (t
+                              'conn--dispatch-setup-label-charwise))
+       :padding-function (overlay-get target 'padding-function)
+       :string str
+       :prefix (when-let* ((pfx (overlay-get target 'label-prefix)))
+                 (propertize pfx 'face face))
+       :suffix (when-let* ((sfx (overlay-get target 'label-suffix)))
+                 (propertize sfx 'face face))
+       :narrowed-string str
+       :overlay ov
+       :target target))))
 
 (cl-defstruct (conn-simple-label-state)
   (pool nil :type list)
@@ -1627,6 +1636,7 @@ Target overlays may override this default by setting the
               (push target old)))
           (setq conn-targets nil
                 conn-target-count nil)
+          (when executing-kbd-macro (redisplay))
           (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
                          conn-targets)
@@ -2327,7 +2337,7 @@ contain targets."
                   (cons (buffer-chars-modified-tick) hidden)
                   redisplay
                   (or redisplay (and hidden t)))))))
-    (when redisplay (sit-for 0))))
+    (when redisplay (redisplay))))
 
 (defclass conn-dispatch-focus-thing-at-point (conn-dispatch-string-targets
                                               conn-dispatch-focus-targets
@@ -2526,7 +2536,9 @@ contain targets."
         (push (point) pts)))
     (lambda ()
       (dolist (pt pts)
-        (conn-make-target-overlay pt 0)))))
+        (conn-make-target-overlay
+         pt 0
+         :properties '(no-hide t))))))
 
 (defun conn--dispatch-extract-defuns-treesit ()
   (let ((pts nil))
@@ -2541,7 +2553,9 @@ contain targets."
          (push (pos-bol) pts))))
     (lambda ()
       (pcase-dolist (pt pts)
-        (conn-make-target-overlay pt 0)))))
+        (conn-make-target-overlay
+         pt 0
+         :properties '(no-hide t))))))
 
 (cl-defmethod conn-target-finder-update ((state conn-dispatch-all-defuns))
   (let ((cache (oref state cache)))
