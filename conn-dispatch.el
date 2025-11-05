@@ -56,13 +56,6 @@
   :group 'conn
   :type '(list integer))
 
-(defcustom conn-disptach-stable-label-characters
-  `(("j" "u" "m" "k" "i" "," "l" "o" "h" "y" "n" "p" ";")
-    ("f" "r" "v" "d" "e" "c" "s" "w" "x" "g" "t" "b" "a"))
-  "Chars to use for label overlays when recording a keyboard macro."
-  :group 'conn
-  :type '(list integer))
-
 (defface conn-dispatch-action-pulse-face
   '((t (:inherit pulse-highlight-start-face)))
   "Face for highlight pulses after dispatch actions."
@@ -1089,7 +1082,7 @@ Optionally the overlay may have an associated THING."
 
 (defvar conn-dispatch-target-finder nil)
 
-(defvar conn-dispatch-label-function 'conn-dispatch-smart-labels
+(defvar conn-dispatch-label-function 'conn-dispatch-simple-labels
   "Function responsible for labeling all `conn-targets'.
 
 A labeling function should take a single argument STATE and
@@ -1475,52 +1468,6 @@ Target overlays may override this default by setting the
                       (push (conn-disptach-label-target tar str) labels))))
       `(:state ,state ,@labels))))
 
-(defun conn--stable-label-subr (window targets characters)
-  (let ((group 0)
-        (chars characters)
-        (labels nil)
-        (window-label
-         (unless (eq window (selected-window))
-           (upcase (window-parameter window 'conn-label-string)))))
-    (dolist (tar targets labels)
-      (when (null chars)
-        (cl-incf group)
-        (setq chars characters))
-      (push (conn-disptach-label-target
-             tar (concat window-label
-                         (when (> group 0)
-                           (number-to-string group))
-                         (pop chars)))
-            labels))))
-
-(defun conn-dispatch-stable-labels (_state)
-  (declare (important-return-value t))
-  (conn--ensure-window-labels)
-  (pcase-let* ((`(,bchars ,achars) conn-disptach-stable-label-characters)
-               (labels nil))
-    (pcase-dolist (`(,win . ,targets) conn-targets)
-      (when-let* ((ov (buffer-local-value 'conn--mark-cursor
-                                          (window-buffer win))))
-        (delete-overlay ov))
-      (let (before after)
-        (dolist (tar (sort targets (lambda (a b)
-                                     (< (abs (- (overlay-end a)
-                                                (window-point win)))
-                                        (abs (- (overlay-end b)
-                                                (window-point win)))))))
-          (if (> (window-point win) (overlay-start tar))
-              (push tar before)
-            (push tar after)))
-        (push (conn--stable-label-subr win (nreverse after) achars) labels)
-        (push (conn--stable-label-subr win (nreverse before) bchars) labels)))
-    (apply #'nconc labels)))
-
-(defun conn-dispatch-smart-labels (state)
-  (declare (important-return-value t))
-  (if (or executing-kbd-macro defining-kbd-macro)
-      (conn-dispatch-stable-labels state)
-    (conn-dispatch-simple-labels state)))
-
 (defun conn--dispatch-read-event-prefix (keymap)
   (declare (important-return-value t))
   (when-let* ((prefix
@@ -1636,7 +1583,6 @@ Target overlays may override this default by setting the
               (push target old)))
           (setq conn-targets nil
                 conn-target-count nil)
-          (when executing-kbd-macro (redisplay))
           (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
                          conn-targets)
@@ -2260,7 +2206,8 @@ contain targets."
     (memq recenter-positions)
     (cadr)
     (or (car recenter-positions)))
-  (pulse-momentary-highlight-one-line)
+  (unless executing-kbd-macro
+    (pulse-momentary-highlight-one-line))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-focus-targets))
@@ -2891,14 +2838,15 @@ contain targets."
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
-  (set-face-background
-   'conn--dispatch-action-current-pulse-face
-   (face-background 'pulse-highlight-start-face
-                    nil
-                    'default))
-  (pulse-momentary-highlight-region
-   beg end
-   'conn--dispatch-action-current-pulse-face))
+  (unless executing-kbd-macro
+    (set-face-background
+     'conn--dispatch-action-current-pulse-face
+     (face-background 'pulse-highlight-start-face
+                      nil
+                      'default))
+    (pulse-momentary-highlight-region
+     beg end
+     'conn--dispatch-action-current-pulse-face)))
 
 (defun conn-dispatch-undo-pulse (beg end)
   (require 'pulse)
@@ -3090,10 +3038,9 @@ contain targets."
                (insert-for-yank str)
                (when (and separator (not (< end beg)))
                  (conn-dispatch-insert-separator separator))
-               (unless executing-kbd-macro
-                 (conn-dispatch-action-pulse
-                  (- (point) (length str))
-                  (point))))
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))
               (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to) &optional short)
@@ -3134,10 +3081,9 @@ contain targets."
               ((conn-bounds `(,beg . ,end) transform)
                (delete-region beg end)
                (insert-for-yank str)
-               (unless executing-kbd-macro
-                 (conn-dispatch-action-pulse
-                  (- (point) (length str))
-                  (point))))
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))
               (_ (user-error "Cannot find thing at point")))))))))
 
 (oclosure-define (conn-dispatch-yank-to-replace
@@ -3161,9 +3107,8 @@ contain targets."
           ((conn-bounds `(,beg . ,end) transform)
            (delete-region beg end)
            (insert-for-yank str)
-           (unless executing-kbd-macro
-             (conn-dispatch-action-pulse
-              (- (point) (length str)) (point))))
+           (conn-dispatch-action-pulse
+            (- (point) (length str)) (point)))
           (_ (user-error "Cannot find thing at point")))))))
 
 (oclosure-define (conn-dispatch-reading-yank-to-replace
@@ -3187,9 +3132,8 @@ contain targets."
           ((conn-bounds `(,beg . ,end) transform)
            (delete-region beg end)
            (insert-for-yank str)
-           (unless executing-kbd-macro
-             (conn-dispatch-action-pulse
-              (- (point) (length str)) (point))))
+           (conn-dispatch-action-pulse
+            (- (point) (length str)) (point)))
           (_ (user-error "Cannot find thing at point")))))))
 
 (oclosure-define (conn-dispatch-yank-to
@@ -3224,10 +3168,9 @@ contain targets."
            (insert-for-yank str)
            (when (and separator (not (< end beg)))
              (conn-dispatch-insert-separator separator))
-           (unless executing-kbd-macro
-             (conn-dispatch-action-pulse
-              (- (point) (length str))
-              (point))))
+           (conn-dispatch-action-pulse
+            (- (point) (length str))
+            (point)))
           (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to) &optional short)
@@ -3270,15 +3213,13 @@ contain targets."
              (insert-for-yank str)
              (when (and separator (not (< end beg)))
                (conn-dispatch-insert-separator separator))
-             (unless executing-kbd-macro
-               (conn-dispatch-action-pulse
-                (- (point) (length str))
-                (point))))
+             (conn-dispatch-action-pulse
+              (- (point) (length str))
+              (point)))
             (_ (user-error "Cannot find thing at point")))
-          (unless executing-kbd-macro
-            (conn-dispatch-action-pulse
-             (- (point) (length str))
-             (point))))))))
+          (conn-dispatch-action-pulse
+           (- (point) (length str))
+           (point)))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -3334,15 +3275,13 @@ contain targets."
                (insert-for-yank str)
                (when (not (< end beg))
                  (conn-dispatch-insert-separator separator))
-               (unless executing-kbd-macro
-                 (conn-dispatch-action-pulse
-                  (- (point) (length str))
-                  (point))))
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))
               (_ (user-error "Cannot find thing at point")))
-            (unless executing-kbd-macro
-              (conn-dispatch-action-pulse
-               (- (point) (length str))
-               (point)))))))))
+            (conn-dispatch-action-pulse
+             (- (point) (length str))
+             (point))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (conn-dispatch-send--change-group action))
@@ -3388,9 +3327,8 @@ contain targets."
             ((conn-bounds `(,beg . ,end) transform)
              (delete-region beg end)
              (insert-for-yank str)
-             (unless executing-kbd-macro
-               (conn-dispatch-action-pulse
-                (- (point) (length str)) (point))))
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point)))
             (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))

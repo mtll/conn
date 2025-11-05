@@ -1331,6 +1331,9 @@ chooses to handle a command."
     (setq conn--read-args-message (apply #'format format-string args)
           conn--read-args-message-timeout (time-add nil minibuffer-message-timeout))))
 
+(defun conn-read-args-error (format-string &rest args)
+  (setq conn--read-args-error-message (apply #'format format-string args)))
+
 (defun conn--read-args-display-message ()
   (let ((msg (concat
               (when conn--read-args-message
