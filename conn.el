@@ -39,6 +39,7 @@
 (require 'conn-dispatch)
 (require 'conn-commands)
 (require 'conn-keymaps)
+(require 'conn-surround)
 (eval-when-compile (require 'cl-lib))
 
 ;;;; Advice

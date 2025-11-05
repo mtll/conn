@@ -284,7 +284,6 @@
        (push (conn--make-surround-region beg end) regions)))
     (list (nreverse regions))))
 
-;;;###autoload
 (defun conn-surround (&optional arg)
   (interactive "P")
   (conn-read-args (conn-surround-thing-state
