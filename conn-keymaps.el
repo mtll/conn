@@ -450,6 +450,7 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
   "<remap> <conn-expand>" (conn-anonymous-thing
                             'expansion
+                            :description ( :method (_) "conn-expand")
                             :bounds-op ( :method (_self arg)
                                          (conn--push-ephemeral-mark)
                                          (conn-bounds-of 'conn-expand arg)))
@@ -510,6 +511,7 @@
   ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
         'point
+        :description ( :method (_) "prev-emacs-state")
         :default-action ( :method (_self)
                           (let ((goto (conn-make-action 'conn-dispatch-goto)))
                             (oclosure-lambda (conn-action
@@ -521,13 +523,16 @@
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "g y" (conn-anonymous-thing
           'point
+          :description ( :method (_) "global-mark-ring")
           :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
         'point
+        :description ( :method (_) "position-registers")
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
     'point
+    :description ( :method (_) "mark-ring")
     :target-finder (:method (_self _arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State

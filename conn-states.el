@@ -1388,25 +1388,26 @@ chooses to handle a command."
 (defun conn--read-args-completion-affixation (args)
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
-      (cl-loop
-       for command-name in command-names
-       collect
-       (let* ((fun (or (get-char-property 0 'command command-name)
-                       (and (stringp command-name) (intern-soft command-name))))
-              (binding (where-is-internal fun nil t))
-              (binding (if (and binding (not (stringp binding)))
-                           (format " {%s}" (key-description binding))
-                         ""))
-              (annotation
-               (or (cl-loop for arg in args
-                            thereis (conn-argument-completion-annotation arg fun))
-                   "")))
-         (put-text-property 0 (length binding)
-                            'face 'help-key-binding binding)
-         (when annotation
-           (put-text-property 0 (length annotation)
-                              'face 'completions-annotations annotation))
-         (list command-name "" (concat annotation binding)))))))
+      (conn--where-is-with-remaps
+        (cl-loop
+         for command-name in command-names
+         collect
+         (let* ((fun (or (get-char-property 0 'command command-name)
+                         (and (stringp command-name) (intern-soft command-name))))
+                (binding (where-is-internal fun nil t))
+                (binding (if (and binding (not (stringp binding)))
+                             (format " {%s}" (key-description binding))
+                           ""))
+                (annotation
+                 (or (cl-loop for arg in args
+                              thereis (conn-argument-completion-annotation arg fun))
+                     "")))
+           (put-text-property 0 (length binding)
+                              'face 'help-key-binding binding)
+           (when annotation
+             (put-text-property 0 (length annotation)
+                                'face 'completions-annotations annotation))
+           (list command-name "" (concat annotation binding))))))))
 
 (defun conn--read-args-completing-read (state args)
   (and-let* ((metadata `((affixation-function . ,(conn--read-args-completion-affixation args))
