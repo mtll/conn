@@ -2690,7 +2690,7 @@ contain targets."
 (defun conn-dispatch-inner-lines ()
   (let ((thing (conn-anonymous-thing
                  'conn-forward-inner-line
-                 :description ( :method (_self) "inner-line")
+                 :pretty-print ( :method (_self) "inner-line")
                  :bounds-op ( :method (_self _arg)
                               (goto-char (pos-bol))
                               (cl-call-next-method)))))
@@ -2710,7 +2710,7 @@ contain targets."
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((thing (conn-anonymous-thing
                  'conn-forward-inner-line
-                 :description ( :method (_self) "end-of-inner-line")
+                 :pretty-print ( :method (_self) "end-of-inner-line")
                  :bounds-op ( :method (_self _arg)
                               (goto-char (pos-bol))
                               (cl-call-next-method)))))
@@ -4108,7 +4108,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-push-button)
    (conn-anonymous-thing
      'button
-     :description ( :method (_self) "all-buttons")
+     :pretty-print ( :method (_self) "all-buttons")
      :target-finder ( :method (_self _arg) 'conn-dispatch-all-buttons)
      :has-other-end ( :method (_self) :no-other-end))
    nil nil))

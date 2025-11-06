@@ -962,13 +962,13 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
   "w" (conn-anonymous-thing
         'conn-ts-thing
-        :description ( :method (_) "ts-all-things")
+        :pretty-print ( :method (_) "ts-all-things")
         :target-finder ( :method (_self _arg)
                          (conn-ts-node-targets
                           :things conn-ts-all-things)))
   "W" (conn-anonymous-thing
         'conn-ts-thing
-        :description ( :method (_) "ts-all-parents")
+        :pretty-print ( :method (_) "ts-all-parents")
         :target-finder ( :method (_self _arg)
                          (conn-ts-node-targets
                           :things conn-ts-parent-things

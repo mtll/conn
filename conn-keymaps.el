@@ -437,12 +437,12 @@
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
   "O" (conn-anonymous-thing
         'forward-word
-        :description (:method (_self) "all-words")
+        :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
         'forward-symbol
-        :description (:method (_self) "all-symbols")
+        :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'symbol))))
 
@@ -450,7 +450,7 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
   "<remap> <conn-expand>" (conn-anonymous-thing
                             'expansion
-                            :description ( :method (_) "conn-expand")
+                            :pretty-print ( :method (_) "conn-expand")
                             :bounds-op ( :method (_self arg)
                                          (conn--push-ephemeral-mark)
                                          (conn-bounds-of 'conn-expand arg)))
@@ -458,12 +458,12 @@
   "<conn-thing-map> a" 'move-beginning-of-line
   "O" (conn-anonymous-thing
         'word
-        :description (:method (_self) "all-words")
+        :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'word)))
   "U" (conn-anonymous-thing
         'symbol
-        :description (:method (_self) "all-symbols")
+        :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'symbol)))
   "b" 'conn-dispatch-buttons)
@@ -472,13 +472,13 @@
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   ")" (conn-anonymous-thing
         'forward-sexp
-        :description (:method (_self) "list")
+        :pretty-print (:method (_self) "list")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-things-with-re-prefix
                           'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-anonymous-thing
         'sexp
-        :description (:method (_self) "inner-list")
+        :pretty-print (:method (_self) "inner-list")
         :bounds-op ( :method (_self arg)
                      (conn-bounds-of 'down-list arg))
         :target-finder ( :method (_self _arg)
@@ -511,7 +511,7 @@
   ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
         'point
-        :description ( :method (_) "prev-emacs-state")
+        :pretty-print ( :method (_) "prev-emacs-state")
         :default-action ( :method (_self)
                           (let ((goto (conn-make-action 'conn-dispatch-goto)))
                             (oclosure-lambda (conn-action
@@ -523,16 +523,16 @@
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "g y" (conn-anonymous-thing
           'point
-          :description ( :method (_) "global-mark-ring")
+          :pretty-print ( :method (_) "global-mark-ring")
           :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
         'point
-        :description ( :method (_) "position-registers")
+        :pretty-print ( :method (_) "position-registers")
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register)))
   "<remap> <conn-pop-mark-ring>"
   (conn-anonymous-thing
     'point
-    :description ( :method (_) "mark-ring")
+    :pretty-print ( :method (_) "mark-ring")
     :target-finder (:method (_self _arg) (conn-dispatch-mark-ring))))
 
 ;;;;;; Transpose State
@@ -553,12 +553,12 @@
   "C-o" 'other-window
   "o" (conn-anonymous-thing
         'word
-        :description (:method (_self) "all-words")
+        :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'word)))
   "u" (conn-anonymous-thing
         'symbol
-        :description (:method (_self) "all-symbols")
+        :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-all-things 'symbol))))
 
