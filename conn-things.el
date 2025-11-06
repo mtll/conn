@@ -331,13 +331,16 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defgeneric conn-thing-pretty-print (thing)
   (declare (conn-anonymous-thing-property :description)
            (side-effect-free t))
-  (:method (thing) (copy-sequence (symbol-name thing))))
+  (:method (thing) (copy-sequence (symbol-name thing)))
+  ( :method ((thing conn--anonymous-thing))
+    (format "<anonymous %S>" (conn-anonymous-thing-parent thing))))
 
 ;;;;; Thing Args
 
 (oclosure-define (conn-thing-argument
                   (:parent conn-read-args-argument))
-  (recursive-edit :type boolean))
+  (recursive-edit :type boolean)
+  (predicate :type function))
 
 (defun conn-thing-argument (&optional recursive-edit)
   (declare (important-return-value t))
@@ -370,6 +373,18 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
   t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
+                                       (_sym (conn-thing dispatch)))
+  (not (or defining-kbd-macro executing-kbd-macro)))
+
+(cl-defmethod conn-argument-completion-annotation ((_arg conn-thing-argument)
+                                                   sym)
+  (and-let* ((thing (or (and (conn-anonymous-thing-p sym)
+                             (conn-anonymous-thing-parent sym))
+                        (conn-command-thing sym)
+                        (and (conn-thing-p sym) sym))))
+    (format " (%s)" thing)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
                                        (_sym (eql recursive-edit)))
@@ -569,11 +584,7 @@ words."))
 
 (conn-define-state conn-read-thing-state (conn-read-thing-common-state)
   "A state for reading things."
-  :lighter "THG"
-  :loop-completion-metadata `((affixation-function
-                               . conn--dispatch-command-affixation)
-                              (category
-                               . conn-dispatch-command)))
+  :lighter "THG")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)

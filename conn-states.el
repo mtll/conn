@@ -1374,27 +1374,58 @@ chooses to handle a command."
          ((and (pred keymapp) keymap)
           (setq bindings (nconc (conn--all-bindings keymap) bindings)))
          ((and (pred symbolp) sym)
-          (push sym bindings))))
+          (push (cons (symbol-name sym) sym) bindings))
+         (`(,(and desc (pred stringp)) . ,(and sym (pred symbolp)))
+          (push (cons desc sym) bindings))
+         ((and at (pred conn-anonymous-thing-p))
+          (push (cons (propertize (conn-thing-pretty-print at)
+                                  'command at)
+                      at)
+                bindings))))
      (keymap-canonicalize keymap))
     bindings))
 
+(defun conn--read-args-completion-affixation (args)
+  (lambda (command-names)
+    (with-selected-window (or (minibuffer-selected-window) (selected-window))
+      (cl-loop
+       for command-name in command-names
+       collect
+       (let* ((fun (or (get-char-property 0 'command command-name)
+                       (and (stringp command-name) (intern-soft command-name))))
+              (binding (where-is-internal fun nil t))
+              (binding (if (and binding (not (stringp binding)))
+                           (format " {%s}" (key-description binding))
+                         ""))
+              (annotation
+               (or (cl-loop for arg in args
+                            thereis (conn-argument-completion-annotation arg fun))
+                   "")))
+         (put-text-property 0 (length binding)
+                            'face 'help-key-binding binding)
+         (when annotation
+           (put-text-property 0 (length annotation)
+                              'face 'completions-annotations annotation))
+         (list command-name "" (concat annotation binding)))))))
+
 (defun conn--read-args-completing-read (state args)
-  (when-let* ((metadata (conn-state-get state :loop-completion-metadata))
-              (table
-               (cl-loop for sym in (mapcan #'conn--all-bindings
-                                           (current-active-maps))
-                        when (cl-loop for arg in args
-                                      thereis (conn-argument-predicate arg sym))
-                        collect sym)))
+  (and-let* ((metadata `((affixation-function . ,(conn--read-args-completion-affixation args))
+                         ,@(conn-state-get state :loop-completion-metadata)))
+             (table
+              (cl-loop for binding in (mapcan #'conn--all-bindings
+                                              (current-active-maps))
+                       when (cl-loop for arg in args
+                                     thereis (conn-argument-predicate arg (cdr binding)))
+                       collect binding)))
     (condition-case _
-        (intern
-         (completing-read
-          "Command: "
-          (lambda (string pred action)
-            (if (eq action 'metadata)
-                `(metadata ,@metadata)
-              (complete-with-action action table string pred)))
-          nil t))
+        (alist-get (completing-read
+                    "Command: "
+                    (lambda (string pred action)
+                      (if (eq action 'metadata)
+                          `(metadata ,@metadata)
+                        (complete-with-action action table string pred)))
+                    nil t)
+                   table nil nil #'equal)
       (quit nil))))
 
 (cl-defun conn--read-args ( state arglist callback
@@ -1519,9 +1550,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 \(fn (STATE KEYS) &rest BODY)"
   (declare (indent 2))
-  (pcase-let (((or `(,state . ,keys)
-                   state)
-               state-and-keys)
+  (pcase-let (((or `(,state . ,keys) state) state-and-keys)
               (patterns nil)
               (values nil))
     (pcase-dolist (`(,pat ,val) varlist)
@@ -1536,7 +1565,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (oclosure-define (conn-read-args-argument
                   ;; (:predicate conn-read-args-argument-p)
-                  (:copier conn-set-argument (value &aux (set-flag t)))
+                  (:copier conn-set-argument (value &optional (set-flag t)))
                   (:copier conn-unset-argument (value &aux (set-flag nil))))
   (value :type t)
   (set-flag :type boolean)
@@ -1592,6 +1621,11 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg _val) nil))
+
+(cl-defgeneric conn-argument-completion-annotation (argument value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (&rest _) nil))
 
 (cl-defgeneric conn-argument-keymaps (argument)
   (declare (important-return-value t)

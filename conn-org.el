@@ -302,7 +302,6 @@
   "E" 'org-export
   "e" 'org-example)
 
-
 (cl-defmethod conn-argument-predicate :extra "conn-org" ((_arg conn-surround-with-argument)
                                                          sym)
   (or (memq sym '(org-quote

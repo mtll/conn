@@ -238,14 +238,10 @@
   t)
 
 (keymap-set (conn-get-minor-mode-map 'conn-transpose-state 'smartparens-mode)
-            "c" 'sp-convolve-sexp)
-
-(cl-defmethod conn-argument-predicate ((_arg conn-transpose-argument)
-                                       (_sym (eql sp-convolve-sexp)))
-  t)
-
-(cl-defmethod conn-perform-transpose ((_cmd (eql sp-convolve-sexp)) arg)
-  (sp-convolute-sexp arg))
+            "c" (conn-anonymous-thing
+                  'sexp
+                  :transpose-op ( :method (_self arg)
+                                  (sp-convolute-sexp arg))))
 
 (put 'conn-sp-pair :conn-thing t)
 
