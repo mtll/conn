@@ -1366,26 +1366,35 @@ chooses to handle a command."
   (message (conn--read-args-prompt prompt arguments)))
 
 ;; From embark
-(defun conn--all-bindings (keymap)
-  (let (bindings)
-    (map-keymap
-     (lambda (_key def)
-       (pcase (keymap--menu-item-binding def)
-         ((and (pred keymapp) keymap)
-          (setq bindings (nconc (conn--all-bindings keymap) bindings)))
-         ((and (pred symbolp) sym)
-          (push (cons (symbol-name sym) sym) bindings))
-         (`(,(and desc (pred stringp)) . ,(and sym (pred symbolp)))
-          (push (cons desc sym) bindings))
-         ((and at (pred conn-anonymous-thing-p))
-          (push (cons (propertize (conn-thing-pretty-print at)
-                                  'command at)
-                      at)
-                bindings))))
-     (keymap-canonicalize keymap))
-    bindings))
+(defun conn--read-args-bindings (args)
+  (let ((result nil))
+    (cl-labels ((predicate (item)
+                  (cl-loop for arg in args
+                           thereis (conn-argument-predicate arg item)))
+                (bindings (keymap)
+                  (map-keymap
+                   (lambda (_key def)
+                     (pcase (keymap--menu-item-binding def)
+                       ((and (pred keymapp) keymap)
+                        (bindings keymap))
+                       ((and (pred symbolp)
+                             (pred predicate)
+                             sym)
+                        (push (cons (symbol-name sym) sym) result))
+                       (`(,(and desc (pred stringp))
+                          . ,(and item (pred predicate)))
+                        (push (cons desc item) result))
+                       ((and item (pred predicate))
+                        (push (cons (propertize
+                                     (conn-thing-pretty-print item)
+                                     'command item)
+                                    item)
+                              result))))
+                   (keymap-canonicalize keymap))))
+      (mapc #'bindings (current-active-maps))
+      result)))
 
-(defun conn--read-args-completion-affixation (args)
+(defun conn--read-args-affixation-function (args)
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
       (conn--where-is-with-remaps
@@ -1410,14 +1419,10 @@ chooses to handle a command."
            (list command-name "" (concat annotation binding))))))))
 
 (defun conn--read-args-completing-read (state args)
-  (and-let* ((metadata `((affixation-function . ,(conn--read-args-completion-affixation args))
-                         ,@(conn-state-get state :loop-completion-metadata)))
-             (table
-              (cl-loop for binding in (mapcan #'conn--all-bindings
-                                              (current-active-maps))
-                       when (cl-loop for arg in args
-                                     thereis (conn-argument-predicate arg (cdr binding)))
-                       collect binding)))
+  (and-let* ((metadata
+              `((affixation-function . ,(conn--read-args-affixation-function args))
+                ,@(conn-state-get state :loop-completion-metadata)))
+             (table (conn--read-args-bindings args)))
     (condition-case _
         (alist-get (completing-read
                     "Command: "

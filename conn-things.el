@@ -331,7 +331,8 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defgeneric conn-thing-pretty-print (thing)
   (declare (conn-anonymous-thing-property :pretty-print)
            (side-effect-free t))
-  (:method (thing) (copy-sequence (symbol-name thing)))
+  (:method (thing) (format "%S" thing))
+  (:method ((thing symbol)) (copy-sequence (symbol-name thing)))
   ( :method ((thing conn--anonymous-thing))
     (format "<anonymous %S>" (conn-anonymous-thing-parent thing))))
 
@@ -565,7 +566,8 @@ words."))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
-  (get sym :conn-bounds-transformation))
+  (and (symbolp sym)
+       (get sym :conn-bounds-transformation)))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
   (when-let* ((ts (conn-read-args-argument-value arg)))
