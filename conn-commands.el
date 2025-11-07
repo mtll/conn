@@ -1555,7 +1555,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                             ('prepend nil))
                           register))
       ('delete
-       (conn-set-kill-how self t nil nil))
+       (conn-set-kill-how self (not delete) nil nil))
       ('register
        (if register
            (conn-set-kill-how self nil append nil)
@@ -1569,14 +1569,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
   (list
-   (substitute-command-keys
-    (concat
-     "\\[delete] "
-     (if-let* ((ts (conn-kill-how-argument--delete arg)))
-         (propertize
-          "del"
-          'face 'eldoc-highlight-function-argument)
-       "del")))
    (substitute-command-keys
     (concat
      "\\[append-next-kill] "
@@ -1595,9 +1587,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      "\\[register] "
      (if-let* ((ts (conn-kill-how-argument--register arg)))
          (propertize
-          (format "reg <%c>" ts)
+          (format "register <%c>" ts)
           'face 'eldoc-highlight-function-argument)
-       "reg")))))
+       "register")))
+   (substitute-command-keys
+    (concat
+     "\\[delete] "
+     (if-let* ((ts (conn-kill-how-argument--delete arg)))
+         (propertize
+          "delete"
+          'face 'eldoc-highlight-function-argument)
+       "delete")))))
 
 (cl-defmethod conn-argument-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument--delete arg)
@@ -1626,7 +1626,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (fixup (conn-fixup-whitespace-argument
                 (unless (region-active-p)
                   conn-kill-fixup-whitespace-default)))
-        (check-bounds (conn-check-bounds-argument)))
+        (check-bounds (conn-check-bounds-argument t)))
      (list thing thing-arg transform append
            delete register fixup check-bounds)))
   (when (and (null append)
@@ -2011,16 +2011,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                             (register-read-with-preview "Register:"))))
       (_ self))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
+(cl-defmethod conn-argument-predicate ((_arg conn-copy-how-argument)
                                        sym)
   (memq sym '(append-next-kill register)))
 
-(cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
+(cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
   (list
    (substitute-command-keys
     (concat
      "\\[append-next-kill] "
-     (pcase (conn-kill-how-argument--append arg)
+     (pcase (conn-copy-how-argument--append arg)
        ('nil "append")
        ('prepend
         (propertize
@@ -2033,15 +2033,15 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
    (substitute-command-keys
     (concat
      "\\[register] "
-     (if-let* ((ts (conn-kill-how-argument--register arg)))
+     (if-let* ((ts (conn-copy-how-argument--register arg)))
          (propertize
-          (format "reg <%c>" ts)
+          (format "register <%c>" ts)
           'face 'eldoc-highlight-function-argument)
-       "reg")))))
+       "register")))))
 
-(cl-defmethod conn-argument-value ((arg conn-kill-how-argument))
-  (list (conn-kill-how-argument--append arg)
-        (conn-kill-how-argument--register arg)))
+(cl-defmethod conn-argument-value ((arg conn-copy-how-argument))
+  (list (conn-copy-how-argument--append arg)
+        (conn-copy-how-argument--register arg)))
 
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
@@ -2082,7 +2082,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat (conn-dispatch-repeat-argument))
-       (append (conn-kill-how-argument append))
+       (append (conn-copy-how-argument append))
        (separator (conn-separator-argument 'default))
        (restrict-windows (conn-dispatch-restrict-windows-argument t)))
     (conn-with-dispatch-event-handler _
