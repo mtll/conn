@@ -123,7 +123,8 @@
 (defalias 'conn-previous-buffer 'previous-buffer)
 
 (defvar-keymap conn-buffer-repeat-map
-  :repeat t
+  :repeat (:exit (ignore))
+  "e" 'ignore
   "l" 'conn-next-buffer
   "j" 'conn-previous-buffer)
 

@@ -465,7 +465,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state)))
   (if (or defining-kbd-macro executing-kbd-macro)
-      (user-error "Dispatch not available in keyboard macros")
+      (error "Dispatch not available in keyboard macros")
     (cl-call-next-method)))
 
 (conn-define-state conn-dispatch-bounds-state (conn-dispatch-targets-state)
@@ -1060,7 +1060,7 @@ Optionally the overlay may have an associated THING."
   "Function responsible for labeling all `conn-targets'.
 
 A labeling function should take a single argument STATE and
-return either a list of labels or a list of the form
+return either a list of label strings or a list of the form
 (:state NEW-STATE . LABELS).  If the labeling function returns such a
 list then NEW-STATE will be passed to the labeling function the next
 time it is called.  The first time the labeling function is called STATE
@@ -3836,113 +3836,113 @@ contain targets."
                                              always-retarget
                                              setup
                                              &allow-other-keys)
-  (if (or defining-kbd-macro executing-kbd-macro)
-      (message "Dispatch not available in keyboard macros")
-    (let* ((dispatch-quit-flag nil)
-           (opoint (point-marker))
-           (eldoc-display-functions nil)
-           (recenter-last-op nil)
-           (conn-read-args-last-command nil)
-           (conn--dispatch-prev-state
-            (list conn-target-window-predicate
-                  conn-target-predicate
-                  conn-target-sort-function))
-           (conn-target-window-predicate conn-target-window-predicate)
-           (conn-target-predicate conn-target-predicate)
-           (conn-target-sort-function conn-target-sort-function)
-           (conn--dispatch-must-prompt nil)
-           (conn--read-args-prefix-mag nil)
-           (conn--read-args-prefix-sign nil)
-           (conn--dispatch-read-event-handlers
-            (cons #'conn-handle-dispatch-select-command
-                  conn--dispatch-read-event-handlers))
-           (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
-           (conn-dispatch-target-finder
-            (conn-get-target-finder thing thing-arg))
-           (conn-dispatch-repeat-count 0)
-           (conn--dispatch-always-retarget
-            (or always-retarget
-                (conn-action--always-retarget action)))
-           (target-other-end (conn-target-finder-other-end
-                              conn-dispatch-target-finder))
-           (conn-dispatch-no-other-end
-            (or (eq other-end :no-other-end)
-                (eq target-other-end :no-other-end)))
-           (conn-dispatch-other-end
-            (unless conn-dispatch-no-other-end
-              (xor target-other-end (or other-end conn-dispatch-other-end))))
-           (conn--dispatch-read-event-message-prefixes
-            `(,(propertize (conn-action-pretty-print action t)
-                           'face 'eldoc-highlight-function-argument)
-              ,(lambda (_keymap)
-                 (conn-target-finder-message-prefixes
-                  conn-dispatch-target-finder))
-              ,(unless conn-dispatch-no-other-end
-                 (lambda (keymap)
-                   (when-let* ((binding
-                                (where-is-internal 'dispatch-other-end keymap t)))
-                     (concat
-                      (propertize (key-description binding)
-                                  'face 'help-key-binding)
-                      " "
-                      (propertize
-                       "other end"
-                       'face (when conn-dispatch-other-end
-                               'eldoc-highlight-function-argument))))))
-              ,(lambda (keymap)
-                 (when-let* (((or (length> conn-targets 1)
-                                  (advice-function-member-p 'conn--dispatch-restrict-windows
-                                                            conn-target-window-predicate)))
-                             (binding
-                              (where-is-internal 'restrict-windows keymap t)))
+  (when (or defining-kbd-macro executing-kbd-macro)
+    (error "Dispatch not available in keyboard macros"))
+  (let* ((dispatch-quit-flag nil)
+         (opoint (point-marker))
+         (eldoc-display-functions nil)
+         (recenter-last-op nil)
+         (conn-read-args-last-command nil)
+         (conn--dispatch-prev-state
+          (list conn-target-window-predicate
+                conn-target-predicate
+                conn-target-sort-function))
+         (conn-target-window-predicate conn-target-window-predicate)
+         (conn-target-predicate conn-target-predicate)
+         (conn-target-sort-function conn-target-sort-function)
+         (conn--dispatch-must-prompt nil)
+         (conn--read-args-prefix-mag nil)
+         (conn--read-args-prefix-sign nil)
+         (conn--dispatch-read-event-handlers
+          (cons #'conn-handle-dispatch-select-command
+                conn--dispatch-read-event-handlers))
+         (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
+         (conn-dispatch-target-finder
+          (conn-get-target-finder thing thing-arg))
+         (conn-dispatch-repeat-count 0)
+         (conn--dispatch-always-retarget
+          (or always-retarget
+              (conn-action--always-retarget action)))
+         (target-other-end (conn-target-finder-other-end
+                            conn-dispatch-target-finder))
+         (conn-dispatch-no-other-end
+          (or (eq other-end :no-other-end)
+              (eq target-other-end :no-other-end)))
+         (conn-dispatch-other-end
+          (unless conn-dispatch-no-other-end
+            (xor target-other-end (or other-end conn-dispatch-other-end))))
+         (conn--dispatch-read-event-message-prefixes
+          `(,(propertize (conn-action-pretty-print action t)
+                         'face 'eldoc-highlight-function-argument)
+            ,(lambda (_keymap)
+               (conn-target-finder-message-prefixes
+                conn-dispatch-target-finder))
+            ,(unless conn-dispatch-no-other-end
+               (lambda (keymap)
+                 (when-let* ((binding
+                              (where-is-internal 'dispatch-other-end keymap t)))
                    (concat
                     (propertize (key-description binding)
                                 'face 'help-key-binding)
                     " "
                     (propertize
-                     "this win"
-                     'face (when (advice-function-member-p
-                                  'conn--dispatch-restrict-windows
-                                  conn-target-window-predicate)
-                             'eldoc-highlight-function-argument)))))
-              ,@conn--dispatch-read-event-message-prefixes)))
-      (when-let* ((predicate (conn-action--window-predicate action)))
-        (add-function :after-while conn-target-window-predicate predicate))
-      (when-let* ((predicate (conn-action--target-predicate action)))
-        (add-function :after-while conn-target-predicate predicate))
-      (when restrict-windows
-        (add-function :after-while conn-target-window-predicate
-                      'conn--dispatch-restrict-windows))
-      (when setup (funcall setup))
-      (conn--unwind-protect-all
-        (progn
-          (while-let ((new-target
-                       (catch 'dispatch-change-target
-                         (let ((emulation-mode-map-alists
-                                `(((conn-dispatch-select-mode
-                                    . ,(make-composed-keymap
-                                        (conn-target-finder-keymaps
-                                         conn-dispatch-target-finder))))
-                                  ,@emulation-mode-map-alists)))
-                           (apply #'cl-call-next-method
-                                  action
-                                  thing thing-arg thing-transform
-                                  keys))
-                         nil)))
-            (pcase-setq `(,thing ,thing-arg ,thing-transform) new-target))
-          (conn-dispatch-push-history
-           (conn-make-dispatch action thing thing-arg thing-transform keys)))
-        (conn-cleanup-targets)
-        (conn-cleanup-labels)
-        (progn
-          (with-current-buffer (marker-buffer opoint)
-            (if dispatch-quit-flag
-                (goto-char opoint)
-              (unless (eql (point) (marker-position opoint))
-                (conn--push-mark-ring opoint))))
-          (set-marker opoint nil)
-          (let ((inhibit-message conn-read-args-inhibit-message))
-            (message nil)))))))
+                     "other end"
+                     'face (when conn-dispatch-other-end
+                             'eldoc-highlight-function-argument))))))
+            ,(lambda (keymap)
+               (when-let* (((or (length> conn-targets 1)
+                                (advice-function-member-p 'conn--dispatch-restrict-windows
+                                                          conn-target-window-predicate)))
+                           (binding
+                            (where-is-internal 'restrict-windows keymap t)))
+                 (concat
+                  (propertize (key-description binding)
+                              'face 'help-key-binding)
+                  " "
+                  (propertize
+                   "this win"
+                   'face (when (advice-function-member-p
+                                'conn--dispatch-restrict-windows
+                                conn-target-window-predicate)
+                           'eldoc-highlight-function-argument)))))
+            ,@conn--dispatch-read-event-message-prefixes)))
+    (when-let* ((predicate (conn-action--window-predicate action)))
+      (add-function :after-while conn-target-window-predicate predicate))
+    (when-let* ((predicate (conn-action--target-predicate action)))
+      (add-function :after-while conn-target-predicate predicate))
+    (when restrict-windows
+      (add-function :after-while conn-target-window-predicate
+                    'conn--dispatch-restrict-windows))
+    (when setup (funcall setup))
+    (conn--unwind-protect-all
+      (progn
+        (while-let ((new-target
+                     (catch 'dispatch-change-target
+                       (let ((emulation-mode-map-alists
+                              `(((conn-dispatch-select-mode
+                                  . ,(make-composed-keymap
+                                      (conn-target-finder-keymaps
+                                       conn-dispatch-target-finder))))
+                                ,@emulation-mode-map-alists)))
+                         (apply #'cl-call-next-method
+                                action
+                                thing thing-arg thing-transform
+                                keys))
+                       nil)))
+          (pcase-setq `(,thing ,thing-arg ,thing-transform) new-target))
+        (conn-dispatch-push-history
+         (conn-make-dispatch action thing thing-arg thing-transform keys)))
+      (conn-cleanup-targets)
+      (conn-cleanup-labels)
+      (progn
+        (with-current-buffer (marker-buffer opoint)
+          (if dispatch-quit-flag
+              (goto-char opoint)
+            (unless (eql (point) (marker-position opoint))
+              (conn--push-mark-ring opoint))))
+        (set-marker opoint nil)
+        (let ((inhibit-message conn-read-args-inhibit-message))
+          (message nil))))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-action)
                                      thing

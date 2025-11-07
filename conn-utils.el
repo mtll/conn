@@ -45,7 +45,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                                  (setq ,success t))))
       (pcase binding
         ('nil body)
-        ((and `(,var ,val . ,cleanup) (guard cleanup))
+        ((and `(,var ,val . ,cleanup)
+              (guard cleanup))
          (protect (car rest) (cdr rest)
                   `(let* ((,var ,val))
                      (unwind-protect
@@ -62,10 +63,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
         (wrap `(unwind-protect ,wrapped ,(car to-wrap))
               (cdr to-wrap))
       wrapped)))
-
-(defmacro conn-anaphoricate (name lambda)
-  (declare (indent 1))
-  `(letrec ((,name ,lambda)) ,name))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
