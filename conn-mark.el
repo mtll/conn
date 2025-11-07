@@ -304,7 +304,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                 (cons (conn--create-marker point nil t)
                                       (conn--create-marker mark))))))))
 
-;;;###autoload
 (defun conn-unpop-movement-ring (arg)
   "Rotate backward through `conn-movement-ring'."
   (interactive "p")
@@ -322,7 +321,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
             (goto-char pt)
             (conn--push-ephemeral-mark mk))))))
 
-;;;###autoload
 (defun conn-pop-movement-ring (arg)
   "Rotate forward through `conn-movement-ring'."
   (interactive "p")
