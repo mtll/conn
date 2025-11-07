@@ -521,6 +521,7 @@ themselves once the selection process has concluded."
        (funcall conn--dispatch-thing-predicate sym)))
 
 (defvar-keymap conn-dispatch-transform-map
+  "V" 'conn-dispatch-bounds-between
   "x" 'conn-bounds-trim
   "v" 'conn-dispatch-bounds-over
   "X" 'conn-transform-reset)
@@ -618,7 +619,7 @@ themselves once the selection process has concluded."
        conn-dispatch-take-replace))
      (("copy to"
        conn-dispatch-copy-to
-       conn-dispatch-copy-replace-to)
+       conn-dispatch-copy-to-replace)
       ("transpose" conn-dispatch-transpose)
       ("over" conn-dispatch-bounds-over)
       ("kapply" conn-dispatch-kapply)
@@ -858,16 +859,27 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-dispatch-bounds-over (bounds)
   (pcase bounds
-    ((conn-bounds `(,beg . ,end))
-     (pcase (conn-bounds-of bounds (conn-bounds-arg bounds))
-       ((conn-bounds `(,obeg . ,oend))
-        (conn-make-transformed-bounds
-         bounds
-         (if (< oend end)
-             (cons (max oend end) (min obeg beg))
-           (cons (min obeg beg) (max oend end)))))
-       (_ bounds)))
+    ((and (conn-bounds `(,beg . ,end))
+          (conn-bounds-get :origin))
+     (save-excursion
+       (goto-char origin)
+       (pcase (conn-bounds-of bounds (conn-bounds-arg bounds))
+         ((conn-bounds `(,obeg . ,oend))
+          (conn-make-transformed-bounds
+           'conn-dispatch-bounds-over
+           bounds
+           (if (< oend end)
+               (cons (max oend end) (min obeg beg))
+             (cons (min obeg beg) (max oend end)))))
+         (_ bounds))))
     (_ bounds)))
+
+(put 'conn-dispatch-bounds-between :conn-bounds-transformation t)
+(put 'conn-dispatch-bounds-between :conn-transform-description "between")
+
+(cl-defgeneric conn-dispatch-bounds-between (bounds)
+  (declare (important-return-value t)
+           (conn-anonymous-thing-property :dispatch-between)))
 
 (cl-defgeneric conn-dispatch-bounds (bounds &optional transforms))
 
@@ -2985,20 +2997,22 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim))
-       (transform (conn-transform-argument))
+      ((`(,fthing ,farg) (conn-thing-argument-dwim))
+       (ftransform (conn-transform-argument))
        (separator (conn-dispatch-separator-argument 'default)))
-    (let ((str (pcase (conn-bounds-of thing arg)
-                 ((conn-bounds `(,beg . ,end) transform)
+    (let ((str (pcase (conn-bounds-of fthing farg)
+                 ((conn-bounds `(,beg . ,end) ftransform)
                   (save-mark-and-excursion
                     (goto-char beg)
                     (conn--push-ephemeral-mark end)
-                    (funcall region-extract-function nil))))))
+                    (conn-dispatch-action-pulse beg end)
+                    (funcall region-extract-function nil)))
+                 (_ (user-error "No %s found" (conn-thing-pretty-print fthing))))))
       (oclosure-lambda (conn-dispatch-copy-to
                         (str str)
                         (separator
                          (if (eq separator 'default)
-                             (cond ((eq thing 'region))
+                             (cond ((eq fthing 'region))
                                    ((seq-contains-p str ?\n #'eql)
                                     'newline)
                                    (t 'space))
@@ -3032,42 +3046,45 @@ contain targets."
       (format "Copy To <%s>" sep)
     "Copy To"))
 
-(oclosure-define (conn-dispatch-copy-replace-to
+(oclosure-define (conn-dispatch-copy-to-replace
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-replace-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to-replace)))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
-      ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
-       (transform (conn-transform-argument)))
-    (let ((str (pcase (conn-bounds-of thing thing-arg)
-                 ((conn-bounds `(,beg . ,end) transform)
-                  (save-mark-and-excursion
-                    (goto-char beg)
-                    (conn--push-ephemeral-mark end)
-                    (funcall region-extract-function nil)))
-                 (_ (user-error "Cannot find thing at point")))))
-      (oclosure-lambda (conn-dispatch-copy-replace-to
-                        (description "Copy and Replace To")
-                        (str str)
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing thing-arg transform)
-        (with-selected-window window
-          (conn-dispatch-loop-undo-boundary)
-          (save-excursion
-            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-              ((conn-bounds `(,beg . ,end) transform)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (conn-dispatch-action-pulse
-                (- (point) (length str))
-                (point)))
-              (_ (user-error "Cannot find thing at point")))))))))
+      ((`(,fthing ,farg) (conn-thing-argument-dwim))
+       (ftransform (conn-transform-argument)))
+    (oclosure-lambda (conn-dispatch-copy-to-replace
+                      (description "Copy and Replace To")
+                      (str (pcase (conn-bounds-of fthing farg)
+                             ((conn-bounds `(,beg . ,end) ftransform)
+                              (save-mark-and-excursion
+                                (goto-char beg)
+                                (conn--push-ephemeral-mark end)
+                                (conn-dispatch-action-pulse beg end)
+                                (funcall region-extract-function nil)))
+                             (_ (user-error "Cannot find %s at point"
+                                            (conn-thing-pretty-print fthing)))))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt thing thing-arg transform)
+      (with-selected-window window
+        (conn-dispatch-loop-undo-boundary)
+        (save-mark-and-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (goto-char beg)
+             (delete-region beg end)
+             (insert-for-yank str)
+             (conn-dispatch-action-pulse
+              (- (point) (length str))
+              (point)))
+            (_ (user-error "Cannot find %s"
+                           (conn-thing-pretty-print thing)))))))))
 
 (oclosure-define (conn-dispatch-yank-to-replace
                   (:parent conn-action))
@@ -4216,6 +4233,36 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    cmd arg
    (lambda (bounds) (conn--dispatch-bounds bounds))
    :subregions (lambda (bounds) (conn--dispatch-bounds bounds t))))
+
+(cl-defmethod conn-dispatch-bounds-between (bounds)
+  (pcase bounds
+    ((conn-dispatch-bounds `(,beg . ,end))
+     (let (obeg oend)
+       (conn-perform-dispatch
+        (oclosure-lambda (conn-action
+                          (no-history t)
+                          (description "Bounds")
+                          (window-predicate
+                           (let ((win (selected-window)))
+                             (lambda (window) (eq win window)))))
+            (window pt thing thing-arg transform)
+          (with-selected-window window
+            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+              ((conn-dispatch-bounds `(,beg . ,end) transform)
+               (setq obeg beg
+                     oend end))
+              (_ (user-error "No %s found at point" thing)))))
+        (conn-bounds-thing bounds)
+        (conn-bounds-arg bounds)
+        (when (conn-transformed-bounds-p bounds)
+          (conn-transformed-bounds-transforms bounds))
+        :other-end nil)
+       (conn-make-transformed-bounds
+        'conn-dispatch-bounds-between
+        bounds
+        (if (< (min obeg oend) (min beg end))
+            (cons obeg end)
+          (cons beg oend)))))))
 
 ;;;;; Dispatch Registers
 

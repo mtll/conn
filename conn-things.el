@@ -527,6 +527,7 @@ words."))
      ("reset" conn-transform-reset))))
 
 (defvar-keymap conn-transform-map
+  "V" 'conn-dispatch-bounds-between
   "x" 'conn-bounds-trim
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
@@ -641,21 +642,28 @@ words."))
 
 (cl-defstruct (conn-transformed-bounds
                (:include conn-bounds)
-               (:constructor conn--make-bounds-transform)))
+               (:constructor conn--make-bounds-transform))
+  (transforms nil :type list))
 
-(defun conn-make-transformed-bounds (from to)
+(defun conn-make-transformed-bounds (transform from to)
   (declare (compiler-macro
             (lambda (_exp)
               `(conn--make-bounds-transform
                 :thing (conn-bounds-thing ,from)
                 :arg (conn-bounds-arg ,from)
                 :whole ,to
-                :properties (conn-bounds--properties ,from)))))
+                :properties (conn-bounds--properties ,from)
+                :transforms (append (when (conn-transformed-bounds-p ,from)
+                                      (conn-transformed-bounds-transforms ,from))
+                                    (list ,transform))))))
   (conn--make-bounds-transform
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)
    :whole to
-   :properties (conn-bounds--properties from)))
+   :properties (conn-bounds--properties from)
+   :transforms (append (when (conn-transformed-bounds-p from)
+                         (conn-transformed-bounds-transforms from))
+                       (list transform))))
 
 (defun conn-bounds-set (bounds prop val)
   (setf (plist-get (conn-bounds--properties bounds) prop) val))
@@ -856,10 +864,6 @@ words."))
     (cl-call-next-method)))
 
 (cl-defgeneric conn-bounds-last (bounds)
-  ( :method ((bounds (conn-thing dispatch)))
-    (ignore (conn-bounds bounds))
-    (or (car (conn-bounds-get bounds :subregions))
-        bounds))
   ( :method (bounds)
     (or (car (last (conn-bounds-get bounds :subregions)))
         bounds)))
@@ -884,7 +888,9 @@ words."))
                      (skip-chars-backward conn-bounds-trim-chars beg)
                      (point))))
     (unless (> tb te)
-      (conn-make-transformed-bounds bounds (cons tb te)))))
+      (conn-make-transformed-bounds
+       'conn-bounds-trim
+       bounds (cons tb te)))))
 
 ;;;;;; Bounds Before/After
 
@@ -906,6 +912,7 @@ words."))
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (<= (point) end)
         (conn-make-transformed-bounds
+         'conn-bounds-after-point
          bounds (cons (point) (if exclusive beg end)))
       (error "Invalid bounds"))))
 
@@ -942,6 +949,7 @@ words."))
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
     (if (>= (point) beg)
         (conn-make-transformed-bounds
+         'conn-bounds-before-point
          bounds (cons (if exclusive end beg) (point)))
       (error "Invalid bounds"))))
 
@@ -1032,9 +1040,8 @@ words."))
                    (when (or isearch-mode-end-hook-quit
                              (null isearch-other-end))
                      (abort-recursive-edit))
-                   (setq bounds (conn-bounds-of thing thing-arg)
-                         exclusive (< (abs (- (point) start))
-                                      (abs (- isearch-other-end start))))))
+                   (setq max (> (point) isearch-other-end)
+                         bounds (conn-bounds-of thing thing-arg))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)
@@ -1047,11 +1054,20 @@ words."))
          (cond ((<= beg start end)
                 (unless exclusive bounds))
                ((< start beg)
-                (conn-make-transformed-bounds
-                 bounds (cons start (if exclusive end beg))))
+                (conn-make-bounds
+                 'isearch nil
+                 (cons start (if max
+                                 (max beg end)
+                               (min beg end)))
+                 :subregions (list bounds)))
                (t
-                (conn-make-transformed-bounds
-                 bounds (cons (if exclusive beg end) start)))))))))
+                (conn-make-bounds
+                 'isearch nil
+                 (cons (if max
+                           (max beg end)
+                         (min beg end))
+                       start)
+                 :subregions (list bounds)))))))))
 
 ;;;; Bounds of Things in Region
 

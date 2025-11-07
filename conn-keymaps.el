@@ -495,7 +495,7 @@
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
   "t" 'conn-dispatch-copy-to
-  "T" 'conn-dispatch-copy-replace-to
+  "T" 'conn-dispatch-copy-to-replace
   "C-y" 'conn-dispatch-yank-to-replace
   "M-y" 'conn-dispatch-reading-yank-to-replace
   "y" 'conn-dispatch-yank-to
