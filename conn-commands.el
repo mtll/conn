@@ -280,6 +280,40 @@ of line proper."
   (backward-up-list nil t t)
   (down-list 1 t))
 
+(defun conn-unpop-movement-ring (arg)
+  "Rotate backward through `conn-movement-ring'."
+  (interactive "p")
+  (setq conn--movement-ring-rotating t)
+  (cond ((< arg 0)
+         (conn-pop-movement-ring (abs arg)))
+        ((null conn-movement-ring)
+         (message "Movement ring empty"))
+        (t
+         (conn-push-movement-ring (point) (mark t))
+         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
+           (conn-ring-rotate-backward conn-movement-ring))
+         (pcase (conn-ring-head conn-movement-ring)
+           (`(,pt . ,mk)
+            (goto-char pt)
+            (conn--push-ephemeral-mark mk))))))
+
+(defun conn-pop-movement-ring (arg)
+  "Rotate forward through `conn-movement-ring'."
+  (interactive "p")
+  (setq conn--movement-ring-rotating t)
+  (cond ((< arg 0)
+         (conn-unpop-movement-ring (abs arg)))
+        ((null conn-movement-ring)
+         (message "Movement ring empty"))
+        (t
+         (conn-push-movement-ring (point) (mark t))
+         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
+           (conn-ring-rotate-forward conn-movement-ring))
+         (pcase (conn-ring-head conn-movement-ring)
+           (`(,pt . ,mk)
+            (goto-char pt)
+            (conn--push-ephemeral-mark mk))))))
+
 ;;;;; Replace
 
 (conn-define-state conn-replace-state (conn-read-thing-state)
