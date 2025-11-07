@@ -301,8 +301,8 @@
 (defun conn-sp-region-ok-p (bounds)
   (pcase bounds
     ((conn-bounds `(,beg . ,end))
-     (unless (sp-region-ok-p beg end)
-       (user-error (sp-message :unbalanced-region :return))))))
+     (or (sp-region-ok-p beg end)
+         (user-error (sp-message :unbalanced-region :return))))))
 
 (defun conn-smartparens-check-region ()
   (if smartparens-mode

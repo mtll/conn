@@ -966,8 +966,8 @@ words."))
 
 (defun conn-check-bounds (bounds)
   (cl-loop for fn in conn-check-bounds-functions
-           do (funcall fn bounds)
-           finally return bounds))
+           do (funcall fn bounds))
+  bounds)
 
 ;;;;; Perform Bounds
 

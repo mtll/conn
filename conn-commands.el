@@ -1916,14 +1916,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                (save-mark-and-excursion
                  (pcase (conn-bounds-of-dispatch thing thing-arg pt)
                    ((and bounds
-                         (conn-dispatch-bounds `(,beg . ,end) transform))
+                         (conn-dispatch-bounds `(,beg . ,end)
+                                               `(,@transform
+                                                 ,@(when check-bounds
+                                                     (list 'conn-check-bounds)))))
                     (goto-char beg)
                     (conn--push-ephemeral-mark end)
-                    (when check-bounds
-                      (conn-check-bounds
-                       (conn-make-bounds
-                        'region nil
-                        (cons (region-beginning) (region-end)))))
                     (if delete
                         (delete-region beg end)
                       (push (cons append (funcall region-extract-function t))
@@ -1958,10 +1956,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   register
                                   fixup-whitespace
                                   check-bounds)
-  (pcase (conn-transform-bounds (conn-bounds-of cmd arg) transform)
-    ((and (conn-bounds `(,beg . ,end)
-                       (when check-bounds
-                         (list 'conn-check-bounds)))
+  (pcase (conn-bounds-of cmd arg)
+    ((and (conn-bounds `(,beg . ,end) `(,@transform
+                                        ,@(when check-bounds
+                                            (list 'conn-check-bounds))))
           bounds)
      (goto-char beg)
      (save-mark-and-excursion

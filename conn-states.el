@@ -1294,6 +1294,8 @@ the state stays active if the previous command was a prefix command."
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
+(defvar conn-reading-args nil)
+
 (defvar conn--read-args-prefix-mag nil)
 (defvar conn--read-args-prefix-sign nil)
 (defvar conn--read-args-error-message nil)
@@ -1332,7 +1334,8 @@ chooses to handle a command."
           conn--read-args-message-timeout (time-add nil minibuffer-message-timeout))))
 
 (defun conn-read-args-error (format-string &rest args)
-  (setq conn--read-args-error-message (apply #'format format-string args)))
+  (setq conn--read-args-error-message (apply #'format format-string args))
+  (throw 'read-args-error nil))
 
 (defun conn--read-args-display-message ()
   (let ((msg (concat
@@ -1469,17 +1472,18 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (setf conn--read-args-error-message
-                 (format "Invalid Command <%s>" cmd))
-           (when command-handler
-             (funcall command-handler cmd))
-           (let ((next (if update-handler
-                           (funcall update-handler cmd arguments)
-                         (cl-loop for arg in arguments
-                                  collect (conn-argument-update arg cmd)))))
-             (unless (equal arguments next)
-               (setq conn--read-args-error-message "")
-               (setq arguments next))))
+           (catch 'read-args-error
+             (setf conn--read-args-error-message
+                   (format "Invalid Command <%s>" cmd))
+             (let ((next (if update-handler
+                             (funcall update-handler cmd arguments)
+                           (cl-loop for arg in arguments
+                                    collect (conn-argument-update arg cmd)))))
+               (when command-handler
+                 (funcall command-handler cmd))
+               (unless (equal arguments next)
+                 (setq conn--read-args-error-message "")
+                 (setq arguments next)))))
          (read-command ()
            (let ((cmd (key-binding (read-key-sequence nil) t)))
              (while (arrayp cmd) ; keyboard macro
@@ -1523,6 +1527,7 @@ chooses to handle a command."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn--read-args-exiting nil)
+                   (conn-reading-args t)
                    (inhibit-message t)
                    (emulation-mode-map-alists
                     `(((,state . ,(thread-last

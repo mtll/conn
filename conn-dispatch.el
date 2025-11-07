@@ -329,8 +329,7 @@ themselves once the selection process has concluded."
        (setq prompt-suffix (concat prompt-suffix (string c))
              current (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
-                         (push l next)))
-             conn--read-args-error-message nil)))))
+                         (push l next))))))))
 
 ;;;;; Window Header-line Labels
 
@@ -441,7 +440,7 @@ themselves once the selection process has concluded."
 (defvar conn--dispatch-remap-cookies nil)
 
 (defvar conn-dispatch-repeating nil)
-(defvar conn-dispatch-repeat-count nil)
+(defvar conn-dispatch-iteration-count nil)
 
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
@@ -683,14 +682,18 @@ themselves once the selection process has concluded."
     (if (not (conn-argument-predicate self type))
         self
       (conn-cancel-action value)
-      (if-let* ((_(not (cl-typep value type)))
-                (action (conn-make-action type)))
-          (progn
-            (setq conn--dispatch-thing-predicate
-                  (or (conn-action--thing-predicate action)
-                      #'always))
-            (conn-set-argument self action))
-        (conn-set-argument self nil)))))
+      (condition-case err
+          (if-let* ((_(not (cl-typep value type)))
+                    (action (conn-make-action type)))
+              (progn
+                (setq conn--dispatch-thing-predicate
+                      (or (conn-action--thing-predicate action)
+                          #'always))
+                (conn-set-argument self action))
+            (conn-set-argument self nil))
+        (error
+         (conn-read-args-error (error-message-string err))
+         self)))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-read-args-argument-value arg)))
@@ -1458,20 +1461,23 @@ Target overlays may override this default by setting the
                                            seconds
                                            prompt-suffix)
   (declare (important-return-value t))
-  (let ((inhibit-message conn-read-args-inhibit-message)
-        (message-log-max nil)
-        (prompt-suffix (unless inhibit-message
-                         (concat prompt-suffix " "
-                                 (when conn--read-args-error-message
-                                   (propertize conn--read-args-error-message
-                                               'face 'error)))))
-        (keymap (make-composed-keymap conn--dispatch-event-handler-maps
-                                      conn-dispatch-read-event-map)))
+  (let* ((inhibit-message conn-read-args-inhibit-message)
+         (message-log-max nil)
+         (prompt-suffix (unless inhibit-message prompt-suffix))
+         (error-msg (when (and conn--read-args-error-message
+                               (not inhibit-message))
+                      (propertize conn--read-args-error-message
+                                  'face 'error)))
+         (keymap (make-composed-keymap conn--dispatch-event-handler-maps
+                                       conn-dispatch-read-event-map)))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
                             (read-event (unless inhibit-message
-                                          (concat prompt ": " prompt-suffix))
+                                          (concat prompt
+                                                  ": " prompt-suffix
+                                                  (when prompt-suffix " ")
+                                                  error-msg))
                                         inherit-input-method seconds))))
             (when (characterp ev)
               (throw 'return ev)))
@@ -1481,12 +1487,14 @@ Target overlays may override this default by setting the
                      (unless inhibit-message
                        (concat prompt
                                (conn--dispatch-read-event-prefix keymap)
-                               ": " prompt-suffix))
+                               ": " prompt-suffix
+                               (when prompt-suffix " ") error-msg))
                      (read-key-sequence-vector)
                      (key-binding t)))
             ('restart (throw 'return ?\8))
             ('dispatch-character-event
-             (setq conn--dispatch-must-prompt nil)
+             (setq conn--read-args-error-message nil
+                   conn--dispatch-must-prompt nil)
              (push `(no-record . ,last-input-event) unread-command-events)
              (throw 'return
                     (conn-with-input-method
@@ -1497,21 +1505,26 @@ Target overlays may override this default by setting the
                                  ": " prompt-suffix))
                        inherit-input-method))))
             (cmd
+             (setq conn--read-args-error-message nil)
              (let ((unhandled nil))
                (unwind-protect
                    (catch 'dispatch-handle
                      (cl-loop for handler in conn--dispatch-read-event-handlers
                               do (funcall handler cmd))
                      (setq unhandled t))
-                 (unless unhandled
-                   (setf conn-read-args-last-command cmd)))
+                 (if unhandled
+                     (setq error-msg (propertize
+                                      (format "Invalid command <%s>" cmd)
+                                      'face 'error))
+                   (setf conn-read-args-last-command cmd)
+                   (setq conn--read-args-error-message nil)))
                (when (and unhandled (eq cmd 'keyboard-quit))
                  (keyboard-quit))))))))))
 
 (defun conn-dispatch-prompt-p ()
   (or conn--dispatch-must-prompt
       conn--dispatch-action-always-prompt
-      (> conn-dispatch-repeat-count 0)
+      (> conn-dispatch-iteration-count 0)
       (conn-target-finder-prompt-p conn-dispatch-target-finder)))
 
 (defun conn-select-target (&rest _args)
@@ -1645,22 +1658,8 @@ Target overlays may override this default by setting the
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (setq body `(progn
-                (push nil conn--dispatch-undo-change-groups)
-                ,@body
-                (cl-incf conn-dispatch-repeat-count)))
-  (when repeat
-    (setq body `(condition-case err
-                    ,body
-                  (user-error
-                   (pcase-dolist (`(,_ . ,undo-fn)
-                                  (pop conn--dispatch-undo-change-groups))
-                     (funcall undo-fn :undo))
-                   (setf conn--read-args-error-message
-                         (error-message-string err))))))
-  (cl-with-gensyms (rep display-always success)
-    `(let* ((,rep nil)
-            (,display-always nil)
+  (cl-with-gensyms (display-always success)
+    `(let* ((,display-always nil)
             (,success nil)
             (conn--dispatch-label-state nil)
             (conn--prev-scroll-conservatively scroll-conservatively)
@@ -1677,10 +1676,20 @@ Target overlays may override this default by setting the
                         conn-dispatch-target-finder)))
              (catch 'dispatch-select-exit
                (let ((conn-dispatch-in-progress t))
-                 (while (or (setq ,rep ,repeat)
-                            (< conn-dispatch-repeat-count 1))
+                 (while (or conn-dispatch-repeating
+                            (< conn-dispatch-iteration-count 1))
                    (catch 'dispatch-redisplay
-                     ,body))))
+                     (condition-case err
+                         (progn
+                           (push nil conn--dispatch-undo-change-groups)
+                           ,@body
+                           (cl-incf conn-dispatch-iteration-count))
+                       (user-error
+                        (pcase-dolist (`(,_ . ,undo-fn)
+                                       (pop conn--dispatch-undo-change-groups))
+                          (funcall undo-fn :undo))
+                        (setf conn--read-args-error-message
+                              (error-message-string err))))))))
              (setq ,success (not dispatch-quit-flag)))
          (dolist (undo conn--dispatch-undo-change-groups)
            (pcase-dolist (`(,_ . ,undo-fn) undo)
@@ -1705,7 +1714,7 @@ Target overlays may override this default by setting the
                    (conn--dispatch-undo-change-groups nil)
                    (inhibit-message nil)
                    (recenter-last-op nil)
-                   (conn-dispatch-repeat-count nil)
+                   (conn-dispatch-iteration-count nil)
                    (conn-dispatch-other-end nil)
                    (conn-read-args-last-command nil)
                    (conn--read-args-prefix-mag nil)
@@ -2012,7 +2021,8 @@ to the key binding for that target."
   "M-f" 'always-retarget
   "C-f" 'retarget)
 
-(cl-defgeneric conn-target-finder-retarget (target-finder))
+(cl-defgeneric conn-target-finder-retarget (target-finder)
+  (:method (_) nil))
 
 (cl-defgeneric conn-dispatch-has-targets-p (target-finder)
   (declare (important-return-value t)))
@@ -2883,11 +2893,10 @@ contain targets."
   (:method :after (_type) (conn-read-args-consume-prefix-arg)))
 
 (cl-defmethod conn-make-action :around (type)
-  (let ((wconf (current-window-configuration)))
-    (unwind-protect
-        (or (cl-call-next-method)
-            (error "Failed to construct %s" type))
-      (set-window-configuration wconf))))
+  (or (atomic-change-group
+        (save-window-excursion
+          (cl-call-next-method)))
+      (error "Failed to construct %S" type)))
 
 (defun conn--action-buffer-change-group ()
   (declare (important-return-value t))
@@ -3859,7 +3868,7 @@ contain targets."
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn-dispatch-target-finder
           (conn-get-target-finder thing thing-arg))
-         (conn-dispatch-repeat-count 0)
+         (conn-dispatch-iteration-count 0)
          (conn--dispatch-always-retarget
           (or always-retarget
               (conn-action--always-retarget action)))
@@ -3992,7 +4001,7 @@ contain targets."
               (user-error (message (cadr err)) t))))))
   (unless conn-kapply-suppress-message
     (message "Kapply completed successfully after %s iterations"
-             conn-dispatch-repeat-count)))
+             conn-dispatch-iteration-count)))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
