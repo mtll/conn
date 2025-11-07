@@ -1092,7 +1092,7 @@ region after a `recursive-edit'."
                     :prompt "Transpose"
                     :prefix current-prefix-arg
                     :reference conn-transpose-reference)
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t)))
+       ((`(,thing ,thing-arg) (conn-thing-argument t)))
      (list thing thing-arg)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
