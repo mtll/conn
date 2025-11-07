@@ -331,10 +331,12 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defgeneric conn-thing-pretty-print (thing)
   (declare (conn-anonymous-thing-property :pretty-print)
            (side-effect-free t))
-  (:method (thing) (format "%S" thing))
+  (:method (thing) (format "%s" thing))
   (:method ((thing symbol)) (copy-sequence (symbol-name thing)))
   ( :method ((thing conn--anonymous-thing))
-    (format "<anonymous %S>" (conn-anonymous-thing-parent thing))))
+    (format "<anonymous %s %s>"
+            (conn-anonymous-thing-parent thing)
+            (substring (secure-hash 'sha1 (prin1-to-string thing)) 0 8))))
 
 ;;;;; Thing Args
 

@@ -1419,6 +1419,8 @@ chooses to handle a command."
            (list command-name "" (concat annotation binding))))))))
 
 (defun conn--read-args-completing-read (state args)
+  (let ((inhibit-message nil))
+    (message nil))
   (and-let* ((metadata
               `((affixation-function . ,(conn--read-args-affixation-function args))
                 ,@(conn-state-get state :loop-completion-metadata)))
