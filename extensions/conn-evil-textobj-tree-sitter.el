@@ -213,7 +213,8 @@
                              :things (list ,thing)
                              :bounds-op ( :method (self _arg)
                                           (conn-with-dispatch-suspended
-                                            (conn-multi-thing-select self)))))))
+                                            (conn-multi-thing-select self))))
+                    :properties (list 'unique-bounds (list (cons ,beg ,end))))))
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
           (things (oref state things)))
