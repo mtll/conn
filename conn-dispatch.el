@@ -478,27 +478,6 @@ themselves once the selection process has concluded."
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
-(cl-defgeneric conn-make-default-action (cmd)
-  (declare (conn-anonymous-thing-property :default-action)
-           (important-return-value t)))
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
-  (conn-make-action 'conn-dispatch-goto))
-
-(cl-defgeneric conn-get-target-finder (cmd arg)
-  (declare (conn-anonymous-thing-property :target-finder)
-           (important-return-value t)))
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
-                                      _arg)
-  (conn-dispatch-read-n-chars
-   :string-length 2
-   :hide-target-overlays t))
-
-(defun conn--dispatch-restrict-windows (win)
-  (declare (side-effect-free t))
-  (eq win (selected-window)))
-
 (defvar conn--dispatch-thing-predicate nil)
 
 (oclosure-define (conn-dispatch-target-argument
@@ -582,7 +561,7 @@ themselves once the selection process has concluded."
 
 ;;;;;; Dispatch Quick Ref
 
-(defvar conn-dispatch-thing-ref-extras
+(defvar conn-dispatch-thing-ref-list
   (conn-reference-quote
     (("symbol" forward-symbol)
      ("line" forward-line)
@@ -592,40 +571,47 @@ themselves once the selection process has concluded."
               conn-end-of-defun-remap
               (conn-get-state-map 'conn-dispatch-targets-state)))))))
 
+(defvar conn-dispatch-thing-transforms-ref-list
+  (conn-reference-quote
+    (("between" conn-dispatch-bounds-between)
+     ("trim" conn-bounds-trim)
+     ("over" conn-dispatch-bounds-over)
+     ("reset" conn-transform-reset))))
+
 (defvar conn-dispatch-thing-ref
   (conn-reference-page "Things"
-    "Use a thing command to specify a region to operate on."
-    "Dispatch state redefines some thing bindings:
-"
+    (:heading "Extra Thing Bindings")
     ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
-     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-ref-extras)))))
+     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-ref-list)))
+    (:heading "Transforms")
+    ((:splice (conn-quick-ref-to-cols conn-dispatch-thing-transforms-ref-list)))))
+
+(defvar conn-dispatch-action-ref-list
+  (conn-reference-quote
+    (("copy from/replace"
+      conn-dispatch-copy-from
+      conn-dispatch-copy-from-replace)
+     ("send/replace"
+      conn-dispatch-send
+      conn-dispatch-send-replace)
+     ("kapply" conn-dispatch-kapply)
+     ("yank read/replace"
+      conn-dispatch-reading-yank-to
+      conn-dispatch-reading-yank-to-replace)
+     ("copy to/replace"
+      conn-dispatch-copy-to
+      conn-dispatch-copy-to-replace)
+     ("transpose" conn-dispatch-transpose)
+     ("register load/replace"
+      conn-dispatch-register-load
+      conn-dispatch-register-load-replace)
+     ("take/replace"
+      conn-dispatch-take
+      conn-dispatch-take-replace))))
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
-    ((("copy from/replace"
-       conn-dispatch-copy-from
-       conn-dispatch-copy-from-replace)
-      ("yank to/replace"
-       conn-dispatch-yank-to
-       conn-dispatch-yank-to-replace)
-      ("yank read/replace"
-       conn-dispatch-reading-yank-to
-       conn-dispatch-reading-yank-to-replace)
-      ("send/replace"
-       conn-dispatch-send
-       conn-dispatch-send-replace)
-      ("take/replace"
-       conn-dispatch-take
-       conn-dispatch-take-replace))
-     (("copy to"
-       conn-dispatch-copy-to
-       conn-dispatch-copy-to-replace)
-      ("transpose" conn-dispatch-transpose)
-      ("over" conn-dispatch-bounds-over)
-      ("kapply" conn-dispatch-kapply)
-      ("register load/replace"
-       conn-dispatch-register-load
-       conn-dispatch-register-load-replace)))))
+    ((:splice (conn-quick-ref-to-cols conn-dispatch-action-ref-list 3)))))
 
 (defvar conn-dispatch-command-ref
   (conn-reference-page "Misc Commands"
@@ -942,6 +928,10 @@ with `conn-dispatch-thing-ignored-modes'."
   (not (apply #'provided-mode-derived-p
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
+
+(defun conn--dispatch-restrict-windows (win)
+  (declare (side-effect-free t))
+  (eq win (selected-window)))
 
 ;;;;; Dispatch Target Overlays
 
@@ -1893,6 +1883,16 @@ Target overlays may override this default by setting the
 
 (defun conn-cleanup-targets ()
   (conn-target-finder-cleanup conn-dispatch-target-finder))
+
+(cl-defgeneric conn-get-target-finder (cmd arg)
+  (declare (conn-anonymous-thing-property :target-finder)
+           (important-return-value t)))
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
+                                      _arg)
+  (conn-dispatch-read-n-chars
+   :string-length 2
+   :hide-target-overlays t))
 
 (cl-defgeneric conn-target-finder-update (target-finder))
 
@@ -2874,6 +2874,13 @@ contain targets."
                           (cl--find-class item))))
     (and (oclosure--class-p class)
          (memq 'conn-action (oclosure--class-allparents class)))))
+
+(cl-defgeneric conn-make-default-action (cmd)
+  (declare (conn-anonymous-thing-property :default-action)
+           (important-return-value t)))
+
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
+  (conn-make-action 'conn-dispatch-goto))
 
 (cl-defgeneric conn-action-stale-p (action)
   (declare (important-return-value t)
