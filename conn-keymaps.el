@@ -26,6 +26,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "p" conn-thing-inner-remap
   "@" 'append-next-kill
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
@@ -244,7 +245,7 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "." conn-thing-inner-remap
+  "p" conn-thing-inner-remap
   "," conn-thing-inner-remap
   "w" 'forward-whitespace
   "W" 'conn-backward-whitespace
