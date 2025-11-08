@@ -22,7 +22,7 @@
 (defvar conn-mode nil)
 (defvar conn-local-mode nil)
 (defvar conn-lighter " Conn")
-(defvar conn--last-perform-bounds nil)
+(defvar conn--last-bounds nil)
 (defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
 
 (defvar-keymap conn-goto-map)

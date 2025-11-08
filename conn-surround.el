@@ -116,8 +116,8 @@
      (delete-region cbeg cend)
      (delete-region obeg oend))))
 
-(cl-defmethod conn-perform-kill ((_cmd (eql conn-surround))
-                                 arg _transform &optional _append _delete _register)
+(cl-defmethod conn-kill-thing-do ((_cmd (eql conn-surround))
+                                  arg _transform &optional _append _delete _register)
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"
                    :prefix arg)
@@ -218,25 +218,25 @@
 
 ;;;;;; Perform Surround
 
-(cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
+(cl-defgeneric conn-surround-do (with arg &key &allow-other-keys))
 
-(cl-defmethod conn-perform-surround :around (_with _arg &key regions &allow-other-keys)
+(cl-defmethod conn-surround-do :around (_with _arg &key regions &allow-other-keys)
   (dolist (ov regions)
     (goto-char (overlay-start ov))
     (conn--push-ephemeral-mark (overlay-end ov) nil t)
     (cl-call-next-method)))
 
-(cl-defmethod conn-perform-surround :before (_with _arg &key &allow-other-keys)
+(cl-defmethod conn-surround-do :before (_with _arg &key &allow-other-keys)
   ;; Normalize point and mark
   (unless (= (point) (region-beginning))
     (exchange-point-and-mark)))
 
-(cl-defmethod conn-perform-surround ((_with (eql surround-comment)) arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_with (eql surround-comment)) arg
+                                &key &allow-other-keys)
   (comment-or-uncomment-region (region-beginning) (region-end) arg))
 
-(cl-defmethod conn-perform-surround ((_with (eql surround-uncomment)) arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_with (eql surround-uncomment)) arg
+                                &key &allow-other-keys)
   (uncomment-region (region-beginning) (region-end) arg))
 
 (defun conn--perform-surround-with-pair-subr (pair padding arg)
@@ -255,8 +255,8 @@
          (ins-pair open close))))
     (when padding (ins-pair padding))))
 
-(cl-defmethod conn-perform-surround ((with conn-self-insert-event) arg
-                                     &key padding &allow-other-keys)
+(cl-defmethod conn-surround-do ((with conn-self-insert-event) arg
+                                &key padding &allow-other-keys)
   (conn--perform-surround-with-pair-subr
    (assoc (conn-self-insert-event-id with) insert-pair-alist)
    padding arg))
@@ -309,7 +309,7 @@
                                  :overriding-map (plist-get prep-keys :keymap))
                     ((`(,with ,with-arg) (conn-surround-with-argument))
                      (padding (conn-surround-padding-argument)))
-                  (apply #'conn-perform-surround
+                  (apply #'conn-surround-do
                          `( ,with ,with-arg
                             :regions ,regions
                             ,@prep-keys
@@ -337,7 +337,7 @@
       (goto-char (overlay-start (car regions))))
     (unwind-protect
         (progn
-          (apply #'conn-perform-surround
+          (apply #'conn-surround-do
                  `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
           (setq success t))
       (mapc #'delete-overlay regions)
@@ -422,8 +422,8 @@
                                ((pred stringp) open)
                                (_ (string open)))))))
 
-(cl-defmethod conn-perform-surround ((with conn-surround-pair) arg
-                                     &key padding &allow-other-keys)
+(cl-defmethod conn-surround-do ((with conn-surround-pair) arg
+                                &key padding &allow-other-keys)
   (conn--perform-surround-with-pair-subr
    (let ((open (conn-surround-pair-id with)))
      (or (assoc open insert-pair-alist)
@@ -476,9 +476,9 @@
        (delete-region cbeg cend)
        (delete-region obeg oend)))))
 
-(cl-defmethod conn-perform-change ((_cmd (eql conn-surround))
-                                   _arg _transform
-                                   &optional _kill)
+(cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
+                                    _arg _transform
+                                    &optional _kill)
   (atomic-change-group
     (save-mark-and-excursion
       (conn-read-args (conn-change-surround-state
@@ -494,7 +494,7 @@
                                :overriding-map (plist-get prep-keys :keymap))
                   ((`(,with ,with-arg) (conn-surround-with-argument))
                    (padding (conn-surround-padding-argument)))
-                (apply #'conn-perform-surround
+                (apply #'conn-surround-do
                        `(,with ,with-arg
                                :regions ,(list ov)
                                ,@prep-keys
@@ -520,7 +520,7 @@
                    (success nil))
         (unwind-protect
             (progn
-              (apply #'conn-perform-surround
+              (apply #'conn-surround-do
                      `(,with ,with-arg :regions ,(list ov) ,@prep-keys ,@with-keys))
               (setq success t))
           (delete-overlay ov)

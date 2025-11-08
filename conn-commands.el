@@ -953,7 +953,7 @@ With a prefix ARG `push-mark' without activating it."
                                      thing
                                      thing-arg
                                      &key &allow-other-keys)
-  (conn-perform-dispatch-loop nil
+  (conn-dispatch-loop nil
     (pcase-let* ((`(,pt ,win ,thing-override)
                   (save-mark-and-excursion
                     (conn-select-target))))
@@ -961,13 +961,13 @@ With a prefix ARG `push-mark' without activating it."
                (or thing-override thing)
                thing-arg))))
 
-(cl-defgeneric conn-perform-transpose (cmd arg)
+(cl-defgeneric conn-transpose-things-do (cmd arg)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
-(cl-defmethod conn-perform-transpose :before (_cmd _arg)
+(cl-defmethod conn-transpose-things-do :before (_cmd _arg)
   (conn-make-command-repeatable))
 
-(cl-defmethod conn-perform-transpose (cmd arg)
+(cl-defmethod conn-transpose-things-do (cmd arg)
   (pcase cmd
     ((guard (use-region-p))
      (deactivate-mark t)
@@ -997,7 +997,7 @@ With a prefix ARG `push-mark' without activating it."
                      (prefix-numeric-value arg)))
     (_ (error "Invalid transpose mover"))))
 
-(cl-defmethod conn-perform-transpose ((cmd (conn-thing isearch)) arg)
+(cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch)) arg)
   (pcase-let* ((bounds (conn-bounds-of cmd arg))
                ((conn-bounds `(,beg1 . ,end1))
                 bounds)
@@ -1006,7 +1006,7 @@ With a prefix ARG `push-mark' without activating it."
                                 (conn-bounds-arg bounds))))
     (transpose-regions beg1 end1 beg2 end2)))
 
-(cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit-thing)) _arg)
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing recursive-edit-thing)) _arg)
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer)))
@@ -1029,7 +1029,7 @@ With a prefix ARG `push-mark' without activating it."
                       (conn-make-bounds 'region nil bounds2))))
      nil)))
 
-(cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch)) arg)
   (conn-disable-repeating)
   (conn-read-args (conn-dispatch-transpose-state
                    :prompt "Transpose Dispatch"
@@ -1066,16 +1066,17 @@ With a prefix ARG `push-mark' without activating it."
      :restrict-windows restrict-windows)))
 
 (defvar conn-transpose-reference
-  (list (conn-reference-page "Transpose"
-          "Transpose reads a THING command and transposes two of those THINGs. If
+  (list
+   (conn-reference-page "Transpose"
+     "Transpose reads a THING command and transposes two of those THINGs. If
 THING is `recursive-edit' then the current region and a region defined
 within a recursive edit will be transposed.
 
 Transpose defines some addition thing bindings:
 "
-          ((("line" conn-backward-line forward-line))
-           (("symbol" forward-symbol))
-           (("recursive-edit" recursive-edit))))))
+     ((("line" conn-backward-line forward-line))
+      (("symbol" forward-symbol))
+      (("recursive-edit" recursive-edit))))))
 
 (defun conn-transpose-things (mover arg)
   "Exchange regions defined by a thing command.
@@ -1093,7 +1094,7 @@ region after a `recursive-edit'."
      (list thing thing-arg)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
-  (conn-perform-transpose mover arg))
+  (conn-transpose-things-do mover arg))
 
 ;;;;; Line Commands
 
@@ -1671,7 +1672,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (eq last-command 'conn-kill-thing))
     (setq append 'append))
   (cl-callf and fixup-whitespace (null transform))
-  (conn-perform-kill cmd arg transform append delete register fixup-whitespace check-bounds)
+  (conn-kill-thing-do cmd arg transform append delete register fixup-whitespace check-bounds)
   (setq this-command 'conn-kill-thing))
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
@@ -1782,16 +1783,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (kill-append string (eq append 'prepend)))
       (kill-new string))))
 
-(cl-defgeneric conn-perform-kill ( cmd arg transform
-                                   &optional
-                                   append
-                                   delete
-                                   register
-                                   fixup-whitespace
-                                   check-bounds)
+(cl-defgeneric conn-kill-thing-do ( cmd arg transform
+                                    &optional
+                                    append
+                                    delete
+                                    register
+                                    fixup-whitespace
+                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing expansion)) &rest _)
+(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
 (oclosure-define (conn-separator-argument
@@ -1858,14 +1859,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (oclosure-define (conn-kill-action
                   (:parent conn-action)))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing dispatch))
-                                 arg transform
-                                 &optional
-                                 append
-                                 delete
-                                 register
-                                 fixup-whitespace
-                                 check-bounds)
+(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing dispatch))
+                                  arg transform
+                                  &optional
+                                  append
+                                  delete
+                                  register
+                                  fixup-whitespace
+                                  check-bounds)
   (let ((conn-dispatch-amalgamate-undo t))
     (conn-read-args (conn-dispatch-bounds-state
                      :prefix arg
@@ -1951,13 +1952,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                         (concat string (and result sep) result))))
               (conn--kill-string result append register sep))))))))
 
-(cl-defmethod conn-perform-kill ( cmd arg transform
-                                  &optional
-                                  append
-                                  delete
-                                  register
-                                  fixup-whitespace
-                                  check-bounds)
+(cl-defmethod conn-kill-thing-do ( cmd arg transform
+                                   &optional
+                                   append
+                                   delete
+                                   register
+                                   fixup-whitespace
+                                   check-bounds)
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds `(,beg . ,end) `(,@transform
                                         ,@(when check-bounds
@@ -1972,29 +1973,29 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (when fixup-whitespace
        (funcall conn-kill-fixup-whitespace-function bounds)))))
 
-(cl-defmethod conn-perform-kill ((_cmd (conn-thing line)) &rest _)
+(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line)) &rest _)
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
 
-(cl-defmethod conn-perform-kill ((cmd (conn-thing char))
-                                 arg transform
-                                 &optional
-                                 append
-                                 _delete
-                                 register
-                                 fixup-whitespace
-                                 _check-bounds)
+(cl-defmethod conn-kill-thing-do ((cmd (conn-thing char))
+                                  arg transform
+                                  &optional
+                                  append
+                                  _delete
+                                  register
+                                  fixup-whitespace
+                                  _check-bounds)
   (cl-call-next-method cmd arg transform append t register fixup-whitespace))
 
-(cl-defmethod conn-perform-kill :extra "rmm" ( (_cmd (conn-thing region))
-                                               _arg _transform
-                                               &optional
-                                               _append
-                                               delete
-                                               register
-                                               _fixup-whitespace
-                                               _check-bounds)
+(cl-defmethod conn-kill-thing-do :extra "rmm" ( (_cmd (conn-thing region))
+                                                _arg _transform
+                                                &optional
+                                                _append
+                                                delete
+                                                register
+                                                _fixup-whitespace
+                                                _check-bounds)
   (if (bound-and-true-p rectangle-mark-mode)
       (let ((beg (region-beginning))
             (end (region-end)))
@@ -2089,12 +2090,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           :register (when current-prefix-arg
                       (register-read-with-preview "Register:")))))
      (list thing thing-arg transform append register)))
-  (conn-perform-copy thing arg transform append register))
+  (conn-copy-thing-do thing arg transform append register))
 
-(cl-defgeneric conn-perform-copy (cmd arg &optional transform append register)
+(cl-defgeneric conn-copy-thing-do (cmd arg &optional transform append register)
   (declare (conn-anonymous-thing-property :copy-op)))
 
-(cl-defmethod conn-perform-copy (cmd arg &optional transform append register)
+(cl-defmethod conn-copy-thing-do (cmd arg &optional transform append register)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
      (save-mark-and-excursion
@@ -2104,11 +2105,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
 
-(cl-defmethod conn-perform-copy ((_cmd (conn-thing expansion)) &rest _)
+(cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
-(cl-defmethod conn-perform-copy ((_cmd (conn-thing dispatch)) arg
-                                 &optional transform append register)
+(cl-defmethod conn-copy-thing-do ((_cmd (conn-thing dispatch)) arg
+                                  &optional transform append register)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
                    :prompt "Copy"
@@ -2187,10 +2188,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (conn-define-state conn-comment-state (conn-read-thing-state)
   :lighter "COMMENT")
 
-(cl-defgeneric conn-perform-comment (thing thing-arg transform)
+(cl-defgeneric conn-comment-thing-do (thing thing-arg transform)
   (declare (conn-anonymous-thing-property :comment-op)))
 
-(cl-defmethod conn-perform-comment (thing thing-arg transform)
+(cl-defmethod conn-comment-thing-do (thing thing-arg transform)
   (pcase (conn-bounds-of thing thing-arg)
     ((conn-bounds `(,beg . ,end) transform)
      (comment-or-uncomment-region beg end))))
@@ -2202,7 +2203,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
-  (conn-perform-comment thing thing-arg transform))
+  (conn-comment-thing-do thing thing-arg transform))
 
 ;;;;; Duplicate Thing
 
@@ -2213,10 +2214,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   :keymap (conn-get-state-map 'conn-duplicate-state)
   "c" 'copy-from-above-command)
 
-(cl-defgeneric conn-perform-duplicate (cmd arg transform &optional comment)
+(cl-defgeneric conn-duplicate-thing-do (cmd arg transform &optional comment)
   (declare (conn-anonymous-thing-property :duplicate-op)))
 
-(cl-defmethod conn-perform-duplicate (cmd arg transform &optional comment)
+(cl-defmethod conn-duplicate-thing-do (cmd arg transform &optional comment)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
      (save-mark-and-excursion
@@ -2232,8 +2233,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (when comment
        (comment-region beg end)))))
 
-(cl-defmethod conn-perform-duplicate ((_cmd (eql copy-from-above-command))
-                                      arg _transform _comment)
+(cl-defmethod conn-duplicate-thing-do ((_cmd (eql copy-from-above-command))
+                                       arg _transform _comment)
   (copy-from-above-command arg))
 
 (oclosure-define (conn-duplicate-comment-argument
@@ -2263,7 +2264,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                'face (when (conn-read-args-argument-value arg)
                        'eldoc-highlight-function-argument))))
 
-(defun conn-duplicate (thing-mover thing-arg transform &optional comment)
+(defun conn-duplicate-thing (thing-mover thing-arg transform &optional comment)
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
@@ -2275,7 +2276,7 @@ With prefix arg N duplicate region N times."
         (comment (conn-duplicate-comment-argument)))
      (list thing thing-arg transform comment)))
   (conn-make-command-repeatable)
-  (conn-perform-duplicate thing-mover thing-arg transform comment))
+  (conn-duplicate-thing-do thing-mover thing-arg transform comment))
 
 ;;;;; Recenter
 
@@ -2376,7 +2377,7 @@ Interactively `region-beginning' and `region-end'."
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
 
-(cl-defgeneric conn-perform-change (cmd arg transform)
+(cl-defgeneric conn-change-thing-do (cmd arg transform)
   (declare (conn-anonymous-thing-property :change-op)))
 
 (define-keymap
@@ -2397,7 +2398,7 @@ Interactively `region-beginning' and `region-end'."
         :change-op ( :method (&rest _)
                      (conn-emacs-state-overwrite-binary))))
 
-(cl-defmethod conn-perform-change (cmd arg transform)
+(cl-defmethod conn-change-thing-do (cmd arg transform)
   (pcase-let (((conn-bounds `(,beg . ,end) transform)
                (conn-bounds-of cmd arg)))
     (goto-char beg)
@@ -2406,8 +2407,8 @@ Interactively `region-beginning' and `region-end'."
         (conn-pop-state)
       (conn-push-state 'conn-emacs-state))))
 
-(cl-defmethod conn-perform-change :extra "rectangle" ((_cmd (conn-thing region))
-                                                      _arg _transform)
+(cl-defmethod conn-change-thing-do :extra "rectangle" ((_cmd (conn-thing region))
+                                                       _arg _transform)
   (if (bound-and-true-p rectangle-mark-mode)
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
@@ -2420,7 +2421,7 @@ Interactively `region-beginning' and `region-end'."
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument 'conn-bounds-last)))
      (list thing thing-arg transform)))
-  (conn-perform-change cmd arg transform))
+  (conn-change-thing-do cmd arg transform))
 
 ;;;;; Transition Functions
 

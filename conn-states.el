@@ -1225,7 +1225,7 @@ the state stays active if the previous command was a prefix command."
   "v" 'rectangle-mark-mode
   "V" 'undefined
   "g" 'conn-surround
-  "RET" 'conn-duplicate
+  "RET" 'conn-duplicate-thing
   "SPC" 'conn-push-mark-command)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))

@@ -1569,7 +1569,7 @@ Target overlays may override this default by setting the
       (conn-target-finder-prompt-p conn-dispatch-target-finder)))
 
 (defun conn-select-target (&rest _args)
-  (error "conn-select-target only allowed inside conn-perform-dispatch-loop"))
+  (error "conn-select-target only allowed inside conn-dispatch-loop"))
 
 (defvar conn--previous-labels-cleanup nil)
 
@@ -1664,7 +1664,7 @@ Target overlays may override this default by setting the
               finally return (format "Label [%s]" count))
      (conn-dispatch-prompt-p))))
 
-;;;;; Perform Dispatch Loop
+;;;;; Dispatch Loop
 
 (defvar conn-dispatch-in-progress nil)
 (defvar conn--dispatch-undo-change-groups nil)
@@ -1697,7 +1697,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle t))
 
-(defmacro conn-perform-dispatch-loop (repeat &rest body)
+(defmacro conn-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   (cl-with-gensyms (display-always success)
     `(let* ((,display-always nil)
@@ -1979,7 +1979,7 @@ Target overlays may override this default by setting the
   (setq conn-target-count nil))
 
 (cl-defgeneric conn-target-finder-other-end (target-finder)
-  "Default value for :other-end parameter in `conn-perform-dispatch'."
+  "Default value for :other-end parameter in `conn-dispatch-do'."
   (declare (conn-anonymous-thing-property :has-other-end)
            (important-return-value t))
   (:method (_) nil))
@@ -3867,7 +3867,7 @@ contain targets."
                           restrict-windows
                           setup)
                dispatch))
-    (apply #'conn-perform-dispatch
+    (apply #'conn-dispatch-do
            `( ,action ,thing ,thing-arg ,thing-transform
               ,@override-keys
               :always-retarget ,always-retarget
@@ -3879,35 +3879,35 @@ contain targets."
 
 ;;;;; Dispatch Commands
 
-(cl-defgeneric conn-perform-dispatch (action
-                                      thing
-                                      thing-arg
-                                      thing-transform
-                                      &key
-                                      repeat
-                                      restrict-windows
-                                      other-end
-                                      &allow-other-keys))
+(cl-defgeneric conn-dispatch-do (action
+                                 thing
+                                 thing-arg
+                                 thing-transform
+                                 &key
+                                 repeat
+                                 restrict-windows
+                                 other-end
+                                 &allow-other-keys))
 
-(cl-defmethod conn-perform-dispatch ((_action (eql nil))
-                                     thing thing-arg thing-transform
-                                     &rest keys
-                                     &key &allow-other-keys)
-  (apply #'conn-perform-dispatch
+(cl-defmethod conn-dispatch-do ((_action (eql nil))
+                                thing thing-arg thing-transform
+                                &rest keys
+                                &key &allow-other-keys)
+  (apply #'conn-dispatch-do
          (conn-make-default-action thing)
          thing thing-arg thing-transform keys))
 
-(cl-defmethod conn-perform-dispatch :around ((action conn-action)
-                                             thing
-                                             thing-arg
-                                             thing-transform
-                                             &rest keys
-                                             &key
-                                             restrict-windows
-                                             other-end
-                                             always-retarget
-                                             setup
-                                             &allow-other-keys)
+(cl-defmethod conn-dispatch-do :around ((action conn-action)
+                                        thing
+                                        thing-arg
+                                        thing-transform
+                                        &rest keys
+                                        &key
+                                        restrict-windows
+                                        other-end
+                                        always-retarget
+                                        setup
+                                        &allow-other-keys)
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
@@ -4016,28 +4016,28 @@ contain targets."
         (let ((inhibit-message conn-read-args-inhibit-message))
           (message nil))))))
 
-(cl-defmethod conn-perform-dispatch ((action conn-action)
-                                     thing
-                                     thing-arg
-                                     thing-transform
-                                     &key
-                                     repeat
-                                     &allow-other-keys)
-  (conn-perform-dispatch-loop repeat
+(cl-defmethod conn-dispatch-do ((action conn-action)
+                                thing
+                                thing-arg
+                                thing-transform
+                                &key
+                                repeat
+                                &allow-other-keys)
+  (conn-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,thing-override)
                   (conn-select-target)))
       (funcall action win pt
                (or thing-override thing)
                thing-arg thing-transform))))
 
-(cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
-                                     thing
-                                     thing-arg
-                                     thing-transform
-                                     &key
-                                     repeat
-                                     &allow-other-keys)
-  (conn-perform-dispatch-loop repeat
+(cl-defmethod conn-dispatch-do ((action conn-dispatch-transpose)
+                                thing
+                                thing-arg
+                                thing-transform
+                                &key
+                                repeat
+                                &allow-other-keys)
+  (conn-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,thing-override1)
                  (conn-select-target))
                 (`(,pt2 ,win2 ,thing-override2)
@@ -4047,11 +4047,11 @@ contain targets."
                win2 pt2 (or thing-override2 thing)
                thing-arg thing-transform))))
 
-(cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
-                                     thing thing-arg thing-transform
-                                     &key repeat &allow-other-keys)
+(cl-defmethod conn-dispatch-do ((action conn-dispatch-kapply)
+                                thing thing-arg thing-transform
+                                &key repeat &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
-    (conn-perform-dispatch-loop repeat
+    (conn-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,thing-override)
                     (conn-select-target)))
         (while
@@ -4082,7 +4082,7 @@ contain targets."
        (other-end (conn-dispatch-other-end-argument nil))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-perform-dispatch
+    (conn-dispatch-do
      action thing thing-arg transform
      :repeat repeat
      :other-end other-end
@@ -4112,7 +4112,7 @@ contain targets."
          (other-end (conn-dispatch-other-end-argument nil))
          (restrict-windows (conn-dispatch-restrict-windows-argument))
          (`(,action ,repeat) (conn-dispatch-action-argument)))
-      (conn-perform-dispatch
+      (conn-dispatch-do
        action thing thing-arg transform
        :repeat repeat
        :other-end other-end
@@ -4174,7 +4174,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
   (interactive)
-  (conn-perform-dispatch
+  (conn-dispatch-do
    (conn-make-action 'conn-dispatch-push-button)
    (conn-anonymous-thing
      'button
@@ -4197,7 +4197,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                      (conn--isearch-matches))))
       (unwind-protect ;In case this was a recursive isearch
           (isearch-exit)
-        (conn-perform-dispatch
+        (conn-dispatch-do
          (conn-make-action 'conn-dispatch-goto)
          (conn-anonymous-thing
            'region
@@ -4214,7 +4214,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
   (interactive)
-  (conn-perform-dispatch
+  (conn-dispatch-do
    (conn-make-action 'conn-dispatch-jump)
    nil nil nil
    :other-end :no-other-end))
@@ -4236,7 +4236,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
     (let (ovs subregions)
       (unwind-protect
           (progn
-            (conn-perform-dispatch
+            (conn-dispatch-do
              (oclosure-lambda (conn-action
                                (no-history t)
                                (description "Bounds")
@@ -4282,7 +4282,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (pcase bounds
     ((conn-dispatch-bounds `(,beg . ,end))
      (let (obeg oend)
-       (conn-perform-dispatch
+       (conn-dispatch-do
         (oclosure-lambda (conn-action
                           (no-history t)
                           (description "Bounds")

@@ -192,7 +192,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-post-command-hook ()
   (unless conn--disable-mark-cursor
-    (cl-callf2 assq-delete-all (recursion-depth) conn--last-perform-bounds)
+    (cl-callf2 assq-delete-all (recursion-depth) conn--last-bounds)
     (unless conn-this-command-thing
       (setq conn-this-command-thing (or (conn-command-thing this-command)
                                         (conn-command-thing real-this-command))))

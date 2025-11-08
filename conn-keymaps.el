@@ -35,7 +35,7 @@
   "v" 'rectangle-mark-mode
   "V" 'undefined
   "g" 'conn-surround
-  "RET" 'conn-duplicate
+  "RET" 'conn-duplicate-thing
   "SPC" 'conn-push-mark-command)
 
 (define-keymap
@@ -130,7 +130,7 @@
   "L" 'clone-indirect-buffer
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
-  "d" 'conn-duplicate
+  "d" 'conn-duplicate-thing
   "y" 'yank-in-context
   "s" 'conn-sort-prefix
   "r" 'yank-rectangle
@@ -343,7 +343,7 @@
   "C-5" (conn-remap-key "C-x 5" t)
   "G" 'conn-surround
   "<escape>" 'conn-pop-state
-  "D" 'conn-duplicate
+  "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
   "SPC" conn-edit-remap

@@ -737,7 +737,7 @@ words."))
 (cl-defmethod conn-bounds-of :around (&rest _)
   (if conn--bounds-of-in-progress
       (cl-call-next-method)
-    (setf (alist-get (recursion-depth) conn--last-perform-bounds)
+    (setf (alist-get (recursion-depth) conn--last-bounds)
           (let ((conn--bounds-of-in-progress t))
             (save-mark-and-excursion
               (cl-call-next-method))))))
@@ -757,7 +757,7 @@ words."))
           (let (and conn-this-command-handler
                     (pred identity))
             (conn-command-mark-handler thing)))
-     (let (conn--last-perform-bounds)
+     (let (conn--last-bounds)
        (deactivate-mark t)
        (pcase (prefix-numeric-value arg)
          (0 nil)
@@ -810,7 +810,7 @@ words."))
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of)) _arg)
-  (alist-get (recursion-depth) conn--last-perform-bounds))
+  (alist-get (recursion-depth) conn--last-bounds))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
                               _arg)
