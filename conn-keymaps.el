@@ -521,6 +521,7 @@
                               (apply goto args)
                               (conn-push-state 'conn-emacs-state))))
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
+  "j" 'point
   "g y" (conn-anonymous-thing
           'point
           :pretty-print ( :method (_) "global-mark-ring")

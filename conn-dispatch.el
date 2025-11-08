@@ -1459,13 +1459,13 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-read-event-prefix (keymap)
   (declare (important-return-value t))
-  (when-let* ((prefix
-               (flatten-tree
-                (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-                         for str = (pcase pfx
-                                     ((pred functionp) (funcall pfx keymap))
-                                     ((pred stringp) pfx))
-                         if str collect str))))
+  (and-let* ((prefix
+              (flatten-tree
+               (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+                        for str = (pcase pfx
+                                    ((pred functionp) (funcall pfx keymap))
+                                    ((pred stringp) pfx))
+                        if str collect str))))
     (concat " (" (string-join prefix "; ") ")")))
 
 (defun conn-dispatch-read-event (&optional prompt

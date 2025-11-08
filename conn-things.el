@@ -1033,7 +1033,7 @@ words."))
       ((`(,thing ,thing-arg) (conn-thing-argument)))
     (let* ((name (symbol-name cmd))
            (start (point))
-           (exclusive nil)
+           (max nil)
            (bounds nil)
            (quit (make-symbol "quit")))
       (fset quit (lambda ()
@@ -1052,7 +1052,7 @@ words."))
       (pcase bounds
         ((conn-bounds `(,beg . ,end))
          (cond ((<= beg start end)
-                (unless exclusive bounds))
+                (unless max bounds))
                ((< start beg)
                 (conn-make-bounds
                  'isearch nil
