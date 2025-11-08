@@ -1075,9 +1075,6 @@ Transpose defines some addition thing bindings:
 "
           ((("line" conn-backward-line forward-line))
            (("symbol" forward-symbol))
-           (("defun" (:eval (conn-quick-ref-find-remap
-                             conn-end-of-defun-remap
-                             (conn-get-state-map 'conn-transpose-state)))))
            (("recursive-edit" recursive-edit))))))
 
 (defun conn-transpose-things (mover arg)
