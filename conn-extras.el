@@ -216,11 +216,10 @@
   (conn-read-args (conn-dired-dispatch-state
                    :prefix initial-arg
                    :prompt "Dired Dispatch")
-      ((action (conn-dispatch-action-argument))
-       (`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument))
-       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+       (restrict-windows (conn-dispatch-restrict-windows-argument))
+       (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
@@ -573,11 +572,10 @@
   (conn-read-args (conn-ibuffer-dispatch-state
                    :prefix initial-arg
                    :prompt "Ibuffer Dispatch")
-      ((action (conn-dispatch-action-argument))
-       (`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument))
-       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+       (restrict-windows (conn-dispatch-restrict-windows-argument))
+       (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
@@ -763,10 +761,9 @@
   (conn-read-args (conn-bmenu-dispatch-state
                    :prefix initial-arg
                    :prompt "Bookmark Dispatch")
-      ((action (conn-dispatch-action-argument))
-       (`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (repeat (conn-dispatch-repeat-argument)))
+       (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat

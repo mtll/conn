@@ -489,27 +489,11 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "=" 'conn-dispatch-repeat-command
-  "'" 'conn-dispatch-kapply
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "t" 'conn-dispatch-copy-to
-  "T" 'conn-dispatch-copy-to-replace
-  "C-y" 'conn-dispatch-yank-to-replace
-  "M-y" 'conn-dispatch-reading-yank-to-replace
-  "y" 'conn-dispatch-yank-to
-  "Y" 'conn-dispatch-reading-yank-to
-  "f" 'conn-dispatch-copy-from
-  "F" 'conn-dispatch-copy-from-replace
-  "s" 'conn-dispatch-send
-  "S" 'conn-dispatch-send-replace
-  "d" 'conn-dispatch-take
-  "D" 'conn-dispatch-take-replace
-  "q" 'conn-dispatch-transpose
-  "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-load-replace
   "e" (conn-anonymous-thing
         'point
         :pretty-print ( :method (_) "prev-emacs-state")

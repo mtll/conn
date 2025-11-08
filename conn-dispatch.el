@@ -658,36 +658,69 @@ themselves once the selection process has concluded."
 
 ;;;;;; Action
 
+(defvar conn-dispatch-autorepeat-actions (list 'conn-dispatch-kapply))
+
 (oclosure-define (conn-dispatch-action-argument
-                  (:parent conn-read-args-argument)))
+                  (:parent conn-read-args-argument)
+                  (:copier conn-set-action-argument (repeat value)))
+  (repeat :type boolean))
+
+(defvar-keymap conn-dispatch-action-map
+  "TAB" 'repeat-dispatch
+  "'" 'conn-dispatch-kapply
+  "t" 'conn-dispatch-copy-to
+  "T" 'conn-dispatch-copy-to-replace
+  "C-y" 'conn-dispatch-yank-to-replace
+  "M-y" 'conn-dispatch-reading-yank-to-replace
+  "y" 'conn-dispatch-yank-to
+  "Y" 'conn-dispatch-reading-yank-to
+  "f" 'conn-dispatch-copy-from
+  "F" 'conn-dispatch-copy-from-replace
+  "s" 'conn-dispatch-send
+  "S" 'conn-dispatch-send-replace
+  "d" 'conn-dispatch-take
+  "D" 'conn-dispatch-take-replace
+  "q" 'conn-dispatch-transpose
+  "." 'conn-dispatch-register-load
+  ">" 'conn-dispatch-register-load-replace)
 
 (defun conn-dispatch-action-argument ()
   (declare (important-return-value t))
   (setq conn--dispatch-thing-predicate #'always)
-  (oclosure-lambda (conn-dispatch-action-argument)
-      (self type)
-    (if (not (conn-argument-predicate self type))
-        self
-      (conn-cancel-action value)
-      (condition-case err
-          (if-let* ((_(not (cl-typep value type)))
-                    (action (conn-make-action type)))
-              (progn
-                (setq conn--dispatch-thing-predicate
-                      (or (conn-action--thing-predicate action)
-                          #'always))
-                (conn-set-argument self action))
-            (conn-set-argument self nil))
-        (error
-         (conn-read-args-error (error-message-string err))
-         self)))))
+  (oclosure-lambda (conn-dispatch-action-argument
+                    (keymap conn-dispatch-action-map))
+      (self cmd)
+    (pcase cmd
+      ('repeat-dispatch
+       (conn-set-action-argument self (not repeat) value))
+      ((guard (conn-argument-predicate self cmd))
+       (conn-cancel-action value)
+       (condition-case err
+           (if-let* ((_(not (cl-typep value cmd)))
+                     (action (conn-make-action cmd)))
+               (progn
+                 (setq conn--dispatch-thing-predicate
+                       (or (conn-action--thing-predicate action)
+                           #'always))
+                 (conn-set-action-argument
+                  self
+                  (or (memq cmd conn-dispatch-autorepeat-actions)
+                      repeat)
+                  action))
+             (conn-set-action-argument self repeat nil))
+         (error
+          (conn-read-args-error (error-message-string err))
+          (conn-set-action-argument self repeat nil))))
+      (_ self))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-read-args-argument-value arg)))
 
-(cl-defmethod conn-argument-value :before ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-value ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
-    (conn-accept-action action)))
+    (conn-accept-action action))
+  (list (conn-read-args-argument-value arg)
+        (conn-dispatch-action-argument--repeat arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-dispatch-action-argument)
                                        sym)
@@ -699,9 +732,15 @@ themselves once the selection process has concluded."
     " (action)"))
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-read-args-argument-value arg)))
-    (propertize (conn-action-pretty-print action)
-                'face 'eldoc-highlight-function-argument)))
+  (list
+   (concat "\\[repeat-dispatch] "
+           (propertize
+            "repeat"
+            'face (when (conn-dispatch-action-argument--repeat arg)
+                    'eldoc-highlight-function-argument)))
+   (when-let* ((action (conn-read-args-argument-value arg)))
+     (propertize (conn-action-pretty-print action)
+                 'face 'eldoc-highlight-function-argument))))
 
 ;;;;;; Other End
 
@@ -4038,12 +4077,11 @@ contain targets."
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
                             (posframe-hide " *conn-list-posframe*"))))
-      ((action (conn-dispatch-action-argument))
-       (`(,thing ,thing-arg) (conn-dispatch-target-argument))
+      ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
-       (repeat (conn-dispatch-repeat-argument))
        (other-end (conn-dispatch-other-end-argument nil))
-       (restrict-windows (conn-dispatch-restrict-windows-argument)))
+       (restrict-windows (conn-dispatch-restrict-windows-argument))
+       (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
@@ -4069,12 +4107,11 @@ contain targets."
                             (when (and (bound-and-true-p conn-posframe-mode)
                                        (fboundp 'posframe-hide))
                               (posframe-hide " *conn-list-posframe*"))))
-        ((action (conn-dispatch-action-argument))
-         (`(,thing ,thing-arg) (conn-dispatch-target-argument))
+        ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument))
-         (repeat (conn-dispatch-repeat-argument))
          (other-end (conn-dispatch-other-end-argument nil))
-         (restrict-windows (conn-dispatch-restrict-windows-argument)))
+         (restrict-windows (conn-dispatch-restrict-windows-argument))
+         (`(,action ,repeat) (conn-dispatch-action-argument)))
       (conn-perform-dispatch
        action thing thing-arg transform
        :repeat repeat
