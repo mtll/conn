@@ -1331,7 +1331,7 @@ Resets the current prefix argument."
 This function should be called from any function passed as the
 :command-handler argument to `conn-read-args' when the function
 chooses to handle a command."
-  (setf conn--read-args-error-message ""))
+  (throw 'conn-read-args-handle t))
 
 (defun conn-read-args-message (format-string &rest args)
   (let ((inhibit-message conn-read-args-inhibit-message)
@@ -1477,18 +1477,20 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (when command-handler
-             (funcall command-handler cmd))
-           (named-let update ((as arguments)
-                              (u (conn-argument-update (car arguments) cmd)))
-             (cond (conn--read-args-error-flag)
-                   ((not (eq u (car as)))
-                    (setf (car as) u))
-                   ((null (cdr as))
-                    (setf conn--read-args-error-message
-                          (format "Invalid Command <%s>" cmd)))
-                   (t (update (cdr as)
-                              (conn-argument-update (cadr as) cmd))))))
+           (unless (catch 'conn-read-args-handle
+                     (when command-handler
+                       (funcall command-handler cmd)
+                       nil))
+             (named-let update ((as arguments)
+                                (u (conn-argument-update (car arguments) cmd)))
+               (cond (conn--read-args-error-flag)
+                     ((not (eq u (car as)))
+                      (setf (car as) u))
+                     ((null (cdr as))
+                      (setf conn--read-args-error-message
+                            (format "Invalid Command <%s>" cmd)))
+                     (t (update (cdr as)
+                                (conn-argument-update (cadr as) cmd)))))))
          (read-command ()
            (let ((cmd (key-binding (read-key-sequence nil) t)))
              (while (arrayp cmd) ; keyboard macro
