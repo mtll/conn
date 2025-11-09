@@ -1477,10 +1477,9 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (unless (catch 'conn-read-args-handle
-                     (when command-handler
-                       (funcall command-handler cmd)
-                       nil))
+           (catch 'conn-read-args-handle
+             (when command-handler
+               (funcall command-handler cmd))
              (named-let update ((as arguments)
                                 (u (conn-argument-update (car arguments) cmd)))
                (cond (conn--read-args-error-flag)

@@ -214,20 +214,20 @@ Expansions and contractions are provided by functions in
           (pcase command
             ('conn-expand-exchange
              (conn-expand-exchange)
-             (conn-argument-handle self))
+             (conn-read-args-handle))
             ('conn-contract
              (ignore-error user-error
                (conn-contract (conn-read-args-consume-prefix-arg)))
-             (conn-argument-handle self))
+             (conn-read-args-handle))
             ('conn-expand
              (ignore-error user-error
                (conn-expand (conn-read-args-consume-prefix-arg)))
-             (conn-argument-handle self))
+             (conn-read-args-handle))
             ('conn-toggle-mark-command
              (if mark-active
                  (deactivate-mark)
                (activate-mark))
-             (conn-argument-handle self))
+             (conn-read-args-handle))
             ((or 'end 'exit-recursive-edit)
              (conn-set-argument self (cons (region-beginning)
                                            (region-end))))
