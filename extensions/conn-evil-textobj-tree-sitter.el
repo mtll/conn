@@ -981,7 +981,7 @@
         :target-finder ( :method (_self _arg)
                          (conn-ts-node-targets
                           :things conn-ts-parent-things
-                          :region-predicate (lambda (_group beg end)
+                          :region-predicate (lambda (beg end)
                                               (and (<= beg (point))
                                                    (<= (point) end)))))))
 
