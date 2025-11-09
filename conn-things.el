@@ -1271,7 +1271,7 @@ Only the background color is used."
                         ('select
                          (conn-set-argument self (nth curr bounds)))
                         ('abort
-                         (conn-set-argument self nil))
+                         (user-error "Aborted"))
                         (_ self)))))
                 (when bound
                   (setf (conn-anonymous-thing-property thing :things)

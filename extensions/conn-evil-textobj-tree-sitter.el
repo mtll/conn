@@ -91,6 +91,8 @@
   (push query (alist-get language conn-ts--custom-queries)))
 
 (defun conn-ts--get-query ()
+  (unless (treesit-language-at (point))
+    (error "No treesitter language at point"))
   (with-memoization (gethash (treesit-language-at (point))
                              conn-ts--compiled-query-cache)
     (treesit-query-compile
@@ -207,6 +209,8 @@
 
 (conn-register-thing 'conn-ts-thing)
 
+(defvar conn-ts-multi-always-prompt t)
+
 (defvar-local conn-ts-parent-things
   `(conn-ts-assignment-inner
     conn-ts-assignment-outer
@@ -236,7 +240,8 @@
     conn-ts-regex-outer
     conn-ts-return-inner
     conn-ts-return-outer
-    conn-ts-scopename))
+    conn-ts-scopename
+    conn-ts-statement))
 
 (defvar-local conn-ts-all-things
   conn-ts-parent-things)
@@ -256,7 +261,9 @@
                              :things (list ,thing)
                              :bounds-op ( :method (self _arg)
                                           (conn-with-dispatch-suspended
-                                            (conn-multi-thing-select self t))))
+                                            (conn-multi-thing-select
+                                             self
+                                             conn-ts-multi-always-prompt))))
                     :properties (list 'unique-bounds (list (cons ,beg ,end))))))
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
@@ -405,7 +412,7 @@
 (conn-ts-define-thing conn-ts-return-inner "return.inner")
 (conn-ts-define-thing conn-ts-return-outer "return.outer")
 (conn-ts-define-thing conn-ts-scopename "scopename.inner")
-;; (conn-ts-define-thing conn-ts-statement "statement.outer")
+(conn-ts-define-thing conn-ts-statement "statement.outer")
 
 (defvar-keymap conn-ts-assignment-inner-repeat-map
   :repeat ( :continue (conn-toggle-mark-command

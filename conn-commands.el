@@ -2419,7 +2419,7 @@ Interactively `region-beginning' and `region-end'."
    (conn-read-args (conn-change-state
                     :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument 'conn-bounds-last)))
+        (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
   (conn-change-thing-do cmd arg transform))
 
