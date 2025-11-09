@@ -778,6 +778,36 @@ Possibilities: \\<query-replace-map>
 
 (defvar conn-kapply-suppress-message nil)
 
+(defun conn--perform-kapply (iterator body)
+  (require 'kmacro)
+  (let* ((undo-outer-limit nil)
+         (undo-limit most-positive-fixnum)
+         (undo-strong-limit most-positive-fixnum)
+         (conn-kmacro-applying-p t)
+         (conn--kapply-automatic-flag nil)
+         (iterations 0)
+         (success nil)
+         (iterator (lambda (&optional state)
+                     (when-let* ((ret (funcall iterator (or state :next))))
+                       (pcase ret
+                         (`(,beg . ,end)
+                          (when (markerp beg) (set-marker beg nil))
+                          (when (markerp end) (set-marker end nil))))
+                       (cl-incf iterations)))))
+    (deactivate-mark)
+    (unwind-protect
+        (cl-letf (((symbol-function 'kmacro-loop-setup-function)))
+          (advice-add 'kmacro-loop-setup-function :before-while iterator)
+          (run-hooks 'conn-kmacro-apply-start-hook)
+          (funcall body iterator)
+          (setq success t)
+          (unless conn-kapply-suppress-message
+            (message "Kapply completed successfully after %s iterations"
+                     iterations)))
+      (let ((conn-kmacro-apply-error (not success)))
+        (funcall iterator :cleanup)
+        (run-hooks 'conn-kmacro-apply-end-hook)))))
+
 (defmacro conn--define-kapplier (name arglist &rest body)
   "Define a macro application function.
 The iterator must be the first argument in ARGLIST.
@@ -788,39 +818,11 @@ The iterator must be the first argument in ARGLIST.
                     def-body))
            (doc-string 3)
            (indent 2))
-  (let ((iterator (car arglist))
-        (docstring (if (stringp (car body)) (pop body) "")))
-    (cl-with-gensyms (iterations)
-      `(defun ,name ,arglist
-         ,docstring
-         (require 'kmacro)
-         (let* ((undo-outer-limit nil)
-                (undo-limit most-positive-fixnum)
-                (undo-strong-limit most-positive-fixnum)
-                (conn-kmacro-applying-p t)
-                (conn--kapply-automatic-flag nil)
-                (,iterations 0)
-                (success nil)
-                (,iterator (lambda (&optional state)
-                             (when-let* ((ret (funcall ,iterator (or state :next))))
-                               (pcase ret
-                                 (`(,beg . ,end)
-                                  (when (markerp beg) (set-marker beg nil))
-                                  (when (markerp end) (set-marker end nil))))
-                               (cl-incf ,iterations)))))
-           (deactivate-mark)
-           (unwind-protect
-               (cl-letf (((symbol-function 'kmacro-loop-setup-function)))
-                 (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
-                 (run-hooks 'conn-kmacro-apply-start-hook)
-                 ,@body
-                 (setq success t)
-                 (unless conn-kapply-suppress-message
-                   (message "Kapply completed successfully after %s iterations"
-                            ,iterations)))
-             (let ((conn-kmacro-apply-error (not success)))
-               (funcall ,iterator :cleanup)
-               (run-hooks 'conn-kmacro-apply-end-hook))))))))
+  (pcase-let ((`(,decls . ,exps) (macroexp-parse-body body)))
+    `(defun ,name ,arglist
+       ,@decls
+       (conn--perform-kapply ,(car arglist)
+                             (lambda (,(car arglist)) ,@exps)))))
 
 (conn--define-kapplier conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro

@@ -151,10 +151,7 @@
 (defalias 'conn-anonymous-thing-parent 'conn--anonymous-thing-parent)
 (defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
-(defmacro conn-anonymous-thing (parent &rest properties)
-  "Make an anonymous thing."
-  (declare (indent 0))
-  (cl-assert (plistp properties))
+(defun conn--anonymous-thing-parse-properties (properties)
   (cl-loop with known = (get 'conn-anonymous-thing :known-properties)
            with seen = nil
            for (key var) on properties by #'cddr
@@ -175,17 +172,25 @@
                                          ,@(cdr parsed-body))))))
                             (result (error "Unexpected macroexpansion result :%S"
                                            result))))))
-                   `(',(car seen)
-                     ,(macroexpand-all
-                       var
-                       (cons (cons :method method-expander)
-                             macroexpand-all-environment))))
+                   (list `',(car seen)
+                         (macroexpand-all
+                          var
+                          (cons (cons :method method-expander)
+                                macroexpand-all-environment))))
            into methods
            else nconc (list key var) into props
-           finally return `(conn--make-anonymous-thing
-                            :parent ,parent
-                            :methods ,(cons 'list methods)
-                            :properties ,(cons 'list props))))
+           finally return (cons methods props)))
+
+(defmacro conn-anonymous-thing (parent &rest properties)
+  "Make an anonymous thing."
+  (declare (indent 0))
+  (cl-assert (plistp properties))
+  (pcase-let ((`(,methods . ,props)
+               (conn--anonymous-thing-parse-properties properties)))
+    `(conn--make-anonymous-thing
+      :parent ,parent
+      :methods (list ,@methods)
+      :properties (list ,@props))))
 
 (define-inline conn-anonymous-thing-property (object property)
   (declare (side-effect-free t)
@@ -256,25 +261,31 @@ order to mark the region that should be defined by any of COMMANDS."
     (setf (conn-command-thing cmd) thing
           (conn-command-mark-handler cmd) handler)))
 
+(defun conn--mark-for-mark-command (region ignore-mark-active)
+  (pcase region
+    (`(,beg . ,end)
+     (cond ((or ignore-mark-active
+                (not (region-active-p)))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end))
+           ((= (point) (mark))
+            (pcase (car (read-multiple-choice
+                         "Mark"
+                         '((?a "after point")
+                           (?b "before point"))))
+              (?e (goto-char end))
+              (?b (goto-char beg))))
+           ((> (point) (mark)) (goto-char end))
+           (t (goto-char beg))))
+    (_ (user-error "Invalid region"))))
+
 (defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
   `(progn
      (defun ,name ()
        (interactive)
-       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
-         (`(,beg . ,end)
-          (cond ((or ,ignore-mark-active
-                     (not (region-active-p)))
-                 (goto-char beg)
-                 (conn--push-ephemeral-mark end))
-                ((= (point) (mark))
-                 (pcase (car (read-multiple-choice
-                              "Mark"
-                              '((?a "after point")
-                                (?b "before point"))))
-                   (?e (goto-char end))
-                   (?b (goto-char beg))))
-                ((> (point) (mark)) (goto-char end))
-                (t (goto-char beg))))))
+       (conn--mark-for-mark-command
+        (bounds-of-thing-at-point ',thing)
+        ,ignore-mark-active))
      (conn-register-thing-commands ',thing 'ignore ',name)))
 
 (defun conn-get-thing (thing)
@@ -362,6 +373,22 @@ order to mark the region that should be defined by any of COMMANDS."
                     (value (when (use-region-p)
                              (list 'region nil)))
                     (set-flag (use-region-p))
+                    (required t)
+                    (recursive-edit recursive-edit))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-read-args-consume-prefix-arg)))
+      self)))
+
+(defun conn-thing-argument-dwim-rectangle (&optional recursive-edit)
+  (declare (important-return-value t))
+  (oclosure-lambda (conn-thing-argument
+                    (value (when (and (use-region-p)
+                                      (bound-and-true-p rectangle-mark-mode))
+                             (list 'region nil)))
+                    (set-flag (and (use-region-p)
+                                   (bound-and-true-p rectangle-mark-mode)))
                     (required t)
                     (recursive-edit recursive-edit))
       (self cmd)
@@ -1077,9 +1104,8 @@ words."))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
                                          beg end)
-  (setf thing (conn--get-boundable-thing thing))
-  (when (or (conn-thing-p thing)
-            (conn-thing-p (setf thing (conn-command-thing thing))))
+  (when-let* ((thing (seq-find #'conn-thing-p
+                               (conn-thing-all-parents thing))))
     (save-excursion
       (goto-char beg)
       (forward-thing thing 1)
@@ -1105,12 +1131,13 @@ words."))
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
   (conn-read-args (conn-read-thing-state
                    :prompt "Things in Region")
-      ((thing (car (conn-thing-argument-dwim))))
-    (thread-first
-      (cl-loop for parent in (conn-thing-all-parents thing)
-               when (conn-thing-p parent) return parent
-               finally (user-error "Not a valid things in region thing"))
-      (conn-get-things-in-region (region-beginning) (region-end)))))
+      ((`(,thing ,_) (conn-thing-argument)))
+    (conn-get-things-in-region
+     (cl-loop for parent in (conn-thing-all-parents thing)
+              when (conn-thing-p parent) return parent
+              finally (user-error "Not a valid things in region thing"))
+     (region-beginning)
+     (region-end))))
 
 ;;;; Multi Things
 

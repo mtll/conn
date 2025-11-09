@@ -163,26 +163,18 @@ strings have `conn-dispatch-label-face'."
 
 (defmacro conn-with-dispatch-event-handler (tag keymap message-fn handler &rest body)
   (declare (indent 4))
-  (cl-once-only (keymap)
-    (let* ((body `(let ((conn--dispatch-read-event-handlers
-                         (cons ,handler conn--dispatch-read-event-handlers))
-                        (conn--dispatch-read-event-message-prefixes
-                         ,(if message-fn
-                              `(cons ,message-fn conn--dispatch-read-event-message-prefixes)
-                            'conn--dispatch-read-event-message-prefixes)))
-                    ,@body)))
-      (if (or (not tag) (eq tag '_))
-          (if keymap
-              `(let ((conn--dispatch-event-handler-maps
-                      (cons ,keymap conn--dispatch-event-handler-maps)))
-                 ,body)
-            body)
-        `(catch ,tag
-           ,(if keymap
-                `(let ((conn--dispatch-event-handler-maps
-                        (cons ,keymap conn--dispatch-event-handler-maps)))
-                   ,body)
-              body))))))
+  `(let (,@(when keymap
+             `((conn--dispatch-event-handler-maps
+                (cons ,keymap conn--dispatch-event-handler-maps))))
+         ,@(when message-fn
+             `((conn--dispatch-read-event-message-prefixes
+                (cons ,message-fn conn--dispatch-read-event-message-prefixes))))
+         (conn--dispatch-read-event-handlers
+          (cons ,handler conn--dispatch-read-event-handlers)))
+     ,@(if (or (null tag)
+               (eq tag '_))
+           body
+         `((catch ,tag ,@body)))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -1697,45 +1689,52 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle t))
 
+(defun conn--dispatch-loop (repeat body)
+  (let* ((success nil)
+         (conn--dispatch-label-state nil)
+         (conn--prev-scroll-conservatively scroll-conservatively)
+         (scroll-conservatively 100)
+         (conn-dispatch-repeating (and repeat t))
+         (conn--dispatch-undo-change-groups nil)
+         (conn--read-args-error-message nil)
+         (conn--dispatch-read-event-message-prefixes
+          `(,(car conn--dispatch-read-event-message-prefixes)
+            ,@(cdr conn--dispatch-read-event-message-prefixes))))
+    (unwind-protect
+        (cl-flet ((conn-select-target ()
+                    (conn-target-finder-select
+                     conn-dispatch-target-finder)))
+          (catch 'dispatch-select-exit
+            (let ((conn-dispatch-in-progress t))
+              (while (or conn-dispatch-repeating
+                         (< conn-dispatch-iteration-count 1))
+                (catch 'dispatch-redisplay
+                  (condition-case err
+                      (progn
+                        (push nil conn--dispatch-undo-change-groups)
+                        (funcall body)
+                        (cl-incf conn-dispatch-iteration-count))
+                    (user-error
+                     (pcase-dolist (`(,_ . ,undo-fn)
+                                    (pop conn--dispatch-undo-change-groups))
+                       (funcall undo-fn :undo))
+                     (setf conn--read-args-error-message
+                           (error-message-string err))))))))
+          (setq success (not dispatch-quit-flag)))
+      (dolist (undo conn--dispatch-undo-change-groups)
+        (pcase-dolist (`(,_ . ,undo-fn) undo)
+          (funcall undo-fn (if success :accept :cancel)))))
+    (when dispatch-quit-flag (keyboard-quit))))
+
 (defmacro conn-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (display-always success)
-    `(let* ((,display-always nil)
-            (,success nil)
-            (conn--dispatch-label-state nil)
-            (conn--prev-scroll-conservatively scroll-conservatively)
-            (scroll-conservatively 100)
-            (conn-dispatch-repeating (and ,repeat t))
-            (conn--dispatch-undo-change-groups nil)
-            (conn--read-args-error-message nil)
-            (conn--dispatch-read-event-message-prefixes
-             `(,(car conn--dispatch-read-event-message-prefixes)
-               ,@(cdr conn--dispatch-read-event-message-prefixes))))
-       (unwind-protect
-           (cl-flet ((conn-select-target ()
-                       (conn-target-finder-select
-                        conn-dispatch-target-finder)))
-             (catch 'dispatch-select-exit
-               (let ((conn-dispatch-in-progress t))
-                 (while (or conn-dispatch-repeating
-                            (< conn-dispatch-iteration-count 1))
-                   (catch 'dispatch-redisplay
-                     (condition-case err
-                         (progn
-                           (push nil conn--dispatch-undo-change-groups)
-                           ,@body
-                           (cl-incf conn-dispatch-iteration-count))
-                       (user-error
-                        (pcase-dolist (`(,_ . ,undo-fn)
-                                       (pop conn--dispatch-undo-change-groups))
-                          (funcall undo-fn :undo))
-                        (setf conn--read-args-error-message
-                              (error-message-string err))))))))
-             (setq ,success (not dispatch-quit-flag)))
-         (dolist (undo conn--dispatch-undo-change-groups)
-           (pcase-dolist (`(,_ . ,undo-fn) undo)
-             (funcall undo-fn (if ,success :accept :cancel)))))
-       (when dispatch-quit-flag (keyboard-quit)))))
+  `(conn--dispatch-loop
+    ,repeat
+    (lambda ()
+      (cl-flet ((conn-select-target ()
+                  (conn-target-finder-select
+                   conn-dispatch-target-finder)))
+        ,@body))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -2834,19 +2833,23 @@ contain targets."
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
+(defun conn--dispatch-push-undo-case (depth body)
+  (push (cons depth body)
+        (car conn--dispatch-undo-change-groups))
+  (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
+    :key #'car
+    :in-place t))
+
 (defmacro conn-dispatch-undo-case (depth &rest body)
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
   (cl-with-gensyms (do buf)
-    `(progn
-       (push (cons ,depth (let ((,buf (current-buffer)))
-                            (lambda (,do)
-                              (with-current-buffer ,buf
-                                (pcase ,do ,@body)))))
-             (car conn--dispatch-undo-change-groups))
-       (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
-         :key #'car
-         :in-place t))))
+    `(conn--dispatch-push-undo-case
+      ,depth
+      (let ((,buf (current-buffer)))
+        (lambda (,do)
+          (with-current-buffer ,buf
+            (pcase ,do ,@body)))))))
 
 (defun conn-dispatch-loop-undo-boundary (&rest buffers)
   (unless buffers (setq buffers (list (current-buffer))))

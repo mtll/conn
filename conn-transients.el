@@ -41,16 +41,14 @@
   (pcase-let* (((or `(,mode-command ,mode-var)
                     (and mode-command mode-var))
                 mode)
-               (body
-                `((interactive)
-                  (,mode-command 'toggle)))
-               (properties
-                (cl-loop for (k . rest) on properties by #'cddr
-                         if (keywordp k)
-                         nconc (list k (car rest)) into props
-                         else
-                         do (setq body (cons k rest))
-                         and return props)))
+               (body `((interactive)
+                       (,mode-command 'toggle)))
+               (properties (cl-loop for (k . rest) on properties by #'cddr
+                                    if (keywordp k)
+                                    nconc (list k (car rest)) into props
+                                    else
+                                    do (setq body (cons k rest))
+                                    and return props)))
     `(transient-define-suffix ,name ,arglist
        :description (lambda ()
                       (concat ,description " "
@@ -674,7 +672,8 @@ apply to each contiguous component of the region."
    (conn--kapply-region-iterator
     (conn-read-args (conn-read-thing-state
                      :prompt "Thing")
-        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+        ((`(,thing ,thing-arg)
+          (conn-thing-argument-dwim-rectangle t))
          (transform (conn-transform-argument)))
       (mapcar #'conn-bounds (conn-bounds-get
                              (conn-bounds-of thing thing-arg)
@@ -1342,8 +1341,8 @@ A zero means repeat until error."
               (substring-no-properties fill-prefix))))
 
 (conn-transient-mode-suffix conn-auto-fill-suffix ()
-                            "Auto Fill"
-                            (auto-fill-mode auto-fill-function))
+  "Auto Fill"
+  (auto-fill-mode auto-fill-function))
 
 ;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()

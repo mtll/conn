@@ -263,6 +263,30 @@
         (substring string (length "conn-ts-"))
       string)))
 
+(defun conn-ts--thing-forward (thing arg)
+  (interactive "p")
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end))
+     (goto-char (if (> arg 0) end beg))
+     (unless (region-active-p)
+       (conn--push-ephemeral-mark (if (> arg 0) beg end))))
+    (_ (signal 'scan-error
+               (list (format-message "No more %S to move across" thing)
+                     (point) (point))))))
+
+(defun conn-ts--thing-forward-flat (thing arg)
+  (interactive "p")
+  (pcase (thread-first
+           (conn-bounds-of thing arg :flat t)
+           (conn-bounds-get :subregions)
+           last car)
+    ((conn-bounds `(,beg . ,end))
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))
+    (_ (signal 'scan-error
+               (list (format-message "No more %S to move across" thing)
+                     (point) (point))))))
+
 (defmacro conn-ts-define-thing (name group &optional query)
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
@@ -286,38 +310,22 @@
 
        (defun ,forward-cmd (&optional arg)
          (interactive "p")
-         (pcase (conn-bounds-of ',name arg)
-           ((conn-bounds `(,beg . ,end))
-            (goto-char (if (> arg 0) end beg))
-            (unless (region-active-p)
-              (conn--push-ephemeral-mark (if (> arg 0) beg end))))
-           (_ (signal 'scan-error
-                      (list (format-message "No more %S to move across" ',name)
-                            (point) (point))))))
+         (conn-ts--thing-forward ',name arg))
        (put ',forward-cmd 'repeat-check-key 'no)
 
        (defun ,backward-cmd (&optional arg)
          (interactive "p")
-         (,forward-cmd (- arg)))
+         (conn-ts--thing-forward ',name (- arg)))
        (put ',backward-cmd 'repeat-check-key 'no)
 
        (defun ,forward-flat-cmd (&optional arg)
          (interactive "p")
-         (pcase (thread-first
-                  (conn-bounds-of ',name arg :flat t)
-                  (conn-bounds-get :subregions)
-                  last car)
-           ((conn-bounds `(,beg . ,end))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end))
-           (_ (signal 'scan-error
-                      (list (format-message "No more %S to move across" ',name)
-                            (point) (point))))))
+         (conn-ts--thing-forward-flat ',name arg))
        (put ',forward-flat-cmd 'repeat-check-key 'no)
 
        (defun ,backward-flat-cmd (&optional arg)
          (interactive "p")
-         (,forward-flat-cmd (- arg)))
+         (conn-ts--thing-forward-flat ',name (- arg)))
        (put ',backward-flat-cmd 'repeat-check-key 'no)
 
        (conn-register-thing-commands
