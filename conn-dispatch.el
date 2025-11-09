@@ -1569,11 +1569,11 @@ Target overlays may override this default by setting the
   (when conn--previous-labels-cleanup
     (funcall conn--previous-labels-cleanup)))
 
-(defmacro conn-with-dispatch-labels (labels &rest body)
+(defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
   `(progn
      (conn-cleanup-labels)
-     (let (,labels)
+     (let (,binder)
        (unwind-protect
            (progn ,@body)
          (clrhash conn--pixelwise-window-cache)
@@ -1581,7 +1581,7 @@ Target overlays may override this default by setting the
          (let ((fn (make-symbol "cleanup")))
            (fset fn (lambda (&rest _)
                       (unwind-protect
-                          (mapc #'conn-label-delete ,(car labels))
+                          (mapc #'conn-label-delete ,(car binder))
                         (setq conn--previous-labels-cleanup nil)
                         (remove-hook 'pre-redisplay-functions fn))))
            (add-hook 'pre-redisplay-functions fn)
