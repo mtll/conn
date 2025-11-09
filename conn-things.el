@@ -1176,10 +1176,11 @@ Only the background color is used."
          (unselected (if asciip "." "◯")))
     (cons selected unselected)))
 
-(defun conn-multi-thing-select (thing)
+(defun conn-multi-thing-select (thing &optional always-prompt)
   (pcase (conn-anonymous-thing-property thing :things)
     ('nil)
-    ((and `(,thing . nil))
+    ((and `(,thing . nil)
+          (guard (not always-prompt)))
      (pcase (conn-bounds-of thing nil)
        ((and bounds
              (conn-bounds `(,beg . ,end))
@@ -1228,14 +1229,18 @@ Only the background color is used."
                     ")"
                     (when-let* ((msg (conn--read-args-display-message)))
                       (concat ": " msg))
-                    "\n\\[conn-expand] next; "
-                    "\\[conn-contract] prev; "
-                    "\\[select] select; "
-                    "\\[abort] abort "))))))
+                    "\n\\[select] select; "
+                    "\\[abort] abort"
+                    (when (> size 1)
+                      (concat
+                       "; \\[conn-expand] next; "
+                       "\\[conn-contract] prev"))))))))
          (pcase-exhaustive bounds
            ('nil
             (user-error "No things found at point"))
-           (`(,bound . nil) bound)
+           ((and `(,bound . nil)
+                 (guard (not always-prompt)))
+            bound)
            (`(,(conn-bounds `(,beg . ,end)) . ,_)
             (save-mark-and-excursion
               (goto-char end)
