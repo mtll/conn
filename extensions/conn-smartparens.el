@@ -287,8 +287,9 @@
             (cl-loop for pair in sp-local-pairs
                      collect (plist-get pair :open)))))
 
-(cl-defmethod conn-perform-surround ((with conn-surround-sp-pair)
-                                     _arg &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((with conn-surround-sp-pair)
+                                _arg
+                                &key &allow-other-keys)
   (sp-wrap-with-pair (conn-surround-sp-pair-id with)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)

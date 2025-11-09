@@ -949,10 +949,10 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     thing
-                                     thing-arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-dispatch-do ((action conn-transpose-command)
+                                thing
+                                thing-arg
+                                &key &allow-other-keys)
   (conn-dispatch-loop nil
     (pcase-let* ((`(,pt ,win ,thing-override)
                   (save-mark-and-excursion
@@ -1036,7 +1036,7 @@ With a prefix ARG `push-mark' without activating it."
                    :prefix arg)
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (restrict-windows (conn-dispatch-restrict-windows-argument)))
-    (conn-perform-dispatch
+    (conn-dispatch-do
      (oclosure-lambda
          (conn-transpose-command
           (description "Transpose")
@@ -1910,7 +1910,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (conn-dispatch-handle)))
         (let ((result nil)
               (strings nil))
-          (conn-perform-dispatch
+          (conn-dispatch-do
            (oclosure-lambda (conn-kill-action
                              (description "Kill"))
                (window pt thing thing-arg transform)
@@ -2148,7 +2148,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (conn-dispatch-handle)))
       (let ((result nil)
             (strings nil))
-        (conn-perform-dispatch
+        (conn-dispatch-do
          (oclosure-lambda (conn-kill-action
                            (description "Copy"))
              (window pt thing thing-arg transform)

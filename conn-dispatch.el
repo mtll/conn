@@ -3890,7 +3890,9 @@ contain targets."
                                  &allow-other-keys))
 
 (cl-defmethod conn-dispatch-do ((_action (eql nil))
-                                thing thing-arg thing-transform
+                                thing
+                                thing-arg
+                                thing-transform
                                 &rest keys
                                 &key &allow-other-keys)
   (apply #'conn-dispatch-do
@@ -4048,8 +4050,12 @@ contain targets."
                thing-arg thing-transform))))
 
 (cl-defmethod conn-dispatch-do ((action conn-dispatch-kapply)
-                                thing thing-arg thing-transform
-                                &key repeat &allow-other-keys)
+                                thing
+                                thing-arg
+                                thing-transform
+                                &key
+                                repeat
+                                &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,thing-override)

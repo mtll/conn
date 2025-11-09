@@ -26,7 +26,7 @@
 (require 'org-element)
 (require 'org-agenda)
 
-(cl-defmethod conn-perform-transpose ((_cmd (conn-thing org-element)) _arg)
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-element)) _arg)
   (org-transpose-element))
 
 (define-keymap
@@ -316,47 +316,47 @@
                   org-example))
       (cl-call-next-method)))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-quote)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "quote"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-comment)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-comment)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "comment"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-center)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-center)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "center"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-src)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-src)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "src")
   (undo-boundary)
   (conn-with-recursive-stack 'conn-emacs-state
     (recursive-edit)))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-verse)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-verse)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "verse"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-export-ascii)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-export-ascii)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "export ascii"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-export-html)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-export-html)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "export html"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-export-latex)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-export-latex)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "export latex"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-example)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-example)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "example"))
 
-(cl-defmethod conn-perform-surround ((_cmd (eql org-export)) _arg
-                                     &key &allow-other-keys)
+(cl-defmethod conn-surround-do ((_cmd (eql org-export)) _arg
+                                &key &allow-other-keys)
   (org-insert-structure-template "export")
   (undo-boundary)
   (conn-with-recursive-stack 'conn-emacs-state
