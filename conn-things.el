@@ -1255,16 +1255,14 @@ Only the background color is used."
                            ((conn-bounds `(,beg . ,end))
                             (goto-char end)
                             (conn--push-ephemeral-mark beg)))
-                         (conn-read-args-handle)
-                         self)
+                         (conn-argument-handle self))
                         ('conn-expand
                          (setq curr (mod (1+ curr) size))
                          (pcase (nth curr bounds)
                            ((conn-bounds `(,beg . ,end))
                             (goto-char end)
                             (conn--push-ephemeral-mark beg)))
-                         (conn-read-args-handle)
-                         self)
+                         (conn-argument-handle self))
                         ('select
                          (conn-set-argument self (nth curr bounds)))
                         ('abort

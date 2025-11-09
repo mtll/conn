@@ -43,6 +43,7 @@ potential expansions.  Functions may return invalid expansions
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
+  "v" 'conn-toggle-mark-command
   "z" 'conn-expand-exchange
   "j" 'conn-contract
   "h" 'conn-expand
@@ -99,12 +100,12 @@ potential expansions.  Functions may return invalid expansions
 
 If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
-  (interactive "P")
-  (if (consp arg)
-      (progn
-        (conn--push-ephemeral-mark)
-        (setq arg (log (prefix-numeric-value arg) 4)))
-    (setq arg (prefix-numeric-value arg)))
+  (interactive "p")
+  (unless (or (region-active-p)
+              (memq last-command '(conn-expand
+                                   conn-contract
+                                   conn-expand-exchange)))
+    (conn--push-ephemeral-mark))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
@@ -140,10 +141,7 @@ Expansions are provided by functions in `conn-expansion-functions'."
 If the region is active only the `point' is moved.
 Expansions and contractions are provided by functions in
 `conn-expansion-functions'."
-  (interactive "P")
-  (if (consp arg)
-      (setq arg (log (prefix-numeric-value arg) 4))
-    (setq arg (prefix-numeric-value arg)))
+  (interactive "p")
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-expand (- arg))
@@ -216,24 +214,20 @@ Expansions and contractions are provided by functions in
           (pcase command
             ('conn-expand-exchange
              (conn-expand-exchange)
-             (conn-read-args-handle)
-             self)
+             (conn-argument-handle self))
             ('conn-contract
              (ignore-error user-error
                (conn-contract (conn-read-args-consume-prefix-arg)))
-             (conn-read-args-handle)
-             self)
+             (conn-argument-handle self))
             ('conn-expand
              (ignore-error user-error
                (conn-expand (conn-read-args-consume-prefix-arg)))
-             (conn-read-args-handle)
-             self)
+             (conn-argument-handle self))
             ('conn-toggle-mark-command
              (if mark-active
                  (deactivate-mark)
                (activate-mark))
-             (conn-read-args-handle)
-             self)
+             (conn-argument-handle self))
             ((or 'end 'exit-recursive-edit)
              (conn-set-argument self (cons (region-beginning)
                                            (region-end))))

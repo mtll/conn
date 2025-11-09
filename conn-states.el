@@ -1584,6 +1584,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (oclosure-define (conn-read-args-argument
                   ;; (:predicate conn-read-args-argument-p)
+                  (:copier conn-argument-handle)
                   (:copier conn-set-argument (value &optional (set-flag t)))
                   (:copier conn-unset-argument (value &aux (set-flag nil))))
   (value :type t)
