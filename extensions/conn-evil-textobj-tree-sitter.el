@@ -25,43 +25,96 @@
 (require 'evil-textobj-tree-sitter)
 (require 'mule-util)
 
-(cl-defstruct (conn--ts-thing
+(cl-defstruct (conn-ts--thing
                (:constructor conn--make-ts-thing))
-  (groups nil :type (or cons symbol) :read-only t)
-  (query nil :type list :read-only t))
+  (groups nil :type (or cons symbol) :read-only t))
 
-(defvar conn--ts-chunk-size 10000)
+(defvar conn-ts--chunk-size 10000)
 
-(defconst conn--ts-query-cache
-  (make-hash-table :test 'eq))
+(defconst conn-ts--queries (make-hash-table :test 'eq))
+(defconst conn-ts--compiled-query-cache (make-hash-table :test 'eq))
+(defvar conn-ts--custom-queries nil)
+(defvar conn-ts--query-parents nil)
 
-(defun conn--ts-get-query ()
-  (with-memoization (gethash (treesit-language-at (point)) conn--ts-query-cache)
+(defvar conn-ts--query-dir
+  (file-name-as-directory
+   (concat evil-textobj-tree-sitter--dir "queries")))
+
+(defun conn-ts--get-language-query (language)
+  (cl-labels
+      ((parse-inherits (top-level)
+         (let (inherits)
+           (when (re-search-forward "; inherits:? " nil t) ;?
+             (while (re-search-forward
+                     (rx (or (seq "(" (group (not ")")) ")")
+                             (seq (group (not ",")))))
+                     (pos-eol) t)
+               (if (match-beginning 1)
+                   (when top-level
+                     (push (buffer-substring (match-beginning 1)
+                                             (match-end 1))
+                           inherits))
+                 (push (buffer-substring (match-beginning 2)
+                                         (match-end 2))
+                       inherits))))
+           inherits))
+       (get-query (language &optional top-level)
+         (with-memoization (gethash language conn-ts--queries)
+           (let ((filename (concat conn-ts--query-dir
+                                   (symbol-name language)
+                                   "/textobjects.scm")))
+             (when (file-exists-p filename)
+               (with-temp-buffer
+                 (insert-file-contents-literally filename)
+                 (goto-char (point-min))
+                 (let ((inherits (parse-inherits top-level)))
+                   (mapc #'get-query inherits)
+                   (setf (alist-get language conn-ts--query-parents)
+                         (cl-loop for p in inherits
+                                  append (assoc p conn-ts--query-parents)))
+                   (concat
+                    (buffer-substring (point-min) (point-max))
+                    "\n"
+                    (cl-loop for lang in inherits
+                             concat (gethash lang conn-ts--queries)
+                             concat (mapconcat
+                                     (alist-get lang conn-ts--custom-queries)
+                                     "\n"))))))))))
+    (get-query language t)))
+
+(defun conn-ts--clear-query-cache ()
+  (clrhash conn-ts--queries)
+  (clrhash conn-ts--compiled-query-cache))
+
+(defun conn-ts-add-custom-query (language query)
+  (conn-ts--clear-query-cache)
+  (push query (alist-get language conn-ts--custom-queries)))
+
+(defun conn-ts--get-query ()
+  (with-memoization (gethash (treesit-language-at (point))
+                             conn-ts--compiled-query-cache)
     (treesit-query-compile
      (treesit-language-at (point))
-     (evil-textobj-tree-sitter--get-query-from-dir
-      (symbol-name (treesit-language-at (point)))
-      (file-name-as-directory (concat evil-textobj-tree-sitter--dir "queries"))
-      t))))
+     (conn-ts--get-language-query (treesit-language-at (point))))))
 
-(defun conn--ts-query-capture (node query start end)
+(defun conn-ts--query-capture (node query start end)
   (mapcar #'nreverse (treesit-query-capture node query start end nil t)))
 
-(defun conn--ts-get-thing-groups (thing)
+(defun conn-ts--get-thing-groups (thing)
   (pcase thing
     ((pred symbolp)
-     (conn--ts-thing-groups
+     (conn-ts--thing-groups
       (get (or (get thing :conn-command-thing) thing)
            :conn-ts-thing)))
     ((pred conn-anonymous-thing-p)
-     (conn--ts-get-thing-groups
+     (conn-ts--get-thing-groups
       (conn-anonymous-thing-parent thing)))
     ((pred conn-bounds-p)
-     (conn--ts-get-thing-groups
+     (conn-ts--get-thing-groups
       (conn-bounds-thing thing)))))
 
-(defun conn--ts-filter-captures (thing captures &optional reverse)
-  (let ((groups (conn--ts-get-thing-groups thing))
+(defun conn-ts--filter-captures (thing captures &optional reverse)
+  (let ((groups (conn-ts--get-thing-groups thing))
         (regions nil))
     (dolist (capture captures)
       (pcase-dolist (`(,group ,tbeg . ,tend) groups)
@@ -75,22 +128,6 @@
                         (treesit-node-end node))
                   regions)))))
     (if reverse regions (nreverse regions))))
-
-;; TODO: handle multiple parsers
-(defun conn--ts-get-captures (thing start end &optional default-captures)
-  (let* ((thing-query
-          (cl-loop for p in (conn-thing-all-parents thing)
-                   for et = (get p :conn-ts-thing)
-                   thereis (and et
-                                (alist-get major-mode
-                                           (conn--ts-thing-query et)))))
-         (captures
-          (if (or thing-query (not default-captures))
-              (conn--ts-query-capture (treesit-buffer-root-node)
-                                      (or thing-query (conn--ts-get-query))
-                                      start end)
-            default-captures)))
-    (conn--ts-filter-captures thing captures (< start end))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
                               &key flat)
@@ -111,9 +148,14 @@
                    (> beg (point-min))
                  (< beg (point-max)))
           (setq end (if (< arg 0)
-                        (max (point-min) (- beg conn--ts-chunk-size))
-                      (min (point-max) (+ beg conn--ts-chunk-size)))
-                captures (conn--ts-get-captures cmd beg end)
+                        (max (point-min) (- beg conn-ts--chunk-size))
+                      (min (point-max) (+ beg conn-ts--chunk-size)))
+                captures (conn-ts--filter-captures
+                          cmd
+                          (conn-ts--query-capture (treesit-buffer-root-node)
+                                                  (conn-ts--get-query)
+                                                  beg end)
+                          (< arg 0))
                 beg end)
           (if flat
               (progn
@@ -165,7 +207,7 @@
 
 (conn-register-thing 'conn-ts-thing)
 
-(defvar conn-ts-parent-things
+(defvar-local conn-ts-parent-things
   `(conn-ts-assignment-inner
     conn-ts-assignment-outer
     conn-ts-assignment-side
@@ -196,7 +238,8 @@
     conn-ts-return-outer
     conn-ts-scopename))
 
-(defvar conn-ts-all-things conn-ts-parent-things)
+(defvar-local conn-ts-all-things
+  conn-ts-parent-things)
 
 (defclass conn-ts-node-targets (conn-dispatch-target-window-predicate)
   ((things :initarg :things)
@@ -217,22 +260,21 @@
                     :properties (list 'unique-bounds (list (cons ,beg ,end))))))
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
-          (things (oref state things)))
+          (things (oref state things))
+          (truncate-string-ellipsis nil))
       (dolist (win (conn--get-target-windows))
         (with-selected-window win
           (pcase-dolist (`(,vbeg . ,vend)
                          (conn--visible-regions (window-start)
                                                 (window-end)))
-            (let* ((truncate-string-ellipsis nil)
-                   (default-captures
-                    (conn--ts-query-capture (treesit-buffer-root-node)
-                                            (conn--ts-get-query)
+            (let* ((captures
+                    (conn-ts--query-capture (treesit-buffer-root-node)
+                                            (conn-ts--get-query)
                                             vbeg vend))
                    (all-captures nil))
               (dolist (thing things)
                 (setf (alist-get thing all-captures)
-                      (conn--ts-get-captures thing vbeg vend
-                                             default-captures)))
+                      (conn-ts--filter-captures thing captures)))
               (pcase-dolist (`(,thing . ,captures) all-captures)
                 (pcase-dolist (`(,beg . ,end) captures)
                   (when (and (<= (window-start) beg (window-end))
@@ -287,7 +329,7 @@
                (list (format-message "No more %S to move across" thing)
                      (point) (point))))))
 
-(defmacro conn-ts-define-thing (name group &optional query)
+(defmacro conn-ts-define-thing (name group)
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
         (forward-flat-cmd (intern (format "%s-forward-flat" name)))
@@ -299,10 +341,7 @@
                                (cons (intern (format "%s._start" group))
                                      (intern (format "%s._end" group)))))))
     `(progn
-       (put ',name
-            :conn-ts-thing (conn--make-ts-thing
-                            :groups ',groups
-                            :query ,(macroexp-quote query)))
+       (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
 
        (conn-register-thing ',name
                             :parent 'conn-ts-thing
