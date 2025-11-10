@@ -63,13 +63,6 @@
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
-;;;; Completion
-
-(defun conn--exit-completion ()
-  (conn-state-defer-once
-    (completion-in-region-mode -1)))
-(add-hook 'completion-in-region-mode-hook 'conn--exit-completion)
-
 ;;;; Eldoc
 
 (with-eval-after-load 'eldoc
