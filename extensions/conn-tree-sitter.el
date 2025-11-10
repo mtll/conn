@@ -248,7 +248,7 @@
            inherits))
        (get-query (language &optional top-level)
          (with-memoization (gethash language conn-ts--queries)
-           (let ((filename (concat conn-ts--query-dir
+           (let ((filename (concat conn-ts-query-dir
                                    (symbol-name language)
                                    "/textobjects.scm")))
              (when (file-exists-p filename)
