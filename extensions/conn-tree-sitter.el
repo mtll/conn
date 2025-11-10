@@ -1,8 +1,8 @@
-;;; conn-evil-textobj-tree-sitter.el --- Evil Treesit Text Objects -*- lexical-binding: t -*-
+;;; conn-tree-sitter.el --- Treesit Things -*- lexical-binding: t -*-
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "30.1") (compat "30.0.2.0") (evil-textobj-tree-sitter "0.5") conn)
+;; Package-Requires: ((emacs "30.1") (compat "30.0.2.0") conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 (require 'conn)
 (require 'conn-things)
 (require 'conn-dispatch)
-(require 'evil-textobj-tree-sitter)
+(require 'treesit)
 (require 'mule-util)
 
 (cl-defstruct (conn-ts--thing
@@ -36,9 +36,197 @@
 (defvar conn-ts--custom-queries nil)
 (defvar conn-ts--query-parents nil)
 
-(defvar conn-ts--query-dir
-  (file-name-as-directory
-   (concat evil-textobj-tree-sitter--dir "queries")))
+;; TODO: vendor the nvim-treesitter-textobjects queries
+(defvar conn-ts-query-dir nil)
+
+(defvar conn-ts--symbol-tick 0)
+
+(defconst conn-ts--predicate-symbol-cache
+  (make-hash-table :test #'equal))
+
+(defconst conn-ts--offset-symbol-cache
+  (make-hash-table :test #'equal))
+
+(defun conn-ts--parse-query (query)
+  (cl-labels
+      ((get-alias (form func)
+         (with-memoization (gethash form conn-ts--predicate-symbol-cache)
+           (let ((sym (intern
+                       (concat "conn-ts--anonymous-predicate"
+                               (number-to-string
+                                (cl-incf conn-ts--symbol-tick))))))
+             (fset sym func)
+             sym)))
+       (get-offset (capture &optional brow bcol erow ecol)
+         (with-memoization (gethash (list brow bcol erow ecol)
+                                    conn-ts--offset-symbol-cache)
+           (let ((sym (intern (concat (substring (symbol-name capture) 1)
+                                      "--offset"
+                                      (number-to-string
+                                       (cl-incf conn-ts--symbol-tick)))))
+                 (capture-sym (intern (substring (symbol-name capture) 1))))
+             (fset sym (pcase-lambda ((and cons `(,_sym . ,node)))
+                         (setf (car cons) capture-sym)
+                         (setf (cdr cons)
+                               (with-current-buffer (treesit-node-buffer node)
+                                 (cons (save-excursion
+                                         (goto-char (treesit-node-start node))
+                                         (when (and brow (/= 0 brow))
+                                           (let ((col (current-column)))
+                                             (forward-line brow)
+                                             (move-to-column col)))
+                                         (when (and bcol (/= 0 bcol))
+                                           (forward-char bcol))
+                                         (point))
+                                       (save-excursion
+                                         (goto-char (treesit-node-end node))
+                                         (when (and erow (/= 0 erow))
+                                           (let ((col (current-column)))
+                                             (forward-line erow)
+                                             (move-to-column col)))
+                                         (when (and ecol (/= 0 ecol))
+                                           (forward-char ecol))
+                                         (point)))))))
+             (put sym :conn-ts--offset-sym t)
+             (intern (concat "@" (symbol-name sym))))))
+       (sub (alist exp)
+         (if (null alist)
+             (list exp)
+           (pcase exp
+             (`(,(pred keywordp) . ,_)
+              (list exp))
+             ((pred consp)
+              (list (mapcan (lambda (e) (sub alist e)) exp)))
+             ((pred vectorp)
+              `([,@(mapcan (lambda (e) (sub alist e))
+                           (append exp nil))]))
+             (_ (or (copy-sequence (alist-get exp alist))
+                    (list exp))))))
+       (walk (exp)
+         (cl-loop
+          with range-sub = nil
+          with offset-sub = nil
+          for e in exp
+          nconc (pcase e
+                  (`(:any-of? ,capt . ,pats)
+                   `((:match? ,(regexp-opt pats) ,capt)))
+                  (`(:offset! ,capt . ,offsets)
+                   (push (apply #'get-offset capt offsets)
+                         (alist-get capt offset-sub))
+                   nil)
+                  (`(:lua-match ,capt ,pat)
+                   ;; All #lua-match? directives I found work fine as
+                   ;; regexps, I think
+                   `((:match? ,pat ,capt)))
+                  ((and form `(:not-lua-match? ,capt ,pat))
+                   `((:pred ,(get-alias
+                              form
+                              (lambda (node)
+                                (save-excursion
+                                  (save-match-data
+                                    (goto-char (treesit-node-start node))
+                                    (not
+                                     (eql (treesit-node-end node)
+                                          (re-search-forward
+                                           pat (treesit-node-end node) nil)))))))
+                            ,capt)))
+                  (`(:make-range! ,capture ,beg ,end)
+                   (push (intern (concat "@" capture "_start"))
+                         (alist-get beg range-sub))
+                   (cl-pushnew beg (alist-get beg range-sub))
+                   (push (intern (concat "@" capture "_end"))
+                         (alist-get end range-sub))
+                   (cl-pushnew end (alist-get end range-sub))
+                   nil)
+                  ((and form `(:not-kind-eq? ,capt ,type))
+                   `((:pred ,(get-alias
+                              form
+                              (lambda (node)
+                                (not (equal (treesit-node-type node)
+                                            type))))
+                            ,capt)))
+                  ((and form `(:not-any-of? ,capt . ,strs))
+                   `((:pred ,(get-alias
+                              form
+                              (let ((re (regexp-opt strs)))
+                                (lambda (node)
+                                  (save-excursion
+                                    (save-match-data
+                                      (goto-char (treesit-node-start node))
+                                      (not
+                                       (eql (treesit-node-end node)
+                                            (re-search-forward
+                                             re (treesit-node-end node) nil))))))))
+                            ,capt)))
+                  (`(,(pred keywordp) . ,_)
+                   nil)
+                  ((pred vectorp)
+                   `([,@(walk (append e nil))]))
+                  ((guard (not (consp e)))
+                   (list e))
+                  (_ (list (walk e))))
+          into newexp
+          finally return
+          (thread-last
+            newexp
+            (mapcan (lambda (e) (sub range-sub e)))
+            (mapcan (lambda (e) (sub offset-sub e)))))))
+    (walk query)))
+
+(defun conn-ts--parse-scm-buffer (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (lisp-data-mode)
+    (goto-char (point-min))
+    (save-excursion
+      (while-let ((sp (and (re-search-forward "[#.+*?]" nil t)
+                           (syntax-ppss))))
+        (unless (or (nth 3 sp)
+                    (nth 4 sp))
+          (pcase (char-before)
+            (?\#
+             (delete-char -1)
+             (insert ":"))
+            (?.
+             (unless (and (looking-at-p (rx (or (syntax word)
+                                                (syntax symbol))))
+                          (save-excursion
+                            (backward-char 2)
+                            (looking-at-p (rx (or (syntax word)
+                                                  (syntax symbol))))))
+               (delete-char -1)
+               (insert ":anchor")))
+            ((or ?+ ?* ??)
+             (unless (or (looking-at-p (rx (or (syntax word)
+                                               (syntax symbol))))
+                         (save-excursion
+                           (backward-char 2)
+                           (looking-at-p (rx (or (syntax word)
+                                                 (syntax symbol))))))
+               (backward-char 1)
+               (insert ?:)))))))
+    (let ((queries nil)
+          (curr nil))
+      (while-let ((sexp (ignore-errors (read (current-buffer)))))
+        (pcase sexp
+          ('nil)
+          ((pred consp)
+           (push curr queries)
+           (setf curr (list sexp)))
+          (_
+           (push sexp (cdr curr)))))
+      (when curr (push curr queries))
+      (let ((qs (mapcar #'conn-ts--parse-query
+                        (cdr (nreverse queries)))))
+        qs))))
+
+(defun conn-ts--normalize-capture (capture)
+  (when (treesit-node-p (cdr capture))
+    (let ((name (car capture)))
+      (if (get name :conn-ts--offset-sym)
+          (funcall name capture)
+        (setf (cdr capture)
+              (cons (treesit-node-start (cdr capture))
+                    (treesit-node-end (cdr capture))))))))
 
 (defun conn-ts--get-language-query (language)
   (cl-labels
@@ -66,20 +254,16 @@
              (when (file-exists-p filename)
                (with-temp-buffer
                  (insert-file-contents-literally filename)
-                 (goto-char (point-min))
+                 (conn-ts--parse-scm-buffer)
                  (let ((inherits (parse-inherits top-level)))
                    (mapc #'get-query inherits)
                    (setf (alist-get language conn-ts--query-parents)
                          (cl-loop for p in inherits
                                   append (assoc p conn-ts--query-parents)))
-                   (concat
-                    (buffer-substring (point-min) (point-max))
-                    "\n"
+                   (append
+                    (conn-ts--parse-scm-buffer)
                     (cl-loop for lang in inherits
-                             concat (gethash lang conn-ts--queries)
-                             concat (mapconcat
-                                     (alist-get lang conn-ts--custom-queries)
-                                     "\n"))))))))))
+                             append (gethash lang conn-ts--queries))))))))))
     (get-query language t)))
 
 (defun conn-ts--clear-query-cache ()
@@ -97,7 +281,8 @@
                              conn-ts--compiled-query-cache)
     (treesit-query-compile
      (treesit-language-at (point))
-     (conn-ts--get-language-query (treesit-language-at (point))))))
+     (conn-ts--get-language-query (treesit-language-at (point)))
+     'eager)))
 
 (defun conn-ts--query-capture (node query start end)
   (mapcar #'nreverse (treesit-query-capture node query start end nil t)))
@@ -119,16 +304,14 @@
   (let ((groups (conn-ts--get-thing-groups thing))
         (regions nil))
     (dolist (capture captures)
+      (mapc #'conn-ts--normalize-capture capture)
       (pcase-dolist (`(,group ,tbeg . ,tend) groups)
         (if-let* ((beg (alist-get tbeg capture)))
             (when-let* ((end (alist-get tend capture)))
-              (push (cons (treesit-node-start beg)
-                          (treesit-node-end end))
+              (push (cons (car beg) (cdr end))
                     regions))
           (when-let* ((node (alist-get group capture)))
-            (push (cons (treesit-node-start node)
-                        (treesit-node-end node))
-                  regions)))))
+            (push node regions)))))
     (if reverse regions (nreverse regions))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
@@ -345,8 +528,8 @@
         (groups (cl-loop
                  for group in (ensure-list group)
                  collect (cons (intern group)
-                               (cons (intern (format "%s._start" group))
-                                     (intern (format "%s._end" group)))))))
+                               (cons (intern (format "%s_start" group))
+                                     (intern (format "%s_end" group)))))))
     `(progn
        (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
 
@@ -1010,9 +1193,6 @@
   "<conn-thing-map> S l" 'conn-ts-scopename-forward
   "<conn-thing-map> S j" 'conn-ts-scopename-backward)
 
-(define-minor-mode conn-ts-things-mode
-  "Minor mode for conn-ts thing bindings.")
-
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
   "w" (conn-anonymous-thing
@@ -1053,4 +1233,8 @@
                           (point)))
                 (error "Point not in comment"))))
 
-(provide 'conn-evil-textobj-tree-sitter)
+;;;###autoload
+(define-minor-mode conn-ts-things-mode
+  "Minor mode for conn-ts thing bindings.")
+
+(provide 'conn-tree-sitter)
