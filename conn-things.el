@@ -774,54 +774,102 @@ words."))
    'point nil
    (cons (point) (point))))
 
+(defun conn--bounds-of-thing (bounds)
+  (let ((thing (conn-bounds-thing bounds))
+        (arg (conn-bounds-arg bounds)))
+    (pcase (conn--get-boundable-thing thing)
+      ((and thing (pred conn-thing-p))
+       (setf (conn-bounds bounds)
+             (bounds-of-thing-at-point thing)))
+      ((and thing
+            (let (and conn-this-command-handler
+                      (pred identity))
+              (conn-command-mark-handler thing)))
+       (let (conn--last-bounds)
+         (deactivate-mark t)
+         (pcase (prefix-numeric-value arg)
+           (0 (setf (conn-bounds bounds) nil))
+           (n
+            (let ((current-prefix-arg n)
+                  (conn-this-command-thing (conn-command-thing thing))
+                  (conn-this-command-start (point-marker))
+                  (this-command thing))
+              (unwind-protect
+                  (progn
+                    (ignore-errors
+                      (call-interactively thing)
+                      (funcall conn-this-command-handler conn-this-command-start))
+                    (setf (conn-bounds bounds) (cons (region-beginning)
+                                                     (region-end))))
+                (set-marker conn-this-command-start nil))))))))
+    (conn-bounds bounds)))
+
+(defun conn--bounds-of-thing-subregions (bounds)
+  (let ((thing (conn-bounds-thing bounds))
+        (arg (conn-bounds-arg bounds)))
+    (pcase (conn--get-boundable-thing thing)
+      ((pred conn-thing-p) nil)
+      ((and thing
+            (let (and conn-this-command-handler
+                      (pred identity))
+              (conn-command-mark-handler thing)))
+       (let (conn--last-bounds)
+         (deactivate-mark t)
+         (cl-flet
+             ((bounds-1 ()
+                (let ((pt (point))
+                      (mk (mark t))
+                      (current-prefix-arg 1)
+                      (conn-this-command-thing (conn-command-thing thing))
+                      (conn-this-command-start (point-marker))
+                      (this-command thing))
+                  (unwind-protect
+                      (progn
+                        (ignore-errors
+                          (call-interactively thing)
+                          (funcall conn-this-command-handler
+                                   conn-this-command-start))
+                        (unless (and (eql pt (point))
+                                     (eql mk (mark)))
+                          (conn-make-bounds
+                           thing 1
+                           (cons (region-beginning)
+                                 (region-end)))))
+                    (set-marker conn-this-command-start nil)))))
+           (pcase (prefix-numeric-value arg)
+             (0 nil)
+             (n
+              (let (subregions)
+                (catch 'break
+                  (dotimes (_ (abs n))
+                    (if-let* ((bound (bounds-1)))
+                        (push bound subregions)
+                      (throw 'break nil))))
+                (unless (conn-bounds--whole bounds)
+                  (setf (conn-bounds bounds)
+                        (cl-loop for bound in subregions
+                                 for (b . e) = (conn-bounds bound)
+                                 minimize b into beg
+                                 maximize e into end
+                                 finally return (cons beg end))))
+                (setf (conn-bounds-get bounds :subregions)
+                      (nreverse subregions)))))))))))
+
 (cl-defmethod conn-bounds-of ((thing (conn-thing t)) arg)
-  (pcase (conn--get-boundable-thing thing)
-    ((and thing (pred conn-thing-p))
-     (conn-make-bounds
-      thing arg
-      (bounds-of-thing-at-point thing)))
-    ((and thing
-          (let (and conn-this-command-handler
-                    (pred identity))
-            (conn-command-mark-handler thing)))
-     (let (conn--last-bounds)
-       (deactivate-mark t)
-       (pcase (prefix-numeric-value arg)
-         (0 nil)
-         ((and n (or 1 -1))
-          (let ((pt (point))
-                (mk (mark))
-                (current-prefix-arg n)
-                (conn-this-command-thing (conn-command-thing thing))
-                (conn-this-command-start (point-marker))
-                (this-command thing))
-            (unwind-protect
-                (progn
-                  (ignore-errors
-                    (call-interactively thing)
-                    (funcall conn-this-command-handler conn-this-command-start))
-                  (unless (and (eql pt (point))
-                               (eql mk (mark)))
-                    (conn-make-bounds
-                     thing 1
-                     (cons (region-beginning)
-                           (region-end)))))
-              (set-marker conn-this-command-start nil))))
-         (n
-          (let (subregions)
-            (catch 'break
-              (dotimes (_ (abs n))
-                (if-let* ((bound (conn-bounds-of thing (cl-signum arg))))
-                    (push bound subregions)
-                  (throw 'break nil))))
-            (conn-make-bounds
-             thing arg
-             (cl-loop for bound in subregions
-                      for (b . e) = (conn-bounds bound)
-                      minimize b into beg
-                      maximize e into end
-                      finally return (cons beg end))
-             :subregions (nreverse subregions)))))))))
+  (let ((pt (point))
+        (buf (current-buffer)))
+    (conn-make-bounds
+     thing arg
+     (lambda (bounds)
+       (with-current-buffer buf
+         (save-excursion
+           (goto-char pt)
+           (conn--bounds-of-thing bounds))))
+     :subregions (lambda (bounds)
+                   (with-current-buffer buf
+                     (save-excursion
+                       (goto-char pt)
+                       (conn--bounds-of-thing-subregions bounds)))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region)) arg)
   (conn-make-bounds
