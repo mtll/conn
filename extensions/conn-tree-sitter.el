@@ -1217,28 +1217,6 @@
                                               (and (<= beg (point))
                                                    (<= (point) end)))))))
 
-;; fix ts comment thing overriding ours
-(conn-register-thing
- 'comment
- :bounds-op (lambda ()
-              (if (conn--point-in-comment-p)
-                  (cons (save-excursion
-                          (while (and (conn--point-in-comment-p)
-                                      (not (eobp)))
-                            (forward-char 1)
-                            (skip-chars-forward " \t\n\r"))
-                          (skip-chars-backward " \t\n\r")
-                          (point))
-                        (save-excursion
-                          (while (conn--point-in-comment-p)
-                            (forward-char -1)
-                            (skip-chars-backward " \t\n\r"))
-                          (skip-chars-forward " \t\n\r")
-                          (unless (conn--point-in-comment-p)
-                            (forward-char 1))
-                          (point)))
-                (error "Point not in comment"))))
-
 ;;;###autoload
 (define-minor-mode conn-ts-things-mode
   "Minor mode for conn-ts thing bindings.")
