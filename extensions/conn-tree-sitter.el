@@ -345,7 +345,8 @@
                           cmd
                           (conn-ts--query-capture (treesit-buffer-root-node)
                                                   (conn-ts--get-query)
-                                                  beg end)
+                                                  (min beg end)
+                                                  (max beg end))
                           (< arg 0))
                 beg end)
           (if flat
