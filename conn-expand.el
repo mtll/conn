@@ -42,7 +42,10 @@ potential expansions.  Functions may return invalid expansions
 (defvar-local conn--current-expansions-tick nil)
 
 (defvar-keymap conn-expand-repeat-map
-  :repeat t
+  :repeat ( :continue (conn-toggle-mark-command)
+            :exit (ignore
+                   conn-toggle-mark-command))
+  "e" 'ignore
   "v" 'conn-toggle-mark-command
   "z" 'conn-expand-exchange
   "j" 'conn-contract
