@@ -34,23 +34,18 @@
 (defconst conn-ts--queries (make-hash-table :test 'eq))
 (defconst conn-ts--compiled-query-cache (make-hash-table :test 'eq))
 (defvar conn-ts--custom-queries nil)
-(defvar conn-ts--query-parents nil)
 
-;; TODO: vendor the nvim-treesitter-textobjects queries
 (defvar conn-ts-query-dir nil)
 
 (defvar conn-ts--symbol-tick 0)
 
-(defconst conn-ts--predicate-symbol-cache
-  (make-hash-table :test #'equal))
-
-(defconst conn-ts--offset-symbol-cache
+(defconst conn-ts--symbol-cache
   (make-hash-table :test #'equal))
 
 (defun conn-ts--parse-query (query)
   (cl-labels
-      ((get-alias (form func)
-         (with-memoization (gethash form conn-ts--predicate-symbol-cache)
+      ((get-predicate (form func)
+         (with-memoization (gethash form conn-ts--symbol-cache)
            (let ((sym (intern
                        (concat "conn-ts--anonymous-predicate"
                                (number-to-string
@@ -58,47 +53,48 @@
              (fset sym func)
              sym)))
        (get-offset (capture &optional brow bcol erow ecol)
-         (with-memoization (gethash (list brow bcol erow ecol)
-                                    conn-ts--offset-symbol-cache)
-           (let ((sym (intern (concat (substring (symbol-name capture) 1)
-                                      "--offset"
-                                      (number-to-string
-                                       (cl-incf conn-ts--symbol-tick)))))
+         (with-memoization (gethash (list capture brow bcol erow ecol)
+                                    conn-ts--symbol-cache)
+           (let ((fsym (intern (concat (substring (symbol-name capture) 1)
+                                       "--offset"
+                                       (number-to-string
+                                        (cl-incf conn-ts--symbol-tick)))))
                  (capture-sym (intern (substring (symbol-name capture) 1))))
-             (fset sym (pcase-lambda ((and cons `(,_sym . ,node)))
-                         (setf (car cons) capture-sym)
-                         (setf (cdr cons)
-                               (with-current-buffer (treesit-node-buffer node)
-                                 (cons (save-excursion
-                                         (goto-char (treesit-node-start node))
-                                         (when (and brow (/= 0 brow))
-                                           (let ((col (current-column)))
-                                             (forward-line brow)
-                                             (move-to-column col)))
-                                         (when (and bcol (/= 0 bcol))
-                                           (forward-char bcol))
-                                         (point))
-                                       (save-excursion
-                                         (goto-char (treesit-node-end node))
-                                         (when (and erow (/= 0 erow))
-                                           (let ((col (current-column)))
-                                             (forward-line erow)
-                                             (move-to-column col)))
-                                         (when (and ecol (/= 0 ecol))
-                                           (forward-char ecol))
-                                         (point)))))))
-             (put sym :conn-ts--offset-sym t)
-             (intern (concat "@" (symbol-name sym))))))
-       (sub (alist exp)
+             (fset fsym
+                   (pcase-lambda ((and cons `(,_fsym . ,node)))
+                     (setf (car cons) capture-sym)
+                     (setf (cdr cons)
+                           (with-current-buffer (treesit-node-buffer node)
+                             (cons (save-excursion
+                                     (goto-char (treesit-node-start node))
+                                     (when (and brow (/= 0 brow))
+                                       (let ((col (current-column)))
+                                         (forward-line brow)
+                                         (move-to-column col)))
+                                     (when (and bcol (/= 0 bcol))
+                                       (forward-char bcol))
+                                     (point))
+                                   (save-excursion
+                                     (goto-char (treesit-node-end node))
+                                     (when (and erow (/= 0 erow))
+                                       (let ((col (current-column)))
+                                         (forward-line erow)
+                                         (move-to-column col)))
+                                     (when (and ecol (/= 0 ecol))
+                                       (forward-char ecol))
+                                     (point)))))))
+             (put fsym :conn-ts--offset-capture t)
+             (intern (concat "@" (symbol-name fsym))))))
+       (subst (alist exp)
          (if (null alist)
              (list exp)
            (pcase exp
              (`(,(pred keywordp) . ,_)
               (list exp))
              ((pred consp)
-              (list (mapcan (lambda (e) (sub alist e)) exp)))
+              (list (mapcan (lambda (e) (subst alist e)) exp)))
              ((pred vectorp)
-              `([,@(mapcan (lambda (e) (sub alist e))
+              `([,@(mapcan (lambda (e) (subst alist e))
                            (append exp nil))]))
              (_ (or (copy-sequence (alist-get exp alist))
                     (list exp))))))
@@ -119,7 +115,7 @@
                    ;; regexps, I think
                    `((:match? ,pat ,capt)))
                   ((and form `(:not-lua-match? ,capt ,pat))
-                   `((:pred ,(get-alias
+                   `((:pred ,(get-predicate
                               form
                               (lambda (node)
                                 (save-excursion
@@ -139,14 +135,14 @@
                    (cl-pushnew end (alist-get end range-sub))
                    nil)
                   ((and form `(:not-kind-eq? ,capt ,type))
-                   `((:pred ,(get-alias
+                   `((:pred ,(get-predicate
                               form
                               (lambda (node)
                                 (not (equal (treesit-node-type node)
                                             type))))
                             ,capt)))
                   ((and form `(:not-any-of? ,capt . ,strs))
-                   `((:pred ,(get-alias
+                   `((:pred ,(get-predicate
                               form
                               (let ((re (regexp-opt strs)))
                                 (lambda (node)
@@ -169,8 +165,8 @@
           finally return
           (thread-last
             newexp
-            (mapcan (lambda (e) (sub range-sub e)))
-            (mapcan (lambda (e) (sub offset-sub e)))))))
+            (mapcan (lambda (e) (subst range-sub e)))
+            (mapcan (lambda (e) (subst offset-sub e)))))))
     (walk query)))
 
 (defun conn-ts--parse-scm-buffer (&optional buffer)
@@ -222,7 +218,7 @@
 (defun conn-ts--normalize-capture (capture)
   (when (treesit-node-p (cdr capture))
     (let ((name (car capture)))
-      (if (get name :conn-ts--offset-sym)
+      (if (get name :conn-ts--offset-capture)
           (funcall name capture)
         (setf (cdr capture)
               (cons (treesit-node-start (cdr capture))
@@ -230,41 +226,51 @@
 
 (defun conn-ts--get-language-query (language)
   (cl-labels
-      ((parse-inherits (top-level)
-         (let (inherits)
+      ((parse-inherits ()
+         (let (inherits toplevel)
            (when (re-search-forward "; inherits:? " nil t) ;?
              (while (re-search-forward
                      (rx (or (seq "(" (group (not ")")) ")")
                              (seq (group (not ",")))))
                      (pos-eol) t)
                (if (match-beginning 1)
-                   (when top-level
-                     (push (buffer-substring (match-beginning 1)
-                                             (match-end 1))
-                           inherits))
-                 (push (buffer-substring (match-beginning 2)
-                                         (match-end 2))
+                   (push (intern (buffer-substring (match-beginning 1)
+                                                   (match-end 1)))
+                         toplevel)
+                 (push (intern (buffer-substring (match-beginning 2)
+                                                 (match-end 2)))
                        inherits))))
-           inherits))
-       (get-query (language &optional top-level)
-         (with-memoization (gethash language conn-ts--queries)
+           (cons inherits toplevel)))
+       (get-query (lang)
+         (with-memoization (gethash lang conn-ts--queries)
            (let ((filename (concat conn-ts-query-dir
-                                   (symbol-name language)
+                                   (symbol-name lang)
                                    "/textobjects.scm")))
              (when (file-exists-p filename)
                (with-temp-buffer
                  (insert-file-contents-literally filename)
-                 (conn-ts--parse-scm-buffer)
-                 (let ((inherits (parse-inherits top-level)))
-                   (mapc #'get-query inherits)
-                   (setf (alist-get language conn-ts--query-parents)
-                         (cl-loop for p in inherits
-                                  append (assoc p conn-ts--query-parents)))
-                   (append
-                    (conn-ts--parse-scm-buffer)
-                    (cl-loop for lang in inherits
-                             append (gethash lang conn-ts--queries))))))))))
-    (get-query language t)))
+                 (pcase-let ((`(,inherits ,toplevel)
+                              (parse-inherits)))
+                   (put lang :conn-ts-inherits inherits)
+                   (put lang :conn-ts-toplevel toplevel)
+                   (conn-ts--parse-scm-buffer)
+                   (treesit-query-expand (conn-ts--parse-scm-buffer))))))))
+       (compose-query (lang)
+         (concat (get-query lang)
+                 (mapconcat #'compose-query
+                            (get lang :conn-ts-inherits))))
+       (get-extras (lang)
+         (alist-get lang conn-ts--custom-queries))
+       (compose-extras (lang)
+         (concat (get-extras lang)
+                 (mapconcat #'compose-extras
+                            (get lang :conn-ts-inherits)))))
+    (concat (compose-query language)
+            (compose-extras language)
+            (mapconcat #'get-query
+                       (get language :conn-ts-toplevel))
+            (mapconcat #'get-extras
+                       (get language :conn-ts-toplevel)))))
 
 (defun conn-ts--clear-query-cache ()
   (clrhash conn-ts--queries)
