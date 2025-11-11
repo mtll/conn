@@ -397,6 +397,22 @@
          (cons min max)
          :subregions (nreverse nodes))))))
 
+(cl-defmethod conn-get-things-in-region ((cmd (conn-thing conn-ts-thing))
+                                         beg end)
+  (cl-loop for bounds in (thread-last
+                           (conn-ts--query-capture
+                            (treesit-buffer-root-node)
+                            (conn-ts--get-query)
+                            beg end)
+                           (conn-ts--filter-captures cmd))
+           minimize (car bounds) into things-beg
+           maximize (cdr bounds) into things-end
+           collect (conn-make-bounds cmd nil bounds) into subregions
+           finally return (conn-make-bounds
+                           cmd nil
+                           (cons things-beg things-end)
+                           :subregions subregions)))
+
 (conn-register-thing 'conn-ts-thing)
 
 (defvar conn-ts-multi-always-prompt t)
