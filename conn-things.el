@@ -862,12 +862,12 @@ words."))
      thing arg
      (lambda (bounds)
        (with-current-buffer buf
-         (save-excursion
+         (save-mark-and-excursion
            (goto-char pt)
            (conn--bounds-of-thing bounds))))
      :subregions (lambda (bounds)
                    (with-current-buffer buf
-                     (save-excursion
+                     (save-mark-and-excursion
                        (goto-char pt)
                        (conn--bounds-of-thing-subregions bounds)))))))
 
