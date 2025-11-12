@@ -42,25 +42,29 @@
 (defconst conn-ts--symbol-cache
   (make-hash-table :test #'equal))
 
+(defun conn-ts--make-symbol (&rest strings-or-symbols)
+  (intern (concat
+           (cl-loop for s in strings-or-symbols
+                    when (stringp s) concat s
+                    when (symbolp s) concat (symbol-name s))
+           (number-to-string
+            (cl-incf conn-ts--symbol-tick)))))
+
 (defun conn-ts--parse-query (query)
   (cl-labels
       ((make-predicate (form capture func)
          (with-memoization (gethash form conn-ts--symbol-cache)
            `((:pred
-              ,(let ((sym (intern
-                           (concat "conn-ts--anonymous-predicate"
-                                   (number-to-string
-                                    (cl-incf conn-ts--symbol-tick))))))
+              ,(let ((sym (conn-ts--make-symbol "conn-ts--anonymous-predicate")))
                  (fset sym func)
                  sym)
               ,capture))))
        (make-offset (capture &optional brow bcol erow ecol)
          (with-memoization (gethash (list capture brow bcol erow ecol)
                                     conn-ts--symbol-cache)
-           (let ((fsym (intern (concat (substring (symbol-name capture) 1)
-                                       "--offset"
-                                       (number-to-string
-                                        (cl-incf conn-ts--symbol-tick)))))
+           (let ((fsym (conn-ts--make-symbol
+                        (substring (symbol-name capture) 1)
+                        "--offset"))
                  (capture-sym (intern (substring (symbol-name capture) 1))))
              (fset fsym
                    (pcase-lambda ((and cons `(,_fsym . ,node)))
@@ -495,6 +499,14 @@
    (window-predicate
     :initform (lambda (win) (eq win (selected-window))))))
 
+(defun conn-ts--thing-predicate (thing)
+  (with-memoization (gethash (cons 'conn-all-things thing)
+                             conn-ts--symbol-cache)
+    (let ((fsym (conn-ts--make-symbol "conn-ts--all-" thing)))
+      (fset fsym (lambda (node)
+                   (treesit-node-match-p node thing)))
+      fsym)))
+
 (cl-defmethod conn-target-finder-update ((state conn-ts-all-things))
   (cl-macrolet ((make-ts-target (thing beg end)
                   `(conn-make-target-overlay
@@ -508,58 +520,55 @@
                                              self
                                              conn-ts-multi-always-prompt))))
                     :properties (list 'unique-bounds (list (cons ,beg ,end))))))
-    (let ((truncate-string-ellipsis nil)
-          (thing (oref state thing)))
+    (let* ((truncate-string-ellipsis nil)
+           (thing (oref state thing))
+           (query `(((_) @node
+                     (:pred? ,(conn-ts--thing-predicate thing) @node)))))
       (dolist (win (conn--get-target-windows))
         (with-selected-window win
-          (conn-for-each-visible (window-start) (window-end)
-            (treesit-induce-sparse-tree
-             (treesit-buffer-root-node) thing
-             (lambda (node)
-               (let ((beg (treesit-node-start node))
-                     (end (treesit-node-end node)))
-                 (when (and (treesit-node-named node)
-                            (<= (point-min) beg (point-max))
-                            (save-excursion
-                              (goto-char beg)
-                              (treesit-thing-at-point thing 'nested)))
-                   (if-let* ((ov (car (conn--overlays-in-of-type
-                                       beg (1+ beg) 'conn-target-overlay))))
-                       (progn
-                         (cl-pushnew (let* ((type (treesit-node-type node))
-                                            (thing (intern type)))
-                                       (conn-anonymous-thing
-                                         thing
-                                         :bounds-op ( :method (_ _)
-                                                      (conn-make-bounds
-                                                       thing nil
-                                                       (let ((n (treesit-thing-at-point
-                                                                 type 'nested)))
-                                                         (cons (treesit-node-start n)
-                                                               (treesit-node-end n)))))))
-                                     (conn-anonymous-thing-property
-                                      (overlay-get ov 'thing)
-                                      :things))
-                         (when (length=
-                                (cl-pushnew (cons beg end)
-                                            (overlay-get ov 'unique-bounds)
-                                            :test #'equal)
-                                2)
-                           (overlay-put ov 'label-suffix (truncate-string-ellipsis))))
-                     (make-ts-target
-                      (let* ((type (treesit-node-type node))
-                             (thing (intern type)))
-                        (conn-anonymous-thing
-                          thing
-                          :bounds-op ( :method (_ _)
-                                       (conn-make-bounds
-                                        thing nil
-                                        (let ((n (treesit-thing-at-point
-                                                  type 'nested)))
-                                          (cons (treesit-node-start n)
-                                                (treesit-node-end n)))))))
-                      beg end))))
-               nil)))))))
+          (pcase-dolist (`(,vbeg . ,vend)
+                         (conn--visible-regions (window-start)
+                                                (window-end)))
+            (pcase-dolist ((and `(,thing . ,node)
+                                (let type (treesit-node-type node))
+                                (let beg (treesit-node-start node))
+                                (let end (treesit-node-end node)))
+                           (treesit-query-capture (treesit-buffer-root-node)
+                                                  query vbeg vend))
+              (if-let* ((ov (car (conn--overlays-in-of-type
+                                  beg (1+ beg) 'conn-target-overlay))))
+                  (progn
+                    (cl-pushnew (conn-anonymous-thing
+                                  thing
+                                  :pretty-print (:method (_) type)
+                                  :bounds-op ( :method (self _)
+                                               (conn-make-bounds
+                                                self nil
+                                                (let ((n (treesit-thing-at-point
+                                                          type 'nested)))
+                                                  (cons (treesit-node-start n)
+                                                        (treesit-node-end n))))))
+                                (conn-anonymous-thing-property
+                                 (overlay-get ov 'thing)
+                                 :things))
+                    (when (length=
+                           (cl-pushnew (cons beg end)
+                                       (overlay-get ov 'unique-bounds)
+                                       :test #'equal)
+                           2)
+                      (overlay-put ov 'label-suffix (truncate-string-ellipsis))))
+                (make-ts-target
+                 (conn-anonymous-thing
+                   thing
+                   :pretty-print (:method (_) type)
+                   :bounds-op ( :method (self _)
+                                (conn-make-bounds
+                                 self nil
+                                 (let ((n (treesit-thing-at-point
+                                           type 'nested)))
+                                   (cons (treesit-node-start n)
+                                         (treesit-node-end n))))))
+                 beg end))))))))
   (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
