@@ -1704,6 +1704,7 @@ Target overlays may override this default by setting the
         (cl-flet ((conn-select-target ()
                     (conn-target-finder-select
                      conn-dispatch-target-finder)))
+          (redisplay)
           (catch 'dispatch-select-exit
             (let ((conn-dispatch-in-progress t))
               (while (or conn-dispatch-repeating
@@ -4041,13 +4042,18 @@ contain targets."
                                      &allow-other-keys)
   (conn-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,thing-override1)
-                 (conn-select-target))
-                (`(,pt2 ,win2 ,thing-override2)
                  (conn-select-target)))
-      (funcall action
-               win1 pt1 (or thing-override1 thing)
-               win2 pt2 (or thing-override2 thing)
-               thing-arg thing-transform))))
+      (let ((conn-target-predicate conn-target-predicate))
+        (add-function :before-while conn-target-predicate
+                      (lambda (pt length window)
+                        (not (and (eq window win1)
+                                  (eql pt pt1)))))
+        (pcase-let ((`(,pt2 ,win2 ,thing-override2)
+                     (conn-select-target)))
+          (funcall action
+                   win1 pt1 (or thing-override1 thing)
+                   win2 pt2 (or thing-override2 thing)
+                   thing-arg thing-transform))))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      thing
