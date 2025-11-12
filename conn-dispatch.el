@@ -4045,7 +4045,7 @@ contain targets."
                  (conn-select-target)))
       (let ((conn-target-predicate conn-target-predicate))
         (add-function :before-while conn-target-predicate
-                      (lambda (pt length window)
+                      (lambda (pt _length window)
                         (not (and (eq window win1)
                                   (eql pt pt1)))))
         (pcase-let ((`(,pt2 ,win2 ,thing-override2)
