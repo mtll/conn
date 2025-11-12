@@ -1153,14 +1153,16 @@ words."))
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
                                          arg transforms
                                          beg end)
-  (when-let* ((thing (seq-find #'conn-thing-p
-                               (conn-thing-all-parents thing))))
-    (let ((subregions nil)
-          (things-beg most-positive-fixnum)
-          (things-end most-negative-fixnum))
-      (save-excursion
-        (goto-char beg)
-        (forward-thing thing 1)
+  (save-excursion
+    (goto-char beg)
+    (when-let* ((thing (seq-find #'conn-thing-p
+                                 (conn-thing-all-parents thing)))
+                (_ (ignore-errors
+                     (forward-thing thing 1)
+                     t)))
+      (let ((subregions nil)
+            (things-beg most-positive-fixnum)
+            (things-end most-negative-fixnum))
         (catch 'end
           (while (< things-end end)
             (let ((sub-beg most-positive-fixnum)
@@ -1212,10 +1214,7 @@ words."))
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument)))
     (conn-get-things-in-region
-     (cl-loop for parent in (conn-thing-all-parents thing)
-              when (conn-thing-p parent) return parent
-              finally (user-error "Not a valid things in region thing"))
-     arg transform
+     thing arg transform
      (region-beginning) (region-end))))
 
 ;;;; Multi Things
