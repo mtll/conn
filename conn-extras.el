@@ -213,7 +213,7 @@
        (transform (conn-transform-argument))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-do
+    (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows restrict-windows
@@ -569,7 +569,7 @@
        (transform (conn-transform-argument))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-do
+    (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows restrict-windows
@@ -757,7 +757,7 @@
       ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-do
+    (conn-perform-dispatch
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows t
@@ -922,7 +922,7 @@
 
 (defun conn-dispatch-on-info-refs ()
   (interactive)
-  (conn-dispatch-do
+  (conn-perform-dispatch
    (oclosure-lambda (conn-action-info-ref
                      (description "Info Refs")
                      (window-predicate
