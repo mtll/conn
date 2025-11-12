@@ -44,15 +44,17 @@
 
 (defun conn-ts--parse-query (query)
   (cl-labels
-      ((get-predicate (form func)
+      ((make-predicate (form capture func)
          (with-memoization (gethash form conn-ts--symbol-cache)
-           (let ((sym (intern
-                       (concat "conn-ts--anonymous-predicate"
-                               (number-to-string
-                                (cl-incf conn-ts--symbol-tick))))))
-             (fset sym func)
-             sym)))
-       (get-offset (capture &optional brow bcol erow ecol)
+           `((:pred
+              ,(let ((sym (intern
+                           (concat "conn-ts--anonymous-predicate"
+                                   (number-to-string
+                                    (cl-incf conn-ts--symbol-tick))))))
+                 (fset sym func)
+                 sym)
+              ,capture))))
+       (make-offset (capture &optional brow bcol erow ecol)
          (with-memoization (gethash (list capture brow bcol erow ecol)
                                     conn-ts--symbol-cache)
            (let ((fsym (intern (concat (substring (symbol-name capture) 1)
@@ -107,25 +109,24 @@
                   (`(:any-of? ,capt . ,pats)
                    `((:match? ,(regexp-opt pats) ,capt)))
                   (`(:offset! ,capt . ,offsets)
-                   (push (apply #'get-offset capt offsets)
+                   (push (apply #'make-offset capt offsets)
                          (alist-get capt offset-sub))
                    nil)
-                  (`(:lua-match ,capt ,pat)
+                  (`(:lua-match? ,capt ,pat)
                    ;; All #lua-match? directives I found work fine as
                    ;; regexps, I think
                    `((:match? ,pat ,capt)))
                   ((and form `(:not-lua-match? ,capt ,pat))
-                   `((:pred ,(get-predicate
-                              form
-                              (lambda (node)
-                                (save-excursion
-                                  (save-match-data
-                                    (goto-char (treesit-node-start node))
-                                    (not
-                                     (eql (treesit-node-end node)
-                                          (re-search-forward
-                                           pat (treesit-node-end node) nil)))))))
-                            ,capt)))
+                   (make-predicate
+                    form capt
+                    (lambda (node)
+                      (save-excursion
+                        (save-match-data
+                          (goto-char (treesit-node-start node))
+                          (not
+                           (eql (treesit-node-end node)
+                                (re-search-forward
+                                 pat (treesit-node-end node) nil))))))))
                   (`(:make-range! ,capture ,beg ,end)
                    (push (intern (concat "@" capture "_start"))
                          (alist-get beg range-sub))
@@ -135,25 +136,23 @@
                    (cl-pushnew end (alist-get end range-sub))
                    nil)
                   ((and form `(:not-kind-eq? ,capt ,type))
-                   `((:pred ,(get-predicate
-                              form
-                              (lambda (node)
-                                (not (equal (treesit-node-type node)
-                                            type))))
-                            ,capt)))
+                   (make-predicate
+                    form capt
+                    (lambda (node)
+                      (not (equal (treesit-node-type node)
+                                  type)))))
                   ((and form `(:not-any-of? ,capt . ,strs))
-                   `((:pred ,(get-predicate
-                              form
-                              (let ((re (regexp-opt strs)))
-                                (lambda (node)
-                                  (save-excursion
-                                    (save-match-data
-                                      (goto-char (treesit-node-start node))
-                                      (not
-                                       (eql (treesit-node-end node)
-                                            (re-search-forward
-                                             re (treesit-node-end node) nil))))))))
-                            ,capt)))
+                   (make-predicate
+                    form capt
+                    (let ((re (regexp-opt strs)))
+                      (lambda (node)
+                        (save-excursion
+                          (save-match-data
+                            (goto-char (treesit-node-start node))
+                            (not
+                             (eql (treesit-node-end node)
+                                  (re-search-forward
+                                   re (treesit-node-end node) nil)))))))))
                   (`(,(pred keywordp) . ,_)
                    nil)
                   ((pred vectorp)
@@ -396,22 +395,6 @@
          cmd arg
          (cons min max)
          :subregions (nreverse nodes))))))
-
-(cl-defmethod conn-get-things-in-region ((cmd (conn-thing conn-ts-thing))
-                                         beg end)
-  (cl-loop for bounds in (thread-last
-                           (conn-ts--query-capture
-                            (treesit-buffer-root-node)
-                            (conn-ts--get-query)
-                            beg end)
-                           (conn-ts--filter-captures cmd))
-           minimize (car bounds) into things-beg
-           maximize (cdr bounds) into things-end
-           collect (conn-make-bounds cmd nil bounds) into subregions
-           finally return (conn-make-bounds
-                           cmd nil
-                           (cons things-beg things-end)
-                           :subregions subregions)))
 
 (conn-register-thing 'conn-ts-thing)
 
