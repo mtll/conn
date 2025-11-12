@@ -1146,46 +1146,77 @@ words."))
 
 ;;;; Bounds of Things in Region
 
-(cl-defgeneric conn-get-things-in-region (thing beg end)
+(cl-defgeneric conn-get-things-in-region (thing arg transforms beg end)
   (declare (conn-anonymous-thing-property :things-in-region)
            (important-return-value t)))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
+                                         arg transforms
                                          beg end)
   (when-let* ((thing (seq-find #'conn-thing-p
                                (conn-thing-all-parents thing))))
-    (save-excursion
-      (goto-char beg)
-      (forward-thing thing 1)
-      (cl-loop for bd = (cons (save-excursion
-                                (forward-thing thing -1)
-                                (point))
-                              (point))
-               while (and bd (< (car bd) end))
-               collect (conn-make-bounds thing nil bd) into sr
-               minimize (car bd) into b
-               maximize (cdr bd) into e
-               while (and (< (point) end)
-                          (ignore-errors
-                            (forward-thing thing 1)
-                            t))
-               finally return (conn-make-bounds
-                               thing nil
-                               (cons b e)
-                               :subregions sr)))))
+    (let ((subregions nil)
+          (things-beg most-positive-fixnum)
+          (things-end most-negative-fixnum))
+      (save-excursion
+        (goto-char beg)
+        (forward-thing thing 1)
+        (catch 'end
+          (while (< things-end end)
+            (let ((sub-beg most-positive-fixnum)
+                  (sub-end most-negative-fixnum)
+                  (ssr nil))
+              (cl-flet ((push-bound ()
+                          (push (conn-transform-bounds
+                                 (conn-make-bounds
+                                  thing arg
+                                  (cons sub-beg sub-end)
+                                  :subregions ssr)
+                                 transforms)
+                                subregions)))
+                (dotimes (_ (prefix-numeric-value arg))
+                  (pcase-let (((and bounds (conn-bounds `(,b . ,e)))
+                               (conn-make-bounds
+                                thing arg
+                                (cons (save-excursion
+                                        (forward-thing thing -1)
+                                        (point))
+                                      (point))
+                                :subregions ssr)))
+                    (unless (< b end)
+                      (when ssr (push-bound))
+                      (throw 'end nil))
+                    (cl-callf min sub-beg b)
+                    (cl-callf min things-beg b)
+                    (cl-callf max sub-end e)
+                    (cl-callf max things-end e)
+                    (push bounds ssr)
+                    (unless (and (< (point) end)
+                                 (ignore-errors
+                                   (forward-thing thing 1)
+                                   t))
+                      (push-bound)
+                      (throw 'end nil))))
+                (push-bound)))))
+        (conn-make-bounds
+         thing nil
+         (cons things-beg things-end)
+         :subregions (nreverse subregions))))))
 
 (conn-register-thing 'conn-things-in-region)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) arg)
   (conn-read-args (conn-read-thing-state
-                   :prompt "Things in Region")
-      ((`(,thing ,_) (conn-thing-argument)))
+                   :prompt "Things in Region"
+                   :prefix arg)
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument)))
     (conn-get-things-in-region
      (cl-loop for parent in (conn-thing-all-parents thing)
               when (conn-thing-p parent) return parent
               finally (user-error "Not a valid things in region thing"))
-     (region-beginning)
-     (region-end))))
+     arg transform
+     (region-beginning) (region-end))))
 
 ;;;; Multi Things
 
