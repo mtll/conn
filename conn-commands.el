@@ -1012,18 +1012,21 @@ With a prefix ARG `push-mark' without activating it."
           (recursive-edit))
       (conn-transpose-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
-     buf (car bounds1)
+     buf
+     (car bounds1)
      (conn-anonymous-thing
        'region
        :bounds-op ( :method (_)
                     (conn-make-bounds 'region nil bounds1)))
-     (current-buffer) (point)
+     nil nil
+     (current-buffer)
+     (point)
      (let ((bounds2 (cons (region-beginning) (region-end))))
        (conn-anonymous-thing
          'region
          :bounds-op ( :method (_)
                       (conn-make-bounds 'region nil bounds2))))
-     nil)))
+     nil nil)))
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch)) arg)
   (conn-disable-repeating)
@@ -1054,9 +1057,8 @@ With a prefix ARG `push-mark' without activating it."
                                       (window-buffer win))))))
          (window2 pt2 thing2 thing-arg)
        (conn--dispatch-transpose-subr
-        (window-buffer window2) pt2 thing2
-        buffer point (or thing1 thing2)
-        thing-arg))
+        (window-buffer window2) pt2 thing2 thing-arg nil
+        buffer point (or thing1 thing2) thing-arg nil))
      thing thing-arg nil
      :other-end :no-other-end
      :restrict-windows restrict-windows)))
