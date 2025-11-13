@@ -950,16 +950,12 @@ With a prefix ARG `push-mark' without activating it."
   (thing1 :type function))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     thing
-                                     thing-arg
                                      &key &allow-other-keys)
   (conn-dispatch-loop nil
-    (pcase-let* ((`(,pt ,win ,thing-override)
+    (pcase-let* ((`(,pt ,win ,thing ,arg ,_transform)
                   (save-mark-and-excursion
                     (conn-select-target))))
-      (funcall action win pt
-               (or thing-override thing)
-               thing-arg))))
+      (funcall action win pt thing arg))))
 
 (cl-defgeneric conn-transpose-things-do (cmd arg)
   (declare (conn-anonymous-thing-property :transpose-op)))
@@ -1036,7 +1032,7 @@ With a prefix ARG `push-mark' without activating it."
                    :prefix arg)
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (restrict-windows (conn-dispatch-restrict-windows-argument)))
-    (conn-perform-dispatch
+    (conn-setup-dispatch
      (oclosure-lambda
          (conn-transpose-command
           (description "Transpose")
@@ -1910,7 +1906,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (conn-dispatch-handle)))
         (let ((result nil)
               (strings nil))
-          (conn-perform-dispatch
+          (conn-setup-dispatch
            (oclosure-lambda (conn-kill-action
                              (description "Kill"))
                (window pt thing thing-arg transform)
@@ -2148,7 +2144,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (conn-dispatch-handle)))
       (let ((result nil)
             (strings nil))
-        (conn-perform-dispatch
+        (conn-setup-dispatch
          (oclosure-lambda (conn-kill-action
                            (description "Copy"))
              (window pt thing thing-arg transform)

@@ -1127,14 +1127,15 @@ argument may be supplied for the thing command.")))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (conn-ring-delete (point) conn-emacs-state-ring #'=)
-    (let ((pt (conn--create-marker (point) nil t)))
-      (conn-ring-insert-front conn-emacs-state-ring pt)
-      (when conn-emacs-state-register
-        (if-let* ((marker (get-register conn-emacs-state-register))
-                  ((markerp marker)))
-            (set-marker marker (point) (current-buffer))
-          (set-register conn-emacs-state-register (copy-marker pt))))))
+    (with-demoted-errors "Emacs state ring error: %s"
+      (conn-ring-delete (point) conn-emacs-state-ring #'=)
+      (let ((pt (conn--create-marker (point) nil t)))
+        (conn-ring-insert-front conn-emacs-state-ring pt)
+        (when conn-emacs-state-register
+          (if-let* ((marker (get-register conn-emacs-state-register))
+                    ((markerp marker)))
+              (set-marker marker (point) (current-buffer))
+            (set-register conn-emacs-state-register (copy-marker pt)))))))
   (cl-call-next-method))
 
 ;;;;; Autopop State
@@ -1331,7 +1332,7 @@ Resets the current prefix argument."
 This function should be called from any function passed as the
 :command-handler argument to `conn-read-args' when the function
 chooses to handle a command."
-  (throw 'conn-read-args-handle t))
+  (throw 'conn-read-args-handle nil))
 
 (defun conn-read-args-message (format-string &rest args)
   (let ((inhibit-message conn-read-args-inhibit-message)
@@ -1341,7 +1342,8 @@ chooses to handle a command."
 
 (defun conn-read-args-error (format-string &rest args)
   (setq conn--read-args-error-message (apply #'format format-string args)
-        conn--read-args-error-flag t))
+        conn--read-args-error-flag t)
+  (throw 'conn-read-args-handle nil))
 
 (defun conn--read-args-display-message ()
   (let ((msg (concat

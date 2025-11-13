@@ -836,7 +836,7 @@ themselves once the selection process has concluded."
           (conn-read-args-message "%s" (conn-describe-dispatch
                                         (conn-ring-head conn-dispatch-ring))))
         (conn-read-args-handle))
-    (user-error "Dispatch ring empty")))
+    (user-error (conn-read-args-error "Dispatch ring empty"))))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
   (condition-case _
@@ -847,16 +847,17 @@ themselves once the selection process has concluded."
           (conn-read-args-message "%s" (conn-describe-dispatch
                                         (conn-ring-head conn-dispatch-ring))))
         (conn-read-args-handle))
-    (user-error "Dispatch ring empty")))
+    (user-error (conn-read-args-error "Dispatch ring empty"))))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
   (conn-dispatch-ring-remove-stale)
   (if-let* ((head (conn-ring-head conn-dispatch-ring)))
-      (if (bound-and-true-p conn-posframe-mode)
-          (conn-posframe--dispatch-ring-display-subr)
-        (conn-read-args-message "%s" (conn-describe-dispatch head)))
-    (user-error "Dispatch ring empty"))
-  (conn-read-args-handle))
+      (progn
+        (if (bound-and-true-p conn-posframe-mode)
+            (conn-posframe--dispatch-ring-display-subr)
+          (conn-read-args-message "%s" (conn-describe-dispatch head)))
+        (conn-read-args-handle))
+    (conn-read-args-error "Dispatch ring empty")))
 
 ;;;;; Bounds of Dispatch
 
@@ -1060,7 +1061,9 @@ Optionally the overlay may have an associated THING."
         (dolist (o old)
           (when-let* ((str (overlay-get o 'label-string)))
             (setf (overlay-get ov 'label-string) str
-                  (overlay-get o 'label-string) nil)
+                  (overlay-get o 'label-string) nil
+                  (overlay-get ov 'label-face)
+                  (overlay-get o 'label-face))
             (throw 'done nil))))
       (when thing (overlay-put ov 'thing thing))
       (cl-loop for (prop val) on properties by #'cddr
@@ -1662,6 +1665,8 @@ Target overlays may override this default by setting the
 (defvar conn--dispatch-undo-change-groups nil)
 (defvar conn--prev-scroll-conservatively nil)
 
+(defvar conn--dispatch-current-thing nil)
+
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
@@ -1701,9 +1706,7 @@ Target overlays may override this default by setting the
           `(,(car conn--dispatch-read-event-message-prefixes)
             ,@(cdr conn--dispatch-read-event-message-prefixes))))
     (unwind-protect
-        (cl-flet ((conn-select-target ()
-                    (conn-target-finder-select
-                     conn-dispatch-target-finder)))
+        (progn
           (redisplay)
           (catch 'dispatch-select-exit
             (let ((conn-dispatch-in-progress t))
@@ -1713,7 +1716,17 @@ Target overlays may override this default by setting the
                   (condition-case err
                       (progn
                         (push nil conn--dispatch-undo-change-groups)
-                        (funcall body)
+                        (while-let ((new-thing
+                                     (catch 'dispatch-change-target
+                                       (let ((emulation-mode-map-alists
+                                              `(((conn-dispatch-select-mode
+                                                  . ,(make-composed-keymap
+                                                      (conn-target-finder-keymaps
+                                                       conn-dispatch-target-finder))))
+                                                ,@emulation-mode-map-alists)))
+                                         (funcall body))
+                                       nil)))
+                          (setq conn--dispatch-current-thing new-thing))
                         (cl-incf conn-dispatch-iteration-count))
                     (user-error
                      (pcase-dolist (`(,_ . ,undo-fn)
@@ -1733,8 +1746,12 @@ Target overlays may override this default by setting the
     ,repeat
     (lambda ()
       (cl-flet ((conn-select-target ()
-                  (conn-target-finder-select
-                   conn-dispatch-target-finder)))
+                  (pcase-let ((`(,pt ,win ,thing-override)
+                               (conn-target-finder-select
+                                conn-dispatch-target-finder))
+                              (`(,thing ,arg ,transform)
+                               conn--dispatch-current-thing))
+                    (list pt win (or thing-override thing) arg transform))))
         ,@body))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -1957,8 +1974,9 @@ Target overlays may override this default by setting the
                   :background ,(conn-dispatch-label-alt-background))))
     (pcase-dolist (`(,_window . ,targets) conn-targets)
       (dolist (tar (sort targets :key #'overlay-start))
-        (overlay-put tar 'label-face face1)
-        (cl-rotatef face1 face2)))))
+        (unless (overlay-get tar 'label-face)
+          (overlay-put tar 'label-face face1)
+          (cl-rotatef face1 face2))))))
 
 (cl-defgeneric conn-target-finder-cleanup (target-finder))
 
@@ -3442,7 +3460,9 @@ contain targets."
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
   (thread-first
     (conn-dispatch-copy-from--opoint action)
-    marker-buffer buffer-live-p not))
+    marker-buffer
+    buffer-live-p
+    not))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from))
   (set-marker (conn-dispatch-copy-from--opoint action) nil))
@@ -3747,8 +3767,9 @@ contain targets."
 (cl-defstruct (conn-previous-dispatch
                (:constructor
                 conn-make-dispatch
-                ( action thing thing-arg thing-transform keys
+                ( action keys
                   &aux
+                  (thing-settings conn--dispatch-current-thing)
                   (restrict-windows (advice-function-member-p
                                      'conn--dispatch-restrict-windows
                                      conn-target-window-predicate))
@@ -3763,9 +3784,7 @@ contain targets."
                          (funcall fn conn-dispatch-target-finder)))))))
                (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
-  (thing nil :type (or symbol conn-anonymous-thing))
-  (thing-arg nil :type (or nil integer))
-  (thing-transform nil :type list)
+  (thing-settings nil :type list)
   (keys nil :type list)
   (other-end nil :type symbol)
   (always-retarget nil :type boolean)
@@ -3780,19 +3799,17 @@ contain targets."
                   :cleanup 'conn-dispatch--cleanup))
 
 (cl-defmethod conn-dispatch-command-handler ((_cmd (eql conn-repeat-last-dispatch)))
-  (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
+  (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))
       (if (conn-action-stale-p (conn-previous-dispatch-action prev))
           (progn
             (conn-dispatch-ring-remove-stale)
-            (user-error "Last dispatch action stale"))
-        (conn-ring-delq prev conn-dispatch-ring)
-        (conn-read-args-handle)
+            (conn-read-args-error "Last dispatch action stale"))
         (conn-read-args-return
           (conn-call-previous-dispatch
            prev
            :repeat (xor (conn-read-args-consume-prefix-arg)
                         (conn-previous-dispatch-repeat prev)))))
-    (user-error "Dispatch ring empty")))
+    (conn-read-args-error "Dispatch ring empty")))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -3808,9 +3825,9 @@ contain targets."
   (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
           (conn-action-pretty-print (conn-previous-dispatch-action dispatch))
-          (conn-thing-pretty-print (conn-previous-dispatch-thing dispatch))
-          (conn-previous-dispatch-thing-arg dispatch)
-          (if-let* ((ts (conn-previous-dispatch-thing-transform dispatch)))
+          (conn-thing-pretty-print (car (conn-previous-dispatch-thing-settings dispatch)))
+          (nth 1 (conn-previous-dispatch-thing-settings dispatch))
+          (if-let* ((ts (nth 2 (conn-previous-dispatch-thing-settings dispatch))))
               (concat
                "; "
                (mapconcat (lambda (tf)
@@ -3857,9 +3874,8 @@ contain targets."
 
 (defun conn-call-previous-dispatch (dispatch &rest override-keys)
   (pcase-let (((cl-struct conn-previous-dispatch
-                          thing
-                          thing-arg
-                          thing-transform
+                          (thing-settings
+                           `(,thing ,thing-arg ,thing-transform))
                           action
                           keys
                           other-end
@@ -3868,7 +3884,7 @@ contain targets."
                           restrict-windows
                           setup)
                dispatch))
-    (apply #'conn-perform-dispatch
+    (apply #'conn-setup-dispatch
            `( ,action ,thing ,thing-arg ,thing-transform
               ,@override-keys
               :always-retarget ,always-retarget
@@ -3880,40 +3896,23 @@ contain targets."
 
 ;;;;; Dispatch Commands
 
-(cl-defgeneric conn-perform-dispatch (action
-                                 thing
-                                 thing-arg
-                                 thing-transform
-                                 &key
-                                 repeat
-                                 restrict-windows
-                                 other-end
-                                 &allow-other-keys))
-
-(cl-defmethod conn-perform-dispatch ((_action (eql nil))
-                                thing
-                                thing-arg
-                                thing-transform
-                                &rest keys
-                                &key &allow-other-keys)
-  (apply #'conn-perform-dispatch
-         (conn-make-default-action thing)
-         thing thing-arg thing-transform keys))
-
-(cl-defmethod conn-perform-dispatch :around ((action conn-action)
-                                             thing
-                                             thing-arg
-                                             thing-transform
-                                             &rest keys
-                                             &key
-                                             restrict-windows
-                                             other-end
-                                             always-retarget
-                                             setup
-                                             &allow-other-keys)
+(cl-defun conn-setup-dispatch (action
+                               thing
+                               thing-arg
+                               thing-transform
+                               &rest keys
+                               &key
+                               restrict-windows
+                               other-end
+                               always-retarget
+                               setup
+                               &allow-other-keys)
+  (when (null action)
+    (setq action (conn-make-default-action thing)))
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
+         (conn--dispatch-current-thing (list thing thing-arg thing-transform))
          (opoint (point-marker))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
@@ -3991,22 +3990,9 @@ contain targets."
     (when setup (funcall setup))
     (conn--unwind-protect-all
       (progn
-        (while-let ((new-target
-                     (catch 'dispatch-change-target
-                       (let ((emulation-mode-map-alists
-                              `(((conn-dispatch-select-mode
-                                  . ,(make-composed-keymap
-                                      (conn-target-finder-keymaps
-                                       conn-dispatch-target-finder))))
-                                ,@emulation-mode-map-alists)))
-                         (apply #'cl-call-next-method
-                                action
-                                thing thing-arg thing-transform
-                                keys))
-                       nil)))
-          (pcase-setq `(,thing ,thing-arg ,thing-transform) new-target))
+        (apply #'conn-perform-dispatch action keys)
         (conn-dispatch-push-history
-         (conn-make-dispatch action thing thing-arg thing-transform keys)))
+         (conn-make-dispatch action keys)))
       (conn-cleanup-targets)
       (conn-cleanup-labels)
       (progn
@@ -4019,59 +4005,52 @@ contain targets."
         (let ((inhibit-message conn-read-args-inhibit-message))
           (message nil))))))
 
+(cl-defgeneric conn-perform-dispatch (action
+                                      &key
+                                      repeat
+                                      restrict-windows
+                                      other-end
+                                      &allow-other-keys))
+
 (cl-defmethod conn-perform-dispatch ((action conn-action)
-                                     thing
-                                     thing-arg
-                                     thing-transform
                                      &key
                                      repeat
                                      &allow-other-keys)
   (conn-dispatch-loop repeat
-    (pcase-let* ((`(,pt ,win ,thing-override)
+    (pcase-let* ((`(,pt ,win ,thing ,arg ,transform)
                   (conn-select-target)))
-      (funcall action win pt
-               (or thing-override thing)
-               thing-arg thing-transform))))
+      (funcall action win pt thing arg transform))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
-                                     thing
-                                     thing-arg
-                                     thing-transform
                                      &key
                                      repeat
                                      &allow-other-keys)
   (conn-dispatch-loop repeat
-    (pcase-let ((`(,pt1 ,win1 ,thing-override1)
+    (pcase-let ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
                  (conn-select-target)))
       (let ((conn-target-predicate conn-target-predicate))
         (add-function :before-while conn-target-predicate
                       (lambda (pt _length window)
                         (not (and (eq window win1)
                                   (eql pt pt1)))))
-        (pcase-let ((`(,pt2 ,win2 ,thing-override2)
+        (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
                      (conn-select-target)))
           (funcall action
-                   win1 pt1 (or thing-override1 thing)
-                   win2 pt2 (or thing-override2 thing)
-                   thing-arg thing-transform))))))
+                   win1 pt1 thing1 arg1 transform1
+                   win2 pt2 thing2 arg2 transform2))))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
-                                     thing
-                                     thing-arg
-                                     thing-transform
                                      &key
                                      repeat
                                      &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-dispatch-loop repeat
-      (pcase-let* ((`(,pt ,win ,thing-override)
+      (pcase-let* ((`(,pt ,win ,thing ,arg ,transform)
                     (conn-select-target)))
         (while
             (condition-case err
                 (progn
-                  (funcall action win pt
-                           (or thing-override thing)
-                           thing-arg thing-transform)
+                  (funcall action win pt thing arg transform)
                   nil)
               (user-error (message (cadr err)) t))))))
   (unless conn-kapply-suppress-message
@@ -4094,7 +4073,7 @@ contain targets."
        (other-end (conn-dispatch-other-end-argument nil))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-perform-dispatch
+    (conn-setup-dispatch
      action thing thing-arg transform
      :repeat repeat
      :other-end other-end
@@ -4124,7 +4103,7 @@ contain targets."
          (other-end (conn-dispatch-other-end-argument nil))
          (restrict-windows (conn-dispatch-restrict-windows-argument))
          (`(,action ,repeat) (conn-dispatch-action-argument)))
-      (conn-perform-dispatch
+      (conn-setup-dispatch
        action thing thing-arg transform
        :repeat repeat
        :other-end other-end
@@ -4139,7 +4118,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
          (conn-previous-dispatch-action (conn-ring-head conn-dispatch-ring)))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (let ((prev (conn-ring-head conn-dispatch-ring)))
+  (let ((prev (conn-ring-extract-head conn-dispatch-ring)))
     (conn-call-previous-dispatch
      prev
      :repeat (xor invert-repeat (conn-previous-dispatch-repeat prev)))))
@@ -4186,7 +4165,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
   (interactive)
-  (conn-perform-dispatch
+  (conn-setup-dispatch
    (conn-make-action 'conn-dispatch-push-button)
    (conn-anonymous-thing
      'button
@@ -4209,7 +4188,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                      (conn--isearch-matches))))
       (unwind-protect ;In case this was a recursive isearch
           (isearch-exit)
-        (conn-perform-dispatch
+        (conn-setup-dispatch
          (conn-make-action 'conn-dispatch-goto)
          (conn-anonymous-thing
            'region
@@ -4226,7 +4205,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
   (interactive)
-  (conn-perform-dispatch
+  (conn-setup-dispatch
    (conn-make-action 'conn-dispatch-jump)
    nil nil nil
    :other-end :no-other-end))
@@ -4248,7 +4227,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
     (let (ovs subregions)
       (unwind-protect
           (progn
-            (conn-perform-dispatch
+            (conn-setup-dispatch
              (oclosure-lambda (conn-action
                                (no-history t)
                                (description "Bounds")
@@ -4294,7 +4273,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (pcase bounds
     ((conn-dispatch-bounds `(,beg . ,end))
      (let (obeg oend)
-       (conn-perform-dispatch
+       (conn-setup-dispatch
         (oclosure-lambda (conn-action
                           (no-history t)
                           (description "Bounds")
