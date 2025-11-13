@@ -1716,17 +1716,7 @@ Target overlays may override this default by setting the
                   (condition-case err
                       (progn
                         (push nil conn--dispatch-undo-change-groups)
-                        (while-let ((new-thing
-                                     (catch 'dispatch-change-target
-                                       (let ((emulation-mode-map-alists
-                                              `(((conn-dispatch-select-mode
-                                                  . ,(make-composed-keymap
-                                                      (conn-target-finder-keymaps
-                                                       conn-dispatch-target-finder))))
-                                                ,@emulation-mode-map-alists)))
-                                         (funcall body))
-                                       nil)))
-                          (setq conn--dispatch-current-thing new-thing))
+                        (funcall body)
                         (cl-incf conn-dispatch-iteration-count))
                     (user-error
                      (pcase-dolist (`(,_ . ,undo-fn)
@@ -1745,13 +1735,32 @@ Target overlays may override this default by setting the
   `(conn--dispatch-loop
     ,repeat
     (lambda ()
-      (cl-flet ((conn-select-target ()
-                  (pcase-let ((`(,pt ,win ,thing-override)
-                               (conn-target-finder-select
-                                conn-dispatch-target-finder))
-                              (`(,thing ,arg ,transform)
-                               conn--dispatch-current-thing))
-                    (list pt win (or thing-override thing) arg transform))))
+      (cl-flet
+          ((conn-select-target ()
+             (let ((ret nil))
+               (while-let
+                   ((new-thing
+                     (catch 'dispatch-change-target
+                       (pcase-let* ((emulation-mode-map-alists
+                                     `(((conn-dispatch-select-mode
+                                         . ,(make-composed-keymap
+                                             (conn-target-finder-keymaps
+                                              conn-dispatch-target-finder))))
+                                       ,@emulation-mode-map-alists))
+                                    (`(,pt ,win ,thing-override)
+                                     (conn-target-finder-select
+                                      conn-dispatch-target-finder))
+                                    (`(,thing ,arg ,transform)
+                                     conn--dispatch-current-thing))
+                         (setq ret (list pt
+                                         win
+                                         (or thing-override thing)
+                                         arg
+                                         transform)))
+                       nil)))
+                 (setq conn--dispatch-current-thing
+                       (funcall new-thing)))
+               ret)))
         ,@body))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -1791,18 +1800,20 @@ Target overlays may override this default by setting the
   (:method (_cmd) nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (conn-read-args (conn-dispatch-targets-state
-                   :prompt "New Targets"
-                   :reference (list conn-dispatch-thing-ref)
-                   :around (lambda (cont)
-                             (conn-with-dispatch-suspended
-                               (save-window-excursion
-                                 (funcall cont)))))
-      ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
-       (transform (conn-dispatch-transform-argument)))
-    (conn-target-finder-cleanup conn-dispatch-target-finder)
-    (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
-    (throw 'dispatch-change-target (list thing thing-arg transform))))
+  (throw 'dispatch-change-target
+         (lambda ()
+           (conn-read-args (conn-dispatch-targets-state
+                            :prompt "New Targets"
+                            :reference (list conn-dispatch-thing-ref)
+                            :around (lambda (cont)
+                                      (conn-with-dispatch-suspended
+                                        (save-window-excursion
+                                          (funcall cont)))))
+               ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
+                (transform (conn-dispatch-transform-argument)))
+             (conn-target-finder-cleanup conn-dispatch-target-finder)
+             (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
+             (list thing thing-arg transform)))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
@@ -3696,17 +3707,16 @@ contain targets."
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-      (window1 pt1 thing1 window2 pt2 thing2 thing-arg transform)
+      ( window1 pt1 thing1 thing-arg1 transform1
+        window2 pt2 thing2 thing-arg2 transform2)
     (conn-dispatch-loop-undo-boundary (window-buffer window1)
                                       (window-buffer window2))
     (conn--dispatch-transpose-subr
-     (window-buffer window1) pt1 thing1
-     (window-buffer window2) pt2 thing2
-     thing-arg transform)))
+     (window-buffer window1) pt1 thing1 thing-arg1 transform1
+     (window-buffer window2) pt2 thing2 thing-arg2 transform2)))
 
-(defun conn--dispatch-transpose-subr ( buffer1 pt1 thing1
-                                       buffer2 pt2 thing2
-                                       thing-arg &optional transform)
+(defun conn--dispatch-transpose-subr ( buffer1 pt1 thing1 arg1 transform1
+                                       buffer2 pt2 thing2 arg2 transform2)
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
         (save-excursion
@@ -3714,15 +3724,15 @@ contain targets."
                        (progn
                          (goto-char pt1)
                          (or (conn-bounds (conn-transform-bounds
-                                           (conn-bounds-of thing1 thing-arg)
-                                           transform))
+                                           (conn-bounds-of thing1 arg1)
+                                           transform1))
                              (user-error "Cannot find thing at point"))))
                       (`(,beg2 . ,end2)
                        (progn
                          (goto-char pt2)
                          (or (conn-bounds (conn-transform-bounds
-                                           (conn-bounds-of thing2 thing-arg)
-                                           transform))
+                                           (conn-bounds-of thing2 arg2)
+                                           transform2))
                              (user-error "Cannot find thing at point")))))
             (if (and (or (<= beg1 end1 beg2 end2)
                          (<= beg2 end2 beg1 end1))
@@ -3741,8 +3751,8 @@ contain targets."
       (with-current-buffer buffer1
         (save-excursion
           (goto-char pt1)
-          (pcase (conn-bounds-of thing1 thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
+          (pcase (conn-bounds-of thing1 arg1)
+            ((conn-bounds `(,beg . ,end) transform1)
              (setq pt1 beg)
              (setq str1 (filter-buffer-substring beg end))
              (delete-region beg end))
@@ -3750,8 +3760,8 @@ contain targets."
       (with-current-buffer buffer2
         (save-excursion
           (goto-char pt2)
-          (pcase (conn-bounds-of thing2 thing-arg)
-            ((conn-bounds `(,beg . ,end) transform)
+          (pcase (conn-bounds-of thing2 arg2)
+            ((conn-bounds `(,beg . ,end) transform2)
              (setq str2 (filter-buffer-substring beg end))
              (delete-region beg end)
              (insert str1))
