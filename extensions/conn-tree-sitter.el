@@ -189,23 +189,12 @@
         (pcase sexp
           ('nil)
           ((pred consp)
-           (push curr queries)
+           (when curr (push (nreverse curr) queries))
            (setf curr (list sexp)))
           (_
-           (push sexp (cdr curr)))))
-      (when curr (push curr queries))
-      (let ((qs (mapcar #'conn-ts--parse-query
-                        (cdr (nreverse queries)))))
-        qs))))
-
-(defun conn-ts--normalize-capture (capture)
-  (when (treesit-node-p (cdr capture))
-    (let ((name (car capture)))
-      (if (get name :conn-ts--offset-capture)
-          (funcall name capture)
-        (setf (cdr capture)
-              (cons (treesit-node-start (cdr capture))
-                    (treesit-node-end (cdr capture))))))))
+           (push sexp curr))))
+      (when curr (push (nreverse curr) queries))
+      (mapcar #'conn-ts--parse-query (nreverse queries)))))
 
 (defun conn-ts--get-language-query (language)
   (cl-labels
@@ -255,13 +244,17 @@
             (mapconcat #'get-extras
                        (get language :conn-ts-toplevel)))))
 
-(defun conn-ts--clear-query-cache ()
-  (clrhash conn-ts--queries)
-  (clrhash conn-ts--compiled-query-cache))
+(defun conn-ts--recompile-query (language &optional eager)
+  (if eager
+      (setf (gethash language conn-ts--compiled-query-cache)
+            (treesit-query-compile language
+                                   (conn-ts--get-language-query language)
+                                   'eager))
+    (remhash language conn-ts--compiled-query-cache)))
 
 (defun conn-ts-add-custom-query (language query)
-  (conn-ts--clear-query-cache)
-  (push query (alist-get language conn-ts--custom-queries)))
+  (push query (alist-get language conn-ts--custom-queries))
+  (conn-ts--recompile-query language))
 
 (defun conn-ts--get-query ()
   (unless (treesit-language-at (point))
@@ -273,8 +266,25 @@
      (conn-ts--get-language-query (treesit-language-at (point)))
      'eager)))
 
-(defun conn-ts--query-capture (node query start end)
-  (mapcar #'nreverse (treesit-query-capture node query start end nil t)))
+(defun conn-ts--normalize-captures (capture-group)
+  (let ((result nil))
+    (dolist (capture capture-group)
+      (when (treesit-node-p (cdr capture))
+        (if (get (car capture) :conn-ts--offset-capture)
+            (funcall (car capture) capture)
+          (setf (cdr capture)
+                (cons (treesit-node-start (cdr capture))
+                      (treesit-node-end (cdr capture)))))
+        (if-let* ((bound (alist-get (car capture) result)))
+            (progn
+              (cl-callf min (car bound) (cadr capture))
+              (cl-callf max (cdr bound) (cddr capture)))
+          (push capture result))))
+    result))
+
+(defun conn-ts-query-capture (node query start end)
+  (mapcan #'conn-ts--normalize-captures
+          (treesit-query-capture node query start end nil t)))
 
 (defun conn-ts--get-thing-groups (thing)
   (pcase thing
@@ -289,18 +299,13 @@
      (conn-ts--get-thing-groups
       (conn-bounds-thing thing)))))
 
-(defun conn-ts--filter-captures (thing captures &optional reverse)
+(defun conn-ts-filter-captures (thing captures)
   (let ((groups (conn-ts--get-thing-groups thing))
-        (regions nil))
-    (dolist (capture captures)
-      (mapc #'conn-ts--normalize-capture capture)
-      (dolist (group groups)
-        (cl-loop for (type b . e) in capture
-                 when (eq type group)
-                 minimize b into beg
-                 and maximize e into end
-                 finally do (when beg (push (cons beg end) regions)))))
-    (if reverse regions (nreverse regions))))
+        (result nil))
+    (pcase-dolist (`(,type . ,bound) captures)
+      (when (memq type groups)
+        (push bound result)))
+    result))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
                               &key flat)
@@ -323,13 +328,12 @@
           (setq end (if (< arg 0)
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
-                captures (conn-ts--filter-captures
+                captures (conn-ts-filter-captures
                           cmd
-                          (conn-ts--query-capture (treesit-buffer-root-node)
-                                                  (conn-ts--get-query)
-                                                  (min beg end)
-                                                  (max beg end))
-                          (< arg 0))
+                          (conn-ts-query-capture (treesit-buffer-root-node)
+                                                 (conn-ts--get-query)
+                                                 (min beg end)
+                                                 (max beg end)))
                 beg end)
           (if flat
               (progn
@@ -425,23 +429,26 @@
    (region-predicate :initarg :region-predicate)))
 
 (cl-defmethod conn-target-finder-update ((state conn-ts-node-targets))
-  (cl-macrolet ((make-ts-target (thing beg end)
+  (cl-macrolet ((make-ts-target (things beg end)
                   `(conn-make-target-overlay
                     ,beg 0
                     :thing (conn-anonymous-thing
                              'conn-ts-thing
                              :thing-count 1
-                             :things (list ,thing)
+                             :things (ensure-list ,things)
                              :bounds-op ( :method (self _arg)
                                           (conn-with-dispatch-suspended
                                             (conn-multi-thing-select
                                              self
                                              conn-ts-multi-always-prompt))))
                     :properties (list 'unique-bounds (list (cons ,beg ,end))))))
-    (let ((region-pred (ignore-error unbound-slot
-                         (oref state region-predicate)))
-          (things (oref state things))
-          (seen (make-hash-table :test 'equal)))
+    (let* ((region-pred (ignore-error unbound-slot
+                          (oref state region-predicate)))
+           (things (oref state things))
+           (groups (cl-loop for thing in things
+                            append (conn-ts--thing-groups
+                                    (get thing :conn-ts-thing))))
+           (seen (make-hash-table :test 'equal)))
       (dolist (win (conn--get-target-windows))
         (clrhash seen)
         (with-selected-window win
@@ -449,30 +456,30 @@
                          (conn--visible-regions (window-start)
                                                 (window-end)))
             (let* ((captures
-                    (conn-ts--query-capture (treesit-buffer-root-node)
-                                            (conn-ts--get-query)
-                                            vbeg vend))
+                    (conn-ts-query-capture (treesit-buffer-root-node)
+                                           (conn-ts--get-query)
+                                           vbeg vend))
                    (all-captures nil))
-              (dolist (thing things)
-                (setf (alist-get thing all-captures)
-                      (conn-ts--filter-captures thing captures)))
-              (pcase-dolist (`(,thing . ,captures) all-captures)
-                (pcase-dolist (`(,beg . ,end) captures)
-                  (when (and (<= (window-start) beg (window-end))
-                             (if region-pred (funcall region-pred beg end) t))
-                    (if-let* ((ov (car (conn--overlays-in-of-type
-                                        beg (1+ beg) 'conn-target-overlay))))
-                        (progn
+              (pcase-dolist (`(,type ,beg . ,end) captures)
+                (when-let* ((type-things (seq-intersection
+                                          (get type :conn-ts--member-of)
+                                          things))
+                            (_ (and (<= (window-start) beg (window-end))
+                                    (if region-pred (funcall region-pred beg end) t))))
+                  (if-let* ((ov (car (conn--overlays-in-of-type
+                                      beg (1+ beg) 'conn-target-overlay))))
+                      (progn
+                        (dolist (thing type-things)
                           (cl-pushnew thing (conn-anonymous-thing-property
                                              (overlay-get ov 'thing)
-                                             :things))
-                          (unless (gethash (cons beg end) seen)
-                            (setf (gethash (cons beg end) seen) t)
-                            (cl-incf (conn-anonymous-thing-property
-                                      (overlay-get ov 'thing)
-                                      :thing-count))))
-                      (make-ts-target thing beg end)
-                      (setf (gethash (cons beg end) seen) t)))))))))))
+                                             :things)))
+                        (unless (gethash (cons beg end) seen)
+                          (setf (gethash (cons beg end) seen) t)
+                          (cl-incf (conn-anonymous-thing-property
+                                    (overlay-get ov 'thing)
+                                    :thing-count))))
+                    (make-ts-target type-things beg end)
+                    (setf (gethash (cons beg end) seen) t))))))))))
   (cl-call-next-method))
 
 (defclass conn-ts-all-things (conn-dispatch-target-window-predicate)
@@ -599,6 +606,8 @@
                          collect (intern g))))
     `(progn
        (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
+       ,@(cl-loop for g in groups
+                  collect `(push ',name (get ',g :conn-ts--member-of)))
 
        (conn-register-thing ',name
                             :parent 'conn-ts-thing
@@ -1285,6 +1294,7 @@
 
 ;;;###autoload
 (define-minor-mode conn-ts-things-mode
-  "Minor mode for conn-ts thing bindings.")
+  "Minor mode for conn-ts thing bindings."
+  :lighter nil)
 
 (provide 'conn-tree-sitter)
