@@ -379,7 +379,7 @@
                                          for item in narrowed
                                          concat (concat item "\n"))))))
               nil)
-          (conn-with-dispatch-event-handler 'backspace
+          (conn-with-dispatch-event-handler backspace
               (define-keymap
                 "<remap> <backward-delete-char>" 'backspace)
               nil
@@ -388,7 +388,7 @@
                   (when (length> so-far 0)
                     (cl-callf substring so-far 0 -1)
                     (setq narrowed collection)
-                    (throw 'backspace nil))))
+                    (throw backspace nil))))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-event prompt t nil)
