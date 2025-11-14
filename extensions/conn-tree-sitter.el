@@ -23,7 +23,6 @@
 (require 'conn-things)
 (require 'conn-dispatch)
 (require 'treesit)
-(require 'mule-util)
 
 (cl-defstruct (conn-ts--thing
                (:constructor conn--make-ts-thing))
