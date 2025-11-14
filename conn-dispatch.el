@@ -3821,7 +3821,7 @@ contain targets."
                         (conn-previous-dispatch-repeat prev)))))
     (conn-read-args-error "Dispatch ring empty")))
 
-(defun conn-dispatch-copy (dispatch)
+(defun conn-previous-dispatch-copy (dispatch)
   (declare (important-return-value t))
   (let ((copy (conn--copy-previous-dispatch dispatch)))
     (setf (conn-previous-dispatch-action copy)
@@ -4154,7 +4154,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                         (format-kbd-macro key-seq)
                                         binding))))
       (define-key (conn-get-minor-mode-map conn-current-state :bind-last)
-                  key-seq (conn-dispatch-copy (conn-ring-head conn-dispatch-ring)))
+                  key-seq (conn-previous-dispatch-copy (conn-ring-head conn-dispatch-ring)))
       (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
 
 (defun conn-dispatch-on-buttons ()
@@ -4296,22 +4296,26 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 ;;;;; Dispatch Registers
 
 (cl-defstruct (conn-dispatch-register
-               (:constructor conn--make-dispatch-register (dispatch-command)))
-  (dispatch-command nil :type conn-dispatch-context))
+               (:constructor conn--make-dispatch-register (dispatch)))
+  (dispatch nil :type conn-previous-dispatch))
 
 (cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
-  (conn-dispatch-setup-previous
-   val
-   :repeat (xor arg (conn-previous-dispatch-repeat val))))
+  (let ((prev (conn-dispatch-register-dispatch val)))
+    (conn-dispatch-setup-previous
+     prev
+     :repeat (xor arg (conn-previous-dispatch-repeat prev)))))
 
-(cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
-  (princ "Dispatch Register"))
+(cl-defmethod register-val-describe ((val conn-dispatch-register) _verbose)
+  (princ "Dispatch: ")
+  (princ (conn-describe-dispatch (conn-dispatch-register-dispatch val))))
 
 (defun conn-last-dispatch-to-register (register)
   "Store last dispatch command in REGISTER."
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
-  (set-register register (conn--make-dispatch-register
-                          (conn-ring-head conn-dispatch-ring))))
+  (if-let* ((head (conn-ring-head conn-dispatch-ring)))
+      (set-register register (conn--make-dispatch-register
+                              (conn-previous-dispatch-copy head)))
+    (user-error "Dispatch ring empty")))
 
 ;;;; Thing Target Finders
 
