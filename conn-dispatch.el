@@ -691,13 +691,13 @@ themselves once the selection process has concluded."
                      (action (conn-make-action cmd)))
                (progn
                  (setq conn--dispatch-thing-predicate
-                       (or (conn-action--%%thing-predicate action)
+                       (or (conn-action--action-thing-predicate action)
                            #'always))
                  (conn-set-action-argument
                   self
                   (pcase repeat
                     ((or 'auto 'nil)
-                     (and (conn-action--%%auto-repeat action)
+                     (and (conn-action--action-auto-repeat action)
                           'auto))
                     (_ repeat))
                   action))
@@ -2102,7 +2102,7 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-target-finder-other-end (target-finder)
   "Default value for :other-end parameter in `conn-dispatch-perform-action'."
-  (declare (conn-anonymous-thing-property :has-other-end)
+  (declare (conn-anonymous-thing-property :has-other-end-p)
            (important-return-value t))
   (:method (_) nil))
 
@@ -2931,14 +2931,23 @@ contain targets."
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
-  (%%auto-repeat :type boolean)
-  (%%no-history :mutable t :type boolean)
-  (%%description :type (or string nil))
-  (%%window-predicate :type function)
-  (%%target-predicate :type function)
-  (%%thing-predicate :type function)
-  (%%always-retarget :type boolean)
-  (%%always-prompt :type boolean))
+  (action-auto-repeat :type boolean)
+  (action-no-history :mutable t :type boolean)
+  (action-description :type (or string nil))
+  (action-window-predicate :type function)
+  (action-target-predicate :type function)
+  (action-thing-predicate :type function)
+  (action-always-retarget :type boolean)
+  (action-always-prompt :type boolean))
+
+(defalias 'conn-action-no-history 'conn-action--action-no-history)
+(defalias 'conn-action-auto-repeat 'conn-action--action-auto-repeat)
+(defalias 'conn-action-description 'conn-action--action-description)
+(defalias 'conn-action-window-predicate 'conn-action--action-window-predicate)
+(defalias 'conn-action-target-predicate 'conn-action--action-target-predicate)
+(defalias 'conn-action-thing-predicate 'conn-action--action-thing-predicate)
+(defalias 'conn-action-always-retarget 'conn-action--action-always-retarget)
+(defalias 'conn-action-always-prompt 'conn-action--action-always-prompt)
 
 (defun conn--action-type-p (item)
   (declare (important-return-value t)
@@ -2971,7 +2980,7 @@ contain targets."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method ((action conn-action) &optional _)
-    (conn-action--%%description action)))
+    (conn-action-description action)))
 
 (cl-defgeneric conn-accept-action (action)
   (:method ((action conn-action)) action))
@@ -3040,7 +3049,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto
-                    (%%description "Goto"))
+                    (action-description "Goto"))
       (window pt thing thing-arg transform)
     (select-window window)
     (conn-dispatch-loop-undo-boundary)
@@ -3060,8 +3069,8 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button
-                    (%%description "Push Button")
-                    (%%no-history t))
+                    (action-description "Push Button")
+                    (action-no-history t))
       (window pt _thing _thing-arg _transform)
     (select-window window)
     (if (button-at pt)
@@ -3097,7 +3106,7 @@ contain targets."
                                     'newline)
                                    (t 'space))
                            separator))
-                        (%%window-predicate
+                        (action-window-predicate
                          (lambda (win)
                            (not
                             (buffer-local-value 'buffer-read-only
@@ -3136,7 +3145,7 @@ contain targets."
       ((`(,fthing ,farg) (conn-thing-argument-dwim))
        (ftransform (conn-transform-argument)))
     (oclosure-lambda (conn-dispatch-copy-to-replace
-                      (%%description "Copy and Replace To")
+                      (action-description "Copy and Replace To")
                       (str (pcase (conn-bounds-of fthing farg)
                              ((conn-bounds `(,beg . ,end) ftransform)
                               (save-mark-and-excursion
@@ -3146,7 +3155,7 @@ contain targets."
                                 (funcall region-extract-function nil)))
                              (_ (user-error "Cannot find %s at point"
                                             (conn-thing-pretty-print fthing)))))
-                      (%%window-predicate
+                      (action-window-predicate
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
@@ -3172,9 +3181,9 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to-replace)))
   (oclosure-lambda (conn-dispatch-yank-to-replace
-                    (%%description "Yank and Replace To")
+                    (action-description "Yank and Replace To")
                     (str (current-kill 0))
-                    (%%window-predicate
+                    (action-window-predicate
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
@@ -3197,9 +3206,9 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to-replace)))
   (oclosure-lambda (conn-dispatch-reading-yank-to-replace
-                    (%%description "Yank and Replace To")
+                    (action-description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
-                    (%%window-predicate
+                    (action-window-predicate
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
@@ -3231,7 +3240,7 @@ contain targets."
                                  (get-register register-separator))
                             'register)
                            (t 'default)))
-                    (%%window-predicate
+                    (action-window-predicate
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
@@ -3276,7 +3285,7 @@ contain targets."
                                    (get-register register-separator))
                               'register)
                              (t 'default)))
-                      (%%window-predicate
+                      (action-window-predicate
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
@@ -3311,7 +3320,7 @@ contain targets."
                   (:parent conn-action))
   (str :type string)
   (separator :type string)
-  (%%change-group))
+  (action-change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
   (conn-read-args (conn-kill-state
@@ -3329,8 +3338,8 @@ contain targets."
                                    fixup check-bounds)
                   (current-kill 0))))
       (oclosure-lambda (conn-dispatch-send
-                        (%%description "Send")
-                        (%%change-group cg)
+                        (action-description "Send")
+                        (action-change-group cg)
                         (str str)
                         (separator
                          (if (eq separator 'default)
@@ -3338,7 +3347,7 @@ contain targets."
                                    ((seq-contains-p str ?\n #'eql) 'newline)
                                    (t 'space))
                            separator))
-                        (%%window-predicate
+                        (action-window-predicate
                          (lambda (win)
                            (not
                             (buffer-local-value 'buffer-read-only
@@ -3364,22 +3373,22 @@ contain targets."
              (point))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
-  (conn--action-accept-change-group (conn-dispatch-send--%%change-group action))
+  (conn--action-accept-change-group (conn-dispatch-send--action-change-group action))
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send))
-  (conn--action-cancel-change-group (conn-dispatch-send--%%change-group action)))
+  (conn--action-cancel-change-group (conn-dispatch-send--action-change-group action)))
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
   (str :type string)
-  (%%change-group))
+  (action-change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send-replace
-                      (%%description "Send and Replace")
-                      (%%change-group cg)
+                      (action-description "Send and Replace")
+                      (action-change-group cg)
                       (str
                        (conn-read-args (conn-kill-state
                                         :prompt "Send Thing")
@@ -3394,7 +3403,7 @@ contain targets."
                                             nil nil nil
                                             fixup check-bounds)
                            (current-kill 0))))
-                      (%%window-predicate
+                      (action-window-predicate
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
@@ -3412,11 +3421,11 @@ contain targets."
             (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
-  (conn--action-accept-change-group (conn-dispatch-send-replace--%%change-group action))
+  (conn--action-accept-change-group (conn-dispatch-send-replace--action-change-group action))
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send-replace))
-  (conn--action-cancel-change-group (conn-dispatch-send-replace--%%change-group action)))
+  (conn--action-cancel-change-group (conn-dispatch-send-replace--action-change-group action)))
 
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
@@ -3466,28 +3475,28 @@ contain targets."
 
 (oclosure-define (conn-dispatch-copy-from
                   (:parent conn-action)
-                  (:copier conn-dispatch-copy-from-copy (%%opoint)))
-  (%%opoint :type marker))
+                  (:copier conn-dispatch-copy-from-copy (action-opoint)))
+  (action-opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
   (thread-first
-    (conn-dispatch-copy-from--%%opoint action)
+    (conn-dispatch-copy-from--action-opoint action)
     marker-buffer
     buffer-live-p
     not))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from))
-  (set-marker (conn-dispatch-copy-from--%%opoint action) nil))
+  (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
   (conn-dispatch-copy-from-copy
    action
-   (copy-marker (conn-dispatch-copy-from--%%opoint action) t)))
+   (copy-marker (conn-dispatch-copy-from--action-opoint action) t)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from)))
   (oclosure-lambda (conn-dispatch-copy-from
-                    (%%description "Copy From")
-                    (%%opoint (copy-marker (point) t)))
+                    (action-description "Copy From")
+                    (action-opoint (copy-marker (point) t)))
       (window pt thing thing-arg transform)
     (let (str)
       (with-selected-window window
@@ -3496,27 +3505,27 @@ contain targets."
            (conn-dispatch-action-pulse beg end)
            (setq str (filter-buffer-substring beg end)))
           (_ (user-error "Cannot find thing at point"))))
-      (with-current-buffer (marker-buffer %%opoint)
+      (with-current-buffer (marker-buffer action-opoint)
         (conn-dispatch-loop-undo-boundary)
         (cond ((null str)
                (user-error "Cannot find thing at point"))
-              ((/= (point) %%opoint)
+              ((/= (point) action-opoint)
                (save-excursion
-                 (goto-char %%opoint)
+                 (goto-char action-opoint)
                  (insert-for-yank str)))
               (t
-               (goto-char %%opoint)
+               (goto-char action-opoint)
                (insert-for-yank str)))))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from))
-  (set-marker (conn-dispatch-copy-from--%%opoint action) nil))
+  (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (oclosure-define (conn-dispatch-copy-from-replace
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from-replace)))
   (oclosure-lambda (conn-dispatch-copy-from-replace
-                    (%%description "Copy From and Replace"))
+                    (action-description "Copy From and Replace"))
       (window pt thing thing-arg transform)
     (with-selected-window window
       (pcase (conn-bounds-of-dispatch thing thing-arg pt)
@@ -3530,21 +3539,21 @@ contain targets."
 
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-replace-copy (%%opoint)))
-  (%%opoint :type marker)
-  (%%change-group))
+                  (:copier conn-dispatch-take-replace-copy (action-opoint)))
+  (action-opoint :type marker)
+  (action-change-group))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
   (thread-first
-    (conn-dispatch-take-replace--%%opoint action)
+    (conn-dispatch-take-replace--action-opoint action)
     marker-buffer buffer-live-p not))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--%%opoint action) nil))
+  (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
   (conn-thread-first
-    (conn-dispatch-take-replace--%%opoint action)
+    (conn-dispatch-take-replace--action-opoint action)
     (copy-marker t)
     (-<> conn-dispatch-take-replace-copy action)))
 
@@ -3552,10 +3561,10 @@ contain targets."
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
     (oclosure-lambda (conn-dispatch-take-replace
-                      (%%description "Take From and Replace")
-                      (%%change-group cg)
-                      (%%opoint (copy-marker (point) t))
-                      (%%window-predicate
+                      (action-description "Take From and Replace")
+                      (action-change-group cg)
+                      (action-opoint (copy-marker (point) t))
+                      (action-window-predicate
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
@@ -3570,44 +3579,44 @@ contain targets."
              (kill-region beg end)
              (funcall conn-kill-fixup-whitespace-function bounds))
             (_ (user-error "Cannot find thing at point")))))
-      (with-current-buffer (marker-buffer %%opoint)
+      (with-current-buffer (marker-buffer action-opoint)
         (save-excursion
-          (goto-char %%opoint)
+          (goto-char action-opoint)
           (yank))))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--%%opoint action) nil)
+  (set-marker (conn-dispatch-take-replace--action-opoint action) nil)
   (conn--action-cancel-change-group
-   (conn-dispatch-take-replace--%%change-group action)))
+   (conn-dispatch-take-replace--action-change-group action)))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-take-replace))
   (conn--action-accept-change-group
-   (conn-dispatch-take-replace--%%change-group action)))
+   (conn-dispatch-take-replace--action-change-group action)))
 
 (oclosure-define (conn-dispatch-take
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-copy (%%opoint)))
-  (%%opoint :type marker))
+                  (:copier conn-dispatch-take-copy (action-opoint)))
+  (action-opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
   (thread-first
-    (conn-dispatch-take--%%opoint action)
+    (conn-dispatch-take--action-opoint action)
     marker-buffer buffer-live-p not))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--%%opoint action) nil))
+  (set-marker (conn-dispatch-take--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
   (conn-thread-first
-    (conn-dispatch-take--%%opoint action)
+    (conn-dispatch-take--action-opoint action)
     (copy-marker t)
     (-<> conn-dispatch-take-copy action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
-                    (%%description "Take From")
-                    (%%opoint (copy-marker (point) t))
-                    (%%window-predicate
+                    (action-description "Take From")
+                    (action-opoint (copy-marker (point) t))
+                    (action-window-predicate
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
@@ -3622,18 +3631,18 @@ contain targets."
            (kill-region beg end)
            (funcall conn-kill-fixup-whitespace-function bounds))
           (_ (user-error "Cannot find thing at point")))))
-    (with-current-buffer (marker-buffer %%opoint)
+    (with-current-buffer (marker-buffer action-opoint)
       (yank))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--%%opoint action) nil))
+  (set-marker (conn-dispatch-take--action-opoint action) nil))
 
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump
-                    (%%description "Jump"))
+                    (action-description "Jump"))
       (window pt _thing _thing-arg _transform)
     (select-window window)
     (conn-dispatch-loop-undo-boundary)
@@ -3678,7 +3687,7 @@ contain targets."
   (when command-history
     (oclosure-lambda (conn-dispatch-repeat-command
                       (command (car command-history))
-                      (%%window-predicate
+                      (action-window-predicate
                        (lambda (win)
                          (not (buffer-local-value 'buffer-read-only
                                                   (window-buffer win))))))
@@ -3702,9 +3711,9 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-transpose)))
   (oclosure-lambda (conn-dispatch-transpose
-                    (%%description "Transpose")
-                    (%%always-retarget t)
-                    (%%window-predicate
+                    (action-description "Transpose")
+                    (action-always-retarget t)
+                    (action-window-predicate
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
@@ -3847,7 +3856,7 @@ contain targets."
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
-  (unless (conn-action--%%no-history (conn-previous-dispatch-action dispatch))
+  (unless (conn-action-no-history (conn-previous-dispatch-action dispatch))
     (add-to-history 'command-history `(conn-dispatch-setup-previous
                                        (conn-ring-head conn-dispatch-ring)))
     (conn-ring-insert-front conn-dispatch-ring dispatch)))
@@ -3938,13 +3947,13 @@ contain targets."
          (conn--dispatch-read-event-handlers
           (cons #'conn-handle-dispatch-select-command
                 conn--dispatch-read-event-handlers))
-         (conn--dispatch-action-always-prompt (conn-action--%%always-prompt action))
+         (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
          (conn-dispatch-target-finder
           (conn-get-target-finder thing thing-arg))
          (conn-dispatch-iteration-count 0)
          (conn--dispatch-always-retarget
           (or always-retarget
-              (conn-action--%%always-retarget action)))
+              (conn-action-always-retarget action)))
          (target-other-end (conn-target-finder-other-end
                             conn-dispatch-target-finder))
          (conn-dispatch-no-other-end
@@ -3988,9 +3997,9 @@ contain targets."
                                 conn-target-window-predicate)
                            'eldoc-highlight-function-argument)))))
             ,@conn--dispatch-read-event-message-prefixes)))
-    (when-let* ((predicate (conn-action--%%window-predicate action)))
+    (when-let* ((predicate (conn-action-window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
-    (when-let* ((predicate (conn-action--%%target-predicate action)))
+    (when-let* ((predicate (conn-action-target-predicate action)))
       (add-function :after-while conn-target-predicate predicate))
     (when restrict-windows
       (add-function :after-while conn-target-window-predicate
@@ -4170,7 +4179,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
      'button
      :pretty-print ( :method (_self) "all-buttons")
      :target-finder ( :method (_self _arg) 'conn-dispatch-all-buttons)
-     :has-other-end ( :method (_self) :no-other-end))
+     :has-other-end-p ( :method (_self) :no-other-end))
    nil nil))
 
 (defun conn-dispatch-isearch ()
@@ -4228,9 +4237,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
           (progn
             (conn-dispatch-setup
              (oclosure-lambda (conn-action
-                               (%%no-history t)
-                               (%%description "Bounds")
-                               (%%window-predicate
+                               (action-no-history t)
+                               (action-description "Bounds")
+                               (action-window-predicate
                                 (let ((win (selected-window)))
                                   (lambda (window) (eq win window)))))
                  (window pt thing thing-arg transform)
@@ -4273,9 +4282,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
      (let (obeg oend)
        (conn-dispatch-setup
         (oclosure-lambda (conn-action
-                          (%%no-history t)
-                          (%%description "Bounds")
-                          (%%window-predicate
+                          (action-no-history t)
+                          (action-description "Bounds")
+                          (action-window-predicate
                            (let ((win (selected-window)))
                              (lambda (window) (eq win window)))))
             (window pt thing thing-arg transform)

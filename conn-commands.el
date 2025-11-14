@@ -1038,8 +1038,8 @@ With a prefix ARG `push-mark' without activating it."
     (conn-dispatch-setup
      (oclosure-lambda
          (conn-transpose-command
-          (%%description "Transpose")
-          (%%no-history t)
+          (action-description "Transpose")
+          (action-no-history t)
           (buffer (current-buffer))
           (point (point))
           (thing1
@@ -1051,7 +1051,7 @@ With a prefix ARG `push-mark' without activating it."
                                          (cons (region-beginning)
                                                (region-end)))))
                             (:method (_self _arg) bounds)))))
-          (%%window-predicate
+          (action-window-predicate
            (lambda (win)
              (not (buffer-local-value 'buffer-read-only
                                       (window-buffer win))))))
@@ -1910,7 +1910,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (strings nil))
           (conn-dispatch-setup
            (oclosure-lambda (conn-kill-action
-                             (%%description "Kill"))
+                             (action-description "Kill"))
                (window pt thing thing-arg transform)
              (with-selected-window window
                (conn-dispatch-loop-undo-boundary)
@@ -2148,7 +2148,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (strings nil))
         (conn-dispatch-setup
          (oclosure-lambda (conn-kill-action
-                           (%%description "Copy"))
+                           (action-description "Copy"))
              (window pt thing thing-arg transform)
            (with-selected-window window
              (conn-dispatch-loop-undo-boundary)

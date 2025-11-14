@@ -404,8 +404,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
   (oclosure-lambda (conn-dispatch-dired-mark
-                    (%%description "Mark")
-                    (%%window-predicate
+                    (action-description "Mark")
+                    (action-window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -425,8 +425,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
   (oclosure-lambda (conn-dispatch-dired-kill-line
-                    (%%description "Kill Line")
-                    (%%window-predicate
+                    (action-description "Kill Line")
+                    (action-window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -442,8 +442,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
-                    (%%description "Kill Subdir")
-                    (%%window-predicate
+                    (action-description "Kill Subdir")
+                    (action-window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -641,8 +641,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
-                    (%%description "Mark")
-                    (%%window-predicate
+                    (action-description "Mark")
+                    (action-window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -768,8 +768,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-bmenu-mark)))
   (oclosure-lambda (conn-dispatch-bmenu-mark
-                    (%%description "Mark")
-                    (%%window-predicate
+                    (action-description "Mark")
+                    (action-window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -924,8 +924,8 @@
   (interactive)
   (conn-dispatch-setup
    (oclosure-lambda (conn-action-info-ref
-                     (%%description "Info Refs")
-                     (%%window-predicate
+                     (action-description "Info Refs")
+                     (action-window-predicate
                       (lambda (win)
                         (eq 'Info-mode
                             (buffer-local-value 'major-mode

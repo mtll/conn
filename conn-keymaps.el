@@ -500,8 +500,8 @@
         :default-action ( :method (_self)
                           (let ((goto (conn-make-action 'conn-dispatch-goto)))
                             (oclosure-lambda (conn-action
-                                              (%%description "Previous Emacs State")
-                                              (%%no-history t))
+                                              (action-description "Previous Emacs State")
+                                              (action-no-history t))
                                 (&rest args)
                               (apply goto args)
                               (conn-push-state 'conn-emacs-state))))

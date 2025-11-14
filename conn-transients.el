@@ -726,7 +726,7 @@ A zero means repeat until error."
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil)
-                        (%%auto-repeat t))
+                        (action-auto-repeat t))
           (window pt thing thing-arg thing-transform)
         (conn-dispatch-loop-undo-boundary (window-buffer window))
         (let ((conn-kapply-suppress-message t))
