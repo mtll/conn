@@ -20,6 +20,7 @@
 (require 'conn-utils)
 (require 'conn-mark)
 (require 'conn-states)
+(require 'mule-util)
 (require 'thingatpt)
 (eval-when-compile
   (require 'cl-lib))
@@ -1289,30 +1290,33 @@ Only the background color is used."
               (pips (conn--multi-thing-pip-strings))
               (display-handler
                (lambda (prompt _args)
-                 (message
-                  (substitute-command-keys
-                   (concat
-                    (propertize prompt 'face 'minibuffer-prompt)
-                    (cl-loop for i below size
-                             concat " "
-                             if (= i curr) concat (car pips)
-                             else concat (cdr pips))
-                    " ("
-                    (mapconcat (lambda (thing)
-                                 (propertize
-                                  (conn-thing-pretty-print thing)
-                                  'face 'eldoc-highlight-function-argument))
-                               (eql-bounds (nth curr bounds))
-                               " & ")
-                    ")"
-                    (when-let* ((msg (conn--read-args-display-message)))
-                      (concat ": " msg))
-                    "\n\\[select] select; "
-                    "\\[abort] abort"
-                    (when (> size 1)
-                      (concat
-                       "; \\[conn-expand] next; "
-                       "\\[conn-contract] prev"))))))))
+                 (let ((eql-bds (eql-bounds (nth curr bounds))))
+                   (message
+                    (substitute-command-keys
+                     (concat
+                      (propertize prompt 'face 'minibuffer-prompt)
+                      (cl-loop for i below size
+                               concat " "
+                               if (= i curr) concat (car pips)
+                               else concat (cdr pips))
+                      " ("
+                      (mapconcat (lambda (thing)
+                                   (propertize
+                                    (conn-thing-pretty-print thing)
+                                    'face 'eldoc-highlight-function-argument))
+                                 (take 2 eql-bds)
+                                 " & ")
+                      (when (length> eql-bds 2)
+                        (concat " & " (truncate-string-ellipsis)))
+                      ")"
+                      (when-let* ((msg (conn--read-args-display-message)))
+                        (concat ": " msg))
+                      "\n\\[select] select; "
+                      "\\[abort] abort"
+                      (when (> size 1)
+                        (concat
+                         "; \\[conn-expand] next; "
+                         "\\[conn-contract] prev")))))))))
          (pcase-exhaustive bounds
            ('nil
             (user-error "No things found at point"))
