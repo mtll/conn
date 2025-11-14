@@ -4154,7 +4154,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                         (format-kbd-macro key-seq)
                                         binding))))
       (define-key (conn-get-minor-mode-map conn-current-state :bind-last)
-                  key-seq (conn-previous-dispatch-copy (conn-ring-head conn-dispatch-ring)))
+                  key-seq (let ((disp (conn-previous-dispatch-copy
+                                       (conn-ring-head conn-dispatch-ring))))
+                            (lambda ()
+                              (interactive)
+                              (conn-dispatch-setup-previous disp))))
       (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
 
 (defun conn-dispatch-on-buttons ()
