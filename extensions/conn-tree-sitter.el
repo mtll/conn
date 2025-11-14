@@ -294,11 +294,12 @@
         (regions nil))
     (dolist (capture captures)
       (mapc #'conn-ts--normalize-capture capture)
-      (cl-loop for (type b . e) in capture
-               when (memq type groups)
-               minimize b into beg
-               and maximize e into end
-               finally do (when beg (push (cons beg end) regions))))
+      (dolist (group groups)
+        (cl-loop for (type b . e) in capture
+                 when (eq type group)
+                 minimize b into beg
+                 and maximize e into end
+                 finally do (when beg (push (cons beg end) regions)))))
     (if reverse regions (nreverse regions))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
