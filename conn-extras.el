@@ -213,7 +213,7 @@
        (transform (conn-transform-argument))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-setup-dispatch
+    (conn-dispatch-setup
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows restrict-windows
@@ -404,8 +404,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
   (oclosure-lambda (conn-dispatch-dired-mark
-                    (description "Mark")
-                    (window-predicate
+                    (%%description "Mark")
+                    (%%window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -425,8 +425,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
   (oclosure-lambda (conn-dispatch-dired-kill-line
-                    (description "Kill Line")
-                    (window-predicate
+                    (%%description "Kill Line")
+                    (%%window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -442,8 +442,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
-                    (description "Kill Subdir")
-                    (window-predicate
+                    (%%description "Kill Subdir")
+                    (%%window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -569,7 +569,7 @@
        (transform (conn-transform-argument))
        (restrict-windows (conn-dispatch-restrict-windows-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-setup-dispatch
+    (conn-dispatch-setup
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows restrict-windows
@@ -641,8 +641,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
-                    (description "Mark")
-                    (window-predicate
+                    (%%description "Mark")
+                    (%%window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -757,7 +757,7 @@
       ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-setup-dispatch
+    (conn-dispatch-setup
      action thing thing-arg transform
      :repeat repeat
      :restrict-windows t
@@ -768,8 +768,8 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-bmenu-mark)))
   (oclosure-lambda (conn-dispatch-bmenu-mark
-                    (description "Mark")
-                    (window-predicate
+                    (%%description "Mark")
+                    (%%window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
@@ -922,10 +922,10 @@
 
 (defun conn-dispatch-on-info-refs ()
   (interactive)
-  (conn-setup-dispatch
+  (conn-dispatch-setup
    (oclosure-lambda (conn-action-info-ref
-                     (description "Info Refs")
-                     (window-predicate
+                     (%%description "Info Refs")
+                     (%%window-predicate
                       (lambda (win)
                         (eq 'Info-mode
                             (buffer-local-value 'major-mode

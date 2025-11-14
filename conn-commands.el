@@ -949,8 +949,8 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     &key &allow-other-keys)
+(cl-defmethod conn-dispatch-perform-action ((action conn-transpose-command)
+                                            _repeat)
   (conn-dispatch-loop nil
     (pcase-let* ((`(,pt ,win ,thing ,arg ,_transform)
                   (save-mark-and-excursion
@@ -1035,11 +1035,11 @@ With a prefix ARG `push-mark' without activating it."
                    :prefix arg)
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (restrict-windows (conn-dispatch-restrict-windows-argument)))
-    (conn-setup-dispatch
+    (conn-dispatch-setup
      (oclosure-lambda
          (conn-transpose-command
-          (description "Transpose")
-          (no-history t)
+          (%%description "Transpose")
+          (%%no-history t)
           (buffer (current-buffer))
           (point (point))
           (thing1
@@ -1051,7 +1051,7 @@ With a prefix ARG `push-mark' without activating it."
                                          (cons (region-beginning)
                                                (region-end)))))
                             (:method (_self _arg) bounds)))))
-          (window-predicate
+          (%%window-predicate
            (lambda (win)
              (not (buffer-local-value 'buffer-read-only
                                       (window-buffer win))))))
@@ -1908,9 +1908,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (conn-dispatch-handle)))
         (let ((result nil)
               (strings nil))
-          (conn-setup-dispatch
+          (conn-dispatch-setup
            (oclosure-lambda (conn-kill-action
-                             (description "Kill"))
+                             (%%description "Kill"))
                (window pt thing thing-arg transform)
              (with-selected-window window
                (conn-dispatch-loop-undo-boundary)
@@ -2146,9 +2146,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (conn-dispatch-handle)))
       (let ((result nil)
             (strings nil))
-        (conn-setup-dispatch
+        (conn-dispatch-setup
          (oclosure-lambda (conn-kill-action
-                           (description "Copy"))
+                           (%%description "Copy"))
              (window pt thing thing-arg transform)
            (with-selected-window window
              (conn-dispatch-loop-undo-boundary)
