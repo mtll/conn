@@ -2574,23 +2574,6 @@ contain targets."
          pt 0
          :properties '(no-hide t))))))
 
-(defun conn--dispatch-extract-defuns-treesit ()
-  (let ((pts nil))
-    (save-excursion
-      (treesit-induce-sparse-tree
-       (treesit-buffer-root-node)
-       (or treesit-defun-type-regexp 'defun)
-       (lambda (node)
-         (goto-char (treesit-node-start node))
-         (when-let* ((name (treesit-defun-name node)))
-           (search-forward name (pos-bol 6) t))
-         (push (pos-bol) pts))))
-    (lambda ()
-      (pcase-dolist (pt pts)
-        (conn-make-target-overlay
-         pt 0
-         :properties '(no-hide t))))))
-
 (cl-defmethod conn-target-finder-update ((state conn-dispatch-all-defuns))
   (let ((cache (oref state cache)))
     (dolist (win (conn--get-target-windows))
