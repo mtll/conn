@@ -74,6 +74,7 @@
   :group 'conn-faces)
 
 (defvar conn-dispatch-label-alt-face nil)
+(defvar conn-dispatch-label-multi-face nil)
 
 (defvar conn-dispatch-action-pulse-color nil)
 
@@ -1977,17 +1978,39 @@ Target overlays may override this default by setting the
          (apply #'color-rgb-to-hex (color-hsl-to-rgb h s (* l 1.1))))
         (_ 'conn-dispatch-label-face))))
 
+(defun conn-dispatch-label-multi-background ()
+  (or conn-dispatch-label-multi-face
+      (pcase (thread-last
+               (face-background 'conn-dispatch-label-face)
+               (color-name-to-rgb)
+               (apply #'color-rgb-to-hsl))
+        (`(,h ,s ,l)
+         (apply #'color-rgb-to-hex (color-hsl-to-rgb (mod (+ h .87) 1.0) s l)))
+        (_ 'conn-dispatch-label-face))))
+
 (cl-defgeneric conn-target-finder-label-faces (target-finder))
 
 (cl-defmethod conn-target-finder-label-faces (_target-finder)
   (let ((face1 'conn-dispatch-label-face)
         (face2 `( :inherit conn-dispatch-label-face
-                  :background ,(conn-dispatch-label-alt-background))))
+                  :background ,(conn-dispatch-label-alt-background)))
+        (multi-face `( :inherit conn-dispatch-label-face
+                       :background ,(conn-dispatch-label-multi-background))))
     (pcase-dolist (`(,_window . ,targets) conn-targets)
       (dolist (tar (sort targets :key #'overlay-start))
         (unless (overlay-get tar 'label-face)
-          (overlay-put tar 'label-face face1)
-          (cl-rotatef face1 face2))))))
+          (if-let* ((thing (overlay-get tar 'thing))
+                    (_ (and (conn-anonymous-thing-p thing)
+                            (if-let* ((c (conn-anonymous-thing-property
+                                          thing :thing-count)))
+                                (> c 1)
+                              (length>
+                               (conn-anonymous-thing-property
+                                thing :things)
+                               1)))))
+              (overlay-put tar 'label-face multi-face)
+            (overlay-put tar 'label-face face1)
+            (cl-rotatef face1 face2)))))))
 
 (cl-defgeneric conn-target-finder-cleanup (target-finder))
 

@@ -40,7 +40,7 @@
 (defvar conn-ts--symbol-tick 0)
 
 (defconst conn-ts--symbol-cache
-  (make-hash-table :test #'equal))
+  (make-hash-table :test 'equal))
 
 (defun conn-ts--make-symbol (&rest strings-or-symbols)
   (intern (concat
@@ -102,16 +102,19 @@
              ((pred vectorp)
               `([,@(mapcan (lambda (e) (subst alist e))
                            (append exp nil))]))
-             (_ (or (copy-sequence (alist-get exp alist))
+             (_ (or (copy-sequence (assq exp alist))
                     (list exp))))))
        (walk (exp)
          (cl-loop
-          with range-sub = nil
           with offset-sub = nil
           for e in exp
           nconc (pcase e
                   (`(:any-of? ,capt . ,pats)
-                   `((:match? ,(regexp-opt pats) ,capt)))
+                   `((:match? ,(regexp-opt (mapcar #'regexp-quote pats))
+                              ,capt)))
+                  (`(:not-any-of? ,capt . ,pats)
+                   `((:not-match? ,(regexp-opt (mapcar #'regexp-quote pats))
+                                  ,capt)))
                   (`(:offset! ,capt . ,offsets)
                    (push (apply #'make-offset capt offsets)
                          (alist-get capt offset-sub))
@@ -131,32 +134,12 @@
                            (eql (treesit-node-end node)
                                 (re-search-forward
                                  pat (treesit-node-end node) nil))))))))
-                  (`(:make-range! ,capture ,beg ,end)
-                   (push (intern (concat "@" capture "_start"))
-                         (alist-get beg range-sub))
-                   (cl-pushnew beg (alist-get beg range-sub))
-                   (push (intern (concat "@" capture "_end"))
-                         (alist-get end range-sub))
-                   (cl-pushnew end (alist-get end range-sub))
-                   nil)
                   ((and form `(:not-kind-eq? ,capt ,type))
                    (make-predicate
                     form capt
                     (lambda (node)
                       (not (equal (treesit-node-type node)
                                   type)))))
-                  ((and form `(:not-any-of? ,capt . ,strs))
-                   (make-predicate
-                    form capt
-                    (let ((re (regexp-opt strs)))
-                      (lambda (node)
-                        (save-excursion
-                          (save-match-data
-                            (goto-char (treesit-node-start node))
-                            (not
-                             (eql (treesit-node-end node)
-                                  (re-search-forward
-                                   re (treesit-node-end node) nil)))))))))
                   (`(,(pred keywordp) . ,_)
                    nil)
                   ((pred vectorp)
@@ -166,10 +149,7 @@
                   (_ (list (walk e))))
           into newexp
           finally return
-          (thread-last
-            newexp
-            (mapcan (lambda (e) (subst range-sub e)))
-            (mapcan (lambda (e) (subst offset-sub e)))))))
+          (mapcan (lambda (e) (subst offset-sub e)) newexp))))
     (walk query)))
 
 (defun conn-ts--parse-scm-buffer (&optional buffer)
@@ -314,13 +294,11 @@
         (regions nil))
     (dolist (capture captures)
       (mapc #'conn-ts--normalize-capture capture)
-      (pcase-dolist (`(,group ,tbeg . ,tend) groups)
-        (if-let* ((beg (alist-get tbeg capture)))
-            (when-let* ((end (alist-get tend capture)))
-              (push (cons (car beg) (cdr end))
-                    regions))
-          (when-let* ((node (alist-get group capture)))
-            (push node regions)))))
+      (cl-loop for (type b . e) in capture
+               when (memq type groups)
+               minimize b into beg
+               and maximize e into end
+               finally do (when beg (push (cons beg end) regions))))
     (if reverse regions (nreverse regions))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
@@ -451,6 +429,7 @@
                     ,beg 0
                     :thing (conn-anonymous-thing
                              'conn-ts-thing
+                             :thing-count 1
                              :things (list ,thing)
                              :bounds-op ( :method (self _arg)
                                           (conn-with-dispatch-suspended
@@ -461,8 +440,9 @@
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
           (things (oref state things))
-          (truncate-string-ellipsis nil))
+          (seen (make-hash-table :test 'equal)))
       (dolist (win (conn--get-target-windows))
+        (clrhash seen)
         (with-selected-window win
           (pcase-dolist (`(,vbeg . ,vend)
                          (conn--visible-regions (window-start)
@@ -485,13 +465,13 @@
                           (cl-pushnew thing (conn-anonymous-thing-property
                                              (overlay-get ov 'thing)
                                              :things))
-                          (when (length=
-                                 (cl-pushnew (cons beg end)
-                                             (overlay-get ov 'unique-bounds)
-                                             :test #'equal)
-                                 2)
-                            (overlay-put ov 'label-suffix (truncate-string-ellipsis))))
-                      (make-ts-target thing beg end)))))))))))
+                          (unless (gethash (cons beg end) seen)
+                            (setf (gethash (cons beg end) seen) t)
+                            (cl-incf (conn-anonymous-thing-property
+                                      (overlay-get ov 'thing)
+                                      :thing-count))))
+                      (make-ts-target thing beg end)
+                      (setf (gethash (cons beg end) seen) t)))))))))))
   (cl-call-next-method))
 
 (defclass conn-ts-all-things (conn-dispatch-target-window-predicate)
@@ -514,17 +494,19 @@
                     :thing (conn-anonymous-thing
                              thing
                              :things (list ,thing)
+                             :thing-count 1
                              :bounds-op ( :method (self _arg)
                                           (conn-with-dispatch-suspended
                                             (conn-multi-thing-select
                                              self
                                              conn-ts-multi-always-prompt))))
                     :properties (list 'unique-bounds (list (cons ,beg ,end))))))
-    (let* ((truncate-string-ellipsis nil)
-           (thing (oref state thing))
+    (let* ((thing (oref state thing))
+           (seen (make-hash-table :test 'equal))
            (query `(((_) @node
                      (:pred? ,(conn-ts--thing-predicate thing) @node)))))
       (dolist (win (conn--get-target-windows))
+        (clrhash seen)
         (with-selected-window win
           (pcase-dolist (`(,vbeg . ,vend)
                          (conn--visible-regions (window-start)
@@ -538,25 +520,24 @@
               (if-let* ((ov (car (conn--overlays-in-of-type
                                   beg (1+ beg) 'conn-target-overlay))))
                   (progn
-                    (cl-pushnew (conn-anonymous-thing
-                                  thing
-                                  :pretty-print (:method (_) type)
-                                  :bounds-op ( :method (self _)
-                                               (conn-make-bounds
-                                                self nil
-                                                (let ((n (treesit-thing-at-point
-                                                          type 'nested)))
-                                                  (cons (treesit-node-start n)
-                                                        (treesit-node-end n))))))
-                                (conn-anonymous-thing-property
-                                 (overlay-get ov 'thing)
-                                 :things))
-                    (when (length=
-                           (cl-pushnew (cons beg end)
-                                       (overlay-get ov 'unique-bounds)
-                                       :test #'equal)
-                           2)
-                      (overlay-put ov 'label-suffix (truncate-string-ellipsis))))
+                    (push (conn-anonymous-thing
+                            thing
+                            :pretty-print (:method (_) type)
+                            :bounds-op ( :method (self _)
+                                         (conn-make-bounds
+                                          self nil
+                                          (let ((n (treesit-thing-at-point
+                                                    type 'nested)))
+                                            (cons (treesit-node-start n)
+                                                  (treesit-node-end n))))))
+                          (conn-anonymous-thing-property
+                           (overlay-get ov 'thing)
+                           :things))
+                    (unless (gethash (cons beg end) seen)
+                      (setf (gethash (cons beg end) seen) t)
+                      (cl-incf (conn-anonymous-thing-property
+                                (overlay-get ov 'thing)
+                                :thing-count))))
                 (make-ts-target
                  (conn-anonymous-thing
                    thing
@@ -568,7 +549,8 @@
                                            type 'nested)))
                                    (cons (treesit-node-start n)
                                          (treesit-node-end n))))))
-                 beg end))))))))
+                 beg end)
+                (setf (gethash (cons beg end) seen) t))))))))
   (cl-call-next-method))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
@@ -612,11 +594,8 @@
         (forward-flat-cmd (intern (format "%s-forward-flat" name)))
         (backward-cmd (intern (format "%s-backward" name)))
         (backward-flat-cmd (intern (format "%s-backward-flat" name)))
-        (groups (cl-loop
-                 for group in (ensure-list group)
-                 collect (cons (intern group)
-                               (cons (intern (format "%s_start" group))
-                                     (intern (format "%s_end" group)))))))
+        (groups (cl-loop for g in (ensure-list group)
+                         collect (intern g))))
     `(progn
        (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
 

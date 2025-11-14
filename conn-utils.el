@@ -198,13 +198,15 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (list nil :type list)
   (history nil :type list)
   (capacity 0 :type integer)
-  (cleanup 'ignore :type function)
-  (copier 'identity :type function))
+  (cleanup #'ignore :type function)
+  (copier #'identity :type function))
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
-   (cl-callf thread-last (conn-ring-history ,ring)
-     (cl-delete ,item ) (cons ,item))))
+   (cl-callf thread-last
+       (conn-ring-history ,ring)
+     (cl-delete ,item)
+     (cons ,item))))
 
 (defun conn-copy-ring (ring)
   (when (conn-ring-p ring)
