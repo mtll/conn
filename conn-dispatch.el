@@ -175,7 +175,7 @@ strings have `conn-dispatch-label-face'."
             (conn--dispatch-read-event-handlers
              (cons ,handler conn--dispatch-read-event-handlers)))
         (catch ',tag ,@body))
-     `((:handle . ,(lambda (&rest body)
+     `((:return . ,(lambda (&rest body)
                      `(throw ',tag (progn ,@body))))
        ,@macroexpand-all-environment))))
 
@@ -415,7 +415,7 @@ themselves once the selection process has concluded."
                          (win (posn-window posn)))
                     (when (and (not (posn-area posn))
                                (funcall conn-target-window-predicate win))
-                      (:handle win)))))
+                      (:return win)))))
             (conn-label-select labels #'conn-dispatch-read-event))
         (mapc #'conn-label-delete labels))))))
 
@@ -1446,7 +1446,7 @@ Target overlays may override this default by setting the
         (setf size (max (ceiling (* 1.8 count))
                         (let ((len (length conn-simple-label-characters)))
                           (+ (- len 3)
-                             (* len 3))))
+                             (* (- len 3) 3))))
               pool (conn-simple-labels size))
         (dolist (str pool)
           (remhash str in-use)))
@@ -1574,7 +1574,7 @@ Target overlays may override this default by setting the
                    (pt (posn-point posn)))
               (when (and (not (posn-area posn))
                          (funcall conn-target-window-predicate win))
-                (:handle (list pt win nil))))))
+                (:return (list pt win nil))))))
       (conn-dispatch-select-mode 1)
       (unwind-protect
           (let ((inhibit-message t))
@@ -2159,7 +2159,7 @@ to the key binding for that target."
         nil
         (lambda (obj)
           (when (conn-dispatch-label-p obj)
-            (:handle obj)))
+            (:return obj)))
       (conn-label-payload
        (progn
          (ignore (conn-dispatch-read-event "Register"))
@@ -2275,7 +2275,7 @@ to the key binding for that target."
                 (when (eq cmd 'backspace)
                   (when (length> string 0)
                     (cl-callf substring string 0 -1))
-                  (:handle)))
+                  (:return)))
             (cl-callf thread-last
                 string
               (conn-dispatch-read-event prompt t nil)

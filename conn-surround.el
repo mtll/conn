@@ -388,7 +388,7 @@
                   (when (length> so-far 0)
                     (cl-callf substring so-far 0 -1)
                     (setq narrowed collection)
-                    (:handle))))
+                    (:return))))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-event prompt t nil)
