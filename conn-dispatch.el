@@ -3058,7 +3058,9 @@ contain targets."
         (pcase (conn-bounds-of-dispatch thing thing-arg pt)
           ((conn-dispatch-bounds `(,beg . ,end) transform)
            (if (region-active-p)
-               (goto-char (if forward end beg))
+               (goto-char (if (and forward (not (eq thing 'point)))
+                              end
+                            beg))
              (conn--push-ephemeral-mark end)
              (goto-char beg)))
           (_ (user-error "Cannot find thing at point")))))))
