@@ -162,11 +162,11 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-event-handlers nil)
 (defvar conn--dispatch-read-event-message-prefixes nil)
 
-(defmacro conn-with-dispatch-event-handler (tag-var keymap message-fn handler &rest body)
-  (declare (indent 4))
-  (let ((tagp (and tag-var (not (eq tag-var '_)))))
-    `(let* (,@(when tagp `((,tag-var (gensym "tag"))))
-            ,@(when keymap
+(defmacro conn-with-dispatch-event-handler (keymap message-fn handler &rest body)
+  (declare (indent 3))
+  (let ((tag (gensym "handle")))
+    (macroexpand-all
+     `(let (,@(when keymap
                 `((conn--dispatch-event-handler-maps
                    (cons ,keymap conn--dispatch-event-handler-maps))))
             ,@(when message-fn
@@ -174,7 +174,10 @@ strings have `conn-dispatch-label-face'."
                    (cons ,message-fn conn--dispatch-read-event-message-prefixes))))
             (conn--dispatch-read-event-handlers
              (cons ,handler conn--dispatch-read-event-handlers)))
-       ,@(if tagp `((catch ,tag-var ,@body)) body))))
+        (catch ',tag ,@body))
+     `((:handle . ,(lambda (&rest body)
+                     `(throw ',tag (progn ,@body))))
+       ,@macroexpand-all-environment))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -401,7 +404,7 @@ themselves once the selection process has concluded."
                                      win (window-parameter win 'conn-label-string))))
           (conn-label-select-always-prompt always-prompt))
       (unwind-protect
-          (conn-with-dispatch-event-handler mouse-click
+          (conn-with-dispatch-event-handler
               nil nil
               (lambda (cmd)
                 (when (or (and (eq cmd 'act)
@@ -412,7 +415,7 @@ themselves once the selection process has concluded."
                          (win (posn-window posn)))
                     (when (and (not (posn-area posn))
                                (funcall conn-target-window-predicate win))
-                      (throw mouse-click win)))))
+                      (:handle win)))))
             (conn-label-select labels #'conn-dispatch-read-event))
         (mapc #'conn-label-delete labels))))))
 
@@ -1559,7 +1562,7 @@ Target overlays may override this default by setting the
 
 (cl-defmethod conn-target-finder-select :around (_target-finder)
   (let ((conn--dispatch-remap-cookies nil))
-    (conn-with-dispatch-event-handler mouse-click
+    (conn-with-dispatch-event-handler
         nil nil
         (lambda (cmd)
           (when (or (and (eq cmd 'act)
@@ -1571,7 +1574,7 @@ Target overlays may override this default by setting the
                    (pt (posn-point posn)))
               (when (and (not (posn-area posn))
                          (funcall conn-target-window-predicate win))
-                (throw mouse-click (list pt win nil))))))
+                (:handle (list pt win nil))))))
       (conn-dispatch-select-mode 1)
       (unwind-protect
           (let ((inhibit-message t))
@@ -1796,7 +1799,7 @@ Target overlays may override this default by setting the
                                (when prompt-suffix " ") error-msg))
                      (read-key-sequence-vector)
                      (key-binding t)))
-            ('restart (throw 'return ?\8))
+            ('restart (throw 'return 8))
             ('dispatch-character-event
              (setq conn--read-args-error-message nil
                    conn--dispatch-must-prompt nil)
@@ -1812,17 +1815,16 @@ Target overlays may override this default by setting the
             (cmd
              (setq conn--read-args-error-message nil)
              (let ((unhandled nil))
-               (unwind-protect
-                   (catch 'dispatch-handle
-                     (cl-loop for handler in conn--dispatch-read-event-handlers
-                              do (funcall handler cmd))
-                     (setq unhandled t))
-                 (if unhandled
-                     (setq error-msg (propertize
-                                      (format "Invalid command <%s>" cmd)
-                                      'face 'error))
-                   (setf conn-read-args-last-command cmd)
-                   (setq conn--read-args-error-message nil)))
+               (catch 'dispatch-handle
+                 (cl-loop for handler in conn--dispatch-read-event-handlers
+                          do (funcall handler cmd))
+                 (setq unhandled t))
+               (if unhandled
+                   (setq error-msg (propertize
+                                    (format "Invalid command <%s>" cmd)
+                                    'face 'error))
+                 (setf conn-read-args-last-command cmd)
+                 (setq conn--read-args-error-message nil))
                (when (and unhandled (eq cmd 'keyboard-quit))
                  (keyboard-quit))))))))))
 
@@ -2147,7 +2149,7 @@ to the key binding for that target."
                                           conn-dispatch-target-key-labels))
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
-    (conn-with-dispatch-event-handler label
+    (conn-with-dispatch-event-handler
         (let ((map (make-sparse-keymap)))
           (cl-loop for label in labels
                    for key = (conn-dispatch-label-string label)
@@ -2157,7 +2159,7 @@ to the key binding for that target."
         nil
         (lambda (obj)
           (when (conn-dispatch-label-p obj)
-            (throw label obj)))
+            (:handle obj)))
       (conn-label-payload
        (progn
          (ignore (conn-dispatch-read-event "Register"))
@@ -2261,26 +2263,25 @@ to the key binding for that target."
                        (propertize (format "%d Chars" string-length)
                                    'face 'minibuffer-prompt)
                      (propertize "1 Char" 'face 'minibuffer-prompt))))
-      (conn-with-input-method
-        (while (length< string string-length)
-          (when (length> string 0)
-            (while-no-input
-              (conn-make-string-target-overlays string predicate)))
-          (catch 'dispatch-redisplay
-            (conn-with-dispatch-event-handler backspace
-                (define-keymap "<remap> <backward-delete-char>" 'backspace)
-                nil
-                (lambda (cmd)
-                  (when (eq cmd 'backspace)
-                    (when (length> string 0)
-                      (cl-callf substring string 0 -1))
-                    (throw backspace nil)))
-              (cl-callf thread-last
-                  string
-                (conn-dispatch-read-event prompt t)
-                (char-to-string)
-                (concat string))))
-          (conn-cleanup-targets)))
+      (while (length< string string-length)
+        (when (length> string 0)
+          (while-no-input
+            (conn-make-string-target-overlays string predicate)))
+        (catch 'dispatch-redisplay
+          (conn-with-dispatch-event-handler
+              (define-keymap "<backspace>" 'backspace)
+              nil
+              (lambda (cmd)
+                (when (eq cmd 'backspace)
+                  (when (length> string 0)
+                    (cl-callf substring string 0 -1))
+                  (:handle)))
+            (cl-callf thread-last
+                string
+              (conn-dispatch-read-event prompt t nil)
+              (char-to-string)
+              (concat string))))
+        (conn-cleanup-targets))
       (conn-make-string-target-overlays
        string
        predicate

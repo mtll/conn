@@ -509,7 +509,7 @@
                          :border-width conn-posframe-border-width
                          :border-color conn-posframe-border-color
                          :min-width 8)
-          (conn-with-dispatch-event-handler backspace
+          (conn-with-dispatch-event-handler
               (define-keymap
                 "<remap> <backward-delete-char>" 'backspace)
               nil
@@ -518,7 +518,7 @@
                            (length> so-far 0))
                   (cl-callf substring so-far 0 -1)
                   (setq narrowed collection)
-                  (throw backspace nil)))
+                  (:handle)))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-event prompt t nil)

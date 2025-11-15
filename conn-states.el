@@ -1155,7 +1155,7 @@ the state stays active if the previous command was a prefix command."
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
-        (preserve-state (make-symbol "preserver-state"))
+        (preserve-state (make-symbol "preserve-state"))
         (pop-pred (make-symbol "pop-pred"))
         (setup (make-symbol "setup")))
     (fset msg-fn (conn-state-get state :message-function))
