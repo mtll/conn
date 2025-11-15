@@ -164,20 +164,21 @@ strings have `conn-dispatch-label-face'."
 
 (defmacro conn-with-dispatch-event-handler (keymap message-fn handler &rest body)
   (declare (indent 3))
-  (let ((tag (gensym "handle")))
-    (macroexpand-all
-     `(let (,@(when keymap
-                `((conn--dispatch-event-handler-maps
-                   (cons ,keymap conn--dispatch-event-handler-maps))))
-            ,@(when message-fn
-                `((conn--dispatch-read-event-message-prefixes
-                   (cons ,message-fn conn--dispatch-read-event-message-prefixes))))
-            (conn--dispatch-read-event-handlers
-             (cons ,handler conn--dispatch-read-event-handlers)))
-        (catch ',tag ,@body))
-     `((:return . ,(lambda (&rest body)
-                     `(throw ',tag (progn ,@body))))
-       ,@macroexpand-all-environment))))
+  (let* ((tag (gensym "handle"))
+         (menv `((:return . ,(lambda (&optional result)
+                               `(throw ',tag ,result)))
+                 ,@macroexpand-all-environment))
+         (handler (macroexpand-all handler menv))
+         (body (macroexpand-all (macroexp-progn body) menv)))
+    `(let (,@(when keymap
+               `((conn--dispatch-event-handler-maps
+                  (cons ,keymap conn--dispatch-event-handler-maps))))
+           ,@(when message-fn
+               `((conn--dispatch-read-event-message-prefixes
+                  (cons ,message-fn conn--dispatch-read-event-message-prefixes))))
+           (conn--dispatch-read-event-handlers
+            (cons ,handler conn--dispatch-read-event-handlers)))
+       (catch ',tag ,@(macroexp-unprogn body)))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
