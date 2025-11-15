@@ -1543,7 +1543,7 @@ Target overlays may override this default by setting the
                 conn-target-count nil)
           (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
-                         conn-targets)
+                         (cl-callf nreverse conn-targets))
             (cl-loop for tar in targets
                      if (<= (window-start window)
                             (overlay-start tar)
