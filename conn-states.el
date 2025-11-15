@@ -914,10 +914,10 @@ Returns the next state in the state stack."
 
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive state stack."
+  (push nil conn--state-stack)
   (conn-enter-state state)
   ;; Ensure the lighter gets updates even if we haven't changed state
   (conn-update-lighter)
-  (push nil conn--state-stack)
   (push state conn--state-stack))
 
 (defun conn-exit-recursive-stack ()
@@ -1175,7 +1175,9 @@ the state stays active if the previous command was a prefix command."
                     (add-hook 'post-command-hook msg-fn 91 t))
                   (add-hook 'post-command-hook pop-pred 90 t)))
     (conn-state-defer
-      (cl-callf2 remq state conn--state-stack)
+      (setq conn--state-stack
+            (append (remq state (take-while #'identity conn--state-stack))
+                    (drop-while #'identity conn--state-stack)))
       (when (symbol-function msg-fn)
         (remove-hook 'post-command-hook msg-fn t))
       (remove-hook 'post-command-hook setup t)
