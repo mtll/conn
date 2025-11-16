@@ -1313,7 +1313,7 @@
                           :region-predicate (lambda (beg end)
                                               (and (<= beg (point))
                                                    (<= (point) end))))))
-  "M" (conn-anonymous-thing
+  "n" (conn-anonymous-thing
         'sexp
         :pretty-print ( :method (_) "ts-all-sexps")
         :target-finder ( :method (_self _arg)

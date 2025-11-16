@@ -1278,9 +1278,12 @@ Only the background color is used."
                         if (= i curr) concat (car pips)
                         else concat (cdr pips))
                " ("
-               (propertize (conn-thing-pretty-print
-                            (conn-bounds-thing (nth curr bounds)))
-                           'face 'eldoc-highlight-function-argument)
+               (let* ((desc (conn-thing-pretty-print
+                             (conn-bounds-thing (nth curr bounds)))))
+                 (propertize (if (length> desc 40)
+                                 (truncate-string-to-width desc 40 nil nil t)
+                               desc)
+                             'face 'eldoc-highlight-function-argument))
                ")"
                (when-let* ((msg (conn--read-args-display-message)))
                  (concat ": " msg))

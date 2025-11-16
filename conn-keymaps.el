@@ -425,7 +425,6 @@
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
-  "n" conn-end-of-defun-remap
   "," conn-thing-remap)
 
 (define-keymap
