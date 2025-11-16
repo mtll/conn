@@ -132,7 +132,7 @@ strings have `conn-dispatch-label-face'."
                              (take count conn-simple-label-characters)
                              (reverse)
                              (mapcar #'copy-sequence)))
-    (named-let rec ((curr 0))
+    (named-let loop ((curr 0))
       (let* ((prefixes nil))
         (while (and (aref buckets curr)
                     (> count (+ (length (aref buckets curr))
@@ -144,7 +144,7 @@ strings have `conn-dispatch-label-face'."
               (dolist (a prefixes)
                 (dolist (b conn-simple-label-characters)
                   (push (concat a b) (aref buckets (1+ curr)))))
-              (rec (1+ curr)))
+              (loop (1+ curr)))
           (catch 'done
             (let ((n (length (aref buckets curr))))
               (dolist (prefix prefixes)
@@ -1602,7 +1602,6 @@ Target overlays may override this default by setting the
 
 (defvar conn-dispatch-in-progress nil)
 (defvar conn--dispatch-undo-change-groups nil)
-(defvar conn--prev-scroll-conservatively nil)
 
 (defvar conn--dispatch-current-thing nil)
 
@@ -1628,8 +1627,6 @@ Target overlays may override this default by setting the
 (defun conn--dispatch-loop (repeat body)
   (let* ((success nil)
          (conn--dispatch-label-state nil)
-         (conn--prev-scroll-conservatively scroll-conservatively)
-         (scroll-conservatively 100)
          (conn-dispatch-repeating (and repeat t))
          (conn--dispatch-undo-change-groups nil)
          (conn--read-args-error-message nil)
@@ -1849,7 +1846,6 @@ Target overlays may override this default by setting the
                     conn--dispatch-prev-state)
                    (conn-targets nil)
                    (conn--dispatch-label-state nil)
-                   (scroll-conservatively conn--prev-scroll-conservatively)
                    (conn-dispatch-target-finder nil)
                    (conn-dispatch-in-progress nil)
                    (conn--dispatch-undo-change-groups nil)
@@ -2070,13 +2066,9 @@ Target overlays may override this default by setting the
         (unless (overlay-get tar 'label-face)
           (if-let* ((thing (overlay-get tar 'thing))
                     (_ (and (conn-anonymous-thing-p thing)
-                            (if-let* ((c (conn-anonymous-thing-property
-                                          thing :thing-count)))
-                                (> c 1)
-                              (length>
-                               (conn-anonymous-thing-property
-                                thing :things)
-                               1)))))
+                            (length> (conn-anonymous-thing-property
+                                      thing :bounds)
+                                     1))))
               (overlay-put tar 'label-face multi-face)
             (overlay-put tar 'label-face face1)
             (cl-rotatef face1 face2)))))))
@@ -3733,20 +3725,17 @@ contain targets."
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
         (save-excursion
-          (pcase-let ((`(,beg1 . ,end1)
-                       (progn
-                         (goto-char pt1)
-                         (or (conn-bounds (conn-transform-bounds
-                                           (conn-bounds-of thing1 arg1)
-                                           transform1))
-                             (user-error "Cannot find thing at point"))))
-                      (`(,beg2 . ,end2)
-                       (progn
-                         (goto-char pt2)
-                         (or (conn-bounds (conn-transform-bounds
-                                           (conn-bounds-of thing2 arg2)
-                                           transform2))
-                             (user-error "Cannot find thing at point")))))
+          (pcase-let* (((and bounds1
+                             (conn-bounds `(,beg1 . ,end1) transform1))
+                        (progn
+                          (goto-char pt1)
+                          (or (conn-bounds-of thing1 arg1)
+                              (user-error "Cannot find thing at point"))))
+                       ((conn-bounds `(,beg2 . ,end2) transform2)
+                        (progn
+                          (goto-char pt2)
+                          (or (conn-bounds-of (or thing2 bounds1) arg2)
+                              (user-error "Cannot find thing at point")))))
             (if (and (or (<= beg1 end1 beg2 end2)
                          (<= beg2 end2 beg1 end1))
                      (/= beg1 end1)
@@ -3758,13 +3747,14 @@ contain targets."
     (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
                                      (prepare-change-group buffer2))
                               (cancel-change-group cg))
+                          (bounds1 nil)
                           (str1)
                           (str2))
       (activate-change-group cg)
       (with-current-buffer buffer1
         (save-excursion
           (goto-char pt1)
-          (pcase (conn-bounds-of thing1 arg1)
+          (pcase (setq bounds1 (conn-bounds-of thing1 arg1))
             ((conn-bounds `(,beg . ,end) transform1)
              (setq pt1 beg)
              (setq str1 (filter-buffer-substring beg end))
@@ -3773,7 +3763,7 @@ contain targets."
       (with-current-buffer buffer2
         (save-excursion
           (goto-char pt2)
-          (pcase (conn-bounds-of thing2 arg2)
+          (pcase (conn-bounds-of (or thing2 bounds1) arg2)
             ((conn-bounds `(,beg . ,end) transform2)
              (setq str2 (filter-buffer-substring beg end))
              (delete-region beg end)

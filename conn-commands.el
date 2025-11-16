@@ -1030,38 +1030,36 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch)) arg)
   (conn-disable-repeating)
-  (conn-read-args (conn-dispatch-transpose-state
-                   :prompt "Transpose Dispatch"
-                   :prefix arg)
-      ((`(,thing ,thing-arg) (conn-thing-argument t))
-       (restrict-windows (conn-dispatch-restrict-windows-argument)))
-    (conn-dispatch-setup
-     (oclosure-lambda
-         (conn-transpose-command
-          (action-description "Transpose")
-          (action-no-history t)
-          (buffer (current-buffer))
-          (point (point))
-          (thing1
-           (when (use-region-p)
-             (conn-anonymous-thing
-               'region
-               :bounds-op (let ((bounds (conn-make-bounds
-                                         'region nil
-                                         (cons (region-beginning)
-                                               (region-end)))))
-                            (:method (_self _arg) bounds)))))
-          (action-window-predicate
-           (lambda (win)
-             (not (buffer-local-value 'buffer-read-only
-                                      (window-buffer win))))))
-         (window2 pt2 thing2 thing-arg)
-       (conn--dispatch-transpose-subr
-        (window-buffer window2) pt2 thing2 thing-arg nil
-        buffer point (or thing1 thing2) thing-arg nil))
-     thing thing-arg nil
-     :other-end :no-other-end
-     :restrict-windows restrict-windows)))
+  (let ((pt1 (point))
+        (buf1 (current-buffer))
+        (thing1 (when (use-region-p)
+                  (conn-anonymous-thing
+                    'region
+                    :bounds-op (let ((bounds (conn-make-bounds
+                                              'region nil
+                                              (cons (region-beginning)
+                                                    (region-end)))))
+                                 (:method (_self _arg) bounds))))))
+    (conn-read-args (conn-dispatch-transpose-state
+                     :prompt "Transpose Dispatch test"
+                     :prefix arg)
+        ((`(,thing ,thing-arg) (conn-thing-argument t))
+         (restrict-windows (conn-dispatch-restrict-windows-argument)))
+      (conn-dispatch-setup
+       (oclosure-lambda (conn-action
+                         (action-description "Transpose")
+                         (action-no-history t)
+                         (action-window-predicate
+                          (lambda (win)
+                            (not (buffer-local-value 'buffer-read-only
+                                                     (window-buffer win))))))
+           (window2 pt2 thing2 arg2 _transform)
+         (conn--dispatch-transpose-subr
+          (window-buffer window2) pt2 thing2 arg2 nil
+          buf1 pt1 thing1 arg2 nil))
+       thing thing-arg nil
+       :other-end :no-other-end
+       :restrict-windows restrict-windows))))
 
 (defvar conn-transpose-reference
   (list
@@ -1975,16 +1973,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
-
-(cl-defmethod conn-kill-thing-do ((cmd (conn-thing char))
-                                  arg transform
-                                  &optional
-                                  append
-                                  _delete
-                                  register
-                                  fixup-whitespace
-                                  _check-bounds)
-  (cl-call-next-method cmd arg transform append t register fixup-whitespace))
 
 (cl-defmethod conn-kill-thing-do :extra "rmm" ( (_cmd (conn-thing region))
                                                 _arg _transform

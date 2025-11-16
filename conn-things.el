@@ -243,8 +243,9 @@
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
                          &rest rest)
-         (if-let* ((op (conn--anonymous-thing-method ,(car args) ',f)))
-             (apply op #'cl-call-next-method ,(car args) rest)
+         (if-let* ((thing (conn-get-thing ,(car args)))
+                   (op (conn--anonymous-thing-method thing ',f)))
+             (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method)))))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
@@ -289,27 +290,27 @@ order to mark the region that should be defined by any of COMMANDS."
         ,ignore-mark-active))
      (conn-register-thing-commands ',thing 'ignore ',name)))
 
-(defun conn-get-thing (thing)
+(define-inline conn-get-thing (thing)
   (declare (side-effect-free t)
            (important-return-value t))
-  (pcase thing
-    ((pred conn-bounds-p)
-     (conn-bounds-thing thing))
-    ((pred conn-anonymous-thing-p)
-     (conn-anonymous-thing-parent thing))
-    ((or (pred conn-thing-p)
-         (pred conn-thing-command-p))
-     thing)))
+  (inline-letevals (thing)
+    (inline-quote
+     (pcase ,thing
+       ((pred conn-bounds-p)
+        (conn-bounds-thing ,thing))
+       ((or (pred conn-thing-p)
+            (pred conn-thing-command-p)
+            (pred conn-anonymous-thing-p))
+        ,thing)))))
 
 ;;;; Specializers
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(or (and (or (conn-thing-p ,thing)
-                     (conn-thing-command-p ,thing))
-                 ,thing)
-            (and (conn-bounds-p ,thing)
-                 (conn-bounds-thing ,thing))))
+       `(let ((th (conn-get-thing ,thing)))
+          (and (or (conn-thing-p th)
+                   (conn-thing-command-p th))
+               th)))
   (lambda (thing &rest _)
     (when thing
       `(,@(cl-loop for parent in (conn-thing-all-parents thing)
@@ -320,12 +321,13 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-generic-define-generalizer conn--anonymous-thing-generalizer
   70 (lambda (thing &rest _)
-       `(and (conn-anonymous-thing-p ,thing)
-             (with-memoization
-                 (gethash (conn-anonymous-thing-parent ,thing)
-                          conn--anonymous-thing-tag-cache)
-               (cons 'anonymous-thing
-                     (conn-anonymous-thing-parent ,thing)))))
+       `(let ((th (conn-get-thing ,thing)))
+          (and (conn-anonymous-thing-p th)
+               (with-memoization
+                   (gethash (conn-anonymous-thing-parent th)
+                            conn--anonymous-thing-tag-cache)
+                 (cons 'anonymous-thing
+                       (conn-anonymous-thing-parent th))))))
   (lambda (thing &rest _)
     (when thing
       `((conn-thing internal--anonymous-thing-method)
@@ -1255,111 +1257,86 @@ Only the background color is used."
          (unselected (if asciip "." "◯")))
     (cons selected unselected)))
 
-(defun conn-multi-thing-select (thing &optional always-prompt)
-  (pcase (conn-anonymous-thing-property thing :things)
-    ('nil)
-    ((and `(,thing . nil)
-          (guard (not always-prompt)))
-     (pcase (conn-bounds-of thing nil)
-       ((and bounds
-             (conn-bounds `(,beg . ,end))
-             (guard (<= beg (point) end)))
-        bounds)
-       (_ (user-error "No %s found at point" thing))))
-    ((and things
-          (let (and unfiltered (pred identity))
-            (conn-thread-last
-              (cl-loop for thing in things
-                       collect (conn-bounds-of thing nil))
-              (delq nil)
-              (seq-filter (pcase-lambda ((conn-bounds `(,beg . ,end)))
-                            (<= beg (point) end)))
-              (<>- sort :key (lambda (bound)
-                               (cdr (conn-bounds bound)))))))
-     (cl-flet ((eql-bounds (bound)
-                 (cl-loop for bd in unfiltered
-                          when (equal (conn-bounds bound)
-                                      (conn-bounds bd))
-                          collect (conn-bounds-thing bd))))
-       (let* ((bounds (seq-uniq unfiltered
-                                (lambda (a b)
-                                  (equal (conn-bounds a)
-                                         (conn-bounds b)))))
-              (curr 0)
-              (size (length bounds))
-              (pips (conn--multi-thing-pip-strings))
-              (display-handler
-               (lambda (prompt _args)
-                 (let ((eql-bds (eql-bounds (nth curr bounds))))
-                   (message
-                    (substitute-command-keys
-                     (concat
-                      (propertize prompt 'face 'minibuffer-prompt)
-                      (cl-loop for i below size
-                               concat " "
-                               if (= i curr) concat (car pips)
-                               else concat (cdr pips))
-                      " ("
-                      (mapconcat (lambda (thing)
-                                   (propertize
-                                    (conn-thing-pretty-print thing)
-                                    'face 'eldoc-highlight-function-argument))
-                                 (take 2 eql-bds)
-                                 " & ")
-                      (when (length> eql-bds 2)
-                        (concat " & " (truncate-string-ellipsis)))
-                      ")"
-                      (when-let* ((msg (conn--read-args-display-message)))
-                        (concat ": " msg))
-                      "\n\\[select] select; "
-                      "\\[abort] abort"
-                      (when (> size 1)
-                        (concat
-                         "; \\[conn-expand] next; "
-                         "\\[conn-contract] prev")))))))))
-         (pcase-exhaustive bounds
-           ('nil
-            (user-error "No things found at point"))
-           ((and `(,bound . nil)
-                 (guard (not always-prompt)))
-            bound)
-           (`(,(conn-bounds `(,beg . ,end)) . ,_)
-            (save-mark-and-excursion
-              (goto-char end)
-              (conn--push-ephemeral-mark beg)
-              (activate-mark)
-              (conn-read-args (conn-multi-thing-select-state
-                               :prompt "Thing"
-                               :display-handler display-handler)
-                  ((bound
-                    (oclosure-lambda (conn-read-args-argument
-                                      (required t))
-                        (self command)
-                      (pcase command
-                        ('conn-contract
-                         (setq curr (mod (1- curr) size))
-                         (pcase (nth curr bounds)
-                           ((conn-bounds `(,beg . ,end))
-                            (goto-char end)
-                            (conn--push-ephemeral-mark beg)))
-                         (conn-read-args-handle))
-                        ('conn-expand
-                         (setq curr (mod (1+ curr) size))
-                         (pcase (nth curr bounds)
-                           ((conn-bounds `(,beg . ,end))
-                            (goto-char end)
-                            (conn--push-ephemeral-mark beg)))
-                         (conn-read-args-handle))
-                        ('select
-                         (conn-set-argument self (nth curr bounds)))
-                        ('abort
-                         (user-error "Aborted"))
-                        (_ self)))))
-                (when bound
-                  (setf (conn-anonymous-thing-property thing :things)
-                        (eql-bounds bound))
-                  bound))))))))
-    (_ (user-error "No things found at point"))))
+(defun conn-multi-thing-select (things &optional always-prompt)
+  (let* ((bounds (compat-call sort things
+                              :key #'conn-bounds--whole
+                              :lessp (lambda (a b)
+                                       (< (cdr a) (cdr b)))))
+         (curr 0)
+         (size (length bounds))
+         (pips (conn--multi-thing-pip-strings))
+         (display-handler
+          (lambda (prompt _args)
+            (message
+             (substitute-command-keys
+              (concat
+               (propertize prompt 'face 'minibuffer-prompt)
+               (cl-loop for i below size
+                        concat " "
+                        if (= i curr) concat (car pips)
+                        else concat (cdr pips))
+               " ("
+               (propertize (conn-thing-pretty-print
+                            (conn-bounds-thing (nth curr bounds)))
+                           'face 'eldoc-highlight-function-argument)
+               ")"
+               (when-let* ((msg (conn--read-args-display-message)))
+                 (concat ": " msg))
+               "\n\\[select] select; "
+               "\\[abort] abort"
+               (when (> size 1)
+                 (concat
+                  "; \\[conn-expand] next; "
+                  "\\[conn-contract] prev"))))))))
+    (pcase bounds
+      ('nil (user-error "No things found at point"))
+      ((and `(,bound . nil)
+            (guard (not always-prompt)))
+       bound)
+      (`(,(conn-bounds `(,beg . ,end)) . ,_)
+       (save-mark-and-excursion
+         (goto-char end)
+         (conn--push-ephemeral-mark beg)
+         (activate-mark)
+         (conn-read-args (conn-multi-thing-select-state
+                          :prompt "Thing"
+                          :display-handler display-handler)
+             ((bound
+               (oclosure-lambda (conn-read-args-argument
+                                 (required t)
+                                 (keymap (define-keymap "z" 'conn-exchange-mark-command)))
+                   (self command)
+                 (pcase command
+                   ('recenter-top-bottom
+                    (let ((this-command 'recenter-top-bottom)
+                          (last-command conn-read-args-last-command))
+                      (recenter-top-bottom (conn-read-args-prefix-arg)))
+                    (conn-read-args-handle))
+                   ('conn-exchange-mark-command
+                    (conn-exchange-mark-command)
+                    (conn-read-args-handle))
+                   ('conn-contract
+                    (setq curr (mod (1- curr) size))
+                    (pcase (nth curr bounds)
+                      ((conn-bounds `(,beg . ,end))
+                       (goto-char (if (< (point) (mark)) beg end))
+                       (conn--push-ephemeral-mark
+                        (if (< (point) (mark)) end beg))))
+                    (conn-read-args-handle))
+                   ('conn-expand
+                    (setq curr (mod (1+ curr) size))
+                    (pcase (nth curr bounds)
+                      ((conn-bounds `(,beg . ,end))
+                       (goto-char (if (< (point) (mark)) beg end))
+                       (conn--push-ephemeral-mark
+                        (if (< (point) (mark)) end beg))))
+                    (conn-read-args-handle))
+                   ('select
+                    (conn-set-argument self (nth curr bounds)))
+                   ('abort
+                    (user-error "Aborted"))
+                   (_ self)))))
+           bound))))))
 
 ;;;; Thing Definitions
 

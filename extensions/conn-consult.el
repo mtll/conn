@@ -44,6 +44,7 @@
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-ripgrep
    nil
    (when (and (< (- end beg) 1000)
@@ -55,6 +56,7 @@
 (defun conn-consult-line-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-line
    (when (and (< (- end beg) 1000)
               (= (count-lines beg end) 1))
@@ -65,6 +67,7 @@
 (defun conn-consult-line-multi-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-line-multi
    nil
    (when (and (< (- end beg) 1000)
@@ -76,6 +79,7 @@
 (defun conn-consult-locate-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-locate
    (when (and (< (- end beg) 1000)
               (= (count-lines beg end) 1))
@@ -86,6 +90,7 @@
 (defun conn-consult-git-grep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-git-grep
    nil
    (when (and (< (- end beg) 1000)
@@ -97,6 +102,7 @@
 (defun conn-consult-find-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
+  (deactivate-mark)
   (consult-find
    nil
    (when (and (< (- end beg) 1000)
