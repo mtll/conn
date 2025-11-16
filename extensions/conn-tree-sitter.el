@@ -255,14 +255,11 @@
   (push query (alist-get language conn-ts--custom-queries))
   (conn-ts--recompile-query language))
 
-(defun conn-ts--get-query ()
-  (unless (treesit-language-at (point))
-    (error "No treesitter language at point"))
-  (with-memoization (gethash (treesit-language-at (point))
-                             conn-ts--compiled-query-cache)
+(defun conn-ts--get-query (language)
+  (with-memoization (gethash language conn-ts--compiled-query-cache)
     (treesit-query-compile
-     (treesit-language-at (point))
-     (conn-ts--get-language-query (treesit-language-at (point)))
+     language
+     (conn-ts--get-language-query language)
      'eager)))
 
 (defun conn-ts--normalize-captures (capture-group)
@@ -281,9 +278,14 @@
           (push capture result))))
     result))
 
-(defun conn-ts-query-capture (node query start end)
-  (mapcan #'conn-ts--normalize-captures
-          (treesit-query-capture node query start end nil t)))
+(defun conn-ts-capture (start end)
+  (cl-loop for parser in (append (treesit-parser-list)
+                                 (treesit-local-parsers-on start end))
+           for lang = (treesit-parser-language parser)
+           nconc (mapcan #'conn-ts--normalize-captures
+                         (treesit-query-capture
+                          parser (conn-ts--get-query lang)
+                          start end nil t))))
 
 (defun conn-ts--get-thing-groups (thing)
   (pcase thing
@@ -346,10 +348,7 @@
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
                           cmd
-                          (conn-ts-query-capture (treesit-buffer-root-node)
-                                                 (conn-ts--get-query)
-                                                 (min beg end)
-                                                 (max beg end)))
+                          (conn-ts-capture (min beg end) (max beg end)))
                 beg end)
           (if flat
               (progn
@@ -464,10 +463,7 @@
                                    (conn-ts-filter-captures
                                     (conn-anonymous-thing-property
                                      self :types)
-                                    (conn-ts-query-capture
-                                     (treesit-buffer-root-node)
-                                     (conn-ts--get-query)
-                                     (point) (1+ (point)))
+                                    (conn-ts-capture (point) (1+ (point)))
                                     (lambda (bd)
                                       (<= (car bd) (point) (cdr bd)))))
                                  'conn-ts-thing)))
@@ -478,9 +474,7 @@
                          (conn--visible-regions (window-start)
                                                 (window-end)))
             (pcase-dolist (`(,type ,beg . ,end)
-                           (conn-ts-query-capture (treesit-buffer-root-node)
-                                                  (conn-ts--get-query)
-                                                  vbeg vend))
+                           (conn-ts-capture vbeg vend))
               (when-let* ((type-things (seq-intersection
                                         (get type :conn-ts--member-of)
                                         things))
@@ -550,7 +544,7 @@
                                     (lambda (c)
                                       (mapcar #'cdr (conn-ts--normalize-captures c)))
                                     (treesit-query-capture
-                                     (treesit-buffer-root-node)
+                                     (treesit-language-at (point))
                                      query (point) (1+ (point)) nil t)))
                                  thing)))
                  nil bounds)))
@@ -563,8 +557,9 @@
                                 (let type (treesit-node-type node))
                                 (let beg (treesit-node-start node))
                                 (let end (treesit-node-end node)))
-                           (treesit-query-capture (treesit-buffer-root-node)
-                                                  query vbeg vend))
+                           (treesit-query-capture
+                            (treesit-language-at (point))
+                            query vbeg vend))
               (if-let* ((ov (car (conn--overlays-in-of-type
                                   beg (1+ beg) 'conn-target-overlay))))
                   (if-let* ((b (seq-find (lambda (b)
