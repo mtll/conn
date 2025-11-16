@@ -304,20 +304,20 @@
   (let ((groups (cl-loop for thing in (ensure-list things)
                          append (conn-ts--get-thing-groups thing)))
         (result nil))
-    (pcase-dolist (`(,type . ,bound) captures)
+    (pcase-dolist ((and capture `(,type . ,bound)) captures)
       (when (and (memq type groups)
                  (or (null predicate)
                      (funcall predicate bound)))
-        (push bound result)))
+        (push capture result)))
     result))
 
 (defun conn-ts-select-expansion (get-captures thing)
   (let ((things nil))
-    (pcase-dolist (`(,beg . ,end) (funcall get-captures))
+    (pcase-dolist (`(,type ,beg . ,end) (funcall get-captures))
       (push (conn-make-bounds
              (conn-anonymous-thing
                thing
-               :pretty-print (:method (_) (format "%s-expansion" thing))
+               :pretty-print (:method (_) (format "%s" type))
                :bounds-op ( :method (_ _)
                             (conn-ts-select-expansion get-captures thing)))
              nil
@@ -356,7 +356,7 @@
                   :key #'car
                   :reverse (< arg 0)
                   :in-place t)
-                (dolist (node captures)
+                (pcase-dolist (`(,type . ,node) captures)
                   (when (and (if (< arg 0)
                                  (< (car node) at)
                                (> (car node) at))
@@ -540,12 +540,14 @@
                    :bounds-op ( :method (_ _)
                                 (conn-ts-select-expansion
                                  (lambda ()
-                                   (mapcan
-                                    (lambda (c)
-                                      (mapcar #'cdr (conn-ts--normalize-captures c)))
+                                   (mapcar
+                                    (pcase-lambda (`(,_ . ,node))
+                                      (cons (treesit-node-type node)
+                                            (cons (treesit-node-start node)
+                                                  (treesit-node-end node))))
                                     (treesit-query-capture
                                      (treesit-language-at (point))
-                                     query (point) (1+ (point)) nil t)))
+                                     query (point) (1+ (point)))))
                                  thing)))
                  nil bounds)))
       (dolist (win (conn--get-target-windows))

@@ -1261,7 +1261,9 @@ Only the background color is used."
   (let* ((bounds (compat-call sort things
                               :key #'conn-bounds--whole
                               :lessp (lambda (a b)
-                                       (< (cdr a) (cdr b)))))
+                                       (if (= (car a) (car b))
+                                           (< (cdr a) (cdr b))
+                                         (> (car a) (car b))))))
          (curr 0)
          (size (length bounds))
          (pips (conn--multi-thing-pip-strings))
