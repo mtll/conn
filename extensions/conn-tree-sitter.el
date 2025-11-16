@@ -356,7 +356,7 @@
                   :key #'car
                   :reverse (< arg 0)
                   :in-place t)
-                (pcase-dolist (`(,type . ,node) captures)
+                (pcase-dolist (`(,_type . ,node) captures)
                   (when (and (if (< arg 0)
                                  (< (car node) at)
                                (> (car node) at))
@@ -490,7 +490,7 @@
                                   (conn-anonymous-thing-property
                                    (overlay-get ov 'thing)
                                    :bounds))))
-                        (cl-callf2 nconc
+                        (cl-callf2 seq-union
                             type-things
                             (conn-anonymous-thing-property
                              (conn-bounds-thing b)
