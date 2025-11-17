@@ -1283,22 +1283,18 @@ With arg N, insert N newlines."
         (narrow-to-region beg end))
        (_ (widen))))))
 
-(defun conn--narrow-to-region-1 (beg end &optional record)
+(defun conn--narrow-to-region (beg end &optional record)
   (narrow-to-region beg end)
   (when record (conn--narrow-ring-record beg end)))
 
-(defun conn--narrow-indirect (beg end &optional record)
+(defun conn--narrow-indirect-to-region (beg end &optional record)
   "Narrow from BEG to END in an indirect buffer."
   (let* ((line-beg (line-number-at-pos beg))
          (linenum (- (line-number-at-pos end) line-beg))
-         (name (format "%s@%s+%s - %s"
-                       (buffer-name (current-buffer)) line-beg linenum
-                       (thread-first
-                         (buffer-substring-no-properties beg end)
-                         (string-trim)
-                         (substring 0 (min 20 (- end beg)))))))
+         (name (format "%s@%s+%s"
+                       (buffer-name (current-buffer)) line-beg linenum)))
     (clone-indirect-buffer-other-window name t)
-    (conn--narrow-to-region-1 beg end record)
+    (conn--narrow-to-region beg end record)
     (deactivate-mark)))
 
 (oclosure-define (conn-indirect-argument
@@ -1349,19 +1345,12 @@ With arg N, insert N newlines."
        (deactivate-mark))
      (if indirect
          (progn
-           (conn--narrow-indirect beg end t)
+           (conn--narrow-indirect-to-region beg end t)
            (when (called-interactively-p 'interactive)
              (message "Buffer narrowed indirect")))
-       (conn--narrow-to-region-1 beg end t)
+       (conn--narrow-to-region beg end t)
        (when (called-interactively-p 'interactive)
          (message "Buffer narrowed"))))))
-
-(defun conn-narrow-to-region (beg end &optional record)
-  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive (list (region-beginning) (region-end) (list t)))
-  (conn--narrow-to-region-1 beg end record)
-  (when (called-interactively-p 'interactive)
-    (message "Buffer narrowed")))
 
 ;;;;;; Bounds of Narrow Ring
 

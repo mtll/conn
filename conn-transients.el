@@ -1272,7 +1272,7 @@ A zero means repeat until error."
                (buf (current-buffer))
                (win (selected-window)))
            (widen)
-           (conn--narrow-indirect beg end)
+           (conn--narrow-indirect-to-region beg end)
            (with-current-buffer buf
              (if (eq (window-buffer win) buf)
                  (with-selected-window win
