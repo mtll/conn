@@ -228,9 +228,9 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (conn-ring--visit ring item)
   (when-let* ((old (drop (conn-ring-capacity ring) (conn-ring-history ring))))
     (cl-callf2 take (conn-ring-capacity ring) (conn-ring-history ring))
-    (dolist (o old)
-      (cl-callf2 delq o (conn-ring-list ring))
-      (when-let* ((cleanup (conn-ring-cleanup ring)))
+    (let ((cleanup (conn-ring-cleanup ring)))
+      (dolist (o old)
+        (cl-callf2 delq o (conn-ring-list ring))
         (funcall cleanup o)))))
 
 (defun conn-ring-insert-back (ring item)

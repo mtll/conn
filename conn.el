@@ -116,7 +116,6 @@
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
 
-
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
@@ -129,7 +128,12 @@
         conn-movement-ring (conn-copy-ring conn-movement-ring)
         conn-mark-ring (conn-copy-ring conn-mark-ring)
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
-        conn--state-stack (copy-sequence conn--state-stack)))
+        conn--state-stack (copy-sequence conn--state-stack))
+  (cl-loop for e in conn-previous-mark-state
+           if (markerp e)
+           collect (copy-marker (marker-position e)) into mstate
+           else collect e into mstate
+           finally do (setq conn-previous-mark-state mstate)))
 
 (defun conn--setup-keymaps ()
   (if conn-mode
