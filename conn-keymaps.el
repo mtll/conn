@@ -118,7 +118,6 @@
   "V" 'vc-region-history
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
-  "N" 'conn-narrow-indirect
   "n" 'conn-narrow-to-thing)
 
 (define-keymap

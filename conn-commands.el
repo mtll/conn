@@ -1301,41 +1301,60 @@ With arg N, insert N newlines."
     (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
 
-(defun conn-narrow-to-thing (thing-mover arg transform)
+(oclosure-define (conn-indirect-argument
+                  (:parent conn-read-args-argument)))
+
+(defvar-keymap conn-indirect-map
+  "d" 'indirect)
+
+(defun conn-indirect-argument (&rest initial)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (oclosure-lambda (conn-indirect-argument
+                    (value initial)
+                    (keymap conn-indirect-map))
+      (self cmd)
+    (pcase cmd
+      ('indirect
+       (conn-set-argument self (not value)))
+      (_ self))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-indirect-argument)
+                                       (_sym (eql indirect)))
+  t)
+
+(cl-defmethod conn-argument-display ((arg conn-indirect-argument))
+  (substitute-command-keys
+   (concat
+    "\\[indirect] "
+    (let ((ts (conn-read-args-argument-value arg)))
+      (propertize
+       "Indirect"
+       'face (when ts 'eldoc-highlight-function-argument))))))
+
+(defun conn-narrow-to-thing (thing-mover arg transform &optional indirect)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
                     :prompt "Thing"
                     :prefix current-prefix-arg)
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform)))
+        (transform (conn-transform-argument))
+        (indirect (conn-indirect-argument)))
+     (list thing thing-arg transform indirect)))
   (pcase (conn-bounds-of thing-mover arg)
     ((conn-bounds `(,beg . ,end) transform)
      (unless (and (<= beg (point) end)
                   (<= beg (mark t) end))
        (deactivate-mark))
-     (conn--narrow-to-region-1 beg end t)
-     (when (called-interactively-p 'interactive)
-       (message "Buffer narrowed")))))
-
-(defun conn-narrow-indirect (thing-mover arg transform)
-  "Narrow to THING at point.
-
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive
-   (conn-read-args (conn-narrow-state
-                    :prompt "Thing"
-                    :prefix current-prefix-arg)
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform)))
-  (pcase (conn-bounds-of thing-mover arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (conn--narrow-indirect beg end t)
-     (when (called-interactively-p 'interactive)
-       (message "Buffer narrowed indirect")))))
+     (if indirect
+         (progn
+           (conn--narrow-indirect beg end t)
+           (when (called-interactively-p 'interactive)
+             (message "Buffer narrowed indirect")))
+       (conn--narrow-to-region-1 beg end t)
+       (when (called-interactively-p 'interactive)
+         (message "Buffer narrowed"))))))
 
 (defun conn-narrow-to-region (beg end &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
