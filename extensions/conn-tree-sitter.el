@@ -479,7 +479,9 @@
                                         (get type :conn-ts--member-of)
                                         things))
                           (_ (and (<= (window-start) beg (window-end))
-                                  (if region-pred (funcall region-pred beg end) t))))
+                                  (if region-pred
+                                      (funcall region-pred beg end)
+                                    t))))
                 (if-let* ((ov (car (conn--overlays-in-of-type
                                     beg (1+ beg) 'conn-target-overlay))))
                     (if-let* ((b (seq-find
@@ -571,7 +573,9 @@
                                          (conn-anonymous-thing-property
                                           (overlay-get ov 'thing)
                                           :bounds))))
-                      (push type (conn-anonymous-thing-property b :types))
+                      (push type (conn-anonymous-thing-property
+                                  (conn-bounds-thing b)
+                                  :types))
                     (push (make-bounds (cons beg end) thing type)
                           (conn-anonymous-thing-property
                            (overlay-get ov 'thing)
