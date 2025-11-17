@@ -216,7 +216,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                               collect (funcall copier elem)))
            (new-hist (cl-loop with old-list = (conn-ring-list ring)
                               for elem in (conn-ring-history ring)
-                              for pos = (seq-position old-list elem)
+                              for pos = (seq-position old-list elem #'eq)
                               when pos collect (nth pos new-list))))
       (setf (conn-ring-list new-ring) new-list
             (conn-ring-history new-ring) new-hist)
