@@ -59,22 +59,37 @@
 (defface conn-dispatch-action-pulse-face
   '((t (:inherit pulse-highlight-start-face)))
   "Face for highlight pulses after dispatch actions."
-  :group 'conn-face)
+  :group 'conn-faces)
 
-(defvar conn-dispatch-undo-pulse-face nil)
+(defface conn-dispatch-undo-pulse-face
+  '((t (:background "#afb28dfb8dfb")))
+  "Face for highlight pulses after dispatch actions."
+  :group 'conn-faces)
 
 (defface conn--dispatch-action-current-pulse-face
   '((t (:inherit conn-dispatch-undo-pulse-face)))
   "Face for current action pulse, do not customize."
-  :group 'conn-face)
+  :group 'conn-faces)
 
 (defface conn-dispatch-label-face
-  '((t (:inherit highlight :bold t)))
+  '((t (:inherit default :background "#ff8bd1" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar conn-dispatch-label-alt-face nil)
-(defvar conn-dispatch-label-multi-face nil)
+(defface conn-dispatch-label-alt-face
+  '((t (:inherit default :background "#ffc5e8" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
+
+(defface conn-dispatch-label-multi-face
+  '((t (:inherit default :background "#8bd6ff" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
+
+(defface conn-dispatch-label-multi-alt-face
+  '((t (:inherit default :background "#c5ebff" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
 
 (defvar conn-dispatch-action-pulse-color nil)
 
@@ -1743,21 +1758,7 @@ Target overlays may override this default by setting the
   (require 'pulse)
   (set-face-background
    'conn--dispatch-action-current-pulse-face
-   (or conn-dispatch-undo-pulse-face
-       (pcase-let ((`(,h ,s ,l)
-                    (apply #'color-rgb-to-hsl
-                           (color-name-to-rgb
-                            (face-background
-                             'pulse-highlight-start-face
-                             nil
-                             'default)))))
-         (apply #'color-rgb-to-hex
-                (color-hsl-to-rgb
-                 (+ h (* .5 float-pi))
-                 s
-                 (if (> l .5)
-                     (- l .2)
-                   (+ l .2)))))))
+   'conn-dispatch-undo-pulse-face)
   (pulse-momentary-highlight-region
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
@@ -2009,7 +2010,7 @@ Target overlays may override this default by setting the
 (defface conn-dispatch-context-separator-face
   '((t (:inherit (shadow tooltip) :extend t)))
   "Face for context region separator."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defun conn-target-nearest-op (a b)
   (declare (side-effect-free t)
@@ -2033,34 +2034,13 @@ Target overlays may override this default by setting the
   (when (functionp target-finder)
     (funcall target-finder)))
 
-(defun conn-dispatch-label-alt-background ()
-  (or conn-dispatch-label-alt-face
-      (pcase (thread-last
-               (face-background 'conn-dispatch-label-face)
-               (color-name-to-rgb)
-               (apply #'color-rgb-to-hsl))
-        (`(,h ,s ,l)
-         (apply #'color-rgb-to-hex (color-hsl-to-rgb h s (* l 1.1))))
-        (_ 'conn-dispatch-label-face))))
-
-(defun conn-dispatch-label-multi-background ()
-  (or conn-dispatch-label-multi-face
-      (pcase (thread-last
-               (face-background 'conn-dispatch-label-face)
-               (color-name-to-rgb)
-               (apply #'color-rgb-to-hsl))
-        (`(,h ,s ,l)
-         (apply #'color-rgb-to-hex (color-hsl-to-rgb (mod (+ h .66) 1.0) s l)))
-        (_ 'conn-dispatch-label-face))))
-
 (cl-defgeneric conn-target-finder-label-faces (target-finder))
 
 (cl-defmethod conn-target-finder-label-faces (_target-finder)
   (let ((face1 'conn-dispatch-label-face)
-        (face2 `( :inherit conn-dispatch-label-face
-                  :background ,(conn-dispatch-label-alt-background)))
-        (multi-face `( :inherit conn-dispatch-label-face
-                       :background ,(conn-dispatch-label-multi-background))))
+        (face2 'conn-dispatch-label-alt-face)
+        (multi-face1 'conn-dispatch-label-multi-face)
+        (multi-face2 'conn-dispatch-label-multi-alt-face))
     (pcase-dolist (`(,_window . ,targets) conn-targets)
       (dolist (tar (compat-call sort targets :key #'overlay-start))
         (unless (overlay-get tar 'label-face)
@@ -2069,7 +2049,9 @@ Target overlays may override this default by setting the
                             (length> (conn-anonymous-thing-property
                                       thing :bounds)
                                      1))))
-              (overlay-put tar 'label-face multi-face)
+              (progn
+                (overlay-put tar 'label-face multi-face1)
+                (cl-rotatef multi-face1 multi-face2))
             (overlay-put tar 'label-face face1)
             (cl-rotatef face1 face2)))))))
 
@@ -3409,6 +3391,7 @@ contain targets."
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-bounds `(,beg . ,end) transform)
+             (goto-char beg)
              (delete-region beg end)
              (insert-for-yank str)
              (conn-dispatch-action-pulse
