@@ -1552,7 +1552,7 @@ If REGISTER is given copy to REGISTER instead."
   "Replace region with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive "p")
+  (interactive "P")
   (pcase (conn-bounds-of 'region nil)
     ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
      (let ((ov (make-overlay beg end))
