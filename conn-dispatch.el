@@ -72,22 +72,22 @@
   :group 'conn-faces)
 
 (defface conn-dispatch-label-face
-  '((t (:inherit default :background "#ff8bd1" :bold t)))
+  '((t (:foreground "black" :background "#ff8bd1" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-alt-face
-  '((t (:inherit default :background "#ffc5e8" :bold t)))
+  '((t (:foreground "black" :background "#ffc5e8" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-face
-  '((t (:inherit default :background "#8bd6ff" :bold t)))
+  '((t (:foreground "black" :background "#8bd6ff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-alt-face
-  '((t (:inherit default :background "#c5ebff" :bold t)))
+  '((t (:foreground "black" :background "#c5ebff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
