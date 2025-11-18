@@ -231,7 +231,7 @@
                  (mapconcat #'compose-query
                             (get lang :conn-ts-inherits))))
        (get-extras (lang)
-         (alist-get lang conn-ts--custom-queries))
+         (apply #'concat (alist-get lang conn-ts--custom-queries)))
        (compose-extras (lang)
          (concat (get-extras lang)
                  (mapconcat #'compose-extras
@@ -241,7 +241,7 @@
             (mapconcat #'get-query
                        (get language :conn-ts-toplevel))
             (mapconcat #'get-extras
-                       (get language :conn-ts-toplevel)))))
+                       (cons t (get language :conn-ts-toplevel))))))
 
 (defun conn-ts--recompile-query (language &optional eager)
   (if eager
@@ -252,7 +252,12 @@
     (remhash language conn-ts--compiled-query-cache)))
 
 (defun conn-ts-add-custom-query (language query)
-  (push query (alist-get language conn-ts--custom-queries))
+  (pcase query
+    ((pred stringp)
+     (push query (alist-get language conn-ts--custom-queries)))
+    ((pred consp)
+     (push (treesit-query-expand query)
+           (alist-get language conn-ts--custom-queries))))
   (conn-ts--recompile-query language))
 
 (defun conn-ts--get-query (language)
@@ -627,6 +632,7 @@
                (list (format-message "No more %S to move across" thing)
                      (point) (point))))))
 
+;;;###autoload
 (defmacro conn-ts-define-thing (name group)
   (declare (indent defun))
   (let ((forward-cmd (intern (format "%s-forward" name)))
