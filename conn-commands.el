@@ -373,8 +373,11 @@ instances of from-string.")
   (when-let* ((default (conn-replace-read-default)))
     (regexp-quote default)))
 
-(defun conn--replace-read-from ( prompt regions
-                                 &optional regexp-flag delimited-flag)
+(defun conn--replace-read-from ( prompt
+                                 regions
+                                 &optional
+                                 regexp-flag
+                                 delimited-flag)
   (minibuffer-with-setup-hook
       (minibuffer-lazy-highlight-setup
        :case-fold case-fold-search
@@ -409,8 +412,11 @@ instances of from-string.")
             (query-replace-read-from prompt regexp-flag))
         (query-replace-read-from prompt regexp-flag)))))
 
-(defun conn--replace-read-args ( prompt regexp-flag regions
-                                 &optional noerror)
+(defun conn--replace-read-args (prompt
+                                regexp-flag
+                                regions
+                                &optional
+                                noerror)
   (unless noerror
     (barf-if-buffer-read-only))
   (conn--with-region-emphasis regions
@@ -439,8 +445,16 @@ instances of from-string.")
               (and current-prefix-arg (eq current-prefix-arg '-))
               conn-query-flag)))))
 
-(defun conn-replace ( thing-mover arg transform from-string to-string
-                      &optional delimited backward query-flag subregions-p)
+(defun conn-replace (thing-mover
+                     arg
+                     transform
+                     from-string
+                     to-string
+                     &optional
+                     delimited
+                     backward
+                     query-flag
+                     subregions-p)
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (conn-read-args (conn-replace-state
@@ -497,8 +511,16 @@ instances of from-string.")
         (perform-replace from-string to-string query-flag nil
                          delimited nil nil beg end backward)))))
 
-(defun conn-regexp-replace ( thing-mover arg transform from-string to-string
-                             &optional delimited backward query-flag subregions-p)
+(defun conn-regexp-replace (thing-mover
+                            arg
+                            transform
+                            from-string
+                            to-string
+                            &optional
+                            delimited
+                            backward
+                            query-flag
+                            subregions-p)
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (conn-read-args (conn-replace-state
@@ -664,16 +686,21 @@ Exiting the recursive edit will resume the isearch."
      (atomic-change-group
        (recursive-edit)))))
 
-(cl-defun conn--isearch-in-thing (thing-cmd thing-arg &key backward regexp subregions-p)
+(cl-defun conn--isearch-in-thing (thing-cmd
+                                  thing-arg
+                                  transform
+                                  &key
+                                  backward
+                                  regexp
+                                  subregions-p)
   (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
          (regions
-          (if (and subregions-p
-                   (conn-bounds-get bounds :subregions))
+          (if-let* ((sr (and subregions-p
+                             (conn-bounds-get bounds :subregions transform))))
               (conn--merge-overlapping-regions
-               (cl-loop for bound in (conn-bounds-get bounds :subregions)
-                        collect (conn-bounds bound))
+               (cl-loop for bound in sr collect (conn-bounds bound))
                t)
-            (list (conn-bounds bounds))))
+            (list (conn-bounds bounds transform))))
          (regions
           (cl-loop for (beg . end) in regions
                    collect (cons (conn--create-marker beg)
@@ -710,28 +737,44 @@ Exiting the recursive edit will resume the isearch."
         (isearch-backward regexp t)
       (isearch-forward regexp t))))
 
-(defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions-p)
+(defun conn-isearch-forward (thing-cmd
+                             thing-arg
+                             transform
+                             &optional
+                             regexp
+                             subregions-p)
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (subregions (conn-subregions-argument (use-region-p))))
-     (list thing thing-arg current-prefix-arg subregions)))
-  (conn--isearch-in-thing thing-cmd thing-arg
+        (subregions (conn-subregions-argument (use-region-p)))
+        (transform (conn-transform-argument)))
+     (list thing thing-arg transform current-prefix-arg subregions)))
+  (conn--isearch-in-thing thing-cmd
+                          thing-arg
+                          transform
                           :backward nil
                           :regexp regexp
                           :subregions-p subregions-p))
 
-(defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions-p)
+(defun conn-isearch-backward (thing-cmd
+                              thing-arg
+                              transform
+                              &optional
+                              regexp
+                              subregions-p)
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-        (subregions (conn-subregions-argument (use-region-p))))
-     (list thing thing-arg current-prefix-arg subregions)))
-  (conn--isearch-in-thing thing-cmd thing-arg
+        (subregions (conn-subregions-argument (use-region-p)))
+        (transform (conn-transform-argument)))
+     (list thing thing-arg transform current-prefix-arg subregions)))
+  (conn--isearch-in-thing thing-cmd
+                          thing-arg
+                          transform
                           :backward t
                           :regexp regexp
                           :subregions-p subregions-p))
@@ -1182,8 +1225,11 @@ With arg N, insert N newlines."
          (cons beg end)
          :subregions subregions)))))
 
-(defun conn-thing-to-narrow-ring ( thing-cmd thing-arg thing-transform
-                                   &optional subregions-p)
+(defun conn-thing-to-narrow-ring (thing-cmd
+                                  thing-arg
+                                  thing-transform
+                                  &optional
+                                  subregions-p)
   "Push thing regions to narrow ring."
   (interactive
    (conn-read-args (conn-narrow-state
@@ -1645,7 +1691,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-kill-how-argument--append arg)
         (conn-kill-how-argument--register arg)))
 
-(defun conn-kill-thing ( cmd arg transform
+(defun conn-kill-thing ( cmd
+                         arg
+                         transform
                          &optional
                          append
                          delete
