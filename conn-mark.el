@@ -250,8 +250,7 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
     (setq conn-mark-ring
           (conn-make-ring conn-mark-ring-max
                           :cleanup (lambda (mk) (set-marker mk nil))
-                          :copier (lambda (mk)
-                                    (copy-marker (marker-position mk))))))
+                          :copier #'conn--copy-mark)))
   (pcase-let ((ptb (conn-ring-tail conn-mark-ring))
               (ptf (conn-ring-head conn-mark-ring)))
     (cond
@@ -284,8 +283,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                      (set-marker pt nil)
                                      (set-marker mk nil))
                           :copier (pcase-lambda (`(,pt . ,mk))
-                                    (cons (copy-marker (marker-position pt))
-                                          (copy-marker (marker-position mk)))))))
+                                    (cons (conn--copy-mark pt)
+                                          (conn--copy-mark mk))))))
   (pcase-let ((`(,ptf . ,mkf) (conn-ring-head conn-movement-ring))
               (`(,ptb . ,mkb) (conn-ring-tail conn-movement-ring)))
     (cond

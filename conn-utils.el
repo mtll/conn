@@ -162,6 +162,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
              restore))))
       (or restore t))))
 
+(defun conn--copy-mark (marker &optional buffer)
+  (let ((mk (make-marker)))
+    (set-marker mk (marker-position marker) buffer)
+    (set-marker-insertion-type mk (marker-insertion-type marker))
+    mk))
+
 ;;;;; Buffer Properties
 
 (defvar-local conn--buffer-properties nil)

@@ -164,8 +164,7 @@
                     conn-emacs-state-ring
                     (conn-make-ring 8
                                     :cleanup (lambda (mk) (set-marker mk nil))
-                                    :copier (lambda (mk)
-                                              (copy-marker (marker-position mk)))))
+                                    :copier #'conn--copy-mark))
         ;; We would like to be able to do the same to
         ;; query-replace-read-from-regexp-default but it must be
         ;; either nil, a string, a list of strings, or a symbol with a

@@ -1257,8 +1257,8 @@ With arg N, insert N newlines."
                                      (set-marker b nil)
                                      (set-marker e nil))
                           :copier (pcase-lambda (`(,b . ,e))
-                                    (cons (copy-marker (marker-position b))
-                                          (copy-marker (marker-position e)))))))
+                                    (cons (conn--copy-mark b)
+                                          (conn--copy-mark e))))))
   (pcase-let ((`(,bf . ,ef) (conn-ring-head conn-narrow-ring))
               (`(,bb . ,eb) (conn-ring-tail conn-narrow-ring)))
     (cond
