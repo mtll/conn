@@ -32,20 +32,13 @@
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function kmacro--keys "kmacro")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
-(declare-function treesit-induce-sparse-tree "treesit")
-(declare-function treesit-defun-name "treesit")
-(declare-function treesit-buffer-root-node "treesit")
-
 (declare-function conn-scroll-up "conn-commands")
 (declare-function conn-scroll-down "conn-commands")
-(declare-function conn-append-region "conn-commands")
 (declare-function conn-register-load "conn-commands")
 (declare-function conn-end-of-inner-line "conn-commands")
 (declare-function conn-beginning-of-inner-line "conn-commands")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-kill-thing "conn-commands")
-(declare-function color-hsl-to-rgb "color")
-(declare-function color-rgb-to-hsl "color")
 
 ;;;; Labels
 
@@ -296,7 +289,11 @@ returned."
 
 (defvar conn-label-select-always-prompt nil)
 
-(defun conn-label-select (candidates char-reader &optional prompt always-prompt)
+(defun conn-label-select (candidates
+                          char-reader
+                          &optional
+                          prompt
+                          always-prompt)
   "Select a label from CANDIDATES.
 
 Prompts the user for prefix characters one at a time and narrows the
@@ -394,7 +391,11 @@ themselves once the selection process has concluded."
         (goto-char (window-start))))))
 
 ;; From ace-window
-(defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
+(defun conn--get-windows (&optional window
+                                    minibuffer
+                                    all-frames
+                                    dedicated
+                                    predicate)
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
            unless (or ;; ignore child frames
@@ -1041,12 +1042,13 @@ buffer is a valid target.")
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
-(cl-defun conn-make-target-overlay ( pt length
-                                     &key
-                                     padding-function
-                                     window
-                                     thing
-                                     properties)
+(cl-defun conn-make-target-overlay (pt
+                                    length
+                                    &key
+                                    padding-function
+                                    window
+                                    thing
+                                    properties)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
@@ -1092,7 +1094,11 @@ Optionally the overlay may have an associated THING."
       (push ov (alist-get window conn-targets))
       ov)))
 
-(defun conn-make-string-target-overlays (string &optional predicate fixed-length thing)
+(defun conn-make-string-target-overlays (string
+                                         &optional
+                                         predicate
+                                         fixed-length
+                                         thing)
   (when (length> string 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -1102,7 +1108,11 @@ Optionally the overlay may have an associated THING."
            beg (or fixed-length (- end beg))
            :thing thing))))))
 
-(defun conn-make-re-target-overlays (regexp &optional predicate fixed-length thing)
+(defun conn-make-re-target-overlays (regexp
+                                     &optional
+                                     predicate
+                                     fixed-length
+                                     thing)
   (when (length> regexp 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
