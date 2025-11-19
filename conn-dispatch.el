@@ -56,7 +56,7 @@
   :group 'conn-faces)
 
 (defface conn-dispatch-undo-pulse-face
-  '((t (:background "#afb28dfb8dfb")))
+  '((t (:inherit pulse-highlight-start-face)))
   "Face for highlight pulses after dispatch actions."
   :group 'conn-faces)
 
