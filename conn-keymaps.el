@@ -40,11 +40,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "DEL" 'backward-delete-arg
-  "<backspace>" 'backward-delete-arg
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "C-q" 'help
   "," conn-thing-remap
   "'" 'recursive-edit
   "c" 'conn-things-in-region)
@@ -280,8 +275,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "<escape>" 'keyboard-quit
-  "C-g" 'keyboard-quit
   "M-h" 'conn-mark-heading
   "C-s" 'isearch-forward
   "s" 'isearch-forward
@@ -389,7 +382,6 @@
   "C-z" 'dispatch-other-end
   "DEL" 'restart
   "<backspace>" 'restart
-  "C-q" 'help
   "C-/" 'undo
   "C-'" 'recursive-edit
   "<mouse-1>" 'act
@@ -409,13 +401,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
-  "<escape>" 'finish
-  "C-q" 'help
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg
   "TAB" 'repeat-dispatch
-  "DEL" 'backward-delete-arg
-  "<backspace>" 'backward-delete-arg
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line

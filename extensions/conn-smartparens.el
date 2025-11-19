@@ -311,6 +311,9 @@
     (cl-callf2 delq 'conn-sp-region-ok-p conn-check-bounds-functions)))
 (add-hook 'smartparens-mode-hook 'conn-smartparens-check-region)
 
+(keymap-set conn-read-args-map
+            "<remap> <sp-remove-active-pair-overlay>" 'keyboard-quit)
+
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode
   "Minor mode for contextual bindings in outline-mode."

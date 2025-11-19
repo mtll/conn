@@ -1308,6 +1308,13 @@ the state stays active if the previous command was a prefix command."
 
 (defvar conn--read-args-exiting nil)
 
+(defvar-keymap conn-read-args-map
+  "C-q" 'help
+  "C-g" 'keyboard-quit
+  "DEL" 'backward-delete-arg
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg)
+
 (defun conn-read-args-prefix-arg ()
   "Return the value of the current prefix argument during `conn-read-args'."
   (declare (important-return-value t)
@@ -1537,11 +1544,11 @@ chooses to handle a command."
                    (conn-reading-args t)
                    (inhibit-message t)
                    (emulation-mode-map-alists
-                    `(((,state . ,(thread-last
+                    `(((,state . ,(conn-thread-last
                                     (mapcar #'conn-argument-keymaps arguments)
                                     (cons overriding-map)
                                     (delq nil)
-                                    (make-composed-keymap))))
+                                    (<>- make-composed-keymap conn-read-args-map))))
                       ,@emulation-mode-map-alists)))
                (while (continue-p)
                  (unless executing-kbd-macro
