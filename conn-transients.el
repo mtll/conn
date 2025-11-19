@@ -728,8 +728,8 @@ A zero means repeat until error."
                         (macro nil)
                         (action-auto-repeat t))
           (window pt thing thing-arg thing-transform)
-        (conn-dispatch-loop-undo-boundary (window-buffer window))
         (with-selected-window window
+          (conn-dispatch-loop-change-group)
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-bounds (and bounds `(,beg . ,end))
                           thing-transform)

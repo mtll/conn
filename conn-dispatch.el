@@ -1736,7 +1736,24 @@ Target overlays may override this default by setting the
     :key #'car
     :in-place t))
 
-(defmacro conn-dispatch-undo-case (depth &rest body)
+(defmacro conn-dispatch-undo-case (depth &rest cases)
+  "Add an undo case to the current iterations undo list.
+
+CASES is a list of the form (PATTERN CODE...).  PATTERN is a `pcase'
+pattern.  The first PATTERN to match the current undo signal will have
+its corresponding CODE run.  The undo signal will be one of:
+
+  :undo     A single iteration of the undo loop is being undone.
+            This signal will only be received by an undo case when
+            the iteration that was current when it was added to the
+            undo list is being undone.
+  :cancel   A quit or error was signaled during dispatch and all
+            iterations of the dispatch loop are being undone.
+  :accept   Dispatch is exiting normally.
+
+DEPTH controls were in the undo list the undo case will be put.  Lesser
+depths will be sorted before greater depths.
+`conn-dispatch-loop-change-group' undo cases have a depth of 0."
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
   (cl-with-gensyms (do buf)
@@ -1745,9 +1762,20 @@ Target overlays may override this default by setting the
       (let ((,buf (current-buffer)))
         (lambda (,do)
           (with-current-buffer ,buf
-            (pcase ,do ,@body)))))))
+            (pcase ,do ,@cases)))))))
 
-(defun conn-dispatch-loop-undo-boundary (&rest buffers)
+(defun conn-dispatch-loop-change-group (&rest buffers)
+  "Create a dispatch change group for the current buffer.
+If BUFFERS are specified, create a change group for the specified
+BUFFERS instead.
+
+A change group will cause modifications in BUFFERS to be undone when the
+current iteration of the dispatch loop is undone.  Any dispatch action
+which modifies a buffer should create a change group in that buffer
+before performing any modifications.
+
+Buffer change groups have depth 0.  See `conn-dispatch-undo-case' for
+the meaning of depth."
   (unless buffers (setq buffers (list (current-buffer))))
   (when conn-dispatch-in-progress
     (let ((cg (mapcan #'prepare-change-group
@@ -1771,6 +1799,7 @@ Target overlays may override this default by setting the
         (:accept (accept-change-group cg))))))
 
 (defun conn-dispatch-undo-pulse (beg end)
+  "Highlight an undo between BEG and END."
   (require 'pulse)
   (set-face-background
    'conn--dispatch-action-current-pulse-face
@@ -3045,7 +3074,7 @@ contain targets."
                     (action-description "Goto"))
       (window pt thing thing-arg transform)
     (select-window window)
-    (conn-dispatch-loop-undo-boundary)
+    (conn-dispatch-loop-change-group)
     (unless (and (= pt (point))
                  (region-active-p))
       (let ((forward (< (point) pt)))
@@ -3108,7 +3137,7 @@ contain targets."
                                                 (window-buffer win))))))
           (window pt thing thing-arg transform)
         (with-selected-window window
-          (conn-dispatch-loop-undo-boundary)
+          (conn-dispatch-loop-change-group)
           (save-mark-and-excursion
             (pcase (conn-bounds-of-dispatch thing thing-arg pt)
               ((conn-dispatch-bounds `(,beg . ,end) transform)
@@ -3157,7 +3186,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt thing thing-arg transform)
       (with-selected-window window
-        (conn-dispatch-loop-undo-boundary)
+        (conn-dispatch-loop-change-group)
         (save-mark-and-excursion
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-bounds `(,beg . ,end) transform)
@@ -3185,7 +3214,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt thing thing-arg transform)
     (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
+      (conn-dispatch-loop-change-group)
       (save-excursion
         (pcase (conn-bounds-of-dispatch thing thing-arg pt)
           ((conn-bounds `(,beg . ,end) transform)
@@ -3210,7 +3239,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt thing thing-arg transform)
     (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
+      (conn-dispatch-loop-change-group)
       (save-excursion
         (pcase (conn-bounds-of-dispatch thing thing-arg pt)
           ((conn-bounds `(,beg . ,end) transform)
@@ -3242,7 +3271,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt thing thing-arg transform)
     (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
+      (conn-dispatch-loop-change-group)
       (save-excursion
         (pcase (conn-bounds-of-dispatch thing thing-arg pt)
           ((conn-dispatch-bounds `(,beg . ,end) transform)
@@ -3287,7 +3316,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt thing thing-arg transform)
       (with-selected-window window
-        (conn-dispatch-loop-undo-boundary)
+        (conn-dispatch-loop-change-group)
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-dispatch-bounds `(,beg . ,end) transform)
@@ -3349,7 +3378,7 @@ contain targets."
                                                 (window-buffer win))))))
           (window pt thing thing-arg transform)
         (with-selected-window window
-          (conn-dispatch-loop-undo-boundary)
+          (conn-dispatch-loop-change-group)
           (save-excursion
             (pcase (conn-bounds-of-dispatch thing thing-arg pt)
               ((conn-dispatch-bounds `(,beg . ,end) transform)
@@ -3405,7 +3434,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt thing thing-arg transform)
       (with-selected-window window
-        (conn-dispatch-loop-undo-boundary)
+        (conn-dispatch-loop-change-group)
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-bounds `(,beg . ,end) transform)
@@ -3432,7 +3461,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt thing thing-arg transform)
     (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
+      (conn-dispatch-loop-change-group)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (save-excursion
@@ -3455,7 +3484,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt thing thing-arg transform)
     (with-selected-window window
-      (conn-dispatch-loop-undo-boundary)
+      (conn-dispatch-loop-change-group)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (save-excursion
@@ -3502,7 +3531,7 @@ contain targets."
            (setq str (filter-buffer-substring beg end)))
           (_ (user-error "Cannot find thing at point"))))
       (with-current-buffer (marker-buffer action-opoint)
-        (conn-dispatch-loop-undo-boundary)
+        (conn-dispatch-loop-change-group)
         (cond ((null str)
                (user-error "Cannot find thing at point"))
               ((/= (point) action-opoint)
@@ -3529,7 +3558,7 @@ contain targets."
          (conn-dispatch-action-pulse beg end)
          (copy-region-as-kill beg end))
         (_ (user-error "Cannot find thing at point"))))
-    (conn-dispatch-loop-undo-boundary)
+    (conn-dispatch-loop-change-group)
     (delete-region (region-beginning) (region-end))
     (yank)))
 
@@ -3566,7 +3595,7 @@ contain targets."
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
         (window pt thing thing-arg transform)
-      (conn-dispatch-loop-undo-boundary (current-buffer) (window-buffer window))
+      (conn-dispatch-loop-change-group (current-buffer) (window-buffer window))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -3618,7 +3647,7 @@ contain targets."
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
       (window pt thing thing-arg transform)
-    (conn-dispatch-loop-undo-boundary (current-buffer) (window-buffer window))
+    (conn-dispatch-loop-change-group (current-buffer) (window-buffer window))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -3641,7 +3670,7 @@ contain targets."
                     (action-description "Jump"))
       (window pt _thing _thing-arg _transform)
     (select-window window)
-    (conn-dispatch-loop-undo-boundary)
+    (conn-dispatch-loop-change-group)
     (unless (= pt (point))
       (unless (region-active-p)
         (push-mark nil t))
@@ -3652,9 +3681,8 @@ contain targets."
   (macro :mutable t))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
-  (require 'conn-transients)
   (let ((action nil)
-        (setup (make-symbol "setup")))
+        (setup (make-symbol "setup-dispatch-kapply")))
     (fset setup (lambda ()
                   (conn-without-recursive-stack
                     (conn-dispatch-kapply-prefix
@@ -3689,7 +3717,7 @@ contain targets."
                                                   (window-buffer win))))))
         (window pt thing thing-arg transform)
       (with-selected-window window
-        (conn-dispatch-loop-undo-boundary)
+        (conn-dispatch-loop-change-group)
         (save-mark-and-excursion
           (pcase (conn-bounds-of-dispatch thing thing-arg pt)
             ((conn-dispatch-bounds `(,beg . ,end) transform)
@@ -3715,8 +3743,8 @@ contain targets."
                                                 (window-buffer win))))))
       ( window1 pt1 thing1 thing-arg1 transform1
         window2 pt2 thing2 thing-arg2 transform2)
-    (conn-dispatch-loop-undo-boundary (window-buffer window1)
-                                      (window-buffer window2))
+    (conn-dispatch-loop-change-group (window-buffer window1)
+                                     (window-buffer window2))
     (conn--dispatch-transpose-subr
      (window-buffer window1) pt1 thing1 thing-arg1 transform1
      (window-buffer window2) pt2 thing2 thing-arg2 transform2)))

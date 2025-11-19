@@ -2015,7 +2015,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                              (action-description "Kill"))
                (window pt thing thing-arg transform)
              (with-selected-window window
-               (conn-dispatch-loop-undo-boundary)
+               (conn-dispatch-loop-change-group)
                (save-mark-and-excursion
                  (pcase (conn-bounds-of-dispatch thing thing-arg pt)
                    ((and bounds
@@ -2244,7 +2244,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                            (action-description "Copy"))
              (window pt thing thing-arg transform)
            (with-selected-window window
-             (conn-dispatch-loop-undo-boundary)
+             (conn-dispatch-loop-change-group)
              (save-mark-and-excursion
                (pcase (conn-bounds-of-dispatch thing thing-arg pt)
                  ((conn-dispatch-bounds `(,beg . ,end) transform)

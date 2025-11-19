@@ -810,6 +810,7 @@ Possibilities: \\<query-replace-map>
 
 (defmacro conn--define-kapplier (name arglist &rest body)
   "Define a macro application function.
+
 The iterator must be the first argument in ARGLIST.
 
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
