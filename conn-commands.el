@@ -34,6 +34,10 @@
 (declare-function project-files "project")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
+(declare-function multi-isearch-read-matching-files "misearch")
+(declare-function multi-isearch-read-files "misearch")
+(declare-function multi-isearch-read-matching-buffers "misearch")
+(declare-function multi-isearch-read-buffers "misearch")
 
 ;;;; Commands
 
@@ -666,6 +670,35 @@ instances of from-string.")
 (conn-define-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
 
+(oclosure-define (conn-isearch-thing-argument
+                  (:parent conn-thing-argument)))
+
+(defvar-keymap conn-isearch-thing-map
+  "F" 'multi-file
+  "B" 'multi-buffer
+  "p" 'project)
+
+(defun conn-isearch-thing-argument ()
+  (oclosure-lambda (conn-isearch-thing-argument
+                    (keymap conn-isearch-thing-map)
+                    (recursive-edit t)
+                    (required t))
+      (self cmd)
+    (if (conn-argument-predicate self cmd)
+        (conn-set-argument
+         self (list cmd (conn-read-args-consume-prefix-arg)))
+      self)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-isearch-thing-argument)
+                                       cmd)
+  (or (memq cmd '(multi-file multi-buffer project))
+      (cl-call-next-method)))
+
+(cl-defmethod conn-argument-display ((_arg conn-isearch-thing-argument))
+  (list "\\[multi-buffer] multi-buffer"
+        "\\[multi-file] multi-file"
+        "\\[project] project"))
+
 (defun conn-isearch-dispatch-region ()
   (interactive)
   (isearch-done)
@@ -693,49 +726,74 @@ Exiting the recursive edit will resume the isearch."
                                   backward
                                   regexp
                                   subregions-p)
-  (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
-         (regions
-          (if-let* ((sr (and subregions-p
-                             (conn-bounds-get bounds :subregions transform))))
-              (conn--merge-overlapping-regions
-               (cl-loop for bound in sr collect (conn-bounds bound))
-               t)
-            (list (conn-bounds bounds transform))))
-         (regions
-          (cl-loop for (beg . end) in regions
-                   collect (cons (conn--create-marker beg)
-                                 (conn--create-marker end nil t))))
-         (depth (recursion-depth))
-         (in-regions-p
-          (lambda (beg end)
-            (or (/= depth (recursion-depth))
-                (cl-loop for (nbeg . nend) in regions
-                         thereis (<= nbeg beg end nend)))))
-         (thing (upcase
-                 (symbol-name
-                  (or (conn-command-thing thing-cmd)
-                      thing-cmd))))
-         (prefix (concat "[in " thing "] ")))
-    (let ((setup (make-symbol "setup"))
-          (cleanup (make-symbol "cleanup")))
-      (fset setup (lambda ()
-                    (when (= depth (recursion-depth))
-                      (add-function :after-while (local 'isearch-filter-predicate)
-                                    in-regions-p `((isearch-message-prefix . ,prefix)))
-                      (remove-hook 'isearch-mode-hook setup t))))
-      (fset cleanup (lambda ()
-                      (if (and (= depth (recursion-depth))
-                               (not isearch-suspended))
-                          (remove-hook 'isearch-mode-end-hook cleanup t)
-                        (add-hook 'isearch-mode-hook setup nil t))
-                      (remove-function (local 'isearch-filter-predicate)
-                                       in-regions-p)))
-      (add-hook 'isearch-mode-end-hook cleanup nil t))
-    (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
-                  `((isearch-message-prefix . ,prefix)))
-    (if backward
-        (isearch-backward regexp t)
-      (isearch-forward regexp t))))
+  (pcase thing-cmd
+    ('multi-buffer
+     (require 'misearch)
+     (let ((isearch-forward (not backward)))
+       (multi-isearch-buffers
+        (if thing-arg
+	    (multi-isearch-read-matching-buffers)
+	  (multi-isearch-read-buffers)))))
+    ('multi-file
+     (require 'misearch)
+     (let ((isearch-forward (not backward)))
+       (multi-isearch-files
+        (if thing-arg
+	    (multi-isearch-read-matching-files)
+	  (multi-isearch-read-files)))))
+    ('project
+     (require 'project)
+     (let ((files (project-files (project-current)))
+           (isearch-forward (not backward)))
+       (multi-isearch-files
+        (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
+            (cons (buffer-file-name)
+                  (seq-remove-at-position files n))
+          files))))
+    (_
+     (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
+            (regions
+             (if-let* ((sr (and subregions-p
+                                (conn-bounds-get bounds :subregions transform))))
+                 (conn--merge-overlapping-regions
+                  (cl-loop for bound in sr collect (conn-bounds bound))
+                  t)
+               (list (conn-bounds bounds transform))))
+            (regions
+             (cl-loop for (beg . end) in regions
+                      collect (cons (conn--create-marker beg)
+                                    (conn--create-marker end nil t))))
+            (depth (recursion-depth))
+            (in-regions-p
+             (lambda (beg end)
+               (or (/= depth (recursion-depth))
+                   (cl-loop for (nbeg . nend) in regions
+                            thereis (<= nbeg beg end nend)))))
+            (thing (upcase
+                    (symbol-name
+                     (or (conn-command-thing thing-cmd)
+                         thing-cmd))))
+            (prefix (concat "[in " thing "] ")))
+       (let ((setup (make-symbol "setup"))
+             (cleanup (make-symbol "cleanup")))
+         (fset setup (lambda ()
+                       (when (= depth (recursion-depth))
+                         (add-function :after-while (local 'isearch-filter-predicate)
+                                       in-regions-p `((isearch-message-prefix . ,prefix)))
+                         (remove-hook 'isearch-mode-hook setup t))))
+         (fset cleanup (lambda ()
+                         (if (and (= depth (recursion-depth))
+                                  (not isearch-suspended))
+                             (remove-hook 'isearch-mode-end-hook cleanup t)
+                           (add-hook 'isearch-mode-hook setup nil t))
+                         (remove-function (local 'isearch-filter-predicate)
+                                          in-regions-p)))
+         (add-hook 'isearch-mode-end-hook cleanup nil t))
+       (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
+                     `((isearch-message-prefix . ,prefix)))
+       (if backward
+           (isearch-backward regexp t)
+         (isearch-forward regexp t))))))
 
 (defun conn-isearch-forward (thing-cmd
                              thing-arg
@@ -747,7 +805,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform current-prefix-arg subregions)))
@@ -768,7 +826,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform current-prefix-arg subregions)))
@@ -816,15 +874,6 @@ Interactively `region-beginning' and `region-end'."
      (setq isearch-new-string (if regexp (regexp-quote string) string)
            isearch-new-message (mapconcat #'isearch-text-char-description
                                           isearch-new-string "")))))
-
-(defun conn-multi-isearch-project ()
-  "Perform a `multi-isearch' within the files of a project."
-  (interactive)
-  (require 'project)
-  (multi-isearch-files
-   (seq-uniq (cons (buffer-file-name)
-                   (project-files (project-current)))
-             'file-equal-p)))
 
 (defun conn-isearch-exit-and-mark ()
   "`isearch-exit' and set region to match."
@@ -1656,35 +1705,32 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
   (list
-   (substitute-command-keys
-    (concat
-     "\\[append-next-kill] "
-     (pcase (conn-kill-how-argument--append arg)
-       ('nil "append")
-       ('prepend
+   (concat
+    "\\[append-next-kill] "
+    (pcase (conn-kill-how-argument--append arg)
+      ('nil "append")
+      ('prepend
+       (propertize
+        "prepend"
+        'face 'eldoc-highlight-function-argument))
+      (_
+       (propertize
+        "append"
+        'face 'eldoc-highlight-function-argument))))
+   (concat
+    "\\[register] "
+    (if-let* ((ts (conn-kill-how-argument--register arg)))
         (propertize
-         "prepend"
-         'face 'eldoc-highlight-function-argument))
-       (_
+         (format "register <%c>" ts)
+         'face 'eldoc-highlight-function-argument)
+      "register"))
+   (concat
+    "\\[delete] "
+    (if-let* ((ts (conn-kill-how-argument--delete arg)))
         (propertize
-         "append"
-         'face 'eldoc-highlight-function-argument)))))
-   (substitute-command-keys
-    (concat
-     "\\[register] "
-     (if-let* ((ts (conn-kill-how-argument--register arg)))
-         (propertize
-          (format "register <%c>" ts)
-          'face 'eldoc-highlight-function-argument)
-       "register")))
-   (substitute-command-keys
-    (concat
-     "\\[delete] "
-     (if-let* ((ts (conn-kill-how-argument--delete arg)))
-         (propertize
-          "delete"
-          'face 'eldoc-highlight-function-argument)
-       "delete")))))
+         "delete"
+         'face 'eldoc-highlight-function-argument)
+      "delete"))))
 
 (cl-defmethod conn-argument-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument--delete arg)

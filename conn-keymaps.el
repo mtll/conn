@@ -148,12 +148,7 @@
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward
   "o" 'occur
-  "l" 'locate
-  "m B" 'multi-isearch-buffers-regexp
-  "m F" 'multi-isearch-files-regexp
-  "m b" 'multi-isearch-buffers
-  "m p" 'conn-multi-isearch-project
-  "m f" 'multi-isearch-files)
+  "l" 'locate)
 
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
