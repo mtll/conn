@@ -510,15 +510,16 @@
                          :border-color conn-posframe-border-color
                          :min-width 8)
           (conn-with-dispatch-event-handler
-              (define-keymap
-                "<remap> <backward-delete-char>" 'backspace)
-              nil
-              (lambda (cmd)
-                (when (and (eq cmd 'backspace)
-                           (length> so-far 0))
-                  (cl-callf substring so-far 0 -1)
-                  (setq narrowed collection)
-                  (:return)))
+              (:handler
+               (lambda (cmd)
+                 (when (and (eq cmd 'backspace)
+                            (length> so-far 0))
+                   (cl-callf substring so-far 0 -1)
+                   (setq narrowed collection)
+                   (:return)))
+               :keymap
+               (define-keymap
+                 "<remap> <backward-delete-char>" 'backspace))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-event prompt t nil)

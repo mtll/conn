@@ -777,21 +777,17 @@ For more information see `conn-state-defer'."
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
 
-(defconst conn--lighter-cache
-  (make-hash-table :test 'equal :weakness 'value))
-
 (defun conn--get-lighter ()
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
-    (with-memoization (gethash conn--state-stack conn--lighter-cache)
-      (let ((lighter (conn-state-get conn-current-state :lighter)))
-        (dolist (elem (cdr conn--state-stack))
-          (setq lighter
-                (if elem
-                    (concat (conn-state-get elem :lighter)
-                            conn-state-lighter-separator
-                            lighter)
-                  (concat "[" lighter "]"))))
-        (concat " [" lighter "]")))))
+    (let ((lighter (conn-state-get conn-current-state :lighter)))
+      (dolist (elem (cdr conn--state-stack))
+        (setq lighter
+              (if elem
+                  (concat (conn-state-get elem :lighter)
+                          conn-state-lighter-separator
+                          lighter)
+                (concat "[" lighter "]"))))
+      (concat " [" lighter "]"))))
 
 (defun conn-update-lighter (&optional buffer)
   "Force the mode-line lighter to be updated in BUFFER.

@@ -153,34 +153,36 @@
 (defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
 (defun conn--anonymous-thing-parse-properties (properties)
-  (cl-loop with known = (get 'conn-anonymous-thing :known-properties)
-           with seen = nil
-           for (key var) on properties by #'cddr
-           if (when-let* ((fn (alist-get key known)))
-                (cl-assert (not (memq fn seen)) nil
-                           "Duplicate method in anonymous thing definition")
-                (push fn seen))
-           nconc (let ((method-expander
-                        (lambda (args &rest body)
-                          (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-                            (`#'(lambda ,args . ,body)
-                             (let ((parsed-body (macroexp-parse-body body))
-                                   (cnm (gensym "thing--cnm")))
-                               `#'(lambda ,(cons cnm args)
-                                    ,@(car parsed-body)
-                                    ,(macroexpand-all
-                                      `(cl-flet ((cl-call-next-method ,cnm))
-                                         ,@(cdr parsed-body))))))
-                            (result (error "Unexpected macroexpansion result :%S"
-                                           result))))))
-                   (list `',(car seen)
-                         (macroexpand-all
-                          var
-                          (cons (cons :method method-expander)
-                                macroexpand-all-environment))))
-           into methods
-           else nconc (list key var) into props
-           finally return (cons methods props)))
+  (cl-loop
+   with known = (get 'conn-anonymous-thing :known-properties)
+   with seen = nil
+   for (key val) on properties by #'cddr
+   if (when-let* ((fn (alist-get key known)))
+        (cl-assert (not (memq fn seen)) nil
+                   "Duplicate method in anonymous thing definition")
+        (push fn seen))
+   collect (let ((method-expander
+                  (lambda (args &rest body)
+                    (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                      (`#'(lambda ,args . ,body)
+                       (let ((parsed-body (macroexp-parse-body body))
+                             (cnm (gensym "thing--cnm")))
+                         `#'(lambda ,(cons cnm args)
+                              ,@(car parsed-body)
+                              ,(macroexpand-all
+                                `(cl-flet ((cl-call-next-method ,cnm))
+                                   ,@(cdr parsed-body))))))
+                      (result (error "Unexpected macroexpansion result :%S"
+                                     result))))))
+             `(cons ',(car seen)
+                    ,(macroexpand-all
+                      val
+                      (cons (cons :method method-expander)
+                            macroexpand-all-environment))))
+   into methods
+   else collect `(cons ,key ,val) into props
+   finally return (cons (cons 'list methods)
+                        (cons 'list props))))
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
@@ -190,22 +192,22 @@
                (conn--anonymous-thing-parse-properties properties)))
     `(conn--make-anonymous-thing
       :parent ,parent
-      :methods (list ,@methods)
-      :properties (list ,@props))))
+      :methods ,methods
+      :properties ,props)))
 
 (define-inline conn-anonymous-thing-property (object property)
   (declare (side-effect-free t)
            (gv-setter
             (lambda (val)
-              `(setf (plist-get (conn--anonymous-thing-properties ,object) ,property)
+              `(setf (alist-get ,property (conn--anonymous-thing-properties ,object))
                      ,val))))
   (inline-quote
-   (plist-get (conn--anonymous-thing-properties ,object) ,property)))
+   (alist-get ,property (conn--anonymous-thing-properties ,object))))
 
 (define-inline conn--anonymous-thing-method (object method)
   (declare (side-effect-free t))
   (inline-quote
-   (plist-get (conn--anonymous-thing-methods ,object) ,method)))
+   (alist-get ,method (conn--anonymous-thing-methods ,object))))
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
