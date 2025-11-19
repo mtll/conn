@@ -743,6 +743,7 @@ Exiting the recursive edit will resume the isearch."
 	  (multi-isearch-read-files)))))
     ('project
      (require 'project)
+     (require 'misearch)
      (let ((files (project-files (project-current)))
            (isearch-forward (not backward)))
        (multi-isearch-files
