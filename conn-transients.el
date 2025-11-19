@@ -729,25 +729,26 @@ A zero means repeat until error."
                         (action-auto-repeat t))
           (window pt thing thing-arg thing-transform)
         (conn-dispatch-loop-undo-boundary (window-buffer window))
-        (let ((conn-kapply-suppress-message t))
-          (conn-with-dispatch-suspended
-            (with-selected-window window
-              (with-undo-amalgamate
-                (conn--kapply-macro
-                 (pcase applier
-                   ('conn--kmacro-apply
-                    (lambda (iterator)
-                      (conn--kmacro-apply iterator nil macro)))
-                   (kmacro kmacro))
-                 (conn--kapply-region-iterator
-                  (save-excursion
-                    (goto-char pt)
-                    (if-let* ((b (conn-bounds-of thing thing-arg)))
-                        (list (conn-bounds (conn-transform-bounds b thing-transform)))
-                      (user-error "Cannot find thing at point"))))
-                 `(conn--kapply-relocate-to-region
-                   conn--kapply-pulse-region
-                   ,@pipeline))))))
+        (with-selected-window window
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds (and bounds `(,beg . ,end))
+                          thing-transform)
+             (conn-dispatch-undo-case 50
+               (:undo (conn-dispatch-undo-pulse beg end)))
+             (with-undo-amalgamate
+               (conn-with-dispatch-suspended
+                 (let ((conn-kapply-suppress-message t))
+                   (conn--kapply-macro
+                    (pcase applier
+                      ('conn--kmacro-apply
+                       (lambda (iterator)
+                         (conn--kmacro-apply iterator nil macro)))
+                      (kmacro kmacro))
+                    (conn--kapply-region-iterator (list bounds))
+                    `(conn--kapply-relocate-to-region
+                      conn--kapply-pulse-region
+                      ,@pipeline))))))
+            (_ (user-error "Cannot find thing at point"))))
         (unless macro (setq macro (kmacro-ring-head))))
       (funcall callback))))
 

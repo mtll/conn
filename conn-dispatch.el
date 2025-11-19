@@ -1774,7 +1774,7 @@ Target overlays may override this default by setting the
   (require 'pulse)
   (set-face-background
    'conn--dispatch-action-current-pulse-face
-   'conn-dispatch-undo-pulse-face)
+   (face-attribute 'conn-dispatch-undo-pulse-face :background))
   (pulse-momentary-highlight-region
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
