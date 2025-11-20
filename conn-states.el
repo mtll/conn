@@ -1216,21 +1216,6 @@ the state stays active if the previous command was a prefix command."
   (interactive)
   (setq deactivate-mark t))
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-mark-state)
-  "<remap> <conn-pop-state>" 'conn-pop-mark-state
-  "e" 'conn-emacs-state
-  "TAB" 'indent-rigidly
-  "Y" 'conn-completing-yank-replace
-  "y" 'conn-yank-replace
-  "*" 'calc-grab-region
-  "C-j" 'conn-join-lines-in-region
-  "v" 'rectangle-mark-mode
-  "V" 'undefined
-  "g" 'conn-surround
-  "RET" 'conn-duplicate-thing
-  "SPC" 'conn-push-mark-command)
-
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
                                   (fboundp 'rectangle--pos-cols)
@@ -1457,19 +1442,21 @@ chooses to handle a command."
                    table nil nil #'equal)
       (quit nil))))
 
-(cl-defun conn--read-args ( state arglist callback
-                            &key
-                            command-handler
-                            (display-handler #'conn--read-args-display)
-                            (around (lambda (cont)
-                                      (save-window-excursion
-                                        (funcall cont))))
-                            overriding-map
-                            prompt
-                            prefix
-                            pre
-                            post
-                            reference)
+(cl-defun conn--read-args (state
+                           arglist
+                           callback
+                           &key
+                           command-handler
+                           (display-handler #'conn--read-args-display)
+                           (around (lambda (cont)
+                                     (save-window-excursion
+                                       (funcall cont))))
+                           overriding-map
+                           prompt
+                           prefix
+                           pre
+                           post
+                           reference)
   (let ((arguments arglist)
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))

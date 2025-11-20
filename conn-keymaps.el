@@ -266,6 +266,23 @@
 
 ;;;;; State Keymaps
 
+;;;;;; Mark State
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-mark-state)
+  "<remap> <conn-pop-state>" 'conn-pop-mark-state
+  "e" 'conn-emacs-state
+  "TAB" 'indent-rigidly
+  "Y" 'conn-completing-yank-replace
+  "y" 'conn-yank-replace
+  "*" 'calc-grab-region
+  "C-j" 'conn-join-lines-in-region
+  "v" 'rectangle-mark-mode
+  "V" 'undefined
+  "g" 'conn-surround
+  "RET" 'conn-duplicate-thing
+  "SPC" 'conn-push-mark-command)
+
 ;;;;;; Emacs State
 
 (keymap-set (conn-get-state-map 'conn-emacs-state)

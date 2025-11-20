@@ -380,16 +380,14 @@
                                          concat (concat item "\n"))))))
               nil)
           (conn-with-dispatch-event-handler
-              (:handler
-               (lambda (cmd)
-                 (when (eq cmd 'backspace)
-                   (when (length> so-far 0)
-                     (cl-callf substring so-far 0 -1)
-                     (setq narrowed collection)
-                     (:return))))
-               :keymap
-               (define-keymap
-                 "<remap> <backward-delete-char>" 'backspace))
+            ( :handler (cmd)
+              (when (eq cmd 'backspace)
+                (when (length> so-far 0)
+                  (cl-callf substring so-far 0 -1)
+                  (setq narrowed collection)
+                  (:return))))
+            (:keymap (define-keymap
+                       "<remap> <backward-delete-char>" 'backspace))
             (cl-callf thread-last
                 so-far
               (conn-dispatch-read-char prompt t nil)

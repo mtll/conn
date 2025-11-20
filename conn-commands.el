@@ -1982,32 +1982,30 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                       (conn-separator-argument 'default)))
          (restrict-windows (conn-dispatch-restrict-windows-argument t)))
       (conn-with-dispatch-event-handler
-          (:handler
-           (lambda (cmd)
-             (when (eq cmd 'dispatch-other-end)
-               (setq append (pcase append
-                              ('nil 'append)
-                              ('append 'prepend)
-                              ('prepend nil)))
-               (conn-dispatch-handle)))
-           :message-fn
-           (lambda (keymap)
-             (when-let* ((binding
-                          (where-is-internal 'dispatch-other-end keymap t)))
-               (concat
-                (propertize (key-description binding)
-                            'face 'help-key-binding)
-                " "
-                (pcase append
-                  ('nil "append")
-                  ('prepend
-                   (propertize
-                    "prepend"
-                    'face 'eldoc-highlight-function-argument))
-                  ('append
-                   (propertize
-                    "append"
-                    'face 'eldoc-highlight-function-argument)))))))
+        ( :handler (cmd)
+          (when (eq cmd 'dispatch-other-end)
+            (setq append (pcase append
+                           ('nil 'append)
+                           ('append 'prepend)
+                           ('prepend nil)))
+            (conn-dispatch-handle)))
+        ( :message-fn (keymap)
+          (when-let* ((binding
+                       (where-is-internal 'dispatch-other-end keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (pcase append
+               ('nil "append")
+               ('prepend
+                (propertize
+                 "prepend"
+                 'face 'eldoc-highlight-function-argument))
+               ('append
+                (propertize
+                 "append"
+                 'face 'eldoc-highlight-function-argument))))))
         (let ((result nil)
               (strings nil))
           (conn-dispatch-setup
@@ -2198,7 +2196,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
-(cl-defmethod conn-copy-thing-do ((_cmd (conn-thing dispatch)) arg
+(cl-defmethod conn-copy-thing-do ((_command (conn-thing dispatch)) arg
                                   &optional transform append register)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
@@ -2211,32 +2209,30 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (separator (conn-separator-argument 'default))
        (restrict-windows (conn-dispatch-restrict-windows-argument t)))
     (conn-with-dispatch-event-handler
-        (:handler
-         (lambda (cmd)
-           (when (eq cmd 'dispatch-other-end)
-             (setq append (pcase append
-                            ('nil 'append)
-                            ('append 'prepend)
-                            ('prepend nil)))
-             (conn-dispatch-handle)))
-         :message-fn
-         (lambda (keymap)
-           (when-let* ((binding
-                        (where-is-internal 'dispatch-other-end keymap t)))
-             (concat
-              (propertize (key-description binding)
-                          'face 'help-key-binding)
-              " "
-              (pcase append
-                ('nil "append")
-                ('prepend
-                 (propertize
-                  "prepend"
-                  'face 'eldoc-highlight-function-argument))
-                ('append
-                 (propertize
-                  "append"
-                  'face 'eldoc-highlight-function-argument)))))))
+      ( :handler (cmd)
+        (when (eq cmd 'dispatch-other-end)
+          (setq append (pcase append
+                         ('nil 'append)
+                         ('append 'prepend)
+                         ('prepend nil)))
+          (conn-dispatch-handle)))
+      ( :message-fn (keymap)
+        (when-let* ((binding
+                     (where-is-internal 'dispatch-other-end keymap t)))
+          (concat
+           (propertize (key-description binding)
+                       'face 'help-key-binding)
+           " "
+           (pcase append
+             ('nil "append")
+             ('prepend
+              (propertize
+               "prepend"
+               'face 'eldoc-highlight-function-argument))
+             ('append
+              (propertize
+               "append"
+               'face 'eldoc-highlight-function-argument))))))
       (let ((result nil)
             (strings nil))
         (conn-dispatch-setup

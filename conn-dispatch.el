@@ -171,24 +171,45 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-char-handlers nil)
 (defvar conn--dispatch-read-char-message-prefixes nil)
 
-(defmacro conn-with-dispatch-event-handler (handler-args &rest body)
-  (declare (indent 1))
-  (pcase-let* (((map :handler :keymap :message-fn)
-                handler-args)
-               (tag (make-symbol "handle"))
-               (menv `((:return . ,(lambda (&optional result)
-                                     `(throw ',tag ,result)))
-                       ,@macroexpand-all-environment))
-               (handler (macroexpand-all handler menv))
-               (body (macroexpand-all (macroexp-progn body) menv)))
-    `(let (,@(when keymap
-               `((conn--dispatch-event-handler-maps
-                  (cons ,keymap conn--dispatch-event-handler-maps))))
-           ,@(when message-fn
-               `((conn--dispatch-read-char-message-prefixes
-                  (cons ,message-fn conn--dispatch-read-char-message-prefixes))))
+(defmacro conn-with-dispatch-event-handler (&rest body)
+  (declare (indent 0))
+  (pcase-let* ((tag (make-symbol "handle"))
+               (return-expander
+                (cons :return
+                      (lambda (&optional result)
+                        `(throw ',tag ,result))))
+               (handler-expander
+                (cons :handler
+                      (lambda (arglist &rest body)
+                        `(cl-callf2 cons
+                             ,(macroexpand-all
+                               `(lambda ,arglist ,@body)
+                               (cons return-expander
+                                     macroexpand-all-environment))
+                             conn--dispatch-read-char-handlers))))
+               (msg-expander
+                (cons :message-fn
+                      (lambda (arglist &rest body)
+                        `(cl-callf2 cons
+                             (lambda ,arglist ,@body)
+                             conn--dispatch-read-char-message-prefixes))))
+               (keymap-expander
+                (cons :keymap
+                      (lambda (keymap)
+                        `(cl-callf2 cons
+                             ,keymap
+                             conn--dispatch-event-handler-maps))))
+               (body (macroexpand-all (macroexp-progn body)
+                                      `(,handler-expander
+                                        ,msg-expander
+                                        ,keymap-expander
+                                        ,@macroexpand-all-environment))))
+    `(let ((conn--dispatch-event-handler-maps
+            conn--dispatch-event-handler-maps)
+           (conn--dispatch-read-char-message-prefixes
+            conn--dispatch-read-char-message-prefixes)
            (conn--dispatch-read-char-handlers
-            (cons ,handler conn--dispatch-read-char-handlers)))
+            conn--dispatch-read-char-handlers))
        (catch ',tag ,@(macroexp-unprogn body)))))
 
 (cl-defgeneric conn-label-delete (label)
@@ -425,17 +446,16 @@ themselves once the selection process has concluded."
           (conn-label-select-always-prompt always-prompt))
       (unwind-protect
           (conn-with-dispatch-event-handler
-              (:handler
-               (lambda (cmd)
-                 (when (or (and (eq cmd 'act)
-                                (mouse-event-p last-input-event))
-                           (eq 'dispatch-mouse-repeat
-                               (event-basic-type last-input-event)))
-                   (let* ((posn (event-start last-input-event))
-                          (win (posn-window posn)))
-                     (when (and (not (posn-area posn))
-                                (funcall conn-target-window-predicate win))
-                       (:return win))))))
+            ( :handler (cmd)
+              (when (or (and (eq cmd 'act)
+                             (mouse-event-p last-input-event))
+                        (eq 'dispatch-mouse-repeat
+                            (event-basic-type last-input-event)))
+                (let* ((posn (event-start last-input-event))
+                       (win (posn-window posn)))
+                  (when (and (not (posn-area posn))
+                             (funcall conn-target-window-predicate win))
+                    (:return win)))))
             (conn-label-select labels #'conn-dispatch-read-char))
         (mapc #'conn-label-delete labels))))))
 
@@ -1592,18 +1612,17 @@ Target overlays may override this default by setting the
 (cl-defmethod conn-target-finder-select :around (_target-finder)
   (let ((conn--dispatch-remap-cookies nil))
     (conn-with-dispatch-event-handler
-        (:handler
-         (lambda (cmd)
-           (when (or (and (eq cmd 'act)
-                          (mouse-event-p last-input-event))
-                     (eq 'dispatch-mouse-repeat
-                         (event-basic-type last-input-event)))
-             (let* ((posn (event-start last-input-event))
-                    (win (posn-window posn))
-                    (pt (posn-point posn)))
-               (when (and (not (posn-area posn))
-                          (funcall conn-target-window-predicate win))
-                 (:return (list pt win nil)))))))
+        ( :handler (cmd)
+          (when (or (and (eq cmd 'act)
+                         (mouse-event-p last-input-event))
+                    (eq 'dispatch-mouse-repeat
+                        (event-basic-type last-input-event)))
+            (let* ((posn (event-start last-input-event))
+                   (win (posn-window posn))
+                   (pt (posn-point posn)))
+              (when (and (not (posn-area posn))
+                         (funcall conn-target-window-predicate win))
+                (:return (list pt win nil))))))
       (conn-dispatch-select-mode 1)
       (unwind-protect
           (let ((inhibit-message t))
@@ -2168,17 +2187,16 @@ to the key binding for that target."
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-event-handler
-        (:handler
-         (lambda (obj)
-           (when (conn-dispatch-label-p obj)
-             (:return obj)))
-         :keymap
-         (let ((map (make-sparse-keymap)))
-           (cl-loop for label in labels
-                    for key = (conn-dispatch-label-string label)
-                    do (keymap-set map key label))
-           (mapc #'conn-label-redisplay labels)
-           map))
+      ( :handler (obj)
+        (when (conn-dispatch-label-p obj)
+          (:return obj)))
+      ( :keymap
+        (let ((map (make-sparse-keymap)))
+          (cl-loop for label in labels
+                   for key = (conn-dispatch-label-string label)
+                   do (keymap-set map key label))
+          (mapc #'conn-label-redisplay labels)
+          map))
       (conn-label-payload
        (progn
          (ignore (conn-dispatch-read-char "Register"))
@@ -2288,14 +2306,12 @@ to the key binding for that target."
             (conn-make-string-target-overlays string predicate)))
         (catch 'dispatch-redisplay
           (conn-with-dispatch-event-handler
-              (:handler
-               (lambda (cmd)
-                 (when (eq cmd 'backspace)
-                   (when (length> string 0)
-                     (cl-callf substring string 0 -1))
-                   (:return)))
-               :keymap
-               (define-keymap "<backspace>" 'backspace))
+            ( :handler (cmd)
+              (when (eq cmd 'backspace)
+                (when (length> string 0)
+                  (cl-callf substring string 0 -1))
+                (:return)))
+            (:keymap (define-keymap "<backspace>" 'backspace))
             (cl-callf thread-last
                 string
               (conn-dispatch-read-char prompt t nil)
