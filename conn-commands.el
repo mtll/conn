@@ -2522,6 +2522,10 @@ Interactively `region-beginning' and `region-end'."
   (interactive)
   (run-hook-with-args-until-success 'conntext-state-hook))
 
+(defun conn-one-emacs-state ()
+  (interactive)
+  (conn-push-state 'conn-one-emacs-state))
+
 (defun conn-one-command ()
   (interactive)
   (conn-push-state 'conn-one-command-state))

@@ -38,8 +38,7 @@
         'calc-trail-mode
         'calc-keypad-mode
         'image-mode
-        'doc-view-mode
-        'pdf-view-mode)
+        'doc-view-mode)
   "Major modes in which `conn-null-state' should be active."
   :group 'conn
   :type '(list symbol))
@@ -1123,7 +1122,7 @@ argument may be supplied for the thing command.")))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (with-demoted-errors "Emacs state ring error: %s"
+    (let ((debug-on-error t))
       (conn-ring-delete (point) conn-emacs-state-ring #'=)
       (let ((pt (conn--create-marker (point) nil t)))
         (conn-ring-insert-front conn-emacs-state-ring pt)
@@ -1186,6 +1185,11 @@ the state stays active if the previous command was a prefix command."
                                            conn-autopop-state)
   "Execute one command in `conn-command-state'."
   :lighter "1C")
+
+(conn-define-state conn-one-emacs-state (conn-emacs-state
+                                         conn-autopop-state)
+  "Execute one command in `conn-emacs-state'."
+  :lighter "1E")
 
 ;;;;; Mark State
 

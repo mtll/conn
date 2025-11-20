@@ -23,33 +23,38 @@
 
 ;;; State
 
-(defvar conn-integration-modes nil)
+(defvar conn-special-modes
+  (list 'dired-mode
+        'diff-mode
+        'magit-section-mode
+        'ibuffer-mode
+        'bookmark-bmenu-mode
+        'help-mode
+        'helpful-mode
+        'Info-mode
+        'treemacs-mode
+        'messages-buffer-mode
+        'debugger-mode
+        'occur-mode
+        'compilation-mode
+        'pdf-view-mode))
 
-(conn-define-state conn-integration-state ()
-  :lighter "I"
+(conn-define-state conn-special-state ()
+  :lighter "S"
   :pop-alternate 'conn-emacs-state)
 
-(conn-define-state conn-one-emacs-state (conn-emacs-state
-                                         conn-autopop-state)
-  "Execute one command in `conn-emacs-state'."
-  :lighter "1E")
-
-(defun conn-one-emacs-state ()
-  (interactive)
-  (conn-push-state 'conn-one-emacs-state))
-
 (define-keymap
-  :keymap (conn-get-state-map 'conn-integration-state)
+  :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state)
 
-(defun conn-setup-integration-state ()
-  (when (derived-mode-p conn-integration-modes)
-    (conn-push-state 'conn-integration-state)
+(defun conn-setup-special-state ()
+  (when (derived-mode-p conn-special-modes)
+    (conn-push-state 'conn-special-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-integration-state -20)
+(add-hook 'conn-setup-state-hook 'conn-setup-special-state -20)
 
 ;;; Load Extensions
 
@@ -197,8 +202,6 @@
 
 ;;;; Dired
 
-(cl-pushnew 'dired-mode conn-integration-modes)
-
 (conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
@@ -260,7 +263,7 @@
   "M-s")
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'dired-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)
   "C-q" 'conn-dired-quick-ref
   "<conn-dired-search-map> s" 'dired-do-isearch
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
@@ -456,8 +459,6 @@
 
 ;;;; Diff
 
-(cl-pushnew 'diff-mode conn-integration-modes)
-
 (conn-set-mode-property 'diff-mode :disable-mark-cursor t)
 
 (defvar conn-diff-ref
@@ -485,7 +486,7 @@
   (conn-quick-reference (list conn-diff-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'diff-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
   "C-q" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
@@ -518,8 +519,6 @@
 
 ;;;; Magit
 
-(cl-pushnew 'magit-section-mode conn-integration-modes)
-
 (conn-set-mode-property 'magit-section-mode :disable-mark-cursor t)
 
 (defvar conn-magit-ref
@@ -536,7 +535,7 @@
   (conn-quick-reference (list conn-magit-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'magit-section-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
   "C-q" 'conn-magit-quick-ref
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
@@ -551,8 +550,6 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Ibuffer
-
-(cl-pushnew 'ibuffer-mode conn-integration-modes)
 
 (conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
   "State for dispatch in `ibuffer-mode'."
@@ -695,7 +692,7 @@
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'ibuffer-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
   "f" 'conn-ibuffer-dispatch-state
   "C-q" 'conn-ibuffer-quick-ref
   "h" 'conn-wincontrol-one-command
@@ -738,8 +735,6 @@
   "RET" 'ibuffer-visit-buffer)
 
 ;;;; Bookmark Bmenu
-
-(cl-pushnew 'bookmark-bmenu-mode conn-integration-modes)
 
 (declare-function bookmark-bmenu-unmark "bookmark")
 (declare-function bookmark-bmenu-mark "bookmark")
@@ -830,7 +825,7 @@
   (conn-quick-reference (list conn-bookmark-bmenu-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'bookmark-bmenu-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
   "C-q" 'conn-bookmark-bmenu-quick-ref
   "e" 'bookmark-bmenu-edit-annotation
   "a" 'execute-extended-command
@@ -876,10 +871,8 @@
 
 ;;;; Help
 
-(cl-pushnew 'help-mode conn-integration-modes)
-
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'help-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'help-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -893,10 +886,8 @@
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
-(cl-pushnew 'helpful-mode conn-integration-modes)
-
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'helpful-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'helpful-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -911,8 +902,6 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Info
-
-(cl-pushnew 'Info-mode conn-integration-modes)
 
 (declare-function Info-prev-reference "info")
 (declare-function Info-follow-nearest-node "info")
@@ -963,7 +952,7 @@
   (conn-quick-reference (list conn-info-ref)))
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'Info-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
   "C-q" 'conn-info-quick-ref
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
@@ -988,11 +977,9 @@
 
 ;;;; Treemacs
 
-(cl-pushnew 'treemacs-mode conn-integration-modes)
-
 (conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'treemacs-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'treemacs-select-window
@@ -1004,11 +991,9 @@
 
 ;;;; Messages
 
-(cl-pushnew 'messages-buffer-mode conn-integration-modes)
-
 (conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'messages-buffer-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -1022,11 +1007,9 @@
 
 ;;;; Debugger mode
 
-(cl-pushnew 'debugger-mode conn-integration-modes)
-
 (conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'debugger-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
@@ -1040,12 +1023,10 @@
 
 ;;;; Occur mode
 
-(cl-pushnew 'occur-mode conn-integration-modes)
-
 (conn-set-mode-property 'occur-mode :disable-mark-cursor t)
 (conn-set-mode-property 'occur-edit-mode :disable-mark-cursor nil)
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'occur-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
@@ -1061,13 +1042,11 @@
 
 ;;;; Compile mode
 
-(cl-pushnew 'compilation-mode conn-integration-modes)
-
 (conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
 (static-if (<= 31 emacs-major-version)
     (conn-set-mode-property 'grep-edit-mode :disable-mark-cursor nil))
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-integration-state 'compilation-mode)
+  :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'conn-wincontrol-mru-window
@@ -1076,6 +1055,25 @@
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
+
+;;;; pdf-tools
+
+(conn-set-mode-property 'pdf-view-mode :disable-mark-cursor t)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
+  "x" (conn-remap-key "C-x" t)
+  "h" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol
+  "i" 'pdf-view-scroll-down-or-previous-page
+  "k" 'pdf-view-scroll-up-or-next-page
+  "l" 'pdf-view-next-page-command
+  "j" 'pdf-view-previous-page-command
+  "m" 'pdf-history-forward
+  "n" 'pdf-history-backward
+  "." 'pdf-view-position-to-register
+  "y" image-map
+  "<escape>" 'undefined
+  "M-j" 'undefined)
 
 ;;; Footer
 ;; Local Variables:

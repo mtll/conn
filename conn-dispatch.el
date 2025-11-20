@@ -172,9 +172,6 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-char-message-prefixes nil)
 
 (defmacro conn-with-dispatch-event-handler (handler-args &rest body)
-  "Add an event handler for dispatch.
-
-\(fn (&key HANDLER KEYMAP MESSAGE-FN) &body BODY)"
   (declare (indent 1))
   (pcase-let* (((map :handler :keymap :message-fn)
                 handler-args)
