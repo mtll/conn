@@ -392,7 +392,7 @@
                  "<remap> <backward-delete-char>" 'backspace))
             (cl-callf thread-last
                 so-far
-              (conn-dispatch-read-event prompt t nil)
+              (conn-dispatch-read-char prompt t nil)
               (char-to-string)
               (concat so-far)))
           (cl-loop for item in narrowed

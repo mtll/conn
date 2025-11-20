@@ -1310,6 +1310,7 @@ the state stays active if the previous command was a prefix command."
 
 (defvar-keymap conn-read-args-map
   "C-q" 'help
+  "<escape>" 'keyboard-quit
   "C-g" 'keyboard-quit
   "DEL" 'backward-delete-arg
   "M-DEL" 'reset-arg
@@ -1546,9 +1547,10 @@ chooses to handle a command."
                    (emulation-mode-map-alists
                     `(((,state . ,(conn-thread-last
                                     (mapcar #'conn-argument-keymaps arguments)
+                                    (cons conn-read-args-map)
                                     (cons overriding-map)
                                     (delq nil)
-                                    (<>- make-composed-keymap conn-read-args-map))))
+                                    (<>- make-composed-keymap))))
                       ,@emulation-mode-map-alists)))
                (while (continue-p)
                  (unless executing-kbd-macro

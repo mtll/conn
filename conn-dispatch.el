@@ -168,8 +168,8 @@ strings have `conn-dispatch-label-face'."
 ;;;;; Label Reading
 
 (defvar conn--dispatch-event-handler-maps nil)
-(defvar conn--dispatch-read-event-handlers nil)
-(defvar conn--dispatch-read-event-message-prefixes nil)
+(defvar conn--dispatch-read-char-handlers nil)
+(defvar conn--dispatch-read-char-message-prefixes nil)
 
 (defmacro conn-with-dispatch-event-handler (handler-args &rest body)
   "Add an event handler for dispatch.
@@ -188,10 +188,10 @@ strings have `conn-dispatch-label-face'."
                `((conn--dispatch-event-handler-maps
                   (cons ,keymap conn--dispatch-event-handler-maps))))
            ,@(when message-fn
-               `((conn--dispatch-read-event-message-prefixes
-                  (cons ,message-fn conn--dispatch-read-event-message-prefixes))))
-           (conn--dispatch-read-event-handlers
-            (cons ,handler conn--dispatch-read-event-handlers)))
+               `((conn--dispatch-read-char-message-prefixes
+                  (cons ,message-fn conn--dispatch-read-char-message-prefixes))))
+           (conn--dispatch-read-char-handlers
+            (cons ,handler conn--dispatch-read-char-handlers)))
        (catch ',tag ,@(macroexp-unprogn body)))))
 
 (cl-defgeneric conn-label-delete (label)
@@ -439,7 +439,7 @@ themselves once the selection process has concluded."
                      (when (and (not (posn-area posn))
                                 (funcall conn-target-window-predicate win))
                        (:return win))))))
-            (conn-label-select labels #'conn-dispatch-read-event))
+            (conn-label-select labels #'conn-dispatch-read-char))
         (mapc #'conn-label-delete labels))))))
 
 ;;;; Dispatch State
@@ -465,7 +465,7 @@ themselves once the selection process has concluded."
 
 (defvar dispatch-quit-flag nil)
 
-(defvar conn-dispatch-read-event-map
+(defvar conn-dispatch-read-char-map
   (let ((map (make-keymap)))
     (set-char-table-range (nth 1 map)
                           (cons #x100 (max-char))
@@ -1519,11 +1519,11 @@ Target overlays may override this default by setting the
                       (push (conn-dispatch-create-label tar str) labels))))
       `(:state ,state ,@labels))))
 
-(defun conn--dispatch-read-event-prefix (keymap)
+(defun conn--dispatch-read-char-prefix (keymap)
   (declare (important-return-value t))
   (and-let* ((prefix
               (flatten-tree
-               (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+               (cl-loop for pfx in conn--dispatch-read-char-message-prefixes
                         for str = (pcase pfx
                                     ((pred functionp) (funcall pfx keymap))
                                     ((pred stringp) pfx))
@@ -1623,7 +1623,7 @@ Target overlays may override this default by setting the
                 (labels labels)))
     (conn-label-select
      labels
-     #'conn-dispatch-read-event
+     #'conn-dispatch-read-char
      (cl-loop for (_ . c) in conn-target-count
               sum c into count
               finally return (format "Label [%s]" count))
@@ -1661,9 +1661,9 @@ Target overlays may override this default by setting the
          (conn-dispatch-repeating (and repeat t))
          (conn--dispatch-undo-change-groups nil)
          (conn--read-args-error-message nil)
-         (conn--dispatch-read-event-message-prefixes
-          `(,(car conn--dispatch-read-event-message-prefixes)
-            ,@(cdr conn--dispatch-read-event-message-prefixes))))
+         (conn--dispatch-read-char-message-prefixes
+          `(,(car conn--dispatch-read-char-message-prefixes)
+            ,@(cdr conn--dispatch-read-char-message-prefixes))))
     (unwind-protect
         (progn
           (redisplay)
@@ -1808,10 +1808,10 @@ the meaning of depth."
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
 
-(defun conn-dispatch-read-event (&optional prompt
-                                           inherit-input-method
-                                           seconds
-                                           prompt-suffix)
+(defun conn-dispatch-read-char (&optional prompt
+                                          inherit-input-method
+                                          seconds
+                                          prompt-suffix)
   (declare (important-return-value t))
   (let* ((inhibit-message conn-read-args-inhibit-message)
          (message-log-max nil)
@@ -1821,7 +1821,7 @@ the meaning of depth."
                       (propertize conn--read-args-error-message
                                   'face 'error)))
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
-                                       conn-dispatch-read-event-map)))
+                                       conn-dispatch-read-char-map)))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
@@ -1838,7 +1838,7 @@ the meaning of depth."
                    (thread-first
                      (unless inhibit-message
                        (concat prompt
-                               (conn--dispatch-read-event-prefix keymap)
+                               (conn--dispatch-read-char-prefix keymap)
                                ": " prompt-suffix
                                (when prompt-suffix " ") error-msg))
                      (read-key-sequence-vector)
@@ -1853,14 +1853,14 @@ the meaning of depth."
                       (read-event
                        (unless inhibit-message
                          (concat prompt
-                                 (conn--dispatch-read-event-prefix keymap)
+                                 (conn--dispatch-read-char-prefix keymap)
                                  ": " prompt-suffix))
                        inherit-input-method))))
             (cmd
              (setq conn--read-args-error-message nil)
              (let ((unhandled nil))
                (catch 'dispatch-handle
-                 (cl-loop for handler in conn--dispatch-read-event-handlers
+                 (cl-loop for handler in conn--dispatch-read-char-handlers
                           do (funcall handler cmd))
                  (setq unhandled t))
                (if unhandled
@@ -1902,8 +1902,8 @@ the meaning of depth."
                    (conn-read-args-last-command nil)
                    (conn--read-args-prefix-mag nil)
                    (conn--read-args-prefix-sign nil)
-                   (conn--dispatch-read-event-handlers nil)
-                   (conn--dispatch-read-event-message-prefixes nil)
+                   (conn--dispatch-read-char-handlers nil)
+                   (conn--dispatch-read-char-message-prefixes nil)
                    (conn--dispatch-always-retarget nil)
                    (,select-mode conn-dispatch-select-mode))
          (message nil)
@@ -1913,6 +1913,7 @@ the meaning of depth."
            (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
+  "Command handler active during `conn-dispatch-select-mode'."
   (:method (_cmd) nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
@@ -1933,7 +1934,7 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
   (defvar conn-dispatch-select-ref)
-  (conn-with-overriding-map conn-dispatch-read-event-map
+  (conn-with-overriding-map conn-dispatch-read-char-map
     (conn-quick-reference (list conn-dispatch-select-ref)))
   (conn-dispatch-handle-and-redisplay))
 
@@ -2183,10 +2184,10 @@ to the key binding for that target."
            map))
       (conn-label-payload
        (progn
-         (ignore (conn-dispatch-read-event "Register"))
+         (ignore (conn-dispatch-read-char "Register"))
          (while t
            (ignore
-            (conn-dispatch-read-event
+            (conn-dispatch-read-char
              "Register" nil nil
              (propertize "Invalid key" 'face 'error)))))))))
 
@@ -2300,7 +2301,7 @@ to the key binding for that target."
                (define-keymap "<backspace>" 'backspace))
             (cl-callf thread-last
                 string
-              (conn-dispatch-read-event prompt t nil)
+              (conn-dispatch-read-char prompt t nil)
               (char-to-string)
               (concat string))))
         (conn-cleanup-targets))
@@ -2341,10 +2342,10 @@ to the key binding for that target."
     (if string
         (funcall search-function string predicate nil thing)
       (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
-        (setq string (char-to-string (conn-dispatch-read-event prompt t)))
+        (setq string (char-to-string (conn-dispatch-read-char prompt t)))
         (while-no-input
           (funcall search-function string predicate nil thing))
-        (while-let ((next-char (conn-dispatch-read-event
+        (while-let ((next-char (conn-dispatch-read-char
                                 prompt t timeout string)))
           (conn-cleanup-targets)
           (setq string (concat string (char-to-string next-char)))
@@ -3966,9 +3967,9 @@ contain targets."
          (conn--dispatch-must-prompt nil)
          (conn--read-args-prefix-mag nil)
          (conn--read-args-prefix-sign nil)
-         (conn--dispatch-read-event-handlers
+         (conn--dispatch-read-char-handlers
           (cons #'conn-handle-dispatch-select-command
-                conn--dispatch-read-event-handlers))
+                conn--dispatch-read-char-handlers))
          (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
          (conn-dispatch-target-finder
           (conn-get-target-finder thing thing-arg))
@@ -3984,7 +3985,7 @@ contain targets."
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
-         (conn--dispatch-read-event-message-prefixes
+         (conn--dispatch-read-char-message-prefixes
           `(,(propertize (conn-action-pretty-print action t)
                          'face 'eldoc-highlight-function-argument)
             ,(lambda (_keymap)
@@ -4018,7 +4019,7 @@ contain targets."
                                 'conn--dispatch-restrict-windows
                                 conn-target-window-predicate)
                            'eldoc-highlight-function-argument)))))
-            ,@conn--dispatch-read-event-message-prefixes)))
+            ,@conn--dispatch-read-char-message-prefixes)))
     (when-let* ((predicate (conn-action-window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action-target-predicate action)))

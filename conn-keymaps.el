@@ -376,7 +376,7 @@
 ;;;;;; Dispatch State
 
 (define-keymap
-  :keymap conn-dispatch-read-event-map
+  :keymap conn-dispatch-read-char-map
   "C-\\" 'toggle-input-method
   "C-M-\\" 'set-input-method
   "C-z" 'dispatch-other-end
