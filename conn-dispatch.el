@@ -1710,7 +1710,7 @@ Target overlays may override this default by setting the
   `(conn--dispatch-loop ,repeat (lambda () ,@body)))
 
 (defun conn-select-target ()
-  (conn-named-loop select
+  (conn-named-loop _
     (catch 'dispatch-change-target
       (catch 'dispatch-redisplay
         (pcase-let* ((emulation-mode-map-alists

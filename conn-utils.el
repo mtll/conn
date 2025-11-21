@@ -143,33 +143,33 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 ;; We need string-pixel-width from emacs 31 since it accounts for face
 ;; remapping
 (static-if (<= 31 emacs-major-version)
-(defalias 'conn--string-pixel-width 'string-pixel-width)
-(defun conn--string-pixel-width (string &optional buffer)
-  (declare (important-return-value t))
-  (if (zerop (length string))
-      0
-    ;; Keeping a work buffer around is more efficient than creating a
-    ;; new temporary buffer.
-    (with-current-buffer (get-buffer-create " *string-pixel-width*")
-      ;; Setup current buffer to correctly compute pixel width.
-      (when buffer
-        (dolist (v '(face-remapping-alist
-                     char-property-alias-alist
-                     default-text-properties))
-          (if (local-variable-p v buffer)
-              (set (make-local-variable v)
-                   (buffer-local-value v buffer)))))
-      ;; Avoid deactivating the region as side effect.
-      (delete-region (point-min) (point-max))
-      (insert string)
-      ;; If `display-line-numbers' is enabled in internal
-      ;; buffers (e.g. globally), it breaks width calculation
-      ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',
-      ;; for the same reason.
-      (add-text-properties
-       (point-min) (point-max)
-       '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
-      (car (buffer-text-pixel-size nil nil t))))))
+    (defalias 'conn--string-pixel-width 'string-pixel-width)
+  (defun conn--string-pixel-width (string &optional buffer)
+    (declare (important-return-value t))
+    (if (zerop (length string))
+        0
+      ;; Keeping a work buffer around is more efficient than creating a
+      ;; new temporary buffer.
+      (with-current-buffer (get-buffer-create " *string-pixel-width*")
+        ;; Setup current buffer to correctly compute pixel width.
+        (when buffer
+          (dolist (v '(face-remapping-alist
+                       char-property-alias-alist
+                       default-text-properties))
+            (if (local-variable-p v buffer)
+                (set (make-local-variable v)
+                     (buffer-local-value v buffer)))))
+        ;; Avoid deactivating the region as side effect.
+        (delete-region (point-min) (point-max))
+        (insert string)
+        ;; If `display-line-numbers' is enabled in internal
+        ;; buffers (e.g. globally), it breaks width calculation
+        ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',
+        ;; for the same reason.
+        (add-text-properties
+         (point-min) (point-max)
+         '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
+        (car (buffer-text-pixel-size nil nil t))))))
 
 (defun conn--open-invisible (beg end)
   (catch 'return

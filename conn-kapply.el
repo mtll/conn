@@ -79,7 +79,7 @@ Your options are: \\<query-replace-map>
         (recursive-edit)))
      ((not executing-kbd-macro))
      ((not conn--kapply-automatic-flag)
-      (conn-named-loop end
+      (conn-named-loop _
         (pcase (let ((executing-kbd-macro nil)
                      (defining-kbd-macro nil))
                  (message "%s" msg)
@@ -587,7 +587,7 @@ Possibilities: \\<query-replace-map>
               (when (and (buffer-modified-p)
                          buffer-file-name)
                 (redisplay)
-                (conn-named-loop end
+                (conn-named-loop _
                   (ding t)
                   (pcase (let ((executing-kbd-macro nil)
                                (defining-kbd-macro nil))

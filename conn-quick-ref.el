@@ -263,7 +263,7 @@
       (funcall display-function buf nil)
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
-            (conn-named-loop loop
+            (conn-named-loop _
               (let ((keys (read-key-sequence-vector nil)))
                 (pcase (key-binding keys)
                   ('close
