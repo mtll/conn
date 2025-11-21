@@ -453,8 +453,28 @@
     conn-ts-scopename
     conn-ts-statement))
 
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-parent-things)) _arg)
+  (conn-ts-select-expansion
+   (lambda ()
+     (conn-ts-filter-captures
+      conn-ts-parent-things
+      (conn-ts-capture (point) (1+ (point)))
+      (lambda (bd)
+        (<= (car bd) (point) (cdr bd)))))
+   'conn-ts-thing))
+
 (defvar-local conn-ts-all-query-things
   conn-ts-parent-things)
+
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-all-query-things)) _arg)
+  (conn-ts-select-expansion
+   (lambda ()
+     (conn-ts-filter-captures
+      conn-ts-all-query-things
+      (conn-ts-capture (point) (1+ (point)))
+      (lambda (bd)
+        (<= (car bd) (point) (cdr bd)))))
+   'conn-ts-thing))
 
 (defclass conn-ts-query-targets (conn-dispatch-target-window-predicate)
   ((things :initarg :things)
