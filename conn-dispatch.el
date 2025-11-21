@@ -181,24 +181,20 @@ strings have `conn-dispatch-label-face'."
                (handler-expander
                 (cons :handler
                       (lambda (arglist &rest body)
-                        `(cl-callf2 cons
-                             ,(macroexpand-all
-                               `(lambda ,arglist ,@body)
-                               (cons return-expander
-                                     macroexpand-all-environment))
-                             conn--dispatch-read-char-handlers))))
+                        `(push ,(macroexpand-all
+                                 `(lambda ,arglist ,@body)
+                                 (cons return-expander
+                                       macroexpand-all-environment))
+                               conn--dispatch-read-char-handlers))))
                (msg-expander
                 (cons :message-fn
                       (lambda (arglist &rest body)
-                        `(cl-callf2 cons
-                             (lambda ,arglist ,@body)
-                             conn--dispatch-read-char-message-prefixes))))
+                        `(push (lambda ,arglist ,@body)
+                               conn--dispatch-read-char-message-prefixes))))
                (keymap-expander
                 (cons :keymap
                       (lambda (keymap)
-                        `(cl-callf2 cons
-                             ,keymap
-                             conn--dispatch-event-handler-maps))))
+                        `(push ,keymap conn--dispatch-event-handler-maps))))
                (body (macroexpand-all (macroexp-progn body)
                                       `(,handler-expander
                                         ,msg-expander
@@ -1687,18 +1683,17 @@ Target overlays may override this default by setting the
             (let ((conn-dispatch-in-progress t))
               (while (or conn-dispatch-repeating
                          (< conn-dispatch-iteration-count 1))
-                (catch 'dispatch-redisplay
-                  (condition-case err
-                      (progn
-                        (push nil conn--dispatch-undo-change-groups)
-                        (funcall body)
-                        (cl-incf conn-dispatch-iteration-count))
-                    (user-error
-                     (pcase-dolist (`(,_ . ,undo-fn)
-                                    (pop conn--dispatch-undo-change-groups))
-                       (funcall undo-fn :undo))
-                     (setf conn--read-args-error-message
-                           (error-message-string err))))))))
+                (condition-case err
+                    (progn
+                      (push nil conn--dispatch-undo-change-groups)
+                      (funcall body)
+                      (cl-incf conn-dispatch-iteration-count))
+                  (user-error
+                   (pcase-dolist (`(,_ . ,undo-fn)
+                                  (pop conn--dispatch-undo-change-groups))
+                     (funcall undo-fn :undo))
+                   (setf conn--read-args-error-message
+                         (error-message-string err)))))))
           (setq success (not dispatch-quit-flag)))
       (dolist (undo conn--dispatch-undo-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
@@ -1711,27 +1706,29 @@ Target overlays may override this default by setting the
 
 (defun conn-select-target ()
   (catch 'return
-    (while t
-      (funcall
-       (catch 'dispatch-change-target-finder
-         (pcase-let* ((emulation-mode-map-alists
-                       `(((conn-dispatch-select-mode
-                           . ,(make-composed-keymap
-                               (conn-target-finder-keymaps
-                                conn-dispatch-target-finder))))
-                         ,@emulation-mode-map-alists))
-                      (`(,pt ,win ,thing-override)
-                       (conn-target-finder-select
-                        conn-dispatch-target-finder))
-                      (`(,thing ,arg ,transform)
-                       conn--dispatch-current-thing))
-           (throw 'return
-                  (list pt win (or thing-override thing) arg transform))))))))
+    (cl-loop
+     (funcall
+      (catch 'dispatch-redisplay
+        (pcase-let* ((emulation-mode-map-alists
+                      `(((conn-dispatch-select-mode
+                          . ,(make-composed-keymap
+                              (conn-target-finder-keymaps
+                               conn-dispatch-target-finder))))
+                        ,@emulation-mode-map-alists))
+                     (`(,pt ,win ,thing-override)
+                      (conn-target-finder-select
+                       conn-dispatch-target-finder))
+                     (`(,thing ,arg ,transform)
+                      conn--dispatch-current-thing))
+          (throw 'return (list pt
+                               win
+                               (or thing-override thing)
+                               arg
+                               transform))))))))
 
 (defmacro conn-dispatch-change-target-finder (&rest body)
   (declare (indent 0))
-  `(throw 'dispatch-change-target-finder
-          (lambda () ,@body)))
+  `(throw 'dispatch-redisplay (lambda () ,@body)))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -1772,13 +1769,13 @@ depths will be sorted before greater depths.
 `conn-dispatch-loop-change-group' undo cases have a depth of 0."
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
-  (cl-with-gensyms (do buf)
+  (cl-with-gensyms (buf signal)
     `(conn--dispatch-push-undo-case
       ,depth
       (let ((,buf (current-buffer)))
-        (lambda (,do)
+        (lambda (,signal)
           (with-current-buffer ,buf
-            (pcase ,do ,@cases)))))))
+            (pcase ,signal ,@cases)))))))
 
 (defun conn-dispatch-loop-change-group (&rest buffers)
   "Create a dispatch change group for the current buffer.
@@ -1888,10 +1885,10 @@ the meaning of depth."
                (when (and unhandled (eq cmd 'keyboard-quit))
                  (keyboard-quit))))))))))
 
-(cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
+(cl-defun conn-dispatch-handle-and-redisplay (&optional (must-prompt t))
   (redisplay)
-  (setq conn--dispatch-must-prompt prompt)
-  (throw 'dispatch-redisplay nil))
+  (cl-callf or conn--dispatch-must-prompt must-prompt)
+  (throw 'dispatch-redisplay #'ignore))
 
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle t))
@@ -1974,12 +1971,12 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
+  (conn-dispatch-handle-and-redisplay nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
+  (conn-dispatch-handle-and-redisplay nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
   (conn-with-dispatch-suspended
@@ -2024,7 +2021,7 @@ the meaning of depth."
   (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
       (progn
         (conn-dispatch-goto-window (conn-prompt-for-window windows))
-        (conn-dispatch-handle-and-redisplay :prompt nil))
+        (conn-dispatch-handle-and-redisplay nil))
     (conn-dispatch-handle)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
@@ -2037,11 +2034,11 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
   (unless conn-dispatch-no-other-end
     (cl-callf not conn-dispatch-other-end)
-    (conn-dispatch-handle-and-redisplay :prompt nil)))
+    (conn-dispatch-handle-and-redisplay nil)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
   (conn-target-finder-retarget conn-dispatch-target-finder)
-  (conn-dispatch-handle-and-redisplay :prompt nil))
+  (conn-dispatch-handle-and-redisplay nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
   (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
@@ -2304,19 +2301,21 @@ to the key binding for that target."
         (when (length> string 0)
           (while-no-input
             (conn-make-string-target-overlays string predicate)))
-        (catch 'dispatch-redisplay
-          (conn-with-dispatch-event-handlers
-            ( :handler (cmd)
-              (when (eq cmd 'backspace)
-                (when (length> string 0)
-                  (cl-callf substring string 0 -1))
-                (:return)))
-            (:keymap (define-keymap "<backspace>" 'backspace))
-            (cl-callf thread-last
-                string
-              (conn-dispatch-read-char prompt t nil)
-              (char-to-string)
-              (concat string))))
+        (funcall
+         (catch 'dispatch-redisplay
+           (conn-with-dispatch-event-handlers
+             ( :handler (cmd)
+               (when (eq cmd 'backspace)
+                 (when (length> string 0)
+                   (cl-callf substring string 0 -1))
+                 (:return)))
+             (:keymap (define-keymap "<backspace>" 'backspace))
+             (cl-callf thread-last
+                 string
+               (conn-dispatch-read-char prompt t nil)
+               (char-to-string)
+               (concat string))
+             #'ignore)))
         (conn-cleanup-targets))
       (conn-make-string-target-overlays
        string
@@ -4068,18 +4067,31 @@ contain targets."
 (cl-defmethod conn-dispatch-perform-action ((action conn-dispatch-transpose)
                                             repeat)
   (conn-dispatch-loop repeat
-    (pcase-let ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
-                 (conn-select-target)))
-      (let ((conn-target-predicate conn-target-predicate))
-        (add-function :before-while conn-target-predicate
-                      (lambda (pt _length window)
-                        (not (and (eq window win1)
-                                  (eql pt pt1)))))
-        (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
-                     (conn-select-target)))
-          (funcall action
-                   win1 pt1 thing1 arg1 transform1
-                   win2 pt2 thing2 arg2 transform2))))))
+    (pcase-let* ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
+                  (conn-select-target))
+                 (ov (make-overlay pt1 pt1 (window-buffer win1))))
+      (unwind-protect
+          (let ((conn-target-predicate conn-target-predicate))
+            (overlay-put ov 'window win1)
+            (with-selected-window win1
+              (save-excursion
+                (goto-char pt1)
+                (if (or (eobp) (eolp))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'face 'isearch))
+                  (move-overlay ov pt1 (1+ pt1))
+                  (overlay-put ov 'face 'isearch))))
+            (add-function :before-while conn-target-predicate
+                          (lambda (pt _length window)
+                            (not (and (eq window win1)
+                                      (eql pt pt1)))))
+            (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
+                         (conn-select-target)))
+              (delete-overlay ov)
+              (funcall action
+                       win1 pt1 thing1 arg1 transform1
+                       win2 pt2 thing2 arg2 transform2)))
+        (delete-overlay ov)))))
 
 (cl-defmethod conn-dispatch-perform-action ((action conn-dispatch-kapply)
                                             repeat)
