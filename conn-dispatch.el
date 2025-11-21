@@ -171,7 +171,7 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-char-handlers nil)
 (defvar conn--dispatch-read-char-message-prefixes nil)
 
-(defmacro conn-with-dispatch-event-handler (&rest body)
+(defmacro conn-with-dispatch-event-handlers (&rest body)
   (declare (indent 0))
   (pcase-let* ((tag (make-symbol "handle"))
                (return-expander
@@ -445,7 +445,7 @@ themselves once the selection process has concluded."
                                      win (window-parameter win 'conn-label-string))))
           (conn-label-select-always-prompt always-prompt))
       (unwind-protect
-          (conn-with-dispatch-event-handler
+          (conn-with-dispatch-event-handlers
             ( :handler (cmd)
               (when (or (and (eq cmd 'act)
                              (mouse-event-p last-input-event))
@@ -1611,18 +1611,18 @@ Target overlays may override this default by setting the
 
 (cl-defmethod conn-target-finder-select :around (_target-finder)
   (let ((conn--dispatch-remap-cookies nil))
-    (conn-with-dispatch-event-handler
-        ( :handler (cmd)
-          (when (or (and (eq cmd 'act)
-                         (mouse-event-p last-input-event))
-                    (eq 'dispatch-mouse-repeat
-                        (event-basic-type last-input-event)))
-            (let* ((posn (event-start last-input-event))
-                   (win (posn-window posn))
-                   (pt (posn-point posn)))
-              (when (and (not (posn-area posn))
-                         (funcall conn-target-window-predicate win))
-                (:return (list pt win nil))))))
+    (conn-with-dispatch-event-handlers
+      ( :handler (cmd)
+        (when (or (and (eq cmd 'act)
+                       (mouse-event-p last-input-event))
+                  (eq 'dispatch-mouse-repeat
+                      (event-basic-type last-input-event)))
+          (let* ((posn (event-start last-input-event))
+                 (win (posn-window posn))
+                 (pt (posn-point posn)))
+            (when (and (not (posn-area posn))
+                       (funcall conn-target-window-predicate win))
+              (:return (list pt win nil))))))
       (conn-dispatch-select-mode 1)
       (unwind-protect
           (let ((inhibit-message t))
@@ -2186,7 +2186,7 @@ to the key binding for that target."
                                           conn-dispatch-target-key-labels))
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
-    (conn-with-dispatch-event-handler
+    (conn-with-dispatch-event-handlers
       ( :handler (obj)
         (when (conn-dispatch-label-p obj)
           (:return obj)))
@@ -2305,7 +2305,7 @@ to the key binding for that target."
           (while-no-input
             (conn-make-string-target-overlays string predicate)))
         (catch 'dispatch-redisplay
-          (conn-with-dispatch-event-handler
+          (conn-with-dispatch-event-handlers
             ( :handler (cmd)
               (when (eq cmd 'backspace)
                 (when (length> string 0)

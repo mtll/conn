@@ -379,7 +379,7 @@
                                          for item in narrowed
                                          concat (concat item "\n"))))))
               nil)
-          (conn-with-dispatch-event-handler
+          (conn-with-dispatch-event-handlers
             ( :handler (cmd)
               (when (eq cmd 'backspace)
                 (when (length> so-far 0)

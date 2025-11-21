@@ -1981,7 +1981,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          (separator (when (not delete)
                       (conn-separator-argument 'default)))
          (restrict-windows (conn-dispatch-restrict-windows-argument t)))
-      (conn-with-dispatch-event-handler
+      (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'dispatch-other-end)
             (setq append (pcase append
@@ -2208,7 +2208,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (append (conn-copy-how-argument append))
        (separator (conn-separator-argument 'default))
        (restrict-windows (conn-dispatch-restrict-windows-argument t)))
-    (conn-with-dispatch-event-handler
+    (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (eq cmd 'dispatch-other-end)
           (setq append (pcase append

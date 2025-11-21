@@ -319,15 +319,29 @@
 (defun conn-ts-select-expansion (get-captures thing)
   (let ((things nil))
     (pcase-dolist (`(,type ,beg . ,end) (funcall get-captures))
-      (push (conn-make-bounds
-             (conn-anonymous-thing
-               thing
-               :pretty-print (:method (_) (format "%s" type))
-               :bounds-op ( :method (_ _)
-                            (conn-ts-select-expansion get-captures thing)))
-             nil
-             (cons beg end))
-            things))
+      (if-let* ((b (seq-find (lambda (bounds)
+                               (pcase-let (((conn-bounds `(,b . ,e))
+                                            bounds))
+                                 (and (eql beg b)
+                                      (eql end e))))
+                             things)))
+          (push type (conn-anonymous-thing-property
+                      (conn-bounds-thing b)
+                      :types))
+        (push (conn-make-bounds
+               (conn-anonymous-thing
+                 thing
+                 :types (list type)
+                 :pretty-print ( :method (self)
+                                 (mapconcat
+                                  (lambda (o) (format "%s" o))
+                                  (conn-anonymous-thing-property self :types)
+                                  " & "))
+                 :bounds-op ( :method (_ _)
+                              (conn-ts-select-expansion get-captures thing)))
+               nil
+               (cons beg end))
+              things)))
     (conn-multi-thing-select things)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
@@ -531,10 +545,13 @@
                    (treesit-node-match-p node thing)))
       fsym)))
 
+(defun conn-ts--thing-node-query (thing)
+  `(((_) @node
+     (:pred? ,(conn-ts--thing-predicate thing) @node))))
+
 (cl-defmethod conn-target-finder-update ((state conn-ts-all-things))
   (let* ((thing (oref state thing))
-         (query `(((_) @node
-                   (:pred? ,(conn-ts--thing-predicate thing) @node)))))
+         (query (conn-ts--thing-node-query thing)))
     (cl-flet ((make-bounds (bounds parent-thing type)
                 (conn-make-bounds
                  (conn-anonymous-thing
@@ -1313,7 +1330,16 @@
         :pretty-print ( :method (_) "ts-all-things")
         :target-finder ( :method (_self _arg)
                          (conn-ts-query-targets
-                          :things conn-ts-all-query-things)))
+                          :things conn-ts-all-query-things))
+        :bounds-op ( :method (_self _arg)
+                     (conn-ts-select-expansion
+                      (lambda ()
+                        (conn-ts-filter-captures
+                         conn-ts-all-query-things
+                         (conn-ts-capture (point) (1+ (point)))
+                         (lambda (bd)
+                           (<= (car bd) (point) (cdr bd)))))
+                      'conn-ts-thing)))
   "W" (conn-anonymous-thing
         'conn-ts-thing
         :pretty-print ( :method (_) "ts-all-parents")
@@ -1322,12 +1348,34 @@
                           :things conn-ts-parent-things
                           :region-predicate (lambda (beg end)
                                               (and (<= beg (point))
-                                                   (<= (point) end))))))
+                                                   (<= (point) end)))))
+        :bounds-op ( :method (_self _arg)
+                     (conn-ts-select-expansion
+                      (lambda ()
+                        (conn-ts-filter-captures
+                         conn-ts-parent-things
+                         (conn-ts-capture (point) (1+ (point)))
+                         (lambda (bd)
+                           (<= (car bd) (point) (cdr bd)))))
+                      'conn-ts-thing)))
   "n" (conn-anonymous-thing
         'sexp
         :pretty-print ( :method (_) "ts-all-sexps")
         :target-finder ( :method (_self _arg)
-                         (conn-ts-all-things :thing 'sexp))))
+                         (conn-ts-all-things :thing 'sexp))
+        :bounds-op ( :method (_self _arg)
+                     (conn-ts-select-expansion
+                      (lambda ()
+                        (mapcar
+                         (pcase-lambda (`(,_ . ,node))
+                           (cons (treesit-node-type node)
+                                 (cons (treesit-node-start node)
+                                       (treesit-node-end node))))
+                         (treesit-query-capture
+                          (treesit-language-at (point))
+                          (conn-ts--thing-node-query 'sexp)
+                          (point) (1+ (point)))))
+                      'sexp))))
 
 ;;;###autoload
 (define-minor-mode conn-ts-things-mode

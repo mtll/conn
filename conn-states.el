@@ -1122,15 +1122,14 @@ argument may be supplied for the thing command.")))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (let ((debug-on-error t))
-      (conn-ring-delete (point) conn-emacs-state-ring #'=)
-      (let ((pt (conn--create-marker (point) nil t)))
-        (conn-ring-insert-front conn-emacs-state-ring pt)
-        (when conn-emacs-state-register
-          (if-let* ((marker (get-register conn-emacs-state-register))
-                    ((markerp marker)))
-              (set-marker marker (point) (current-buffer))
-            (set-register conn-emacs-state-register (copy-marker pt)))))))
+    (conn-ring-delete (point) conn-emacs-state-ring #'=)
+    (let ((pt (conn--create-marker (point) nil t)))
+      (conn-ring-insert-front conn-emacs-state-ring pt)
+      (when conn-emacs-state-register
+        (if-let* ((marker (get-register conn-emacs-state-register))
+                  ((markerp marker)))
+            (set-marker marker (point) (current-buffer))
+          (set-register conn-emacs-state-register (copy-marker pt))))))
   (cl-call-next-method))
 
 ;;;;; Autopop State

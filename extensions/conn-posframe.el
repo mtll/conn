@@ -509,7 +509,7 @@
                          :border-width conn-posframe-border-width
                          :border-color conn-posframe-border-color
                          :min-width 8)
-          (conn-with-dispatch-event-handler
+          (conn-with-dispatch-event-handlers
             ( :handler (cmd)
               (when (and (eq cmd 'backspace)
                          (length> so-far 0))

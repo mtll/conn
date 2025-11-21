@@ -1232,7 +1232,9 @@ words."))
 (define-keymap
   :keymap (conn-get-state-map 'conn-multi-thing-select-state)
   "l" 'conn-expand
+  "f" 'conn-expand
   "j" 'conn-contract
+  "s" 'conn-contract
   "e" 'select
   "a" 'abort
   "<escape>" 'abort)
