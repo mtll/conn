@@ -1684,7 +1684,7 @@ Target overlays may override this default by setting the
     (unwind-protect
         (progn
           (redisplay)
-          (catch 'dispatch-select-exit
+          (catch 'dispatch-loop-exit
             (let ((conn-dispatch-in-progress t))
               (while (or conn-dispatch-repeating
                          (< conn-dispatch-iteration-count 1))
@@ -1710,7 +1710,7 @@ Target overlays may override this default by setting the
   `(conn--dispatch-loop ,repeat (lambda () ,@body)))
 
 (defun conn-select-target ()
-  (conn-loop-catch 'break
+  (conn-named-loop select
     (catch 'dispatch-change-target
       (catch 'dispatch-redisplay
         (pcase-let* ((emulation-mode-map-alists
@@ -1724,11 +1724,11 @@ Target overlays may override this default by setting the
                        conn-dispatch-target-finder))
                      (`(,thing ,arg ,transform)
                       conn--dispatch-current-thing))
-          (throw 'break (list pt
-                              win
-                              (or thing-override thing)
-                              arg
-                              transform)))))))
+          (:return (list pt
+                         win
+                         (or thing-override thing)
+                         arg
+                         transform)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -2025,11 +2025,11 @@ the meaning of depth."
     (conn-dispatch-handle)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
-  (throw 'dispatch-select-exit nil))
+  (throw 'dispatch-loop-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
   (setq dispatch-quit-flag t)
-  (throw 'dispatch-select-exit nil))
+  (throw 'dispatch-loop-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
   (unless conn-dispatch-no-other-end

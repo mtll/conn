@@ -263,11 +263,11 @@
       (funcall display-function buf nil)
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
-            (conn-loop-catch 'break
+            (conn-named-loop loop
               (let ((keys (read-key-sequence-vector nil)))
                 (pcase (key-binding keys)
                   ('close
-                   (throw 'break nil))
+                   (:return))
                   ('next
                    (setq pages (nconc (cdr pages) (list (car pages))))
                    (conn-quick-ref-insert-page (car pages) buf)
@@ -282,7 +282,7 @@
                            (mapcar (lambda (key)
                                      (cons 'no-record key))
                                    (listify-key-sequence keys)))
-                     (throw 'break nil))))))
+                     (:return))))))
         (funcall display-function buf t)))))
 
 (defun conn-quick-ref-to-cols (list &optional col-count)

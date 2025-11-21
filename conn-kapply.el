@@ -79,18 +79,18 @@ Your options are: \\<query-replace-map>
         (recursive-edit)))
      ((not executing-kbd-macro))
      ((not conn--kapply-automatic-flag)
-      (conn-loop-catch 'end
+      (conn-named-loop end
         (pcase (let ((executing-kbd-macro nil)
                      (defining-kbd-macro nil))
                  (message "%s" msg)
                  (lookup-key query-replace-map (vector (read-event))))
-          ('act (throw 'end nil))
+          ('act (:return))
           ('skip
            (setq executing-kbd-macro "")
-           (throw 'end nil))
+           (:return))
           ('exit
            (setq executing-kbd-macro t)
-           (throw 'end nil))
+           (:return))
           ('recenter
            (recenter nil))
           ('edit
@@ -98,10 +98,10 @@ Your options are: \\<query-replace-map>
              (recursive-edit)))
           ('quit
            (setq quit-flag t)
-           (throw 'end nil))
+           (:return))
           ('automatic
            (setq conn--kapply-automatic-flag t)
-           (throw 'end nil))
+           (:return))
           ('help
            (with-output-to-temp-buffer "*Help*"
              (princ
@@ -587,22 +587,22 @@ Possibilities: \\<query-replace-map>
               (when (and (buffer-modified-p)
                          buffer-file-name)
                 (redisplay)
-                (conn-loop-catch 'end
+                (conn-named-loop end
                   (ding t)
                   (pcase (let ((executing-kbd-macro nil)
                                (defining-kbd-macro nil))
                            (message "%s" msg)
                            (lookup-key query-replace-map (vector (read-event))))
-                    ('act (throw 'end (save-buffer '(16))))
-                    ('skip (throw 'end nil))
+                    ('act (:return (save-buffer '(16))))
+                    ('skip (:return))
                     ('quit (setq quit-flag t))
                     ('edit
                      (let (executing-kbd-macro defining-kbd-macro)
                        (recursive-edit))
-                     (throw 'end nil))
+                     (:return))
                     ('automatic
                      (setq automatic t)
-                     (throw 'end nil))
+                     (:return))
                     ('help
                      (with-output-to-temp-buffer "*Help*"
                        (princ
