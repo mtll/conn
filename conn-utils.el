@@ -97,7 +97,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(setf ,place (compat-call ,func ,arg1 ,place ,@args))
     (macroexp-let2 nil a1 arg1
       (gv-letplace (getter setter) place
-        (let* ((rargs (cl-list* a1 getter args)))
+        (let* ((rargs (nconc (list a1 getter) args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
 (defvar conn--named-loop-env nil)
@@ -114,7 +114,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
             (catch ',continue
               ,@(macroexp-unprogn
                  (macroexpand-all
-                  (macroexp-progn body))))))
+                  (macroexp-progn body)
+                  macroexpand-all-environment)))))
        `((:return
           . ,(lambda (&optional val)
                `(throw ',return ,val)))

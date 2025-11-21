@@ -282,24 +282,23 @@ Possibilities: \\<query-replace-map>
  (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
            (pcase state
              (:next
-              (catch 'end
-                (let ((res (funcall iterator state)))
-                  (when conn--kapply-automatic-flag
-                    (throw 'end res))
-                  (while res
+              (let ((res (funcall iterator state)))
+                (if conn--kapply-automatic-flag
+                    res
+                  (conn-named-loop _
                     (move-overlay hl (region-beginning) (region-end) (current-buffer))
                     (pcase (let ((executing-kbd-macro nil)
                                  (defining-kbd-macro nil))
                              (message "%s" msg)
                              (lookup-key query-replace-map (vector (read-event))))
-                      ('act (throw 'end res))
+                      ('act (:return res))
                       ('skip (setq res (funcall iterator state)))
-                      ('exit (throw 'end nil))
+                      ('exit (:return))
                       ('recenter (recenter nil))
                       ('quit (signal 'quit nil))
                       ('automatic
                        (setq conn--kapply-automatic-flag t)
-                       (throw 'end res))
+                       (:return res))
                       ('help
                        (with-output-to-temp-buffer "*Help*"
                          (princ
