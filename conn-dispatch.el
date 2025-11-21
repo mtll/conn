@@ -1710,7 +1710,7 @@ Target overlays may override this default by setting the
   `(conn--dispatch-loop ,repeat (lambda () ,@body)))
 
 (defun conn-select-target ()
-  (conn-named-loop _
+  (conn-named-loop select
     (catch 'dispatch-change-target
       (catch 'dispatch-redisplay
         (pcase-let* ((emulation-mode-map-alists
@@ -1724,11 +1724,12 @@ Target overlays may override this default by setting the
                        conn-dispatch-target-finder))
                      (`(,thing ,arg ,transform)
                       conn--dispatch-current-thing))
-          (:return (list pt
-                         win
-                         (or thing-override thing)
-                         arg
-                         transform)))))))
+          (:return-from
+           select (list pt
+                        win
+                        (or thing-override thing)
+                        arg
+                        transform)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -2462,7 +2463,7 @@ contain targets."
                                    (overlay-put ov 'invisible t))))
               (let ((this-scroll-margin
                      (min (max 0 scroll-margin)
-		          (truncate (/ (window-body-height) 4.0)))))
+                          (truncate (/ (window-body-height) 4.0)))))
                 (pcase (alist-get win (oref state cursor-location))
                   ('middle (recenter nil))
                   ('top (recenter this-scroll-margin))
@@ -2788,39 +2789,35 @@ contain targets."
           (conn-make-target-overlay beg (or fixed-length (- end beg))))))))
 
 (defun conn-dispatch-columns ()
-  (let* ((line-move-visual nil)
-         (goal-column (or goal-column (current-column)))
-         (padding-function
-          (when (= goal-column (window-hscroll))
-            (lambda (ov width _face)
-              (conn--right-justify-padding ov width nil)))))
-    (cl-macrolet ((goto-col ()
-                    `(if (zerop goal-column)
-                         0
-                       (move-to-column goal-column))))
-      (save-excursion
-        (pcase-dolist (`(,vbeg . ,vend)
-                       (conn--visible-regions (window-start) (window-end)))
-          (goto-char vbeg)
-          (unless (zerop goal-column)
-            (move-to-column goal-column))
-          (unless (or (and (bolp) (not (bobp))
-                           (invisible-p (1- (point))))
-                      (< (goto-col) (window-hscroll)))
-            (conn-make-target-overlay
-             (point) 0
-             :padding-function padding-function
-             :thing 'point))
-          (while (< (point) vend)
-            (forward-line)
-            (unless (zerop goal-column)
-              (move-to-column goal-column))
-            (unless (or (and (bolp) (invisible-p (1- (point))))
-                        (< (goto-col) (window-hscroll)))
-              (conn-make-target-overlay
-               (point) 0
-               :padding-function padding-function
-               :thing 'point))))))))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (let ((col-width nil))
+        ;; From `line-move-visual'
+        (let ((posn (posn-at-point))
+              (lnum-width (line-number-display-width t))
+              x-pos)
+          (cond
+           ;; Handle the `overflow-newline-into-fringe' case
+           ;; (left-fringe is for the R2L case):
+           ((memq (nth 1 posn) '(right-fringe left-fringe))
+            (setq col-width (window-width)))
+           ((car (posn-x-y posn))
+            (setq x-pos (- (car (posn-x-y posn)) lnum-width))
+            ;; In R2L lines, the X pixel coordinate is measured from the
+            ;; left edge of the window, but columns are still counted
+            ;; from the logical-order beginning of the line, i.e. from
+            ;; the right edge in this case.  We need to adjust for that.
+            (if (eq (current-bidi-paragraph-direction) 'right-to-left)
+                (setq x-pos (- (window-body-width nil t) 1 x-pos)))
+            (setq col-width (/ (float x-pos)
+                               (frame-char-width))))))
+        (conn-for-each-visible (window-start) (window-end)
+          (goto-char (point-min))
+          (while (/= (point) (point-max))
+            (vertical-motion (cons col-width 0))
+            (unless (and (eolp) (= (point) (point-min)))
+              (conn-make-target-overlay (point) 0))
+            (forward-line 1)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-columns)))
   nil)
@@ -2828,35 +2825,26 @@ contain targets."
 (defun conn-dispatch-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (let* ((line-move-visual nil)
-             (goal-column (window-hscroll))
-             (padding-function
-              (lambda (ov width _face)
-                (conn--right-justify-padding ov width nil))))
+      (let* ((hscroll (window-hscroll))
+             (padding-function #'conn--right-justify-padding))
         (cl-macrolet ((goto-col ()
-                        `(if (zerop goal-column)
+                        `(if (zerop hscroll)
                              0
-                           (move-to-column goal-column))))
+                           (vertical-motion (cons 1 0)))))
           (save-excursion
             (pcase-dolist (`(,vbeg . ,vend)
                            (conn--visible-regions (window-start) (window-end)))
               (goto-char vbeg)
-              (unless (or (and (bolp) (not (bobp))
-                               (invisible-p (1- (point))))
-                          (/= goal-column (goto-col)))
-                (conn-make-target-overlay
-                 (point) 0
-                 :padding-function padding-function))
+              (goto-col)
+              (conn-make-target-overlay
+               (point) 0
+               :padding-function padding-function)
               (while (< (point) vend)
                 (forward-line)
-                (unless (zerop goal-column)
-                  (move-to-column goal-column))
-                (unless (or (and (bolp)
-                                 (invisible-p (1- (point))))
-                            (/= goal-column (goto-col)))
-                  (conn-make-target-overlay
-                   (point) 0
-                   :padding-function padding-function))))))))))
+                (goto-col)
+                (conn-make-target-overlay
+                 (point) 0
+                 :padding-function padding-function)))))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-lines)))
   nil)

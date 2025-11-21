@@ -79,18 +79,18 @@ Your options are: \\<query-replace-map>
         (recursive-edit)))
      ((not executing-kbd-macro))
      ((not conn--kapply-automatic-flag)
-      (conn-named-loop _
+      (conn-named-loop query
         (pcase (let ((executing-kbd-macro nil)
                      (defining-kbd-macro nil))
                  (message "%s" msg)
                  (lookup-key query-replace-map (vector (read-event))))
-          ('act (:return))
+          ('act (:return-from query))
           ('skip
            (setq executing-kbd-macro "")
-           (:return))
+           (:return-from query))
           ('exit
            (setq executing-kbd-macro t)
-           (:return))
+           (:return-from query))
           ('recenter
            (recenter nil))
           ('edit
@@ -98,10 +98,10 @@ Your options are: \\<query-replace-map>
              (recursive-edit)))
           ('quit
            (setq quit-flag t)
-           (:return))
+           (:return-from query))
           ('automatic
            (setq conn--kapply-automatic-flag t)
-           (:return))
+           (:return-from query))
           ('help
            (with-output-to-temp-buffer "*Help*"
              (princ
@@ -285,20 +285,20 @@ Possibilities: \\<query-replace-map>
               (let ((res (funcall iterator state)))
                 (if conn--kapply-automatic-flag
                     res
-                  (conn-named-loop _
+                  (conn-named-loop query
                     (move-overlay hl (region-beginning) (region-end) (current-buffer))
                     (pcase (let ((executing-kbd-macro nil)
                                  (defining-kbd-macro nil))
                              (message "%s" msg)
                              (lookup-key query-replace-map (vector (read-event))))
-                      ('act (:return res))
+                      ('act (:return-from query res))
                       ('skip (setq res (funcall iterator state)))
-                      ('exit (:return))
+                      ('exit (:return-from query))
                       ('recenter (recenter nil))
                       ('quit (signal 'quit nil))
                       ('automatic
                        (setq conn--kapply-automatic-flag t)
-                       (:return res))
+                       (:return-from query res))
                       ('help
                        (with-output-to-temp-buffer "*Help*"
                          (princ
@@ -586,22 +586,22 @@ Possibilities: \\<query-replace-map>
               (when (and (buffer-modified-p)
                          buffer-file-name)
                 (redisplay)
-                (conn-named-loop _
+                (conn-named-loop query
                   (ding t)
                   (pcase (let ((executing-kbd-macro nil)
                                (defining-kbd-macro nil))
                            (message "%s" msg)
                            (lookup-key query-replace-map (vector (read-event))))
-                    ('act (:return (save-buffer '(16))))
-                    ('skip (:return))
+                    ('act (:return-from query (save-buffer '(16))))
+                    ('skip (:return-from query))
                     ('quit (setq quit-flag t))
                     ('edit
                      (let (executing-kbd-macro defining-kbd-macro)
                        (recursive-edit))
-                     (:return))
+                     (:return-from query))
                     ('automatic
                      (setq automatic t)
-                     (:return))
+                     (:return-from query))
                     ('help
                      (with-output-to-temp-buffer "*Help*"
                        (princ

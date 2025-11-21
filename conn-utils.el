@@ -104,34 +104,27 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-named-loop (name &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (return continue)
-    (let ((conn--named-loop-env
-           (cons `(,name ,return . ,continue)
-                 conn--named-loop-env)))
-      (macroexpand-all
-       `(catch ',return
-          (while t
-            (catch ',continue
-              ,@(macroexp-unprogn
-                 (macroexpand-all
-                  (macroexp-progn body)
-                  macroexpand-all-environment)))))
-       `((:return
-          . ,(lambda (&optional val)
-               `(throw ',return ,val)))
-         (:return-from
-          . ,(lambda (tag &optional val)
-               `(throw ',(or (car (alist-get tag conn--named-loop-env))
-                             (error "No loop named %s" tag))
-                       ,val)))
-         (:continue
-          . ,(lambda ()
-               `(throw ',continue nil)))
-         (:continue-to
-          . ,(lambda (tag)
-               `(throw ',(or (cdr (alist-get tag conn--named-loop-env))
-                             (error "No loop named %s" tag))
-                       nil))))))))
+  (let* ((return (make-symbol (format "return-from-%s" name)))
+         (continue (make-symbol (format "continue-to-%s" name)))
+         (conn--named-loop-env
+          (cons `(,name ,return . ,continue)
+                conn--named-loop-env)))
+    (macroexpand-all
+     `(catch ',return
+        (while t
+          (catch ',continue
+            ,@body)))
+     `((:return-from
+        . ,(lambda (tag &optional val)
+             `(throw ',(or (car (alist-get tag conn--named-loop-env))
+                           (error "No loop named %s" tag))
+                     ,val)))
+       (:continue-to
+        . ,(lambda (tag)
+             `(throw ',(or (cdr (alist-get tag conn--named-loop-env))
+                           (error "No loop named %s" tag))
+                     nil)))
+       ,@macroexpand-all-environment))))
 
 ;; From repeat-mode
 (defun conn--command-property (propname)

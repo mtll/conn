@@ -885,8 +885,8 @@ To execute code when a state is exiting use `conn-state-defer'."
 (defun conn-push-state (state)
   "Push STATE to the state stack."
   (unless (symbol-value state)
-    (conn-enter-state state)
-    (push state conn--state-stack)))
+    (push state conn--state-stack)
+    (conn-enter-state state)))
 
 (defun conn-pop-state ()
   "Pop to the previous state in the state stack."
@@ -910,10 +910,10 @@ Returns the next state in the state stack."
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive state stack."
   (push nil conn--state-stack)
+  (push state conn--state-stack)
   (conn-enter-state state)
   ;; Ensure the lighter gets updates even if we haven't changed state
-  (conn-update-lighter)
-  (push state conn--state-stack))
+  (conn-update-lighter))
 
 (defun conn-exit-recursive-stack ()
   "Exit the current recursive state stack.
@@ -922,8 +922,8 @@ If there is not recursive stack an error is signaled."
   (interactive)
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
-        (conn-enter-state (cadr tail))
         (setq conn--state-stack (cdr tail))
+        (conn-enter-state (cadr tail))
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
         (conn-update-lighter))
@@ -1215,6 +1215,9 @@ the state stays active if the previous command was a prefix command."
   (interactive)
   (setq deactivate-mark t))
 
+(defun conn-mark-state-deactivate-mark-p ()
+  (conn-substate-p conn-next-state 'conn-emacs-state))
+
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
                                   (fboundp 'rectangle--pos-cols)
@@ -1227,7 +1230,9 @@ the state stays active if the previous command was a prefix command."
         (setq conn-previous-mark-state (list (make-marker) (make-marker) nil)))
       (set-marker (nth 0 conn-previous-mark-state) (point))
       (set-marker (nth 1 conn-previous-mark-state) (mark t))
-      (setf (nth 2 conn-previous-mark-state) conn--mark-state-rmm)))
+      (setf (nth 2 conn-previous-mark-state) conn--mark-state-rmm))
+    (unless (conn-mark-state-deactivate-mark-p)
+      (deactivate-mark)))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
