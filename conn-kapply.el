@@ -79,35 +79,34 @@ Your options are: \\<query-replace-map>
         (recursive-edit)))
      ((not executing-kbd-macro))
      ((not conn--kapply-automatic-flag)
-      (catch 'end
-        (while t
-          (pcase (let ((executing-kbd-macro nil)
-                       (defining-kbd-macro nil))
-                   (message "%s" msg)
-                   (lookup-key query-replace-map (vector (read-event))))
-            ('act (throw 'end nil))
-            ('skip
-             (setq executing-kbd-macro "")
-             (throw 'end nil))
-            ('exit
-             (setq executing-kbd-macro t)
-             (throw 'end nil))
-            ('recenter
-             (recenter nil))
-            ('edit
-             (let (executing-kbd-macro defining-kbd-macro)
-               (recursive-edit)))
-            ('quit
-             (setq quit-flag t)
-             (throw 'end nil))
-            ('automatic
-             (setq conn--kapply-automatic-flag t)
-             (throw 'end nil))
-            ('help
-             (with-output-to-temp-buffer "*Help*"
-               (princ
-                (substitute-command-keys
-                 "Specify how to proceed with keyboard macro execution.
+      (conn-loop-catch 'end
+        (pcase (let ((executing-kbd-macro nil)
+                     (defining-kbd-macro nil))
+                 (message "%s" msg)
+                 (lookup-key query-replace-map (vector (read-event))))
+          ('act (throw 'end nil))
+          ('skip
+           (setq executing-kbd-macro "")
+           (throw 'end nil))
+          ('exit
+           (setq executing-kbd-macro t)
+           (throw 'end nil))
+          ('recenter
+           (recenter nil))
+          ('edit
+           (let (executing-kbd-macro defining-kbd-macro)
+             (recursive-edit)))
+          ('quit
+           (setq quit-flag t)
+           (throw 'end nil))
+          ('automatic
+           (setq conn--kapply-automatic-flag t)
+           (throw 'end nil))
+          ('help
+           (with-output-to-temp-buffer "*Help*"
+             (princ
+              (substitute-command-keys
+               "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
@@ -115,9 +114,9 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
 \\[automatic]   Apply keyboard macro to rest."))
-               (with-current-buffer standard-output
-                 (help-mode))))
-            (_ (ding t)))))))))
+             (with-current-buffer standard-output
+               (help-mode))))
+          (_ (ding t))))))))
 
 ;;;;; Iterators
 
@@ -588,36 +587,35 @@ Possibilities: \\<query-replace-map>
               (when (and (buffer-modified-p)
                          buffer-file-name)
                 (redisplay)
-                (catch 'end
-                  (while t
-                    (ding t)
-                    (pcase (let ((executing-kbd-macro nil)
-                                 (defining-kbd-macro nil))
-                             (message "%s" msg)
-                             (lookup-key query-replace-map (vector (read-event))))
-                      ('act (throw 'end (save-buffer '(16))))
-                      ('skip (throw 'end nil))
-                      ('quit (setq quit-flag t))
-                      ('edit
-                       (let (executing-kbd-macro defining-kbd-macro)
-                         (recursive-edit))
-                       (throw 'end nil))
-                      ('automatic
-                       (setq automatic t)
-                       (throw 'end nil))
-                      ('help
-                       (with-output-to-temp-buffer "*Help*"
-                         (princ
-                          (substitute-command-keys
-                           "Specify how to proceed with keyboard macro execution.
+                (conn-loop-catch 'end
+                  (ding t)
+                  (pcase (let ((executing-kbd-macro nil)
+                               (defining-kbd-macro nil))
+                           (message "%s" msg)
+                           (lookup-key query-replace-map (vector (read-event))))
+                    ('act (throw 'end (save-buffer '(16))))
+                    ('skip (throw 'end nil))
+                    ('quit (setq quit-flag t))
+                    ('edit
+                     (let (executing-kbd-macro defining-kbd-macro)
+                       (recursive-edit))
+                     (throw 'end nil))
+                    ('automatic
+                     (setq automatic t)
+                     (throw 'end nil))
+                    ('help
+                     (with-output-to-temp-buffer "*Help*"
+                       (princ
+                        (substitute-command-keys
+                         "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Save file and continue iteration.
 \\[skip]	Don't save file and continue iteration.
 \\[quit]	Stop the macro entirely right now.
 \\[edit]	Enter recursive edit; resume executing the keyboard macro afterwards.
 \\[automatic]	Continue iteration and don't ask to save again."))
-                         (with-current-buffer standard-output
-                           (help-mode))))))))))))))
+                       (with-current-buffer standard-output
+                         (help-mode)))))))))))))
    `((depth . ,(alist-get 'kapply-ibuffer conn--kapply-pipeline-depths))
      (name . kapply-ibuffer))))
 

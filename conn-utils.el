@@ -100,6 +100,10 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
         (let* ((rargs (cl-list* a1 getter args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
+(defmacro conn-loop-catch (tag &rest body)
+  (declare (indent 1))
+  `(catch ,tag (while t ,@body)))
+
 ;; From repeat-mode
 (defun conn--command-property (propname)
   "Return the value of the current commands PROPNAME property."

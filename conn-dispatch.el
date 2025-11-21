@@ -65,6 +65,11 @@
   "Face for current action pulse, do not customize."
   :group 'conn-faces)
 
+(defface conn-target-preview-face
+  '((t (:inherit isearch)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
+
 (defface conn-dispatch-label-face
   '((t (:inherit default :foreground "black" :background "#ff8bd1" :bold t)))
   "Face for group in dispatch lead overlay."
@@ -1705,9 +1710,8 @@ Target overlays may override this default by setting the
   `(conn--dispatch-loop ,repeat (lambda () ,@body)))
 
 (defun conn-select-target ()
-  (catch 'return
-    (cl-loop
-     (funcall
+  (conn-loop-catch 'break
+    (catch 'dispatch-change-target
       (catch 'dispatch-redisplay
         (pcase-let* ((emulation-mode-map-alists
                       `(((conn-dispatch-select-mode
@@ -1720,15 +1724,11 @@ Target overlays may override this default by setting the
                        conn-dispatch-target-finder))
                      (`(,thing ,arg ,transform)
                       conn--dispatch-current-thing))
-          (throw 'return (list pt
-                               win
-                               (or thing-override thing)
-                               arg
-                               transform))))))))
-
-(defmacro conn-dispatch-change-target-finder (&rest body)
-  (declare (indent 0))
-  `(throw 'dispatch-redisplay (lambda () ,@body)))
+          (throw 'break (list pt
+                              win
+                              (or thing-override thing)
+                              arg
+                              transform)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -1930,19 +1930,19 @@ the meaning of depth."
   (:method (_cmd) nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (conn-dispatch-change-target-finder
-    (conn-read-args (conn-dispatch-targets-state
-                     :prompt "New Targets"
-                     :reference (list conn-dispatch-thing-ref)
-                     :around (lambda (cont)
-                               (conn-with-dispatch-suspended
-                                 (save-window-excursion
-                                   (funcall cont)))))
-        ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
-         (transform (conn-dispatch-transform-argument)))
-      (conn-target-finder-cleanup conn-dispatch-target-finder)
-      (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg))
-      (list thing thing-arg transform))))
+  (conn-read-args (conn-dispatch-targets-state
+                   :prompt "New Targets"
+                   :reference (list conn-dispatch-thing-ref)
+                   :around (lambda (cont)
+                             (conn-with-dispatch-suspended
+                               (save-window-excursion
+                                 (funcall cont)))))
+      ((`(,thing ,thing-arg) (conn-dispatch-target-argument))
+       (transform (conn-dispatch-transform-argument)))
+    (conn-target-finder-cleanup conn-dispatch-target-finder)
+    (setq conn-dispatch-target-finder (conn-get-target-finder thing thing-arg)
+          conn--dispatch-current-thing (list thing thing-arg transform))
+    (throw 'dispatch-change-target nil)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (require 'conn-quick-ref)
@@ -2301,21 +2301,19 @@ to the key binding for that target."
         (when (length> string 0)
           (while-no-input
             (conn-make-string-target-overlays string predicate)))
-        (funcall
-         (catch 'dispatch-redisplay
-           (conn-with-dispatch-event-handlers
-             ( :handler (cmd)
-               (when (eq cmd 'backspace)
-                 (when (length> string 0)
-                   (cl-callf substring string 0 -1))
-                 (:return)))
-             (:keymap (define-keymap "<backspace>" 'backspace))
-             (cl-callf thread-last
-                 string
-               (conn-dispatch-read-char prompt t nil)
-               (char-to-string)
-               (concat string))
-             #'ignore)))
+        (catch 'dispatch-redisplay
+          (conn-with-dispatch-event-handlers
+            ( :handler (cmd)
+              (when (eq cmd 'backspace)
+                (when (length> string 0)
+                  (cl-callf substring string 0 -1))
+                (:return)))
+            (:keymap (define-keymap "<backspace>" 'backspace))
+            (cl-callf thread-last
+                string
+              (conn-dispatch-read-char prompt t nil)
+              (char-to-string)
+              (concat string))))
         (conn-cleanup-targets))
       (conn-make-string-target-overlays
        string
@@ -4078,7 +4076,7 @@ contain targets."
                 (goto-char pt1)
                 (if (or (eobp) (eolp))
                     (overlay-put ov 'after-string
-                                 (propertize " " 'face 'isearch))
+                                 (propertize " " 'face 'conn-target-preview-face))
                   (move-overlay ov pt1 (1+ pt1))
                   (overlay-put ov 'face 'isearch))))
             (add-function :before-while conn-target-predicate

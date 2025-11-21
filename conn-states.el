@@ -1569,9 +1569,6 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 \(fn (STATE KEYS) &rest BODY)"
   (declare (indent 2))
-  (cl-assert (cl-loop for b in varlist
-                      always (and (consp b) (cdr b) (null (cddr b))))
-             nil "Malformed bindings")
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     `(conn--read-args ',state
                       (list ,@(mapcar #'cadr varlist))
