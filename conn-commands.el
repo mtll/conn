@@ -1698,22 +1698,18 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                             ('prepend nil))
                           register))
       ('delete
-       (if (eq delete 'delete)
-           (conn-set-kill-how self nil nil nil)
-         (conn-set-kill-how self 'delete nil nil)))
+       (conn-set-kill-how self (if (eq delete 'delete) nil 'delete) nil nil))
       ('copy
-       (if (eq delete 'copy)
-           (conn-set-kill-how self nil nil nil)
-         (conn-set-kill-how self 'copy nil nil)))
+       (pcase delete
+         ('delete (conn-set-kill-how self 'copy nil nil))
+         ('copy (conn-set-kill-how self nil append register))
+         ('nil (conn-set-kill-how self 'copy append register))))
       ('register
-       (if register
-           (conn-set-kill-how self
-                              (if (eq delete 'delete) nil delete)
-                              append
-                              nil)
-         (conn-set-kill-how self
-                            (if (eq delete 'delete) nil delete)
-                            append
+       (conn-set-kill-how self
+                          (if (eq delete 'delete) nil delete)
+                          append
+                          (if register
+                              nil
                             (register-read-with-preview "Register:"))))
       (_ self))))
 
