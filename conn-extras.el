@@ -1062,6 +1062,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
   "x" (conn-remap-key "C-x" t)
+  "`" 'conn-wincontrol-mru-window
   "h" 'conn-wincontrol-one-command
   ";" 'conn-wincontrol
   "i" 'pdf-view-scroll-down-or-previous-page
