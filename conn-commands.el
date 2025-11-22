@@ -1679,7 +1679,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defun conn-kill-how-argument (&key delete append register)
   (declare (important-return-value t)
            (side-effect-free t))
-  (cl-assert (not (and delete (or append register))))
+  (cl-assert (memq delete '(nil delete copy)))
+  (cl-assert (not (and (eq delete 'delete)
+                       (or append register))))
   (oclosure-lambda (conn-kill-how-argument
                     (delete delete)
                     (append append)
@@ -1689,7 +1691,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (pcase cmd
       ('append-next-kill
        (conn-set-kill-how self
-                          nil
+                          (if (eq delete 'delete) nil delete)
                           (pcase append
                             ('nil 'append)
                             ('append 'prepend)
@@ -1705,8 +1707,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          (conn-set-kill-how self 'copy nil nil)))
       ('register
        (if register
-           (conn-set-kill-how self nil append nil)
-         (conn-set-kill-how self nil append
+           (conn-set-kill-how self
+                              (if (eq delete 'delete) nil delete)
+                              append
+                              nil)
+         (conn-set-kill-how self
+                            (if (eq delete 'delete) nil delete)
+                            append
                             (register-read-with-preview "Register:"))))
       (_ self))))
 
