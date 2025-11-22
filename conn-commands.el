@@ -1502,7 +1502,7 @@ for the meaning of prefix ARG."
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
 
-(defun conn-register-load-and-replace (reg &optional arg)
+(defun conn-register-load-and-replace (reg)
   "Do what I mean with a REG.
 
 For a window configuration, restore it.  For a number or text, insert it.
@@ -1513,8 +1513,7 @@ for the meaning of prefix ARG."
      (barf-if-buffer-read-only)
      (list (register-read-with-preview
 	    "Insert register and replace: "
-	    #'register--insertable-p)
-	   (not current-prefix-arg))))
+	    #'register--insertable-p))))
   (atomic-change-group
     (if (bound-and-true-p rectangle-mark-mode)
         (delete-rectangle (region-beginning) (region-end))
