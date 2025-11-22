@@ -117,7 +117,12 @@
      (delete-region obeg oend))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (eql conn-surround))
-                                  arg _transform &optional _append _delete _register)
+                                  arg
+                                  _transform
+                                  &optional
+                                  _append
+                                  _delete
+                                  _register)
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"
                    :prefix arg)
@@ -256,7 +261,9 @@
     (when padding (ins-pair padding))))
 
 (cl-defmethod conn-surround-do ((with conn-self-insert-event) arg
-                                &key padding &allow-other-keys)
+                                &key
+                                padding
+                                &allow-other-keys)
   (conn--perform-surround-with-pair-subr
    (assoc (conn-self-insert-event-id with) insert-pair-alist)
    padding arg))
@@ -422,7 +429,9 @@
                                (_ (string open)))))))
 
 (cl-defmethod conn-surround-do ((with conn-surround-pair) arg
-                                &key padding &allow-other-keys)
+                                &key
+                                padding
+                                &allow-other-keys)
   (conn--perform-surround-with-pair-subr
    (let ((open (conn-surround-pair-id with)))
      (or (assoc open insert-pair-alist)
@@ -476,8 +485,10 @@
        (delete-region obeg oend)))))
 
 (cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
-                                    _arg _transform
-                                    &optional _kill)
+                                    _arg
+                                    _transform
+                                    &optional
+                                    _kill)
   (atomic-change-group
     (save-mark-and-excursion
       (conn-read-args (conn-change-surround-state

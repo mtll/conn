@@ -2359,7 +2359,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (comment-region beg end)))))
 
 (cl-defmethod conn-duplicate-thing-do ((_cmd (eql copy-from-above-command))
-                                       arg _transform _comment)
+                                       arg
+                                       _transform
+                                       _comment)
   (copy-from-above-command arg))
 
 (oclosure-define (conn-duplicate-comment-argument
@@ -2533,7 +2535,8 @@ Interactively `region-beginning' and `region-end'."
       (conn-push-state 'conn-emacs-state))))
 
 (cl-defmethod conn-change-thing-do :extra "rectangle" ((_cmd (conn-thing region))
-                                                       _arg _transform)
+                                                       _arg
+                                                       _transform)
   (if (bound-and-true-p rectangle-mark-mode)
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
