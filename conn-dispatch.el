@@ -180,28 +180,28 @@ strings have `conn-dispatch-label-face'."
   (declare (indent 0))
   (let* ((tag (make-symbol "handle"))
          (return-expander
-          `(:return . (lambda (&optional result)
-                        `(throw ',tag ,result))))
+          `(:return . ,(lambda (&optional result)
+                         `(throw ',tag ,result))))
          (handler-expander
-          `(:handler . (lambda (&rest rest)
-                         `(push
-                           ,(pcase rest
-                              (`(#',fn) `#',fn)
-                              (_ (macroexpand-all
-                                  `(lambda ,@rest)
-                                  (cons return-expander
-                                        macroexpand-all-environment))))
-                           conn--dispatch-read-char-handlers))))
+          `(:handler . ,(lambda (&rest rest)
+                          `(push
+                            ,(pcase rest
+                               (`(#',fn) `#',fn)
+                               (_ (macroexpand-all
+                                   `(lambda ,@rest)
+                                   (cons return-expander
+                                         macroexpand-all-environment))))
+                            conn--dispatch-read-char-handlers))))
          (msg-expander
-          `(:message . (lambda (&rest rest)
-                         `(push
-                           ,(pcase rest
-                              (`(#',fn) `#',fn)
-                              (_ `(lambda ,@rest)))
-                           conn--dispatch-read-char-message-prefixes))))
+          `(:message . ,(lambda (&rest rest)
+                          `(push
+                            ,(pcase rest
+                               (`(#',fn) `#',fn)
+                               (_ `(lambda ,@rest)))
+                            conn--dispatch-read-char-message-prefixes))))
          (keymap-expander
-          `(:keymap . (lambda (keymap)
-                        `(push ,keymap conn--dispatch-event-handler-maps))))
+          `(:keymap . ,(lambda (keymap)
+                         `(push ,keymap conn--dispatch-event-handler-maps))))
          (body (macroexpand-all (macroexp-progn body)
                                 `(,handler-expander
                                   ,msg-expander
