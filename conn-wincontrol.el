@@ -216,7 +216,8 @@
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
   "o" 'tab-next
-  ">" 'conn-register-prefix
+  "<" 'conn-register-prefix
+  ;; "," 'conn-register-prefix
   "." 'conn-register-load
   "q" 'quit-window
   "s" 'conn-wincontrol-split-right
