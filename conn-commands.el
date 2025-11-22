@@ -1509,13 +1509,17 @@ For a window configuration, restore it.  For a number or text, insert it.
 For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
-   (list (register-read-with-preview "Load register: ")
-         current-prefix-arg))
+   (progn
+     (barf-if-buffer-read-only)
+     (list (register-read-with-preview
+	    "Insert register and replace: "
+	    #'register--insertable-p)
+	   (not current-prefix-arg))))
   (atomic-change-group
     (if (bound-and-true-p rectangle-mark-mode)
         (delete-rectangle (region-beginning) (region-end))
       (delete-region (region-beginning) (region-end)))
-    (conn-register-load reg arg)))
+    (register-val-insert (get-register reg))))
 
 (defun conn-unset-register (register)
   "Unset REGISTER."
