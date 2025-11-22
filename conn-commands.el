@@ -1989,7 +1989,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                            ('append 'prepend)
                            ('prepend nil)))
             (conn-dispatch-handle)))
-        ( :message-fn (keymap)
+        ( :message (keymap)
           (when-let* ((binding
                        (where-is-internal 'dispatch-other-end keymap t)))
             (concat
@@ -2216,7 +2216,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                          ('append 'prepend)
                          ('prepend nil)))
           (conn-dispatch-handle)))
-      ( :message-fn (keymap)
+      ( :message (keymap)
         (when-let* ((binding
                      (where-is-internal 'dispatch-other-end keymap t)))
           (concat

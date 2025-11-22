@@ -185,14 +185,17 @@ strings have `conn-dispatch-label-face'."
                         `(throw ',tag ,result))))
                (handler-expander
                 (cons :handler
-                      (lambda (arglist &rest body)
-                        `(push ,(macroexpand-all
-                                 `(lambda ,arglist ,@body)
+                      (lambda (&rest rest)
+                        `(push
+                          ,(pcase rest
+                             (`(#',fn) `#',fn)
+                             (_ (macroexpand-all
+                                 `(lambda ,@rest)
                                  (cons return-expander
-                                       macroexpand-all-environment))
-                               conn--dispatch-read-char-handlers))))
+                                       macroexpand-all-environment))))
+                          conn--dispatch-read-char-handlers))))
                (msg-expander
-                (cons :message-fn
+                (cons :message
                       (lambda (arglist &rest body)
                         `(push (lambda ,arglist ,@body)
                                conn--dispatch-read-char-message-prefixes))))
@@ -2816,7 +2819,7 @@ contain targets."
           (while (/= (point) (point-max))
             (vertical-motion (cons col-width 0))
             (unless (and (eolp) (= (point) (point-min)))
-              (conn-make-target-overlay (point) 0))
+              (conn-make-target-overlay (point) 0 :thing 'point))
             (forward-line 1)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-columns)))
@@ -3965,9 +3968,6 @@ contain targets."
          (conn--dispatch-must-prompt nil)
          (conn--read-args-prefix-mag nil)
          (conn--read-args-prefix-sign nil)
-         (conn--dispatch-read-char-handlers
-          (cons #'conn-handle-dispatch-select-command
-                conn--dispatch-read-char-handlers))
          (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
          (conn-dispatch-target-finder
           (conn-get-target-finder thing thing-arg))
@@ -3982,65 +3982,66 @@ contain targets."
               (eq target-other-end :no-other-end)))
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
-            (xor target-other-end (or other-end conn-dispatch-other-end))))
-         (conn--dispatch-read-char-message-prefixes
-          `(,(propertize (conn-action-pretty-print action t)
-                         'face 'eldoc-highlight-function-argument)
-            ,(lambda (_keymap)
-               (conn-target-finder-message-prefixes
-                conn-dispatch-target-finder))
-            ,(unless conn-dispatch-no-other-end
-               (lambda (keymap)
-                 (when-let* ((binding
-                              (where-is-internal 'dispatch-other-end keymap t)))
-                   (concat
-                    (propertize (key-description binding)
-                                'face 'help-key-binding)
-                    " "
-                    (propertize
-                     "other end"
-                     'face (when conn-dispatch-other-end
-                             'eldoc-highlight-function-argument))))))
-            ,(lambda (keymap)
-               (when-let* (((or (length> conn-targets 1)
-                                (advice-function-member-p 'conn--dispatch-restrict-windows
-                                                          conn-target-window-predicate)))
-                           (binding
-                            (where-is-internal 'restrict-windows keymap t)))
-                 (concat
-                  (propertize (key-description binding)
-                              'face 'help-key-binding)
-                  " "
-                  (propertize
-                   "this win"
-                   'face (when (advice-function-member-p
-                                'conn--dispatch-restrict-windows
-                                conn-target-window-predicate)
-                           'eldoc-highlight-function-argument)))))
-            ,@conn--dispatch-read-char-message-prefixes)))
-    (when-let* ((predicate (conn-action-window-predicate action)))
-      (add-function :after-while conn-target-window-predicate predicate))
-    (when-let* ((predicate (conn-action-target-predicate action)))
-      (add-function :after-while conn-target-predicate predicate))
-    (when restrict-windows
-      (add-function :after-while conn-target-window-predicate
-                    'conn--dispatch-restrict-windows))
-    (when setup-function (funcall setup-function))
-    (conn--unwind-protect-all
-      (progn
-        (conn-dispatch-perform-action action repeat)
-        (conn-dispatch-push-history (conn-make-dispatch action)))
-      (conn-cleanup-targets)
-      (conn-cleanup-labels)
-      (progn
-        (with-current-buffer (marker-buffer opoint)
-          (if dispatch-quit-flag
-              (goto-char opoint)
-            (unless (eql (point) (marker-position opoint))
-              (conn--push-mark-ring opoint))))
-        (set-marker opoint nil)
-        (let ((inhibit-message conn-read-args-inhibit-message))
-          (message nil))))))
+            (xor target-other-end (or other-end conn-dispatch-other-end)))))
+    (conn-with-dispatch-event-handlers
+      ( :handler #'conn-handle-dispatch-select-command)
+      ( :message (keymap)
+        (when-let* (((or (length> conn-targets 1)
+                         (advice-function-member-p 'conn--dispatch-restrict-windows
+                                                   conn-target-window-predicate)))
+                    (binding
+                     (where-is-internal 'restrict-windows keymap t)))
+          (concat
+           (propertize (key-description binding)
+                       'face 'help-key-binding)
+           " "
+           (propertize
+            "this win"
+            'face (when (advice-function-member-p
+                         'conn--dispatch-restrict-windows
+                         conn-target-window-predicate)
+                    'eldoc-highlight-function-argument)))))
+      (unless conn-dispatch-no-other-end
+        ( :message (keymap)
+          (when-let* ((binding
+                       (where-is-internal 'dispatch-other-end keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "other end"
+              'face (when conn-dispatch-other-end
+                      'eldoc-highlight-function-argument))))))
+      ( :message (_keymap)
+        (conn-target-finder-message-prefixes
+         conn-dispatch-target-finder))
+      ( :message (_)
+        (propertize (conn-action-pretty-print action t)
+                    'face 'eldoc-highlight-function-argument))
+      (when-let* ((predicate (conn-action-window-predicate action)))
+        (add-function :after-while conn-target-window-predicate predicate))
+      (when-let* ((predicate (conn-action-target-predicate action)))
+        (add-function :after-while conn-target-predicate predicate))
+      (when restrict-windows
+        (add-function :after-while conn-target-window-predicate
+                      'conn--dispatch-restrict-windows))
+      (when setup-function (funcall setup-function))
+      (conn--unwind-protect-all
+        (progn
+          (conn-dispatch-perform-action action repeat)
+          (conn-dispatch-push-history (conn-make-dispatch action)))
+        (conn-cleanup-targets)
+        (conn-cleanup-labels)
+        (progn
+          (with-current-buffer (marker-buffer opoint)
+            (if dispatch-quit-flag
+                (goto-char opoint)
+              (unless (eql (point) (marker-position opoint))
+                (conn--push-mark-ring opoint))))
+          (set-marker opoint nil)
+          (let ((inhibit-message conn-read-args-inhibit-message))
+            (message nil)))))))
 
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
@@ -4173,7 +4174,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (user-error "Last dispatch action stale"))
   (push `(no-record . (dispatch-mouse-repeat ,@(cdr event)))
         unread-command-events)
-  (let ((conn-read-args-inhibit-message t)
+  (let (;; (conn-read-args-inhibit-message t)
         (conn-kapply-suppress-message t))
     (conn-repeat-last-dispatch
      (and (conn-previous-dispatch-repeat (conn-ring-head conn-dispatch-ring))
