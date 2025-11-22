@@ -178,36 +178,35 @@ strings have `conn-dispatch-label-face'."
 
 (defmacro conn-with-dispatch-event-handlers (&rest body)
   (declare (indent 0))
-  (pcase-let* ((tag (make-symbol "handle"))
-               (return-expander
-                (cons :return
-                      (lambda (&optional result)
+  (let* ((tag (make-symbol "handle"))
+         (return-expander
+          `(:return . (lambda (&optional result)
                         `(throw ',tag ,result))))
-               (handler-expander
-                (cons :handler
-                      (lambda (&rest rest)
-                        `(push
-                          ,(pcase rest
-                             (`(#',fn) `#',fn)
-                             (_ (macroexpand-all
-                                 `(lambda ,@rest)
-                                 (cons return-expander
-                                       macroexpand-all-environment))))
-                          conn--dispatch-read-char-handlers))))
-               (msg-expander
-                (cons :message
-                      (lambda (arglist &rest body)
-                        `(push (lambda ,arglist ,@body)
-                               conn--dispatch-read-char-message-prefixes))))
-               (keymap-expander
-                (cons :keymap
-                      (lambda (keymap)
+         (handler-expander
+          `(:handler . (lambda (&rest rest)
+                         `(push
+                           ,(pcase rest
+                              (`(#',fn) `#',fn)
+                              (_ (macroexpand-all
+                                  `(lambda ,@rest)
+                                  (cons return-expander
+                                        macroexpand-all-environment))))
+                           conn--dispatch-read-char-handlers))))
+         (msg-expander
+          `(:message . (lambda (&rest rest)
+                         `(push
+                           ,(pcase rest
+                              (`(#',fn) `#',fn)
+                              (_ `(lambda ,@rest)))
+                           conn--dispatch-read-char-message-prefixes))))
+         (keymap-expander
+          `(:keymap . (lambda (keymap)
                         `(push ,keymap conn--dispatch-event-handler-maps))))
-               (body (macroexpand-all (macroexp-progn body)
-                                      `(,handler-expander
-                                        ,msg-expander
-                                        ,keymap-expander
-                                        ,@macroexpand-all-environment))))
+         (body (macroexpand-all (macroexp-progn body)
+                                `(,handler-expander
+                                  ,msg-expander
+                                  ,keymap-expander
+                                  ,@macroexpand-all-environment))))
     `(let ((conn--dispatch-event-handler-maps
             conn--dispatch-event-handler-maps)
            (conn--dispatch-read-char-message-prefixes
