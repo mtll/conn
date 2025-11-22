@@ -1673,6 +1673,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defvar-keymap conn-kill-how-map
   "z" 'append-next-kill
+  "c" 'copy
   "d" 'delete
   "<" 'register)
 
@@ -1696,7 +1697,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                             ('prepend nil))
                           register))
       ('delete
-       (conn-set-kill-how self (not delete) nil nil))
+       (if (eq delete 'delete)
+           (conn-set-kill-how self nil nil nil)
+         (conn-set-kill-how self 'delete nil nil)))
+      ('copy
+       (if (eq delete 'copy)
+           (conn-set-kill-how self nil nil nil)
+         (conn-set-kill-how self 'copy nil nil)))
       ('register
        (if register
            (conn-set-kill-how self nil append nil)
@@ -1706,7 +1713,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
                                        sym)
-  (memq sym '(append-next-kill delete register)))
+  (memq sym '(append-next-kill delete register copy)))
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
   (list
@@ -1730,27 +1737,32 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          'face 'eldoc-highlight-function-argument)
       "register"))
    (concat
+    "\\[copy] "
+    (propertize
+     "copy"
+     'face (if (eq (conn-kill-how-argument--delete arg) 'copy)
+               'eldoc-highlight-function-argument)))
+   (concat
     "\\[delete] "
-    (if-let* ((ts (conn-kill-how-argument--delete arg)))
-        (propertize
-         "delete"
-         'face 'eldoc-highlight-function-argument)
-      "delete"))))
+    (propertize
+     "delete"
+     'face (if (eq (conn-kill-how-argument--delete arg) 'delete)
+               'eldoc-highlight-function-argument)))))
 
 (cl-defmethod conn-argument-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument--delete arg)
         (conn-kill-how-argument--append arg)
         (conn-kill-how-argument--register arg)))
 
-(defun conn-kill-thing ( cmd
-                         arg
-                         transform
-                         &optional
-                         append
-                         delete
-                         register
-                         fixup-whitespace
-                         check-bounds)
+(defun conn-kill-thing (cmd
+                        arg
+                        transform
+                        &optional
+                        append
+                        delete
+                        register
+                        fixup-whitespace
+                        check-bounds)
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
@@ -2054,40 +2066,46 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                         (concat string (and result sep) result))))
               (conn--kill-string result append register sep))))))))
 
-(cl-defmethod conn-kill-thing-do ( cmd arg transform
-                                   &optional
-                                   append
-                                   delete
-                                   register
-                                   fixup-whitespace
-                                   check-bounds)
-  (pcase (conn-bounds-of cmd arg)
-    ((and (conn-bounds `(,beg . ,end) `(,@transform
-                                        ,@(when check-bounds
-                                            (list 'conn-check-bounds))))
-          bounds)
-     (goto-char beg)
-     (save-mark-and-excursion
-       (conn--push-ephemeral-mark end)
-       (if delete
-           (delete-region beg end)
-         (conn--kill-region beg end t append register)))
-     (when fixup-whitespace
-       (funcall conn-kill-fixup-whitespace-function bounds)))))
+(cl-defmethod conn-kill-thing-do (cmd
+                                  arg
+                                  transform
+                                  &optional
+                                  append
+                                  delete
+                                  register
+                                  fixup-whitespace
+                                  check-bounds)
+  (if (eq delete 'copy)
+      (conn-copy-thing-do cmd arg transform append register)
+    (pcase (conn-bounds-of cmd arg)
+      ((and (conn-bounds `(,beg . ,end)
+                         `(,@transform
+                           ,@(when check-bounds
+                               (list 'conn-check-bounds))))
+            bounds)
+       (goto-char beg)
+       (save-mark-and-excursion
+         (conn--push-ephemeral-mark end)
+         (if delete
+             (delete-region beg end)
+           (conn--kill-region beg end t append register)))
+       (when fixup-whitespace
+         (funcall conn-kill-fixup-whitespace-function bounds))))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line)) &rest _)
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
 
-(cl-defmethod conn-kill-thing-do :extra "rmm" ( (_cmd (conn-thing region))
-                                                _arg _transform
-                                                &optional
-                                                _append
-                                                delete
-                                                register
-                                                _fixup-whitespace
-                                                _check-bounds)
+(cl-defmethod conn-kill-thing-do :extra "rmm" ((_cmd (conn-thing region))
+                                               _arg
+                                               _transform
+                                               &optional
+                                               _append
+                                               delete
+                                               register
+                                               _fixup-whitespace
+                                               _check-bounds)
   (if (bound-and-true-p rectangle-mark-mode)
       (let ((beg (region-beginning))
             (end (region-end)))
