@@ -1794,8 +1794,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
 
-(cl-defmethod conn-kill-fixup-whitespace :after
-  (_bounds &context (major-mode (derived-mode prog-mode)))
+(cl-defmethod conn-kill-fixup-whitespace :after (_bounds
+                                                 &context
+                                                 (major-mode (derived-mode prog-mode)))
   (let ((tab-always-indent t))
     (unless (save-excursion
               (beginning-of-line)
@@ -1857,7 +1858,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (dotimes (_ (min (empty-lines) (empty-lines t)))
         (join-line)))))
 
-(defun conn--kill-region (beg end &optional delete-flag append register separator)
+(defun conn--kill-region (beg
+                          end
+                          &optional
+                          delete-flag
+                          append
+                          register
+                          separator)
   (if register
       (pcase append
         ('nil
@@ -1900,13 +1907,15 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (kill-append string (eq append 'prepend)))
       (kill-new string))))
 
-(cl-defgeneric conn-kill-thing-do ( cmd arg transform
-                                    &optional
-                                    append
-                                    delete
-                                    register
-                                    fixup-whitespace
-                                    check-bounds)
+(cl-defgeneric conn-kill-thing-do (cmd
+                                   arg
+                                   transform
+                                   &optional
+                                   append
+                                   delete
+                                   register
+                                   fixup-whitespace
+                                   check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion)) &rest _)
@@ -1977,7 +1986,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (:parent conn-action)))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing dispatch))
-                                  arg transform
+                                  arg
+                                  transform
                                   &optional
                                   append
                                   delete
@@ -2220,8 +2230,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
-(cl-defmethod conn-copy-thing-do ((_command (conn-thing dispatch)) arg
-                                  &optional transform append register)
+(cl-defmethod conn-copy-thing-do ((_command (conn-thing dispatch))
+                                  arg
+                                  &optional
+                                  transform
+                                  append
+                                  register)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
                    :prompt "Copy"
