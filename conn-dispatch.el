@@ -1241,9 +1241,16 @@ Target overlays may override this default by setting the
            (old-state (buffer-local-set-state
                        display-line-numbers nil
                        line-prefix nil
-                       wrap-prefix nil)))
+                       wrap-prefix nil))
+           (ov nil))
       (unwind-protect
           (progn
+            ;; display-line-numbers, line-prefix and wrap-prefix break
+            ;; width calculations, temporarily disable them.
+            (setq ov (make-overlay (point-min) (point-max)))
+            (overlay-put ov 'display-line-numbers-disable t)
+            (overlay-put ov 'line-prefix "")
+            (overlay-put ov 'wrap-prefix "")
             (unless (= (overlay-start overlay) (point-max))
               (let* ((win (overlay-get target 'window))
                      (beg (overlay-end target))
@@ -1334,6 +1341,7 @@ Target overlays may override this default by setting the
                          overlay
                          padding-width
                          (overlay-get target 'label-face))))))
+        (when ov (delete-overlay ov))
         (buffer-local-restore-state old-state)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
