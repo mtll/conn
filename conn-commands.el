@@ -1042,14 +1042,6 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(cl-defmethod conn-dispatch-perform-action ((action conn-transpose-command)
-                                            _repeat)
-  (conn-dispatch-loop nil
-    (pcase-let* ((`(,pt ,win ,thing ,arg ,_transform)
-                  (save-mark-and-excursion
-                    (conn-select-target))))
-      (funcall action win pt thing arg))))
-
 (cl-defgeneric conn-transpose-things-do (cmd arg)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
@@ -1146,10 +1138,12 @@ With a prefix ARG `push-mark' without activating it."
                           (lambda (win)
                             (not (buffer-local-value 'buffer-read-only
                                                      (window-buffer win))))))
-           (window2 pt2 thing2 arg2 _transform)
-         (conn--dispatch-transpose-subr
-          (window-buffer window2) pt2 thing2 arg2 nil
-          buf1 pt1 thing1 arg2 nil))
+           ()
+         (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
+                       (conn-select-target)))
+           (conn--dispatch-transpose-subr
+            (window-buffer window2) pt2 thing2 arg2 nil
+            buf1 pt1 thing1 arg2 nil)))
        thing thing-arg nil
        :other-end :no-other-end
        :restrict-windows restrict-windows))))
@@ -2039,31 +2033,33 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (conn-dispatch-setup
            (oclosure-lambda (conn-kill-action
                              (action-description "Kill"))
-               (window pt thing thing-arg transform)
-             (with-selected-window window
-               (conn-dispatch-loop-change-group)
-               (save-mark-and-excursion
-                 (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-                   ((and bounds
-                         (conn-dispatch-bounds `(,beg . ,end)
-                                               `(,@transform
-                                                 ,@(when check-bounds
-                                                     (list 'conn-check-bounds)))))
-                    (goto-char beg)
-                    (conn--push-ephemeral-mark end)
-                    (if delete
-                        (delete-region beg end)
-                      (push (cons append (funcall region-extract-function t))
-                            strings)
-                      (conn-dispatch-undo-case 90
-                        (:undo
-                         (pop strings)
-                         (conn-dispatch-undo-pulse beg end))
-                        (:cancel
-                         (pop strings))))
-                    (when fixup-whitespace
-                      (funcall conn-kill-fixup-whitespace-function bounds)))
-                   (_ (user-error "No %s found" thing))))))
+               ()
+             (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                           (conn-select-target)))
+               (with-selected-window window
+                 (conn-dispatch-change-group)
+                 (save-mark-and-excursion
+                   (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                     ((and bounds
+                           (conn-dispatch-bounds `(,beg . ,end)
+                                                 `(,@transform
+                                                   ,@(when check-bounds
+                                                       (list 'conn-check-bounds)))))
+                      (goto-char beg)
+                      (conn--push-ephemeral-mark end)
+                      (if delete
+                          (delete-region beg end)
+                        (push (cons append (funcall region-extract-function t))
+                              strings)
+                        (conn-dispatch-undo-case 90
+                          (:undo
+                           (pop strings)
+                           (conn-dispatch-undo-pulse beg end))
+                          (:cancel
+                           (pop strings))))
+                      (when fixup-whitespace
+                        (funcall conn-kill-fixup-whitespace-function bounds)))
+                     (_ (user-error "No %s found" thing)))))))
            thing thing-arg transform
            :repeat repeat
            :other-end :no-other-end
@@ -2276,24 +2272,26 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-dispatch-setup
          (oclosure-lambda (conn-kill-action
                            (action-description "Copy"))
-             (window pt thing thing-arg transform)
-           (with-selected-window window
-             (conn-dispatch-loop-change-group)
-             (save-mark-and-excursion
-               (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-                 ((conn-dispatch-bounds `(,beg . ,end) transform)
-                  (goto-char beg)
-                  (conn--push-ephemeral-mark end)
-                  (push (cons append (funcall region-extract-function nil))
-                        strings)
-                  (conn-dispatch-action-pulse beg end)
-                  (conn-dispatch-undo-case 90
-                    (:undo
-                     (pop strings)
-                     (conn-dispatch-undo-pulse beg end))
-                    (:cancel
-                     (pop strings))))
-                 (_ (user-error "No %s found" thing))))))
+             ()
+           (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                         (conn-select-target)))
+             (with-selected-window window
+               (conn-dispatch-change-group)
+               (save-mark-and-excursion
+                 (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                   ((conn-dispatch-bounds `(,beg . ,end) transform)
+                    (goto-char beg)
+                    (conn--push-ephemeral-mark end)
+                    (push (cons append (funcall region-extract-function nil))
+                          strings)
+                    (conn-dispatch-action-pulse beg end)
+                    (conn-dispatch-undo-case 90
+                      (:undo
+                       (pop strings)
+                       (conn-dispatch-undo-pulse beg end))
+                      (:cancel
+                       (pop strings))))
+                   (_ (user-error "No %s found" thing)))))))
          thing thing-arg transform
          :repeat repeat
          :other-end :no-other-end

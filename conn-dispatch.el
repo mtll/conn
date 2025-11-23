@@ -702,23 +702,7 @@ themselves once the selection process has concluded."
   (repeat :type boolean))
 
 (defvar-keymap conn-dispatch-action-map
-  "TAB" 'repeat-dispatch
-  "'" 'conn-dispatch-kapply
-  "t" 'conn-dispatch-copy-to
-  "T" 'conn-dispatch-copy-to-replace
-  "C-y" 'conn-dispatch-yank-to-replace
-  "M-y" 'conn-dispatch-reading-yank-to-replace
-  "y" 'conn-dispatch-yank-to
-  "Y" 'conn-dispatch-reading-yank-to
-  "f" 'conn-dispatch-copy-from
-  "F" 'conn-dispatch-copy-from-replace
-  "s" 'conn-dispatch-send
-  "S" 'conn-dispatch-send-replace
-  "d" 'conn-dispatch-take
-  "D" 'conn-dispatch-take-replace
-  "q" 'conn-dispatch-transpose
-  "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-load-replace)
+  "TAB" 'repeat-dispatch)
 
 (defun conn-dispatch-action-argument ()
   (declare (important-return-value t))
@@ -1651,7 +1635,7 @@ Target overlays may override this default by setting the
 ;;;;; Dispatch Loop
 
 (defvar conn-dispatch-in-progress nil)
-(defvar conn--dispatch-undo-change-groups nil)
+(defvar conn--dispatch-change-groups nil)
 
 (defvar conn--dispatch-current-thing nil)
 
@@ -1674,42 +1658,36 @@ Target overlays may override this default by setting the
         (with-current-buffer buf
           (face-remap-remove-relative cookie))))))
 
-(defun conn--dispatch-loop (repeat body)
+(cl-defgeneric conn-dispatch-perform-action (action repeat))
+
+(cl-defmethod conn-dispatch-perform-action (action repeat)
   (let* ((success nil)
          (conn--dispatch-label-state nil)
-         (conn-dispatch-repeating (and repeat t))
-         (conn--dispatch-undo-change-groups nil)
-         (conn--read-args-error-message nil)
-         (conn--dispatch-read-char-message-prefixes
-          `(,(car conn--dispatch-read-char-message-prefixes)
-            ,@(cdr conn--dispatch-read-char-message-prefixes))))
+         (conn--dispatch-change-groups nil)
+         (conn--read-args-error-message nil))
     (unwind-protect
         (progn
           (redisplay)
-          (catch 'dispatch-loop-exit
+          (catch 'dispatch-exit
             (let ((conn-dispatch-in-progress t))
-              (while (or conn-dispatch-repeating
-                         (< conn-dispatch-iteration-count 1))
-                (condition-case err
-                    (progn
-                      (push nil conn--dispatch-undo-change-groups)
-                      (funcall body)
-                      (cl-incf conn-dispatch-iteration-count))
-                  (user-error
-                   (pcase-dolist (`(,_ . ,undo-fn)
-                                  (pop conn--dispatch-undo-change-groups))
-                     (funcall undo-fn :undo))
-                   (setf conn--read-args-error-message
-                         (error-message-string err)))))))
+              (while (or repeat (< conn-dispatch-iteration-count 1))
+                (catch 'dispatch-undo
+                  (condition-case err
+                      (progn
+                        (push nil conn--dispatch-change-groups)
+                        (funcall action)
+                        (cl-incf conn-dispatch-iteration-count))
+                    (user-error
+                     (pcase-dolist (`(,_ . ,undo-fn)
+                                    (pop conn--dispatch-change-groups))
+                       (funcall undo-fn :undo))
+                     (setf conn--read-args-error-message
+                           (error-message-string err))))))))
           (setq success (not dispatch-quit-flag)))
-      (dolist (undo conn--dispatch-undo-change-groups)
+      (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel)))))
     (when dispatch-quit-flag (keyboard-quit))))
-
-(defmacro conn-dispatch-loop (repeat &rest body)
-  (declare (indent 1))
-  `(conn--dispatch-loop ,repeat (lambda () ,@body)))
 
 (defun conn-select-target ()
   (conn-named-loop select
@@ -1747,8 +1725,8 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-push-undo-case (depth body)
   (push (cons depth body)
-        (car conn--dispatch-undo-change-groups))
-  (conn--compat-callf sort (car conn--dispatch-undo-change-groups)
+        (car conn--dispatch-change-groups))
+  (conn--compat-callf sort (car conn--dispatch-change-groups)
     :key #'car
     :in-place t))
 
@@ -1769,7 +1747,7 @@ its corresponding CODE run.  The undo signal will be one of:
 
 DEPTH controls were in the undo list the undo case will be put.  Lesser
 depths will be sorted before greater depths.
-`conn-dispatch-loop-change-group' undo cases have a depth of 0."
+`conn-dispatch-change-group' undo cases have a depth of 0."
   (declare (indent 1))
   (cl-assert (<= -100 depth 100))
   (cl-with-gensyms (buf signal)
@@ -1780,7 +1758,7 @@ depths will be sorted before greater depths.
           (with-current-buffer ,buf
             (pcase ,signal ,@cases)))))))
 
-(defun conn-dispatch-loop-change-group (&rest buffers)
+(defun conn-dispatch-change-group (&rest buffers)
   "Create a dispatch change group for the current buffer.
 If BUFFERS are specified, create a change group for the specified
 BUFFERS instead.
@@ -1792,14 +1770,16 @@ before performing any modifications.
 
 Buffer change groups have depth 0.  See `conn-dispatch-undo-case' for
 the meaning of depth."
-  (unless buffers (setq buffers (list (current-buffer))))
+  (if buffers
+      (setq buffers (delete-dups buffers))
+    (setq buffers (list (current-buffer))))
   (when conn-dispatch-in-progress
     (let ((cg (mapcan #'prepare-change-group
                       (or buffers (list (current-buffer)))))
           (saved-pos (cl-loop for buf in buffers
                               collect (with-current-buffer buf
                                         (cons (point) (mark t))))))
-      (when (and conn--dispatch-undo-change-groups
+      (when (and conn--dispatch-change-groups
                  (not conn-dispatch-amalgamate-undo))
         (dolist (b (or buffers (list (current-buffer))))
           (with-current-buffer b
@@ -1910,7 +1890,7 @@ the meaning of depth."
                    (conn--dispatch-label-state nil)
                    (conn-dispatch-target-finder nil)
                    (conn-dispatch-in-progress nil)
-                   (conn--dispatch-undo-change-groups nil)
+                   (conn--dispatch-change-groups nil)
                    (inhibit-message nil)
                    (recenter-last-op nil)
                    (conn-dispatch-iteration-count nil)
@@ -2028,11 +2008,11 @@ the meaning of depth."
     (conn-dispatch-handle)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
-  (throw 'dispatch-loop-exit nil))
+  (throw 'dispatch-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
   (setq dispatch-quit-flag t)
-  (throw 'dispatch-loop-exit nil))
+  (throw 'dispatch-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
   (unless conn-dispatch-no-other-end
@@ -2059,13 +2039,13 @@ the meaning of depth."
          (conn-dispatch-handle-and-redisplay))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
-  (when conn--dispatch-undo-change-groups
+  (when conn--dispatch-change-groups
     ;; pop the current loop's change group first
     (dotimes (_ 2)
       (pcase-dolist (`(,_ . ,undo-fn)
-                     (pop conn--dispatch-undo-change-groups))
+                     (pop conn--dispatch-change-groups))
         (funcall undo-fn :undo))))
-  (conn-dispatch-handle-and-redisplay))
+  (throw 'dispatch-undo nil))
 
 ;;;;; Dispatch Target Finders
 
@@ -2829,24 +2809,19 @@ contain targets."
     (with-selected-window win
       (let* ((hscroll (window-hscroll))
              (padding-function #'conn--right-justify-padding))
-        (cl-macrolet ((goto-col ()
-                        `(if (zerop hscroll)
-                             0
-                           (vertical-motion (cons 1 0)))))
-          (save-excursion
-            (pcase-dolist (`(,vbeg . ,vend)
-                           (conn--visible-regions (window-start) (window-end)))
-              (goto-char vbeg)
-              (goto-col)
-              (conn-make-target-overlay
-               (point) 0
-               :padding-function padding-function)
-              (while (< (point) vend)
-                (forward-line)
-                (goto-col)
-                (conn-make-target-overlay
-                 (point) 0
-                 :padding-function padding-function)))))))))
+        (save-excursion
+          (goto-char (window-start))
+          (vertical-motion (cons (if (zerop hscroll) 0 1) 0))
+          (when (< (point) (window-end))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function padding-function))
+          (while (progn
+                   (vertical-motion (cons (if (zerop hscroll) 0 1) 1))
+                   (< (point) (window-end)))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function padding-function)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-lines)))
   nil)
@@ -3073,21 +3048,23 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto
                     (action-description "Goto"))
-      (window pt thing thing-arg transform)
-    (select-window window)
-    (conn-dispatch-loop-change-group)
-    (unless (and (= pt (point))
-                 (region-active-p))
-      (let ((forward (< (point) pt)))
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-dispatch-bounds `(,beg . ,end) transform)
-           (if (region-active-p)
-               (goto-char (if (and forward (not (eq thing 'point)))
-                              end
-                            beg))
-             (conn--push-ephemeral-mark end)
-             (goto-char beg)))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                  (conn-select-target)))
+      (select-window window)
+      (conn-dispatch-change-group)
+      (unless (and (= pt (point))
+                   (region-active-p))
+        (let ((forward (< (point) pt)))
+          (pcase (conn-bounds-of-dispatch thing arg pt)
+            ((conn-dispatch-bounds `(,beg . ,end) transform)
+             (if (region-active-p)
+                 (goto-char (if (and forward (not (eq thing 'point)))
+                                end
+                              beg))
+               (conn--push-ephemeral-mark end)
+               (goto-char beg)))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
@@ -3096,12 +3073,14 @@ contain targets."
   (oclosure-lambda (conn-dispatch-push-button
                     (action-description "Push Button")
                     (action-no-history t))
-      (window pt _thing _thing-arg _transform)
-    (select-window window)
-    (if (button-at pt)
-        (push-button pt)
-      (when (fboundp 'widget-apply-action)
-        (widget-apply-action (get-char-property pt 'button) pt)))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
+      (select-window window)
+      (if (button-at pt)
+          (push-button pt)
+        (when (fboundp 'widget-apply-action)
+          (widget-apply-action (get-char-property pt 'button) pt))))))
 
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
@@ -3136,23 +3115,25 @@ contain targets."
                            (not
                             (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-          (window pt thing thing-arg transform)
-        (with-selected-window window
-          (conn-dispatch-loop-change-group)
-          (save-mark-and-excursion
-            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-              ((conn-dispatch-bounds `(,beg . ,end) transform)
-               (goto-char beg)
-               (when (and separator (< end beg))
-                 (conn-dispatch-insert-separator separator))
-               (conn--push-ephemeral-mark)
-               (insert-for-yank str)
-               (when (and separator (not (< end beg)))
-                 (conn-dispatch-insert-separator separator))
-               (conn-dispatch-action-pulse
-                (- (point) (length str))
-                (point)))
-              (_ (user-error "Cannot find thing at point")))))))))
+          ()
+        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                      (conn-select-target)))
+          (with-selected-window window
+            (conn-dispatch-change-group)
+            (save-mark-and-excursion
+              (pcase (conn-bounds-of-dispatch thing arg pt)
+                ((conn-dispatch-bounds `(,beg . ,end) transform)
+                 (goto-char beg)
+                 (when (and separator (< end beg))
+                   (conn-dispatch-insert-separator separator))
+                 (conn--push-ephemeral-mark)
+                 (insert-for-yank str)
+                 (when (and separator (not (< end beg)))
+                   (conn-dispatch-insert-separator separator))
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point)))
+                (_ (user-error "Cannot find thing at point"))))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -3185,20 +3166,22 @@ contain targets."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt thing thing-arg transform)
-      (with-selected-window window
-        (conn-dispatch-loop-change-group)
-        (save-mark-and-excursion
-          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (delete-region beg end)
-             (insert-for-yank str)
-             (conn-dispatch-action-pulse
-              (- (point) (length str))
-              (point)))
-            (_ (user-error "Cannot find %s"
-                           (conn-thing-pretty-print thing)))))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (save-mark-and-excursion
+            (pcase (conn-bounds-of-dispatch thing arg pt)
+              ((conn-bounds `(,beg . ,end) transform)
+               (goto-char beg)
+               (delete-region beg end)
+               (insert-for-yank str)
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))
+              (_ (user-error "Cannot find %s"
+                             (conn-thing-pretty-print thing))))))))))
 
 (oclosure-define (conn-dispatch-yank-to-replace
                   (:parent conn-action))
@@ -3213,17 +3196,19 @@ contain targets."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-change-group)
-      (save-excursion
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
-           (delete-region beg end)
-           (insert-for-yank str)
-           (conn-dispatch-action-pulse
-            (- (point) (length str)) (point)))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (delete-region beg end)
+             (insert-for-yank str)
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point)))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-reading-yank-to-replace
                   (:parent conn-action))
@@ -3238,17 +3223,19 @@ contain targets."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-change-group)
-      (save-excursion
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
-           (delete-region beg end)
-           (insert-for-yank str)
-           (conn-dispatch-action-pulse
-            (- (point) (length str)) (point)))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (delete-region beg end)
+             (insert-for-yank str)
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point)))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
@@ -3270,22 +3257,24 @@ contain targets."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-change-group)
-      (save-excursion
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-dispatch-bounds `(,beg . ,end) transform)
-           (goto-char beg)
-           (when (and separator (< end beg))
-             (conn-dispatch-insert-separator separator))
-           (insert-for-yank str)
-           (when (and separator (not (< end beg)))
-             (conn-dispatch-insert-separator separator))
-           (conn-dispatch-action-pulse
-            (- (point) (length str))
-            (point)))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-dispatch-bounds `(,beg . ,end) transform)
+             (goto-char beg)
+             (when (and separator (< end beg))
+               (conn-dispatch-insert-separator separator))
+             (insert-for-yank str)
+             (when (and separator (not (< end beg)))
+               (conn-dispatch-insert-separator separator))
+             (conn-dispatch-action-pulse
+              (- (point) (length str))
+              (point)))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to) &optional short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
@@ -3315,25 +3304,27 @@ contain targets."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt thing thing-arg transform)
-      (with-selected-window window
-        (conn-dispatch-loop-change-group)
-        (save-excursion
-          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-            ((conn-dispatch-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (when (and separator (< end beg))
-               (conn-dispatch-insert-separator separator))
-             (insert-for-yank str)
-             (when (and separator (not (< end beg)))
-               (conn-dispatch-insert-separator separator))
-             (conn-dispatch-action-pulse
-              (- (point) (length str))
-              (point)))
-            (_ (user-error "Cannot find thing at point")))
-          (conn-dispatch-action-pulse
-           (- (point) (length str))
-           (point)))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                    (conn-select-target)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (save-excursion
+            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+              ((conn-dispatch-bounds `(,beg . ,end) transform)
+               (goto-char beg)
+               (when (and separator (< end beg))
+                 (conn-dispatch-insert-separator separator))
+               (insert-for-yank str)
+               (when (and separator (not (< end beg)))
+                 (conn-dispatch-insert-separator separator))
+               (conn-dispatch-action-pulse
+                (- (point) (length str))
+                (point)))
+              (_ (user-error "Cannot find thing at point")))
+            (conn-dispatch-action-pulse
+             (- (point) (length str))
+             (point))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
@@ -3377,25 +3368,27 @@ contain targets."
                            (not
                             (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-          (window pt thing thing-arg transform)
-        (with-selected-window window
-          (conn-dispatch-loop-change-group)
-          (save-excursion
-            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-              ((conn-dispatch-bounds `(,beg . ,end) transform)
-               (goto-char beg)
-               (when (< end beg)
-                 (conn-dispatch-insert-separator separator))
-               (insert-for-yank str)
-               (when (not (< end beg))
-                 (conn-dispatch-insert-separator separator))
-               (conn-dispatch-action-pulse
-                (- (point) (length str))
-                (point)))
-              (_ (user-error "Cannot find thing at point")))
-            (conn-dispatch-action-pulse
-             (- (point) (length str))
-             (point))))))))
+          ()
+        (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                      (conn-select-target)))
+          (with-selected-window window
+            (conn-dispatch-change-group)
+            (save-excursion
+              (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                ((conn-dispatch-bounds `(,beg . ,end) transform)
+                 (goto-char beg)
+                 (when (< end beg)
+                   (conn-dispatch-insert-separator separator))
+                 (insert-for-yank str)
+                 (when (not (< end beg))
+                   (conn-dispatch-insert-separator separator))
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point)))
+                (_ (user-error "Cannot find thing at point")))
+              (conn-dispatch-action-pulse
+               (- (point) (length str))
+               (point)))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (conn-dispatch-send--action-change-group action))
@@ -3433,18 +3426,20 @@ contain targets."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt thing thing-arg transform)
-      (with-selected-window window
-        (conn-dispatch-loop-change-group)
-        (save-excursion
-          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (delete-region beg end)
-             (insert-for-yank str)
-             (conn-dispatch-action-pulse
-              (- (point) (length str)) (point)))
-            (_ (user-error "Cannot find thing at point"))))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                    (conn-select-target)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (save-excursion
+            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+              ((conn-bounds `(,beg . ,end) transform)
+               (goto-char beg)
+               (delete-region beg end)
+               (insert-for-yank str)
+               (conn-dispatch-action-pulse
+                (- (point) (length str)) (point)))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (conn-dispatch-send-replace--action-change-group action))
@@ -3460,17 +3455,19 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-change-group)
-      ;; If there is a keyboard macro in the register we would like to
-      ;; amalgamate the undo
-      (save-excursion
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-dispatch-bounds `(,beg . ,_end) transform)
-           (goto-char beg)
-           (conn-register-load register))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        ;; If there is a keyboard macro in the register we would like to
+        ;; amalgamate the undo
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-dispatch-bounds `(,beg . ,_end) transform)
+             (goto-char beg)
+             (conn-register-load register))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load) &optional short)
   (if short "Register"
@@ -3483,17 +3480,19 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load-replace)))
   (oclosure-lambda (conn-dispatch-register-load-replace
                     (register (register-read-with-preview "Register: ")))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (conn-dispatch-loop-change-group)
-      ;; If there is a keyboard macro in the register we would like to
-      ;; amalgamate the undo
-      (save-excursion
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
-           (delete-region beg end)
-           (conn-register-load register))
-          (_ (user-error "Cannot find thing at point")))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        ;; If there is a keyboard macro in the register we would like to
+        ;; amalgamate the undo
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (delete-region beg end)
+             (conn-register-load register))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load-replace) &optional short)
   (if short "Register Replace"
@@ -3523,25 +3522,27 @@ contain targets."
   (oclosure-lambda (conn-dispatch-copy-from
                     (action-description "Copy From")
                     (action-opoint (copy-marker (point) t)))
-      (window pt thing thing-arg transform)
-    (let (str)
-      (with-selected-window window
-        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
-           (conn-dispatch-action-pulse beg end)
-           (setq str (filter-buffer-substring beg end)))
-          (_ (user-error "Cannot find thing at point"))))
-      (with-current-buffer (marker-buffer action-opoint)
-        (conn-dispatch-loop-change-group)
-        (cond ((null str)
-               (user-error "Cannot find thing at point"))
-              ((/= (point) action-opoint)
-               (save-excursion
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (let (str)
+        (with-selected-window window
+          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (conn-dispatch-action-pulse beg end)
+             (setq str (filter-buffer-substring beg end)))
+            (_ (user-error "Cannot find thing at point"))))
+        (with-current-buffer (marker-buffer action-opoint)
+          (conn-dispatch-change-group)
+          (cond ((null str)
+                 (user-error "Cannot find thing at point"))
+                ((/= (point) action-opoint)
+                 (save-excursion
+                   (goto-char action-opoint)
+                   (insert-for-yank str)))
+                (t
                  (goto-char action-opoint)
-                 (insert-for-yank str)))
-              (t
-               (goto-char action-opoint)
-               (insert-for-yank str)))))))
+                 (insert-for-yank str))))))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
@@ -3552,16 +3553,18 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from-replace)))
   (oclosure-lambda (conn-dispatch-copy-from-replace
                     (action-description "Copy From and Replace"))
-      (window pt thing thing-arg transform)
-    (with-selected-window window
-      (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-        ((conn-bounds `(,beg . ,end) transform)
-         (conn-dispatch-action-pulse beg end)
-         (copy-region-as-kill beg end))
-        (_ (user-error "Cannot find thing at point"))))
-    (conn-dispatch-loop-change-group)
-    (delete-region (region-beginning) (region-end))
-    (yank)))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+          ((conn-bounds `(,beg . ,end) transform)
+           (conn-dispatch-action-pulse beg end)
+           (copy-region-as-kill beg end))
+          (_ (user-error "Cannot find thing at point"))))
+      (conn-dispatch-change-group)
+      (delete-region (region-beginning) (region-end))
+      (yank))))
 
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action)
@@ -3595,20 +3598,22 @@ contain targets."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt thing thing-arg transform)
-      (conn-dispatch-loop-change-group (current-buffer) (window-buffer window))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing thing-arg)
-            ((and bounds (conn-bounds `(,beg . ,end) transform))
-             (kill-region beg end)
-             (funcall conn-kill-fixup-whitespace-function bounds))
-            (_ (user-error "Cannot find thing at point")))))
-      (with-current-buffer (marker-buffer action-opoint)
-        (save-excursion
-          (goto-char action-opoint)
-          (yank))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                    (conn-select-target)))
+        (conn-dispatch-change-group (current-buffer) (window-buffer window))
+        (with-selected-window window
+          (save-excursion
+            (goto-char pt)
+            (pcase (conn-bounds-of thing thing-arg)
+              ((and bounds (conn-bounds `(,beg . ,end) transform))
+               (kill-region beg end)
+               (funcall conn-kill-fixup-whitespace-function bounds))
+              (_ (user-error "Cannot find thing at point")))))
+        (with-current-buffer (marker-buffer action-opoint)
+          (save-excursion
+            (goto-char action-opoint)
+            (yank)))))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
   (set-marker (conn-dispatch-take-replace--action-opoint action) nil)
@@ -3647,18 +3652,20 @@ contain targets."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing thing-arg transform)
-    (conn-dispatch-loop-change-group (current-buffer) (window-buffer window))
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (conn-bounds-of thing thing-arg)
-          ((and bounds (conn-bounds `(,beg . ,end) transform))
-           (kill-region beg end)
-           (funcall conn-kill-fixup-whitespace-function bounds))
-          (_ (user-error "Cannot find thing at point")))))
-    (with-current-buffer (marker-buffer action-opoint)
-      (yank))))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                  (conn-select-target)))
+      (conn-dispatch-change-group (current-buffer) (window-buffer window))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (conn-bounds-of thing thing-arg)
+            ((and bounds (conn-bounds `(,beg . ,end) transform))
+             (kill-region beg end)
+             (funcall conn-kill-fixup-whitespace-function bounds))
+            (_ (user-error "Cannot find thing at point")))))
+      (with-current-buffer (marker-buffer action-opoint)
+        (yank)))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take))
   (set-marker (conn-dispatch-take--action-opoint action) nil))
@@ -3669,13 +3676,15 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump
                     (action-description "Jump"))
-      (window pt _thing _thing-arg _transform)
-    (select-window window)
-    (conn-dispatch-loop-change-group)
-    (unless (= pt (point))
-      (unless (region-active-p)
-        (push-mark nil t))
-      (goto-char pt))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (select-window window)
+      (conn-dispatch-change-group)
+      (unless (= pt (point))
+        (unless (region-active-p)
+          (push-mark nil t))
+        (goto-char pt)))))
 
 (oclosure-define (conn-dispatch-kapply
                   (:parent conn-action))
@@ -3698,6 +3707,14 @@ contain targets."
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
 
+(cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply)
+                                            _repeat)
+  (let ((conn-label-select-always-prompt t))
+    (cl-call-next-method)
+    (unless conn-kapply-suppress-message
+      (message "Kapply completed successfully after %s iterations"
+               conn-dispatch-iteration-count))))
+
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-kapply) &optional short)
   (if short "Kapply"
     (concat "Kapply"
@@ -3716,16 +3733,18 @@ contain targets."
                        (lambda (win)
                          (not (buffer-local-value 'buffer-read-only
                                                   (window-buffer win))))))
-        (window pt thing thing-arg transform)
-      (with-selected-window window
-        (conn-dispatch-loop-change-group)
-        (save-mark-and-excursion
-          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-            ((conn-dispatch-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (conn--push-ephemeral-mark end)
-             (eval command))
-            (_ (user-error "Cannot find thing at point"))))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                    (conn-select-target)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (save-mark-and-excursion
+            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+              ((conn-dispatch-bounds `(,beg . ,end) transform)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end)
+               (eval command))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command) &optional short)
   (if short "Repeat Cmd"
@@ -3742,13 +3761,34 @@ contain targets."
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-      ( window1 pt1 thing1 thing-arg1 transform1
-        window2 pt2 thing2 thing-arg2 transform2)
-    (conn-dispatch-loop-change-group (window-buffer window1)
-                                     (window-buffer window2))
-    (conn--dispatch-transpose-subr
-     (window-buffer window1) pt1 thing1 thing-arg1 transform1
-     (window-buffer window2) pt2 thing2 thing-arg2 transform2)))
+      ()
+    (pcase-let* ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
+                  (conn-select-target))
+                 (ov (make-overlay pt1 pt1 (window-buffer win1))))
+      (unwind-protect
+          (let ((conn-target-predicate conn-target-predicate))
+            (add-function :before-while conn-target-predicate
+                          (lambda (pt _length window)
+                            (not (and (eq window win1)
+                                      (eql pt pt1)))))
+            (overlay-put ov 'window win1)
+            (with-selected-window win1
+              (save-excursion
+                (goto-char pt1)
+                (if (or (eobp) (eolp))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'face 'conn-target-preview-face))
+                  (move-overlay ov pt1 (1+ pt1))
+                  (overlay-put ov 'face 'isearch))))
+            (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
+                         (conn-select-target)))
+              (delete-overlay ov)
+              (conn-dispatch-change-group (window-buffer win1)
+                                          (window-buffer win2))
+              (conn--dispatch-transpose-subr
+               (window-buffer win1) pt1 thing1 arg1 transform1
+               (window-buffer win2) pt2 thing2 arg2 transform2)))
+        (delete-overlay ov)))))
 
 (defun conn--dispatch-transpose-subr ( buffer1 pt1 thing1 arg1 transform1
                                        buffer2 pt2 thing2 arg2 transform2)
@@ -3957,6 +3997,7 @@ contain targets."
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-read-args-last-command nil)
+         (conn-dispatch-repeating (and repeat t))
          (conn--dispatch-prev-state
           (list conn-target-window-predicate
                 conn-target-predicate
@@ -4041,59 +4082,6 @@ contain targets."
           (set-marker opoint nil)
           (let ((inhibit-message conn-read-args-inhibit-message))
             (message nil)))))))
-
-(cl-defgeneric conn-dispatch-perform-action (action repeat))
-
-(cl-defmethod conn-dispatch-perform-action ((action conn-action) repeat)
-  (conn-dispatch-loop repeat
-    (pcase-let* ((`(,pt ,win ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (funcall action win pt thing arg transform))))
-
-(cl-defmethod conn-dispatch-perform-action ((action conn-dispatch-transpose)
-                                            repeat)
-  (conn-dispatch-loop repeat
-    (pcase-let* ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
-                  (conn-select-target))
-                 (ov (make-overlay pt1 pt1 (window-buffer win1))))
-      (unwind-protect
-          (let ((conn-target-predicate conn-target-predicate))
-            (overlay-put ov 'window win1)
-            (with-selected-window win1
-              (save-excursion
-                (goto-char pt1)
-                (if (or (eobp) (eolp))
-                    (overlay-put ov 'after-string
-                                 (propertize " " 'face 'conn-target-preview-face))
-                  (move-overlay ov pt1 (1+ pt1))
-                  (overlay-put ov 'face 'isearch))))
-            (add-function :before-while conn-target-predicate
-                          (lambda (pt _length window)
-                            (not (and (eq window win1)
-                                      (eql pt pt1)))))
-            (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
-                         (conn-select-target)))
-              (delete-overlay ov)
-              (funcall action
-                       win1 pt1 thing1 arg1 transform1
-                       win2 pt2 thing2 arg2 transform2)))
-        (delete-overlay ov)))))
-
-(cl-defmethod conn-dispatch-perform-action ((action conn-dispatch-kapply)
-                                            repeat)
-  (let ((conn-label-select-always-prompt t))
-    (conn-dispatch-loop repeat
-      (pcase-let* ((`(,pt ,win ,thing ,arg ,transform)
-                    (conn-select-target)))
-        (while
-            (condition-case err
-                (progn
-                  (funcall action win pt thing arg transform)
-                  nil)
-              (user-error (message (cadr err)) t))))))
-  (unless conn-kapply-suppress-message
-    (message "Kapply completed successfully after %s iterations"
-             conn-dispatch-iteration-count)))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
@@ -4276,21 +4264,23 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                (action-window-predicate
                                 (let ((win (selected-window)))
                                   (lambda (window) (eq win window)))))
-                 (window pt thing thing-arg transform)
-               (with-selected-window window
-                 (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-                   ((and (conn-dispatch-bounds `(,beg . ,end) transform)
-                         bound)
-                    (when repeat
-                      (push (make-overlay beg end) ovs)
+                 ()
+               (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                             (conn-select-target)))
+                 (with-selected-window window
+                   (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                     ((and (conn-dispatch-bounds `(,beg . ,end) transform)
+                           bound)
+                      (when repeat
+                        (push (make-overlay beg end) ovs)
+                        (conn-dispatch-undo-case 0
+                          ((or :cancel :undo) (delete-overlay (pop ovs))))
+                        (overlay-put (car ovs) 'face 'region))
+                      (push bound subregions)
                       (conn-dispatch-undo-case 0
-                        ((or :cancel :undo) (delete-overlay (pop ovs))))
-                      (overlay-put (car ovs) 'face 'region))
-                    (push bound subregions)
-                    (conn-dispatch-undo-case 0
-                      ((or :cancel :undo) (pop subregions))))
-                   (_
-                    (user-error "No %s found at point" thing)))))
+                        ((or :cancel :undo) (pop subregions))))
+                     (_
+                      (user-error "No %s found at point" thing))))))
              thing thing-arg transform
              :repeat repeat
              :other-end :no-other-end)
@@ -4321,13 +4311,15 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                           (action-window-predicate
                            (let ((win (selected-window)))
                              (lambda (window) (eq win window)))))
-            (window pt thing thing-arg transform)
-          (with-selected-window window
-            (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-              ((conn-dispatch-bounds `(,beg . ,end) transform)
-               (setq obeg beg
-                     oend end))
-              (_ (user-error "No %s found at point" thing)))))
+            ()
+          (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                        (conn-select-target)))
+            (with-selected-window window
+              (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                ((conn-dispatch-bounds `(,beg . ,end) transform)
+                 (setq obeg beg
+                       oend end))
+                (_ (user-error "No %s found at point" thing))))))
         (conn-bounds-thing bounds)
         (conn-bounds-arg bounds)
         (when (conn-transformed-bounds-p bounds)

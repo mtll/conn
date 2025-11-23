@@ -331,17 +331,6 @@
 
 (conn-set-mode-property 'dired-mode :disable-mark-cursor t)
 
-(defun conn--dispatch-dired-lines ()
-  (let ((dired-movement-style 'bounded))
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-min))
-        (while (/= (point)
-                   (progn
-                     (dired-next-line 1)
-                     (point)))
-          (conn-make-target-overlay (point) 0))))))
-
 (defun conn--dispatch-dired-dirline ()
   (save-excursion
     (with-restriction (window-start) (window-end)
@@ -362,15 +351,11 @@
           (conn-make-target-overlay
            (+ 2 marker) (- (line-end-position) marker 2)))))))
 
-(conn-register-thing 'dired-line)
+(conn-register-thing 'dired-line :parent 'line)
 
 (conn-register-thing-commands
  'dired-line nil
  'dired-previous-line 'dired-next-line)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-line))
-                                      _arg)
-  #'conn--dispatch-dired-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
   (conn-make-action 'conn-dispatch-jump))
@@ -413,15 +398,17 @@
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing _thing-arg _transform)
-    (with-selected-window window
-      (save-excursion
-        (let ((regexp (dired-marker-regexp)))
-          (goto-char pt)
-          (goto-char (line-beginning-position))
-          (if (looking-at regexp)
-              (dired-unmark 1)
-            (dired-mark 1)))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (let ((regexp (dired-marker-regexp)))
+            (goto-char pt)
+            (goto-char (line-beginning-position))
+            (if (looking-at regexp)
+                (dired-unmark 1)
+              (dired-mark 1))))))))
 
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
@@ -434,11 +421,13 @@
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing _thing-arg _transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (dired-kill-line)))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (dired-kill-line))))))
 
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
@@ -451,11 +440,13 @@
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing _thing-arg _transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (dired-kill-subdir)))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (dired-kill-subdir))))))
 
 ;;;; Diff
 
@@ -644,14 +635,16 @@
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'ibuffer-mode))))
-      (window pt _thing _thing-arg _transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (if (or (null (ibuffer-current-mark))
-                (= (ibuffer-current-mark) ? ))
-            (ibuffer-mark-forward nil nil 1)
-          (ibuffer-unmark-forward nil nil 1))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (if (or (null (ibuffer-current-mark))
+                  (= (ibuffer-current-mark) ? ))
+              (ibuffer-mark-forward nil nil 1)
+            (ibuffer-unmark-forward nil nil 1)))))))
 
 (defvar conn-ibuffer-ref
   (conn-reference-page "Ibuffer"
@@ -769,15 +762,17 @@
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'bookmark-bmenu-mode))))
-      (window pt _thing _thing-arg _transform)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (beginning-of-line)
-        (when (tabulated-list-get-entry)
-          (if (search-forward ">" (+ (point) tabulated-list-padding) t)
-              (bookmark-bmenu-unmark)
-            (bookmark-bmenu-mark)))))))
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (beginning-of-line)
+          (when (tabulated-list-get-entry)
+            (if (search-forward ">" (+ (point) tabulated-list-padding) t)
+                (bookmark-bmenu-unmark)
+              (bookmark-bmenu-mark))))))))
 
 (defun conn-bmenu-target-finder ()
   (save-excursion
@@ -919,20 +914,24 @@
                         (eq 'Info-mode
                             (buffer-local-value 'major-mode
                                                 (window-buffer win))))))
-       (win pt _thing _thing-arg)
-     (select-window win)
-     (goto-char pt)
-     (Info-follow-nearest-node))
-   (lambda ()
-     (dolist (win (conn--get-target-windows))
-       (with-selected-window win
-         (save-excursion
-           (let ((last-pt (goto-char (window-end))))
-             (while (and (> last-pt (progn
-                                      (Info-prev-reference)
-                                      (setq last-pt (point))))
-                         (<= (window-start) (point) (window-end)))
-               (conn-make-target-overlay (point) 0)))))))
+       ()
+     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                   (conn-select-target)))
+       (select-window window)
+       (goto-char pt)
+       (Info-follow-nearest-node)))
+   (conn-anonymous-thing
+     'point
+     :target-finder ( :method (_self _arg)
+                      (dolist (win (conn--get-target-windows))
+                        (with-selected-window win
+                          (save-excursion
+                            (let ((last-pt (goto-char (window-end))))
+                              (while (and (> last-pt (progn
+                                                       (Info-prev-reference)
+                                                       (setq last-pt (point))))
+                                          (<= (window-start) (point) (window-end)))
+                                (conn-make-target-overlay (point) 0))))))))
    nil nil
    :other-end :no-other-end))
 

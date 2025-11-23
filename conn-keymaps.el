@@ -427,8 +427,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-thingatpt-state)
   "u" conn-backward-word-remap
-  "n" conn-backward-sexp-remap
-  "k" 'forward-line)
+  "n" conn-backward-sexp-remap)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
@@ -484,6 +483,22 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "'" 'conn-dispatch-kapply
+  "t" 'conn-dispatch-copy-to
+  "T" 'conn-dispatch-copy-to-replace
+  "C-y" 'conn-dispatch-yank-to-replace
+  "M-y" 'conn-dispatch-reading-yank-to-replace
+  "y" 'conn-dispatch-yank-to
+  "Y" 'conn-dispatch-reading-yank-to
+  "f" 'conn-dispatch-copy-from
+  "F" 'conn-dispatch-copy-from-replace
+  "s" 'conn-dispatch-send
+  "S" 'conn-dispatch-send-replace
+  "d" 'conn-dispatch-take
+  "D" 'conn-dispatch-take-replace
+  "q" 'conn-dispatch-transpose
+  "." 'conn-dispatch-register-load
+  ">" 'conn-dispatch-register-load-replace
   "=" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch
@@ -498,8 +513,8 @@
                             (oclosure-lambda (conn-action
                                               (action-description "Previous Emacs State")
                                               (action-no-history t))
-                                (&rest args)
-                              (apply goto args)
+                                ()
+                              (funcall goto)
                               (conn-push-state 'conn-emacs-state))))
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point
@@ -522,7 +537,6 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
   "i" 'conn-backward-line
-  "k" 'forward-line
   "u" 'forward-symbol
   "f" 'conn-dispatch)
 

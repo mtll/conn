@@ -727,29 +727,43 @@ A zero means repeat until error."
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil)
                         (action-auto-repeat t))
-          (window pt thing thing-arg thing-transform)
-        (with-selected-window window
-          (conn-dispatch-loop-change-group)
-          (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-            ((conn-bounds (and bounds `(,beg . ,end))
-                          thing-transform)
-             (conn-dispatch-undo-case 50
-               (:undo (conn-dispatch-undo-pulse beg end)))
-             (with-undo-amalgamate
-               (conn-with-dispatch-suspended
-                 (let ((conn-kapply-suppress-message t))
-                   (conn--kapply-macro
-                    (pcase applier
-                      ('conn--kmacro-apply
-                       (lambda (iterator)
-                         (conn--kmacro-apply iterator nil macro)))
-                      (kmacro kmacro))
-                    (conn--kapply-region-iterator (list bounds))
-                    `(conn--kapply-relocate-to-region
-                      conn--kapply-pulse-region
-                      ,@pipeline))))))
-            (_ (user-error "Cannot find thing at point"))))
-        (unless macro (setq macro (kmacro-ring-head))))
+          ()
+        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                      (conn-select-target))
+                     (counter (if macro
+                                  (kmacro--counter macro)
+                                kmacro-counter)))
+          (while
+              (condition-case err
+                  (progn
+                    (with-selected-window window
+                      (conn-dispatch-change-group)
+                      (pcase (conn-bounds-of-dispatch thing arg pt)
+                        ((conn-bounds (and bounds `(,beg . ,end))
+                                      transform)
+                         (conn-dispatch-undo-case 50
+                           (:undo (conn-dispatch-undo-pulse beg end)))
+                         (with-undo-amalgamate
+                           (conn-with-dispatch-suspended
+                             (let ((conn-kapply-suppress-message t))
+                               (conn--kapply-macro
+                                (pcase applier
+                                  ((or 'conn--kmacro-apply
+                                       (guard macro))
+                                   (lambda (iterator)
+                                     (conn--kmacro-apply iterator nil macro)))
+                                  (_ applier))
+                                (conn--kapply-region-iterator (list bounds))
+                                `(conn--kapply-relocate-to-region
+                                  conn--kapply-pulse-region
+                                  ,@pipeline))))))
+                        (_ (user-error "Cannot find thing at point"))))
+                    nil)
+                (user-error (message (cadr err)) t)))
+          (unless macro (setq macro (kmacro-ring-head)))
+          (conn-dispatch-undo-case 0
+            ((or :undo :cancel)
+             (setf (kmacro--counter macro) counter)))))
       (funcall callback))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
