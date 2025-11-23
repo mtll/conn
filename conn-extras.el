@@ -357,35 +357,26 @@
  'dired-line nil
  'dired-previous-line 'dired-next-line)
 
-(defun conn--dispatch-dired-lines (win)
-  (with-selected-window win
-    (save-excursion
-      (goto-char (window-start))
-      (vertical-motion (cons 1 0))
-      (when (< (point) (window-end))
-        (conn-make-target-overlay
-         (point) 0
-         :padding-function #'conn--right-justify-padding))
-      (while (progn
-               (vertical-motion (cons 1 1))
-               (< (point) (window-end)))
-        (conn-make-target-overlay
-         (point) 0
-         :padding-function #'conn--right-justify-padding)))))
+(defun conn--dispatch-dired-lines ()
+  (save-excursion
+    (goto-char (window-start))
+    (vertical-motion (cons 1 0))
+    (when (< (point) (window-end))
+      (conn-make-target-overlay
+       (point) 0
+       :padding-function #'conn--right-justify-padding))
+    (while (progn
+             (vertical-motion (cons 1 1))
+             (< (point) (window-end)))
+      (conn-make-target-overlay
+       (point) 0
+       :padding-function #'conn--right-justify-padding))))
 
-(cl-defmethod conn-dispatch-lines :extra "dired" (win)
-  (if (provided-mode-derived-p
-       (buffer-local-value 'major-mode (window-buffer win))
-       (list 'dired-mode))
-      (conn--dispatch-dired-lines win)
-    (cl-call-next-method)))
+(cl-defmethod conn-dispatch-lines (&context (major-mode dired-mode))
+  (conn--dispatch-dired-lines))
 
-(cl-defmethod conn-dispatch-columns :extra "dired" (win)
-  (if (provided-mode-derived-p
-       (buffer-local-value 'major-mode (window-buffer win))
-       (list 'dired-mode))
-      (conn--dispatch-dired-lines win)
-    (cl-call-next-method)))
+(cl-defmethod conn-dispatch-columns (&context (major-mode dired-mode))
+  (conn--dispatch-dired-lines))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
   (conn-make-action 'conn-dispatch-jump))
@@ -804,17 +795,16 @@
                 (bookmark-bmenu-unmark)
               (bookmark-bmenu-mark))))))))
 
-(defun conn-bmenu-target-finder (win)
-  (with-selected-window win
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-min))
-        (while (progn
-                 (when (tabulated-list-get-entry)
-                   (conn-make-target-overlay
-                    (+ (point) tabulated-list-padding) 0))
-                 (forward-line)
-                 (not (eobp))))))))
+(defun conn-bmenu-target-finder ()
+  (save-excursion
+    (with-restriction (window-start) (window-end)
+      (goto-char (point-min))
+      (while (progn
+               (when (tabulated-list-get-entry)
+                 (conn-make-target-overlay
+                  (+ (point) tabulated-list-padding) 0))
+               (forward-line)
+               (not (eobp)))))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-bmenu-dispatch-state)
