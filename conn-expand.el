@@ -212,7 +212,7 @@ Expansions and contractions are provided by functions in
                    :display-handler #'conn--read-expand-display)
       ((bounds
         (oclosure-lambda (conn-read-args-argument
-                          (required t))
+                          (arg-required t))
             (self command)
           (pcase command
             ('conn-expand-exchange

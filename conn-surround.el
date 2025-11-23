@@ -52,10 +52,10 @@
 
 (defun conn-surround-property-argument (&optional value)
   (oclosure-lambda (conn-surround-property-argument
-                    (value (or value :whole))
-                    (keymap (define-keymap
-                              "w" :whole
-                              "e" :inner)))
+                    (arg-value (or value :whole))
+                    (arg-keymap (define-keymap
+                                  "w" :whole
+                                  "e" :inner)))
       (self cmd)
     (if (memq cmd '(:whole :inner))
         (conn-set-argument self cmd)
@@ -172,7 +172,7 @@
 (defun conn-surround-with-argument ()
   (declare (important-return-value t))
   (oclosure-lambda (conn-surround-with-argument
-                    (required t))
+                    (arg-required t))
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
@@ -204,7 +204,7 @@
       (self cmd)
     (if (eq cmd 'conn-padding-flag)
         (conn-set-argument
-         self (unless value
+         self (unless arg-value
                 (if (conn-read-args-consume-prefix-arg)
                     (read-string "Padding: ")
                   " ")))
@@ -459,7 +459,7 @@
 (defun conn-change-surround-argument ()
   (declare (important-return-value t))
   (oclosure-lambda (conn-change-surround-argument
-                    (required t))
+                    (arg-required t))
       (self cmd)
     (if (eq 'surround-self-insert cmd)
         (conn-set-argument

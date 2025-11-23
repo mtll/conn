@@ -1216,7 +1216,10 @@ the state stays active if the previous command was a prefix command."
   (setq deactivate-mark t))
 
 (defun conn-mark-state-keep-mark-active-p ()
-  (conn-substate-p conn-next-state 'conn-emacs-state))
+  (or (conn-substate-p conn-next-state 'conn-emacs-state)
+      (and (null (nth 1 conn--state-stack))
+           (eq (nth 2 conn--state-stack)
+               conn-current-state))))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
@@ -1584,22 +1587,28 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (oclosure-define (conn-read-args-argument
                   ;; (:predicate conn-read-args-argument-p)
-                  (:copier conn-set-argument (value &optional (set-flag t)))
-                  (:copier conn-unset-argument (value &aux (set-flag nil))))
-  (value :type t)
-  (set-flag :type boolean)
-  (required :type boolean)
-  (name :type (or nil string function))
-  (keymap :type keymap))
+                  (:copier conn-set-argument (arg-value &optional (arg-set-flag t)))
+                  (:copier conn-unset-argument (arg-value &aux (arg-set-flag nil))))
+  (arg-value :type t)
+  (arg-set-flag :type boolean)
+  (arg-required :type boolean)
+  (arg-name :type (or nil string function))
+  (arg-keymap :type keymap))
 
 (defalias 'conn-read-args-argument-name
-  'conn-read-args-argument--name)
+  'conn-read-args-argument--arg-name)
+
+(defalias 'conn-read-args-argument-required
+  'conn-read-args-argument--arg-required)
+
+(defalias 'conn-read-args-argument-set-flag
+  'conn-read-args-argument--arg-set-flag)
 
 (defalias 'conn-read-args-argument-value
-  'conn-read-args-argument--value)
+  'conn-read-args-argument--arg-value)
 
 (defalias 'conn-read-args-argument-keymap
-  'conn-read-args-argument--keymap)
+  'conn-read-args-argument--arg-keymap)
 
 (cl-defgeneric conn-argument-cancel (argument)
   ( :method (_arg) nil))
@@ -1609,8 +1618,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
            (side-effect-free t))
   ( :method (_arg) nil)
   ( :method ((arg conn-read-args-argument))
-    (and (conn-read-args-argument--required arg)
-         (not (conn-read-args-argument--set-flag arg)))))
+    (and (conn-read-args-argument-required arg)
+         (not (conn-read-args-argument-set-flag arg)))))
 
 (cl-defgeneric conn-argument-update (argument form)
   ( :method (arg _form) arg)

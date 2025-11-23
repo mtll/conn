@@ -680,9 +680,9 @@ instances of from-string.")
 
 (defun conn-isearch-thing-argument ()
   (oclosure-lambda (conn-isearch-thing-argument
-                    (keymap conn-isearch-thing-map)
+                    (arg-keymap conn-isearch-thing-map)
                     (recursive-edit t)
-                    (required t))
+                    (arg-required t))
       (self cmd)
     (if (conn-argument-predicate self cmd)
         (conn-set-argument
@@ -1397,12 +1397,12 @@ With arg N, insert N newlines."
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-indirect-argument
-                    (value initial)
-                    (keymap conn-indirect-map))
+                    (arg-value initial)
+                    (arg-keymap conn-indirect-map))
       (self cmd)
     (pcase cmd
       ('indirect
-       (conn-set-argument self (not value)))
+       (conn-set-argument self (not arg-value)))
       (_ self))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-indirect-argument)
@@ -1680,7 +1680,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                     (delete delete)
                     (append append)
                     (register register)
-                    (keymap conn-kill-how-map))
+                    (arg-keymap conn-kill-how-map))
       (self cmd)
     (pcase cmd
       ('append-next-kill
@@ -1924,13 +1924,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defun conn-separator-argument (&optional initial-value)
   (oclosure-lambda (conn-separator-argument
-                    (value initial-value)
-                    (keymap conn-separator-argument-keymap))
+                    (arg-value initial-value)
+                    (arg-keymap conn-separator-argument-keymap))
       (self cmd)
     (pcase cmd
       ('separator
-       (if (or (stringp value)
-               (eq 'default value))
+       (if (or (stringp arg-value)
+               (eq 'default arg-value))
            (conn-unset-argument self nil)
          (conn-set-argument
           self
@@ -1938,7 +1938,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
               (read-string "Separator: " nil nil nil t)
             'default))))
       ('register-separator
-       (if (eq value 'register)
+       (if (eq arg-value 'register)
            (conn-unset-argument self nil)
          (conn-set-argument self (get-register register-separator))))
       (_ self))))
@@ -2147,7 +2147,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (oclosure-lambda (conn-copy-how-argument
                     (append append)
                     (register register)
-                    (keymap conn-copy-how-map))
+                    (arg-keymap conn-copy-how-map))
       (self cmd)
     (pcase cmd
       ('append-next-kill
@@ -2370,8 +2370,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defun conn-duplicate-comment-argument (&optional value)
   (oclosure-lambda (conn-duplicate-comment-argument
-                    (value value)
-                    (keymap conn-duplicate-comment-argument-map))
+                    (arg-value value)
+                    (arg-keymap conn-duplicate-comment-argument-map))
       (self cmd)
     (pcase cmd
       ('duplicate-comment

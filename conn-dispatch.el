@@ -524,7 +524,7 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-target-argument ()
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-target-argument
-                    (required t)
+                    (arg-required t)
                     (recursive-edit t))
       (self cmd)
     (if (conn-argument-predicate self cmd)
@@ -547,14 +547,14 @@ themselves once the selection process has concluded."
   (declare (important-return-value t)
            (side-effect-free t))
   (oclosure-lambda (conn-transform-argument
-                    (value initial)
-                    (keymap conn-dispatch-transform-map))
+                    (arg-value initial)
+                    (arg-keymap conn-dispatch-transform-map))
       (self cmd)
-    (let* ((next (conn-transform-command-handler cmd value)))
+    (let* ((next (conn-transform-command-handler cmd arg-value)))
       (pcase cmd
         ('conn-transform-reset
          (conn-set-argument self nil))
-        ((guard (not (eq next value)))
+        ((guard (not (eq next arg-value)))
          (conn-set-argument self next))
         (_ self)))))
 
@@ -582,8 +582,8 @@ themselves once the selection process has concluded."
 
 (defun conn-dispatch-separator-argument (&optional value)
   (oclosure-lambda (conn-dispatch-separator-argument
-                    (value value)
-                    (keymap conn-dispatch-separator-argument-map))
+                    (arg-value value)
+                    (arg-keymap conn-dispatch-separator-argument-map))
       (self cmd)
     (pcase cmd
       ('unset-separator
@@ -698,7 +698,7 @@ themselves once the selection process has concluded."
 
 (oclosure-define (conn-dispatch-action-argument
                   (:parent conn-read-args-argument)
-                  (:copier conn-set-action-argument (repeat value)))
+                  (:copier conn-set-action-argument (repeat arg-value)))
   (repeat :type boolean))
 
 (defvar-keymap conn-dispatch-action-map
@@ -708,15 +708,15 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (setq conn--dispatch-thing-predicate #'always)
   (oclosure-lambda (conn-dispatch-action-argument
-                    (keymap conn-dispatch-action-map))
+                    (arg-keymap conn-dispatch-action-map))
       (self cmd)
     (pcase cmd
       ('repeat-dispatch
-       (conn-set-action-argument self (not repeat) value))
+       (conn-set-action-argument self (not repeat) arg-value))
       ((guard (conn-argument-predicate self cmd))
-       (conn-cancel-action value)
+       (conn-cancel-action arg-value)
        (condition-case err
-           (if-let* ((_(not (cl-typep value cmd)))
+           (if-let* ((_(not (cl-typep arg-value cmd)))
                      (action (conn-make-action cmd)))
                (progn
                  (setq conn--dispatch-thing-predicate
@@ -776,8 +776,8 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-other-end-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-other-end-argument
-                    (value value)
-                    (keymap conn-dispatch-other-end-map))
+                    (arg-value value)
+                    (arg-keymap conn-dispatch-other-end-map))
       (self cmd)
     (if (eq cmd 'dispatch-other-end)
         (conn-set-argument self (not value))
@@ -804,8 +804,8 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-repeat-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-repeat-argument
-                    (value value)
-                    (keymap conn-dispatch-repeat-arg-map))
+                    (arg-value value)
+                    (arg-keymap conn-dispatch-repeat-arg-map))
       (self cmd)
     (pcase cmd
       ('repeat-dispatch
@@ -833,8 +833,8 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-restrict-windows-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-restrict-windows-argument
-                    (value value)
-                    (keymap conn-dispatch-restrict-windows-map))
+                    (arg-value value)
+                    (arg-keymap conn-dispatch-restrict-windows-map))
       (self cmd)
     (if (eq cmd 'restrict-windows)
         (conn-set-argument self (not value))
