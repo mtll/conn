@@ -470,16 +470,18 @@
         'forward-sexp
         :pretty-print (:method (_self) "list")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-things-with-re-prefix
-                          'sexp (rx (syntax open-parenthesis)))))
+                         (conn-dispatch-things-with-re-prefix-targets
+                          :thing 'sexp
+                          :prefix-regexp (rx (syntax open-parenthesis)))))
   "]" (conn-anonymous-thing
         'sexp
         :pretty-print (:method (_self) "inner-list")
         :bounds-op ( :method (_self arg)
                      (conn-bounds-of 'down-list arg))
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-things-with-re-prefix
-                          'sexp (rx (syntax open-parenthesis))))))
+                         (conn-dispatch-things-with-re-prefix-targets
+                          :thing 'sexp
+                          :prefix-regexp (rx (syntax open-parenthesis))))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)

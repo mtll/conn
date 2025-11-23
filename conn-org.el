@@ -147,19 +147,18 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
                                       _arg)
-  (add-function :before-while
-                conn-target-window-predicate
-                'conn--org-window-p)
-  (conn-dispatch-re-matches org-link-any-re))
+  (conn-dispatch-regexp-targets
+   :regexp org-link-any-re
+   :fixed-length 0
+   :window-predicate #'conn--org-window-p))
 
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph))
                                       _arg)
-  (add-function :before-while
-                conn-target-window-predicate
-                'conn--org-window-p)
-  (conn-dispatch-all-things 'org-paragraph))
+  (conn-all-things-targets
+   :thing 'org-paragraph
+   :window-predicate #'conn--org-window-p))
 
 (conn-register-thing-commands
  'org-paragraph 'conn-continuous-thing-handler
@@ -232,11 +231,9 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading))
                                       _arg)
-  (let ((conn-target-window-predicate conn-target-window-predicate))
-    (add-function :before-while
-                  conn-target-window-predicate
-                  'conn--org-window-p)
-    (conn-dispatch-all-things 'org-heading)))
+  (conn-all-things-targets
+   :thing 'org-heading
+   :window-predicate #'conn--org-window-p))
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler

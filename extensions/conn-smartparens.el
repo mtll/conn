@@ -220,18 +220,20 @@
         'forward-sexp
         :pretty-print (:method (_self) "list")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-things-with-re-prefix
-                          'sexp (rx (or (syntax open-parenthesis)
-                                        (syntax string-quote))))))
+                         (conn-dispatch-things-with-re-prefix-targets
+                          :thing 'sexp
+                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                                                 (syntax string-quote))))))
   "]" (conn-anonymous-thing
         'sexp
         :pretty-print (:method (_self) "inner-list")
         :bounds-op ( :method (_self arg)
                      (conn-bounds-of 'sp-down-sexp arg))
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-things-with-re-prefix
-                          'sexp (rx (or (syntax open-parenthesis)
-                                        (syntax string-quote)))))))
+                         (conn-dispatch-things-with-re-prefix-targets
+                          :thing 'sexp
+                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                                                 (syntax string-quote)))))))
 
 (defun conntext-paren-state ()
   (conn-push-state 'conntext-paren-state)

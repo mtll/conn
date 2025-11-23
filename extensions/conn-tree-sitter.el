@@ -478,15 +478,11 @@
 
 (defclass conn-ts-query-targets ()
   ((things :initarg :things)
-   (region-predicate :initarg :region-predicate)))
+   (region-predicate :initarg :region-predicate)
+   (update-function :allocation :class
+                    :initform 'conn-ts-query-target-update)))
 
-(cl-defmethod conn-target-finder-update ((state conn-ts-query-targets))
-  (dolist (win (conn--get-target-windows))
-    (when (treesit-parser-list (window-buffer win))
-      (with-selected-window win
-        (conn-target-finder-update-window state)))))
-
-(cl-defmethod conn-target-finder-update-window ((state conn-ts-query-targets))
+(defun conn-ts-query-target-update (state)
   (let* ((region-pred (ignore-error unbound-slot
                         (oref state region-predicate)))
          (things (oref state things)))
@@ -554,28 +550,14 @@
                                         (conn-anonymous-thing-property self :bounds)
                                         conn-ts-multi-always-prompt))))))))))))
 
-(defclass conn-ts-all-things ()
-  ((thing :initarg :thing)))
+(cl-defmethod conn-target-finder-update ((state conn-ts-query-targets))
+  (let ((update (oref state update-function)))
+    (dolist (win (conn--get-target-windows))
+      (when (treesit-parser-list (window-buffer win))
+        (with-selected-window win
+          (funcall update state))))))
 
-(defun conn-ts--thing-predicate (thing)
-  (with-memoization (gethash (cons 'conn-all-things thing)
-                             conn-ts--symbol-cache)
-    (let ((fsym (conn-ts--make-symbol "conn-ts--all-" thing)))
-      (fset fsym (lambda (node)
-                   (treesit-node-match-p node thing)))
-      fsym)))
-
-(defun conn-ts--thing-node-query (thing)
-  `(((_) @node
-     (:pred? ,(conn-ts--thing-predicate thing) @node))))
-
-(cl-defmethod conn-target-finder-update ((state conn-ts-all-things))
-  (dolist (win (conn--get-target-windows))
-    (when (treesit-parser-list (window-buffer win))
-      (with-selected-window win
-        (conn-target-finder-update-window state)))))
-
-(cl-defmethod conn-target-finder-update-window ((state conn-ts-all-things))
+(defun conn-ts-all-things-update (state)
   (let* ((thing (oref state thing))
          (query (conn-ts--thing-node-query thing)))
     (cl-flet ((make-bounds (bounds parent-thing type)
@@ -637,6 +619,30 @@
                                      (conn-multi-thing-select
                                       (conn-anonymous-thing-property self :bounds)
                                       conn-ts-multi-always-prompt)))))))))))
+
+(defclass conn-ts-all-things ()
+  ((thing :initarg :thing)
+   (update-function :allocation :class
+                    :initform #'conn-ts-all-things-update)))
+
+(defun conn-ts--thing-predicate (thing)
+  (with-memoization (gethash (cons 'conn-all-things thing)
+                             conn-ts--symbol-cache)
+    (let ((fsym (conn-ts--make-symbol "conn-ts--all-" thing)))
+      (fset fsym (lambda (node)
+                   (treesit-node-match-p node thing)))
+      fsym)))
+
+(defun conn-ts--thing-node-query (thing)
+  `(((_) @node
+     (:pred? ,(conn-ts--thing-predicate thing) @node))))
+
+(cl-defmethod conn-target-finder-update ((state conn-ts-all-things))
+  (let ((update (oref state update-function)))
+    (dolist (win (conn--get-target-windows))
+      (when (treesit-parser-list (window-buffer win))
+        (with-selected-window win
+          (funcall update state))))))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
                                       _arg)
