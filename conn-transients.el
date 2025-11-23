@@ -723,6 +723,9 @@ A zero means repeat until error."
                      (transient-args transient-current-command)))
   (let ((pipeline (conn--transient-kapply-pipeline-args args))
         (applier (alist-get :kmacro args)))
+    (when (and (eq applier 'conn--kmacro-apply-step-edit)
+               (length= last-kbd-macro 0))
+      (error "No keyboard macro to edit"))
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil)

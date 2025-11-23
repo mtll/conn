@@ -1610,10 +1610,11 @@ Target overlays may override this default by setting the
             (when (and (not (posn-area posn))
                        (funcall conn-target-window-predicate win))
               (:return (list pt win nil))))))
-      (conn-dispatch-select-mode 1)
       (unwind-protect
-          (let ((inhibit-message t))
-            (cl-call-next-method))
+          (progn
+            (conn-dispatch-select-mode 1)
+            (let ((inhibit-message t))
+              (cl-call-next-method)))
         (conn-dispatch-select-mode -1)))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
@@ -1671,18 +1672,17 @@ Target overlays may override this default by setting the
           (catch 'dispatch-exit
             (let ((conn-dispatch-in-progress t))
               (while (or repeat (< conn-dispatch-iteration-count 1))
-                (catch 'dispatch-undo
-                  (condition-case err
-                      (progn
-                        (push nil conn--dispatch-change-groups)
-                        (funcall action)
-                        (cl-incf conn-dispatch-iteration-count))
-                    (user-error
-                     (pcase-dolist (`(,_ . ,undo-fn)
-                                    (pop conn--dispatch-change-groups))
-                       (funcall undo-fn :undo))
-                     (setf conn--read-args-error-message
-                           (error-message-string err))))))))
+                (condition-case err
+                    (catch 'dispatch-undo
+                      (push nil conn--dispatch-change-groups)
+                      (funcall action)
+                      (cl-incf conn-dispatch-iteration-count))
+                  (user-error
+                   (pcase-dolist (`(,_ . ,undo-fn)
+                                  (pop conn--dispatch-change-groups))
+                     (funcall undo-fn :undo))
+                   (setf conn--read-args-error-message
+                         (error-message-string err)))))))
           (setq success (not dispatch-quit-flag)))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
@@ -1903,9 +1903,10 @@ the meaning of depth."
                    (conn--dispatch-always-retarget nil)
                    (,select-mode conn-dispatch-select-mode))
          (message nil)
-         (if ,select-mode (conn-dispatch-select-mode -1))
          (unwind-protect
-             ,(macroexp-progn body)
+             (progn
+               (if ,select-mode (conn-dispatch-select-mode -1))
+               ,(macroexp-progn body))
            (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
@@ -2040,8 +2041,9 @@ the meaning of depth."
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
   (when conn--dispatch-change-groups
-    ;; pop the current loop's change group first
-    (dotimes (_ 2)
+    (if-let* ((curr (pop conn--dispatch-change-groups)))
+        (pcase-dolist (`(,_ . ,undo-fn) curr)
+          (funcall undo-fn :undo))
       (pcase-dolist (`(,_ . ,undo-fn)
                      (pop conn--dispatch-change-groups))
         (funcall undo-fn :undo))))
@@ -3698,10 +3700,11 @@ contain targets."
                      (lambda (kapply-action)
                        (setf action kapply-action))))
                   (remove-hook 'post-command-hook setup)))
-    (add-hook 'post-command-hook setup -99)
-    (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
     (unwind-protect
-        (recursive-edit)
+        (progn
+          (add-hook 'post-command-hook setup -99)
+          (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
+          (recursive-edit))
       (remove-hook 'post-command-hook setup)
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
@@ -3766,6 +3769,7 @@ contain targets."
                  (ov (make-overlay pt1 pt1 (window-buffer win1))))
       (unwind-protect
           (let ((conn-target-predicate conn-target-predicate))
+            (conn-dispatch-change-group (window-buffer win1))
             (add-function :before-while conn-target-predicate
                           (lambda (pt _length window)
                             (not (and (eq window win1)
@@ -3781,9 +3785,9 @@ contain targets."
                   (overlay-put ov 'face 'isearch))))
             (pcase-let ((`(,pt2 ,win2 ,thing2 ,arg2 ,transform2)
                          (conn-select-target)))
+              (unless (eq (window-buffer win1) (window-buffer win2))
+                (conn-dispatch-change-group (window-buffer win2)))
               (delete-overlay ov)
-              (conn-dispatch-change-group (window-buffer win1)
-                                          (window-buffer win2))
               (conn--dispatch-transpose-subr
                (window-buffer win1) pt1 thing1 arg1 transform1
                (window-buffer win2) pt2 thing2 arg2 transform2)))
@@ -4065,9 +4069,9 @@ contain targets."
       (when restrict-windows
         (add-function :after-while conn-target-window-predicate
                       'conn--dispatch-restrict-windows))
-      (when setup-function (funcall setup-function))
       (conn--unwind-protect-all
         (progn
+          (when setup-function (funcall setup-function))
           (conn-dispatch-perform-action action repeat)
           (conn-dispatch-push-history (conn-make-dispatch action)))
         (conn-cleanup-targets)
