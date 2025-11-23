@@ -2807,21 +2807,20 @@ contain targets."
 (defun conn-dispatch-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (let* ((hscroll (window-hscroll))
-             (padding-function #'conn--right-justify-padding))
+      (let ((col (if (window-hscroll) 1 0)))
         (save-excursion
           (goto-char (window-start))
-          (vertical-motion (cons (if (zerop hscroll) 0 1) 0))
+          (vertical-motion (cons col 0))
           (when (< (point) (window-end))
             (conn-make-target-overlay
              (point) 0
-             :padding-function padding-function))
+             :padding-function #'conn--right-justify-padding))
           (while (progn
-                   (vertical-motion (cons (if (zerop hscroll) 0 1) 1))
+                   (vertical-motion (cons col 1))
                    (< (point) (window-end)))
             (conn-make-target-overlay
              (point) 0
-             :padding-function padding-function)))))))
+             :padding-function #'conn--right-justify-padding)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ (eql conn-dispatch-lines)))
   nil)
