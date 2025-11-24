@@ -357,22 +357,23 @@
  'dired-line nil
  'dired-previous-line 'dired-next-line)
 
-(defun conn--dispatch-dired-lines ()
-  (when (derived-mode-p '(dired-mode))
-    (lambda (_state)
-      (save-excursion
-        (goto-char (window-start))
-        (vertical-motion (cons 1 0))
-        (when (< (point) (window-end))
-          (conn-make-target-overlay
-           (point) 0
-           :padding-function #'conn--right-justify-padding))
-        (while (progn
-                 (vertical-motion (cons 1 1))
-                 (< (point) (window-end)))
-          (conn-make-target-overlay
-           (point) 0
-           :padding-function #'conn--right-justify-padding))))))
+(defun conn--dispatch-dired-lines (try-next)
+  (if (derived-mode-p '(dired-mode))
+      (lambda (_state &rest _)
+        (save-excursion
+          (goto-char (window-start))
+          (vertical-motion (cons 1 0))
+          (when (< (point) (window-end))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function #'conn--right-justify-padding))
+          (while (progn
+                   (vertical-motion (cons 1 1))
+                   (< (point) (window-end)))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function #'conn--right-justify-padding))))
+    (funcall try-next)))
 
 (conn-add-update-handler 'conn-dispatch-line-targets
                          #'conn--dispatch-dired-lines)

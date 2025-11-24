@@ -482,7 +482,7 @@
           (window-predicate
            :initform (lambda (win)
                        (treesit-parser-list (window-buffer win)))))
-  ( :update-handler (state)
+  ( :update-handler (state &rest _)
     (let* ((region-pred (ignore-error unbound-slot
                           (oref state region-predicate)))
            (things (oref state things)))
