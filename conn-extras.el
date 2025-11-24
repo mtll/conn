@@ -357,30 +357,28 @@
  'dired-line nil
  'dired-previous-line 'dired-next-line)
 
-(defun conn--dispatch-dired-lines (_state)
+(defun conn--dispatch-dired-lines ()
   (when (derived-mode-p '(dired-mode))
-    (save-excursion
-      (goto-char (window-start))
-      (vertical-motion (cons 1 0))
-      (when (< (point) (window-end))
-        (conn-make-target-overlay
-         (point) 0
-         :padding-function #'conn--right-justify-padding))
-      (while (progn
-               (vertical-motion (cons 1 1))
-               (< (point) (window-end)))
-        (conn-make-target-overlay
-         (point) 0
-         :padding-function #'conn--right-justify-padding)))
-    t))
+    (lambda (_state)
+      (save-excursion
+        (goto-char (window-start))
+        (vertical-motion (cons 1 0))
+        (when (< (point) (window-end))
+          (conn-make-target-overlay
+           (point) 0
+           :padding-function #'conn--right-justify-padding))
+        (while (progn
+                 (vertical-motion (cons 1 1))
+                 (< (point) (window-end)))
+          (conn-make-target-overlay
+           (point) 0
+           :padding-function #'conn--right-justify-padding))))))
 
-(add-function :before-until
-              (oref-default 'conn-dispatch-line-targets update-function)
-              #'conn--dispatch-dired-lines)
+(conn-add-update-handler 'conn-dispatch-line-targets
+                         #'conn--dispatch-dired-lines)
 
-(add-function :before-until
-              (oref-default 'conn-dispatch-column-targets update-function)
-              #'conn--dispatch-dired-lines)
+(conn-add-update-handler 'conn-dispatch-column-targets
+                         #'conn--dispatch-dired-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
   (conn-make-action 'conn-dispatch-jump))
