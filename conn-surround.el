@@ -190,7 +190,7 @@
                                        sym)
   (memq sym '(surround-self-insert surround-command)))
 
-(cl-defmethod conn-argument-value ((arg conn-surround-with-argument))
+(cl-defmethod conn-argument-extract-value ((arg conn-surround-with-argument))
   (conn-read-args-argument-value arg))
 
 ;;;;;; Padding Arg

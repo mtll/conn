@@ -100,7 +100,6 @@
 (define-keymap
   :keymap conn-default-region-map
   "m" 'conn-replace
-  "u" 'conn-regexp-replace
   "'" 'conn-kapply-on-thing-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region

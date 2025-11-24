@@ -1563,7 +1563,7 @@ chooses to handle a command."
              (mapc #'conn-argument-cancel arguments))
            (unless executing-kbd-macro
              (message nil)))
-         (cons callback (mapcar #'conn-argument-value arguments)))))))
+         (cons callback (mapcar #'conn-argument-extract-value arguments)))))))
 
 (defmacro conn-read-args-return (&rest body)
   (declare (indent 0))
@@ -1626,7 +1626,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg conn-read-args-argument) form)
     (funcall arg arg form)))
 
-(cl-defgeneric conn-argument-value (argument)
+(cl-defgeneric conn-argument-extract-value (argument)
   (declare (important-return-value t))
   ( :method (arg) arg)
   ( :method ((arg conn-read-args-argument))

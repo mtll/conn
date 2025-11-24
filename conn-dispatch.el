@@ -38,8 +38,8 @@
 (declare-function conn-register-load "conn-commands")
 (declare-function conn-end-of-inner-line "conn-commands")
 (declare-function conn-beginning-of-inner-line "conn-commands")
-(declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-kill-thing "conn-commands")
+(declare-function conn-dispatch-kapply-prefix "conn-transients")
 
 ;;;; Labels
 
@@ -739,7 +739,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-read-args-argument-value arg)))
 
-(cl-defmethod conn-argument-value ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-read-args-argument-value arg)))
     (conn-accept-action action))
   (list (conn-read-args-argument-value arg)

@@ -402,7 +402,7 @@ order to mark the region that should be defined by any of COMMANDS."
          self (list cmd (conn-read-args-consume-prefix-arg)))
       self)))
 
-(cl-defmethod conn-argument-value ((arg conn-thing-argument))
+(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
   (conn-read-args-argument-value arg))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
@@ -614,7 +614,7 @@ words."))
                  ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
-(cl-defmethod conn-argument-value ((_arg conn-transform-argument))
+(cl-defmethod conn-argument-extract-value ((_arg conn-transform-argument))
   (nreverse (cl-call-next-method)))
 
 ;;;;; Read Mover State
