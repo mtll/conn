@@ -435,12 +435,12 @@
         'forward-word
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'word)))
+                         (conn-all-things-targets :thing 'word)))
   "U" (conn-anonymous-thing
         'forward-symbol
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'symbol))))
+                         (conn-all-things-targets :thing 'symbol))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
@@ -456,12 +456,12 @@
         'word
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'word)))
+                         (conn-all-things-targets :thing 'word)))
   "U" (conn-anonymous-thing
         'symbol
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'symbol)))
+                         (conn-all-things-targets :thing 'symbol)))
   "b" 'conn-dispatch-buttons)
 
 (define-keymap
@@ -553,12 +553,12 @@
         'word
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'word)))
+                         (conn-all-things-targets :thing 'word)))
   "u" (conn-anonymous-thing
         'symbol
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
-                         (conn-dispatch-all-things 'symbol))))
+                         (conn-all-things-targets :thing 'symbol))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state

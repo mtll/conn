@@ -2300,7 +2300,8 @@ to the key binding for that target."
                                 'eldoc-highlight-function-argument)))))
    (cl-call-next-method)))
 
-(conn-define-target-finder conn-dispatch-string-targets (conn-dispatch-retargetable-mixin)
+(conn-define-target-finder conn-dispatch-string-targets
+    (conn-dispatch-retargetable-mixin)
   (:slots (string :initform nil
                   :initarg :string)
           (fixed-length :initform nil
@@ -2331,7 +2332,8 @@ to the key binding for that target."
 (cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
 
-(conn-define-target-finder conn-dispatch-read-n-chars (conn-dispatch-string-targets)
+(conn-define-target-finder conn-dispatch-read-n-chars
+    (conn-dispatch-string-targets)
   (:slots (string-length :initform 1
                          :initarg :string-length))
   ( :update (state)
@@ -2363,7 +2365,8 @@ to the key binding for that target."
             (conn-cleanup-targets))
           (conn-dispatch-call-update-handlers state))))))
 
-(conn-define-target-finder conn-dispatch-read-with-timeout (conn-dispatch-string-targets)
+(conn-define-target-finder conn-dispatch-read-with-timeout
+    (conn-dispatch-string-targets)
   (:slots (timeout :initform 0.5 :initarg :timeout))
   ( :update (state)
     (cl-symbol-macrolet ((string (oref state string)))
@@ -2540,7 +2543,8 @@ contain targets."
               (cl-incf line-count))
             (setq prev beg)))))))
 
-(conn-define-target-finder conn-dispatch-mark-ring (conn-dispatch-focus-mixin)
+(conn-define-target-finder conn-dispatch-mark-ring
+    (conn-dispatch-focus-mixin)
   (:slots (context-lines
            :initform 1
            :initarg :context-lines)
@@ -2681,10 +2685,6 @@ contain targets."
                                   (point)))
                     (/= (point) (point-min)))
           (conn-make-target-overlay (point) 0))))))
-
-;; TODO: remove
-(defun conn-dispatch-all-things (thing)
-  (conn-all-things-targets :thing thing))
 
 (conn-define-target-finder conn-dispatch-button-targets ()
   ( :update-handler (_state)
@@ -4404,11 +4404,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence))
                                       _arg)
-  (conn-dispatch-all-things 'sentence))
+  (conn-all-things-targets :thing 'sentence))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph))
                                       _arg)
-  (conn-dispatch-all-things 'paragraph))
+  (conn-all-things-targets :thing 'paragraph))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       _arg)
