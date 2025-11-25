@@ -465,7 +465,7 @@ Possibilities: \\<query-replace-map>
                   `(,beg . ,end))
              (when-let* ((buffer (and (markerp beg) (marker-buffer beg)))
                          ((not (eq buffer (current-buffer)))))
-               (pop-to-buffer-same-window buffer)
+               (switch-to-buffer buffer t)
                (deactivate-mark t)
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
