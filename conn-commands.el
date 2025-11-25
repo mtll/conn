@@ -349,31 +349,8 @@ of line proper."
 (cl-defmethod conn-argument-display ((_arg conn-replace-thing-argument))
   "\\[project] project")
 
-(oclosure-define (conn-regexp-argument
-                  (:parent conn-thing-argument)))
-
 (defvar-keymap conn-regexp-argument-map
   "q" 'regexp)
-
-(defun conn-regexp-argument ()
-  (oclosure-lambda (conn-regexp-argument
-                    (arg-keymap conn-regexp-argument-map))
-      (self cmd)
-    (if (eq 'regexp cmd)
-        (conn-set-argument self (not arg-value))
-      self)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-regexp-argument)
-                                       cmd)
-  (or (eq cmd 'project)
-      (cl-call-next-method)))
-
-(cl-defmethod conn-argument-display ((arg conn-regexp-argument))
-  (concat
-   "\\[regexp] "
-   (propertize "regexp"
-               'face (when (conn-read-args-argument-value arg)
-                       'eldoc-highlight-function-argument))))
 
 (defvar conn-query-flag nil
   "Default value for conn-query-flag.
@@ -602,7 +579,9 @@ instances of from-string.")
        ((`(,thing-mover ,arg) (conn-replace-thing-argument))
         (transform (conn-transform-argument))
         (subregions-p (conn-subregions-argument (use-region-p)))
-        (regexp-flag (conn-regexp-argument)))
+        (regexp-flag (conn-boolean-argument 'regexp
+                                            conn-regexp-argument-map
+                                            "regexp")))
      (let* ((bounds
              (ignore-errors
                (conn-transform-bounds (conn-bounds-of thing-mover arg)
@@ -859,7 +838,9 @@ Exiting the recursive edit will resume the isearch."
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument))
-        (regexp (conn-regexp-argument)))
+        (regexp (conn-boolean-argument 'regexp
+                                       conn-regexp-argument-map
+                                       "regexp")))
      (list thing thing-arg transform regexp subregions)))
   (conn--isearch-in-thing thing-cmd
                           thing-arg
@@ -881,7 +862,9 @@ Exiting the recursive edit will resume the isearch."
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument))
-        (regexp (conn-regexp-argument)))
+        (regexp (conn-boolean-argument 'regexp
+                                       conn-regexp-argument-map
+                                       "regexp")))
      (list thing thing-arg transform regexp subregions)))
   (conn--isearch-in-thing thing-cmd
                           thing-arg
@@ -905,7 +888,9 @@ Interactively `region-beginning' and `region-end'."
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument))
         (transform (conn-transform-argument))
-        (regexp (conn-regexp-argument)))
+        (regexp (conn-boolean-argument 'regexp
+                                       conn-regexp-argument-map
+                                       "regexp")))
      (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
@@ -935,7 +920,9 @@ Interactively `region-beginning' and `region-end'."
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument))
         (transform (conn-transform-argument))
-        (regexp (conn-regexp-argument)))
+        (regexp (conn-boolean-argument 'regexp
+                                       conn-regexp-argument-map
+                                       "regexp")))
      (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))

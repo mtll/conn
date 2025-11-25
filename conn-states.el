@@ -1150,34 +1150,37 @@ the state stays active if the previous command was a prefix command."
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
         (preserve-state (make-symbol "preserve-state"))
-        (pop-pred (make-symbol "pop-pred"))
-        (setup (make-symbol "setup")))
-    (fset msg-fn (conn-state-get state :message-function))
-    (fset preserve-state (lambda ()
-                           (setq prefix-command t)))
-    (fset pop-pred (let ((pred (conn-state-get state :pop-predicate)))
-                     (cl-check-type pred function)
-                     (lambda ()
-                       (unless (or (cl-shiftf prefix-command nil)
-                                   (not (funcall pred))
-                                   (not (eq conn-current-state state)))
-                         (conn-enter-state (conn-peek-state))))))
-    (fset setup (lambda ()
-                  (remove-hook 'post-command-hook setup t)
-                  (add-hook 'prefix-command-preserve-state-hook preserve-state)
-                  (when (symbol-function msg-fn)
-                    (add-hook 'post-command-hook msg-fn 91 t))
-                  (add-hook 'post-command-hook pop-pred 90 t)))
+        (post (make-symbol "post"))
+        (pre (make-symbol "pre")))
+    (when-let* ((fn (conn-state-get state :message-function)))
+      (fset msg-fn
+            (lambda ()
+              (funcall fn)
+              (remove-hook 'post-command-hook msg-fn t))))
+    (fset preserve-state (lambda () (setq prefix-command t)))
+    (fset post (let ((pred (conn-state-get state :pop-predicate)))
+                 (cl-check-type pred function)
+                 (lambda ()
+                   (if (or (cl-shiftf prefix-command nil)
+                           (not (funcall pred)))
+                       (progn
+                         (remove-hook 'post-command-hook post t)
+                         (remove-hook 'prefix-command-preserve-state-hook preserve-state)
+                         (add-hook 'pre-command-hook pre 99 t))
+                     (when (eq conn-current-state state)
+                       (conn-enter-state (conn-peek-state)))))))
+    (fset pre (lambda ()
+                (remove-hook 'pre-command-hook pre t)
+                (add-hook 'prefix-command-preserve-state-hook preserve-state)
+                (add-hook 'post-command-hook post 90 t)
+                (when (symbol-function msg-fn)
+                  (add-hook 'post-command-hook msg-fn 91 t))))
     (conn-state-defer
       (setq conn--state-stack
             (append (remq state (take-while #'identity conn--state-stack))
                     (drop-while #'identity conn--state-stack)))
-      (when (symbol-function msg-fn)
-        (remove-hook 'post-command-hook msg-fn t))
-      (remove-hook 'post-command-hook setup t)
-      (remove-hook 'post-command-hook pop-pred t)
-      (remove-hook 'prefix-command-preserve-state-hook preserve-state))
-    (add-hook 'post-command-hook setup 99 t)
+      (remove-hook 'pre-command-hook pre t))
+    (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
 
 (conn-define-state conn-one-command-state (conn-command-state
@@ -1663,5 +1666,40 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
     (conn-argument-keymaps (cdr arg)))
   ( :method ((arg conn-read-args-argument))
     (conn-read-args-argument-keymap arg)))
+
+;;;;; Boolean Argument
+
+(defface conn-argument-active-face
+  '((t (:inherit eldoc-highlight-function-argument)))
+  "Face for active arguments"
+  :group 'conn-faces)
+
+(oclosure-define (conn-boolean-argument
+                  (:parent conn-read-args-argument))
+  (arg-description :type string)
+  (arg-toggle-command :type symbol))
+
+(defun conn-boolean-argument (toggle-command keymap description)
+  (oclosure-lambda (conn-boolean-argument
+                    (arg-keymap keymap)
+                    (arg-description description)
+                    (arg-toggle-command toggle-command))
+      (self cmd)
+    (if (eq toggle-command cmd)
+        (conn-set-argument self (not arg-value))
+      self)))
+
+(cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
+                                       cmd)
+  (eq cmd (conn-boolean-argument--arg-toggle-command arg)))
+
+(cl-defmethod conn-argument-display ((arg conn-boolean-argument))
+  (concat
+   (substitute-command-keys
+    (format "\\[%s]" (conn-boolean-argument--arg-toggle-command arg)))
+   " "
+   (propertize (conn-boolean-argument--arg-description arg)
+               'face (when (conn-read-args-argument-value arg)
+                       'conn-argument-active-face))))
 
 (provide 'conn-states)

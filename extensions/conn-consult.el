@@ -175,12 +175,12 @@
                 marker))
             cands)))
       (conn-regions-kapply-prefix
-       (conn--kapply-point-iterator regions))))
+       (conn-kapply-point-iterator regions))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
     (conn-regions-kapply-prefix
-     (conn--kapply-region-iterator
+     (conn-kapply-region-iterator
       (mapcar (lambda (cand)
                 (pcase-let ((`(,line-marker (,beg . ,end) . _)
                              (consult--grep-position cand 'find-file-noselect)))

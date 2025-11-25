@@ -400,7 +400,7 @@ before each iteration."
       (setq regions (nreverse regions)))
     (conn--kapply-macro
      (alist-get :kmacro args)
-     (conn--kapply-region-iterator regions)
+     (conn-kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
        conn--kapply-pulse-region
@@ -420,7 +420,7 @@ before each iteration."
     (deactivate-mark)
     (conn--kapply-macro
      (alist-get :kmacro args)
-     (conn--kapply-region-iterator regions)
+     (conn-kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
        ,(when (> (point) (caar regions))
@@ -443,7 +443,7 @@ before each iteration."
     (deactivate-mark)
     (conn--kapply-macro
      (alist-get :kmacro args)
-     (conn--kapply-region-iterator regions)
+     (conn-kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
        ,(when (> (point) (caar regions))
@@ -464,7 +464,9 @@ before each iteration."
       ((`(,thing ,thing-arg) (conn-replace-thing-argument))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument (use-region-p)))
-       (regexp (conn-regexp-argument)))
+       (regexp (conn-boolean-argument 'regexp
+                                      conn-regexp-argument-map
+                                      "regexp")))
     (let ((delimited (oref transient-current-prefix scope)))
       (conn--kapply-macro
        (alist-get :kmacro args)
@@ -495,7 +497,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-macro
    (alist-get :kmacro args)
-   (conn--kapply-region-iterator
+   (conn-kapply-region-iterator
     (conn-read-args (conn-read-thing-state
                      :prompt "Thing")
         ((`(,thing ,thing-arg)
@@ -522,7 +524,7 @@ A zero means repeat until error."
      (funcall (alist-get :kmacro args)
               iterator
               (read-number "Iterations: " 0)))
-   (conn--kapply-infinite-iterator)
+   (conn-kapply-infinite-iterator)
    (conn--transient-kapply-pipeline-args args)))
 
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
@@ -582,7 +584,7 @@ A zero means repeat until error."
                                    (lambda (iterator)
                                      (conn--kmacro-apply iterator nil macro)))
                                   (_ applier))
-                                (conn--kapply-region-iterator (list bounds))
+                                (conn-kapply-region-iterator (list bounds))
                                 `(conn--kapply-relocate-to-region
                                   conn--kapply-pulse-region
                                   ,@pipeline))))))
@@ -622,7 +624,7 @@ A zero means repeat until error."
         (isearch-done)
       (conn--kapply-macro
        (alist-get :kmacro args)
-       (conn--kapply-region-iterator
+       (conn-kapply-region-iterator
         matches
         (or (alist-get :order args)
             'conn--nnearest-first))
@@ -644,7 +646,7 @@ A zero means repeat until error."
       ((conn-bounds `(,beg . ,end))
        (conn--kapply-macro
         (alist-get :kmacro args)
-        (conn--kapply-highlight-iterator
+        (conn-kapply-highlight-iterator
          (or beg (point-min))
          (or end (point-max))
          (or (alist-get :order args)
@@ -664,7 +666,7 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-macro
    (alist-get :kmacro args)
-   (conn--kapply-region-iterator
+   (conn-kapply-region-iterator
     (save-excursion
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'occur-target)
@@ -698,7 +700,7 @@ A zero means repeat until error."
      (list prop val (transient-args transient-current-command))))
   (conn--kapply-macro
    (alist-get :kmacro args)
-   (conn--kapply-region-iterator
+   (conn-kapply-region-iterator
     (save-excursion
       (goto-char (point-min))
       (let (regions)
@@ -1295,7 +1297,7 @@ A zero means repeat until error."
     (interactive (list (transient-args transient-current-command)))
     (conn--kapply-macro
      (alist-get :kmacro args)
-     (conn--kapply-region-iterator
+     (conn-kapply-region-iterator
       (save-excursion
         (goto-char (point-min))
         (cl-loop for match = (text-property-search-forward 'compilation-message)

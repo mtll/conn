@@ -127,12 +127,12 @@ Possibilities: \\<query-replace-map>
                        (remq nil pipeline)
                        iterator)))
 
-(defun conn--kapply-infinite-iterator ()
+(defun conn-kapply-infinite-iterator ()
   (declare (important-return-value t)
            (side-effect-free t))
   (lambda (_state) (cons (point) (point))))
 
-(defun conn--kapply-highlight-iterator (beg end &optional sort-function read-patterns)
+(defun conn-kapply-highlight-iterator (beg end &optional sort-function read-patterns)
   (declare (important-return-value t)
            (side-effect-free t))
   (let ((patterns
@@ -175,7 +175,7 @@ Possibilities: \\<query-replace-map>
         ((or :record :next)
          (pop matches))))))
 
-(defun conn--kapply-region-iterator (regions &optional sort-function)
+(defun conn-kapply-region-iterator (regions &optional sort-function)
   (declare (important-return-value t))
   (unless regions
     (user-error "No regions for kapply."))
@@ -199,7 +199,7 @@ Possibilities: \\<query-replace-map>
        (pop regions))
       (_ state))))
 
-(defun conn--kapply-point-iterator (points &optional sort-function)
+(defun conn-kapply-point-iterator (points &optional sort-function)
   (declare (important-return-value t))
   (unless points
     (user-error "No points for kapply."))
