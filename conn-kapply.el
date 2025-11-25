@@ -27,6 +27,7 @@
 (declare-function conn-exchange-mark-command "conn-commands")
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function kmacro-p "kmacro")
+(declare-function project-files "project")
 
 ;;;; Kapply
 
@@ -215,23 +216,147 @@ Possibilities: \\<query-replace-map>
          (when-let* ((pt (pop points)))
            (cons pt pt)))))))
 
-(defun conn--kapply-match-iterator ( string regions
-                                     &optional
-                                     sort-function
-                                     regexp-flag
-                                     delimited-flag)
-  (declare (important-return-value t))
-  (let (matches)
+(defun conn--kapply-read-from-with-preview (prompt bounds &optional regexp-flag)
+  "Read a from string with `minibuffer-lazy-highlight-setup' previews.
+
+PROMPT is used as the minibuffer prompt when reading.
+
+BOUNDS is a list of the form returned by `region-bounds' and defines the
+limits of the highlighting.
+
+REGEXP-FLAG means to treat the from string as a regexp for the purpose
+of highlighting."
+  (let ((default (conn-replace-read-default)))
+    (conn--with-region-emphasis bounds
+      (minibuffer-with-setup-hook
+          (minibuffer-lazy-highlight-setup
+           :case-fold case-fold-search
+           :filter (lambda (mb me)
+                     (cl-loop for (beg . end) in bounds
+                              when (<= beg mb me end) return t))
+           :highlight query-replace-lazy-highlight
+           :regexp regexp-flag
+           :regexp-function (or replace-regexp-function
+                                (and replace-char-fold
+                                     (not regexp-flag)
+                                     #'char-fold-to-regexp))
+           :transform (lambda (string)
+                        (when (and case-fold-search search-upper-case)
+                          (setq isearch-case-fold-search
+                                (isearch-no-upper-case-p string regexp-flag)))
+                        string))
+        (if regexp-flag
+            (read-regexp (format-prompt prompt default)
+                         (when default (regexp-quote default))
+                         'minibuffer-history)
+          (let ((from (read-string
+                       (format-prompt prompt default)
+                       nil nil
+                       (if default
+                           (delete-dups
+                            (cons default (query-replace-read-from-suggestions)))
+                         (query-replace-read-from-suggestions))
+                       t)))
+            (or (and (length= from 0) default)
+                from)))))))
+
+(cl-defgeneric conn-kapply-match-iterator (thing
+                                           thing-arg
+                                           transform
+                                           &optional
+                                           subregions
+                                           regexp-flag
+                                           delimited-flag
+                                           sort-function))
+
+(cl-defmethod conn-kapply-match-iterator ((_thing (eql project))
+                                          _thing-arg
+                                          _transform
+                                          &optional
+                                          _subregions
+                                          regexp-flag
+                                          delimited-flag
+                                          sort-function)
+  (require 'project)
+  (let ((files (or (project-files (project-current t))
+                   (user-error "No files for kapply.")))
+        (string (minibuffer-with-setup-hook
+                    (lambda ()
+                      (thread-last
+                        (current-local-map)
+                        (make-composed-keymap conn-replace-to-map)
+                        (use-local-map)))
+                  (conn--kapply-read-from-with-preview
+                   (if regexp-flag "Regexp" "String")
+                   (list (cons (point-min) (point-max)))
+                   regexp-flag)))
+        matches)
+    (lambda (state)
+      (pcase state
+        (:cleanup
+         (when (consp matches)
+           (mapc (pcase-lambda (`(,beg . ,end))
+                   (set-marker beg nil)
+                   (set-marker end nil))
+                 matches)))
+        ((or :next :record)
+         (while (and files (null matches))
+           (with-current-buffer (find-file-noselect (pop files))
+             (save-match-data
+               (save-excursion
+                 (goto-char (point-min))
+                 (while (replace-search string (point-max) regexp-flag
+                                        delimited-flag case-fold-search)
+                   (pcase (match-data t)
+                     (`(,mb ,me . ,_)
+                      (push (cons (conn--create-marker mb nil t)
+                                  (conn--create-marker me))
+                            matches)))))))
+           (setq matches (nreverse matches))
+           (when sort-function
+             (setq matches (funcall sort-function matches))))
+         (pop matches))))))
+
+(cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
+                                          thing-arg
+                                          transform
+                                          &optional
+                                          subregions
+                                          regexp-flag
+                                          delimited-flag
+                                          sort-function)
+  (let* ((regions
+          (prog1
+              (pcase (conn-bounds-of thing thing-arg)
+                ((and (guard subregions)
+                      (conn-bounds-get :subregions
+                                       transform
+                                       (and sr (pred identity))))
+                 (cl-loop for reg in sr collect (conn-bounds reg)))
+                ((conn-bounds whole transform)
+                 (list whole)))
+            (deactivate-mark)))
+         (string (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-to-map)
+                         (use-local-map)))
+                   (conn--kapply-read-from-with-preview
+                    (if regexp-flag "Regexp" "String")
+                    regions
+                    regexp-flag)))
+         matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end) regions)
         (goto-char beg)
-        (cl-loop
-         while (replace-search string end regexp-flag
+        (while (replace-search string end regexp-flag
                                delimited-flag case-fold-search)
-         for (mb me . _) = (match-data t)
-         do (push (cons (conn--create-marker mb nil t)
-                        (conn--create-marker me))
-                  matches))))
+          (pcase (match-data t)
+            (`(,mb ,me . ,_)
+             (push (cons (conn--create-marker mb nil t)
+                         (conn--create-marker me))
+                   matches))))))
     (unless matches
       (user-error "No matches for kapply."))
     (setq matches (nreverse matches))
