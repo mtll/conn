@@ -122,7 +122,9 @@
                                   &optional
                                   _append
                                   _delete
-                                  _register)
+                                  _register
+                                  _fixup-whitespace
+                                  _check-bounds)
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"
                    :prefix arg)
