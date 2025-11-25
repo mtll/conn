@@ -858,8 +858,9 @@ Exiting the recursive edit will resume the isearch."
                     :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform current-prefix-arg subregions)))
+        (transform (conn-transform-argument))
+        (regexp (conn-regexp-argument)))
+     (list thing thing-arg transform regexp subregions)))
   (conn--isearch-in-thing thing-cmd
                           thing-arg
                           transform
@@ -879,8 +880,9 @@ Exiting the recursive edit will resume the isearch."
                     :prompt "Isearch in Thing")
        ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
-        (transform (conn-transform-argument)))
-     (list thing thing-arg transform current-prefix-arg subregions)))
+        (transform (conn-transform-argument))
+        (regexp (conn-regexp-argument)))
+     (list thing thing-arg transform regexp subregions)))
   (conn--isearch-in-thing thing-cmd
                           thing-arg
                           transform
@@ -888,39 +890,61 @@ Exiting the recursive edit will resume the isearch."
                           :regexp regexp
                           :subregions-p subregions-p))
 
-(defun conn-isearch-region-forward (thing-cmd thing-arg &optional regexp)
+(defun conn-isearch-region-forward (thing-cmd
+                                    thing-arg
+                                    transform
+                                    &optional
+                                    regexp
+                                    subregions)
   "Isearch forward for region from BEG to END.
 
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument t)))
-     (list thing thing-arg current-prefix-arg)))
+       ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
+        (subregions (conn-subregions-argument))
+        (transform (conn-transform-argument))
+        (regexp (conn-regexp-argument)))
+     (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
-    (conn--isearch-in-thing thing-cmd thing-arg
+    (conn--isearch-in-thing thing-cmd
+                            thing-arg
+                            transform
                             :backward nil
-                            :regexp regexp)
+                            :regexp regexp
+                            :subregions-p subregions)
     (with-isearch-suspended
      (setq isearch-new-string (if regexp (regexp-quote string) string)
            isearch-new-message (mapconcat #'isearch-text-char-description
                                           isearch-new-string "")))))
 
-(defun conn-isearch-region-backward (thing-cmd thing-arg &optional regexp)
+(defun conn-isearch-region-backward (thing-cmd
+                                     thing-arg
+                                     transform
+                                     &optional
+                                     regexp
+                                     subregions)
   "Isearch backward for region from BEG to END.
 
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument t)))
-     (list thing thing-arg current-prefix-arg)))
+       ((`(,thing ,thing-arg) (conn-isearch-thing-argument))
+        (subregions (conn-subregions-argument))
+        (transform (conn-transform-argument))
+        (regexp (conn-regexp-argument)))
+     (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
-    (conn--isearch-in-thing thing-cmd thing-arg
+    (conn--isearch-in-thing thing-cmd
+                            thing-arg
+                            transform
                             :backward t
-                            :regexp regexp)
+                            :regexp regexp
+                            :subregions-p subregions)
     (with-isearch-suspended
      (setq isearch-new-string (if regexp (regexp-quote string) string)
            isearch-new-message (mapconcat #'isearch-text-char-description
