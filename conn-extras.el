@@ -214,7 +214,10 @@
                    :prompt "Dired Dispatch")
       ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (restrict-windows (conn-dispatch-restrict-windows-argument))
+       (restrict-windows
+        (conn-boolean-argument 'restrict-windows
+                               conn-dispatch-restrict-windows-map
+                               "this-win"))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing thing-arg transform
@@ -579,7 +582,10 @@
                    :prompt "Ibuffer Dispatch")
       ((`(,thing ,thing-arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (restrict-windows (conn-dispatch-restrict-windows-argument))
+       (restrict-windows
+        (conn-boolean-argument 'restrict-windows
+                               conn-dispatch-restrict-windows-map
+                               "this-win"))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing thing-arg transform

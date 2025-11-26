@@ -602,4 +602,8 @@ If END is less than BEG then the order of iteration is reversed.
                          (eq (overlay-get ov 'window) window)))
            collect ov))
 
+;;;;; Project Utils
+
+(defvar conn-project-files-function 'project-files)
+
 (provide 'conn-utils)

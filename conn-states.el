@@ -1492,8 +1492,9 @@ chooses to handle a command."
              (named-let update ((as arguments)
                                 (u (conn-argument-update (car arguments) cmd)))
                (cond (conn--read-args-error-flag)
-                     ((not (eq u (car as)))
-                      (setf (car as) u))
+                     (u (setf (car as) u))
+                     ;; ((not (eq u (car as)))
+                     ;;  (setf (car as) u))
                      ((null (cdr as))
                       (setf conn--read-args-error-message
                             (format "Invalid Command <%s>" cmd)))
@@ -1598,6 +1599,14 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (arg-name :type (or nil string function))
   (arg-keymap :type keymap))
 
+(cl-defstruct (conn-argument
+               (:constructor nil))
+  (value nil)
+  (set-flag nil)
+  (required nil :read-only t)
+  (name nil :read-only t)
+  (keymap nil :read-only t))
+
 (defalias 'conn-read-args-argument-name
   'conn-read-args-argument--arg-name)
 
@@ -1622,18 +1631,25 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method (_arg) nil)
   ( :method ((arg conn-read-args-argument))
     (and (conn-read-args-argument-required arg)
-         (not (conn-read-args-argument-set-flag arg)))))
+         (not (conn-read-args-argument-set-flag arg))))
+  ( :method ((arg conn-argument))
+    (and (conn-argument-required arg)
+         (not (conn-argument-set-flag arg)))))
 
 (cl-defgeneric conn-argument-update (argument form)
-  ( :method (arg _form) arg)
+  ( :method (_arg _form) nil)
   ( :method ((arg conn-read-args-argument) form)
-    (funcall arg arg form)))
+    (let ((result (funcall arg arg form)))
+      (unless (eq result arg)
+        result))))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   (declare (important-return-value t))
   ( :method (arg) arg)
   ( :method ((arg conn-read-args-argument))
-    (conn-read-args-argument-value arg)))
+    (conn-read-args-argument-value arg))
+  ( :method ((arg conn-argument))
+    (conn-argument-value arg)))
 
 (cl-defgeneric conn-argument-display (argument)
   (declare (important-return-value t)
@@ -1641,6 +1657,14 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method (_arg) nil)
   ( :method ((arg conn-read-args-argument))
     (pcase (conn-read-args-argument-name arg)
+      ((and (pred stringp) str)
+       str)
+      ((and fn (pred functionp)
+            (let (and str (pred stringp))
+              (funcall fn arg)))
+       str)))
+  ( :method ((arg conn-argument))
+    (pcase (conn-argument-name arg)
       ((and (pred stringp) str)
        str)
       ((and fn (pred functionp)
@@ -1665,7 +1689,9 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg cons))
     (conn-argument-keymaps (cdr arg)))
   ( :method ((arg conn-read-args-argument))
-    (conn-read-args-argument-keymap arg)))
+    (conn-read-args-argument-keymap arg))
+  ( :method ((arg conn-argument))
+    (conn-argument-keymap arg)))
 
 ;;;;; Boolean Argument
 
@@ -1674,32 +1700,33 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   "Face for active arguments"
   :group 'conn-faces)
 
-(oclosure-define (conn-boolean-argument
-                  (:parent conn-read-args-argument))
-  (arg-description :type string)
-  (arg-toggle-command :type symbol))
+(cl-defstruct (conn-boolean-argument
+               (:include conn-argument)
+               (:constructor conn-boolean-argument
+                             ( toggle-command
+                               keymap
+                               description
+                               &optional value)))
+  (description nil :read-only t)
+  (toggle-command nil :read-only t))
 
-(defun conn-boolean-argument (toggle-command keymap description)
-  (oclosure-lambda (conn-boolean-argument
-                    (arg-keymap keymap)
-                    (arg-description description)
-                    (arg-toggle-command toggle-command))
-      (self cmd)
-    (if (eq toggle-command cmd)
-        (conn-set-argument self (not arg-value))
-      self)))
+(cl-defmethod conn-argument-update ((arg conn-boolean-argument)
+                                    cmd)
+  (when (eq cmd (conn-boolean-argument-toggle-command arg))
+    (cl-callf not (conn-boolean-argument-value arg))
+    arg))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
-  (eq cmd (conn-boolean-argument--arg-toggle-command arg)))
+  (eq cmd (conn-boolean-argument-toggle-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-boolean-argument))
   (concat
    (substitute-command-keys
-    (format "\\[%s]" (conn-boolean-argument--arg-toggle-command arg)))
+    (format "\\[%s]" (conn-boolean-argument-toggle-command arg)))
    " "
-   (propertize (conn-boolean-argument--arg-description arg)
-               'face (when (conn-read-args-argument-value arg)
+   (propertize (conn-boolean-argument-description arg)
+               'face (when (conn-argument-value arg)
                        'conn-argument-active-face))))
 
 (provide 'conn-states)

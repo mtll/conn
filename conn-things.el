@@ -356,54 +356,43 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;;; Thing Args
 
-(oclosure-define (conn-thing-argument
-                  (:parent conn-read-args-argument))
-  (recursive-edit :type boolean)
-  (predicate :type function))
+(cl-defstruct (conn-thing-argument
+               (:include conn-argument)
+               (:constructor
+                conn-thing-argument
+                ( &optional recursive-edit
+                  &aux (required t)))
+               (:constructor
+                conn-thing-argument-dwim
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))
+               (:constructor
+                conn-thing-argument-dwim-rectangle
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode))))))
+  (recursive-edit nil))
 
-(defun conn-thing-argument (&optional recursive-edit)
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-thing-argument
-                    (arg-required t)
-                    (recursive-edit recursive-edit))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list cmd (conn-read-args-consume-prefix-arg)))
-      self)))
-
-(defun conn-thing-argument-dwim (&optional recursive-edit)
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-thing-argument
-                    (arg-value (when (use-region-p)
-                                 (list 'region nil)))
-                    (arg-set-flag (use-region-p))
-                    (arg-required t)
-                    (recursive-edit recursive-edit))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list cmd (conn-read-args-consume-prefix-arg)))
-      self)))
-
-(defun conn-thing-argument-dwim-rectangle (&optional recursive-edit)
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-thing-argument
-                    (arg-value (when (and (use-region-p)
-                                          (bound-and-true-p rectangle-mark-mode))
-                                 (list 'region nil)))
-                    (arg-set-flag (and (use-region-p)
-                                       (bound-and-true-p rectangle-mark-mode)))
-                    (arg-required t)
-                    (recursive-edit recursive-edit))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list cmd (conn-read-args-consume-prefix-arg)))
-      self)))
-
-(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
-  (conn-read-args-argument-value arg))
+(cl-defmethod conn-argument-update ((arg conn-thing-argument)
+                                    cmd)
+  (when (conn-argument-predicate arg cmd)
+    (setf (conn-argument-set-flag arg) t
+          (conn-argument-value arg)
+          (list cmd (conn-read-args-consume-prefix-arg)))
+    arg))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -423,41 +412,45 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
                                        (_sym (eql recursive-edit)))
-  (conn-thing-argument--recursive-edit arg))
+  (conn-thing-argument-recursive-edit arg))
 
 ;;;;;; Subregions
 
 (defvar-keymap conn-subregions-map
   "z" 'toggle-subregions)
 
-(oclosure-define (conn-subregions-argument
-                  (:parent conn-read-args-argument)))
+(cl-defstruct (conn-subregions-argument
+               (:include conn-argument)
+               (:constructor
+                conn-subregions-argument
+                ( &optional value
+                  &aux (keymap conn-subregions-map)))))
 
-(defun conn-subregions-argument (&optional value)
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-subregions-argument
-                    (arg-value value)
-                    (arg-keymap conn-subregions-map))
-      (self cmd)
-    (if (eq cmd 'toggle-subregions)
-        (conn-set-argument
-         self (not (conn-read-args-argument-value self)))
-      (conn-subregions-default-value cmd self))))
+(cl-defmethod conn-argument-update ((arg conn-subregions-argument)
+                                    cmd)
+  (if (eq cmd 'toggle-subregions)
+      (progn
+        (cl-callf not (conn-argument-value arg))
+        arg)
+    (conn-subregions-default-value cmd arg)))
 
 (cl-defgeneric conn-subregions-default-value (cmd arg)
-  ( :method (_ arg) arg))
+  ( :method (_ _) nil))
 
 (cl-defmethod conn-subregions-default-value ((_cmd (eql conn-things-in-region))
                                              arg)
-  (conn-set-argument arg t))
+  (setf (conn-argument-value arg) t)
+  arg)
 
 (cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
                                              arg)
-  (conn-set-argument arg t))
+  (setf (conn-argument-value arg) t)
+  arg)
 
 (cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
                                              arg)
-  (conn-set-argument arg t))
+  (setf (conn-argument-value arg) t)
+  arg)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
                                        (_sym (eql toggle-subregions)))
@@ -466,8 +459,8 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-argument-display ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
           (propertize "subregions"
-                      'face (when (conn-read-args-argument-value arg)
-                              'eldoc-highlight-function-argument))))
+                      'face (when (conn-argument-value arg)
+                              'conn-argument-active-face))))
 
 (defvar conn-subregions-argument-reference
   (conn-reference-page "Subregions"
@@ -480,22 +473,24 @@ words."))
 
 ;;;;;; Fixup Whitespace Argument
 
-(oclosure-define (conn-fixup-whitespace-argument
-                  (:parent conn-read-args-argument)))
-
 (defvar-keymap conn-fixup-whitespace-argument-map
   "q" 'fixup-whitespace)
 
-(defun conn-fixup-whitespace-argument (&optional value)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (oclosure-lambda (conn-fixup-whitespace-argument
-                    (arg-value value)
-                    (arg-keymap conn-fixup-whitespace-argument-map))
-      (self cmd)
-    (if (eq cmd 'fixup-whitespace)
-        (conn-set-argument self (null value))
-      self)))
+(cl-defstruct (conn-fixup-whitespace-argument
+               (:include conn-argument)
+               (:constructor
+                conn-fixup-whitespace-argument
+                ( &optional
+                  value
+                  &aux
+                  (keymap conn-fixup-whitespace-argument-map)))))
+
+(cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
+                                    cmd)
+  (when (eq cmd 'fixup-whitespace)
+    (progn
+      (cl-callf null (conn-argument-value arg))
+      arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
                                        (_sym (eql fixup-whitespace)))
@@ -505,7 +500,7 @@ words."))
   (substitute-command-keys
    (concat
     "\\[fixup-whitespace] "
-    (if-let* ((ts (conn-read-args-argument-value arg)))
+    (if-let* ((ts (conn-argument-value arg)))
         (propertize
          "fixup"
          'face 'eldoc-highlight-function-argument)
@@ -513,22 +508,15 @@ words."))
 
 ;;;;;; Check Bounds Argument
 
-(oclosure-define (conn-check-bounds-argument
-                  (:parent conn-read-args-argument)))
-
 (defvar-keymap conn-check-bounds-argument-map
   "!" 'check-bounds)
 
-(defun conn-check-bounds-argument (&optional value)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (oclosure-lambda (conn-check-bounds-argument
-                    (arg-value value)
-                    (arg-keymap conn-check-bounds-argument-map))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument self (null value))
-      self)))
+(cl-defstruct (conn-check-bounds-argument
+               (:include conn-argument)
+               (:constructor
+                conn-check-bounds-argument
+                ( &optional value
+                  &aux (keymap conn-check-bounds-argument-map)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-check-bounds-argument)
                                        (_sym (eql check-bounds)))
@@ -538,7 +526,7 @@ words."))
   (substitute-command-keys
    (concat
     "\\[check-bounds] "
-    (if-let* ((ts (conn-read-args-argument-value arg)))
+    (if-let* ((ts (conn-argument-value arg)))
         (propertize
          "check region"
          'face 'eldoc-highlight-function-argument)
@@ -568,10 +556,23 @@ words."))
   "SPC" 'conn-bounds-last
   "X" 'conn-transform-reset)
 
-(oclosure-define (conn-transform-argument
-                  (:parent conn-read-args-argument)))
+(cl-defstruct (conn-transform-argument
+               (:include conn-argument)
+               (:constructor
+                conn-transform-argument
+                ( &optional value
+                  &aux (keymap conn-transform-map)))))
 
-(cl-defmethod conn-argument-required-p ((_arg conn-transform-argument)) nil)
+(cl-defmethod conn-update-argument ((arg conn-transform-argument)
+                                    cmd)
+  (let* ((next (conn-transform-command-handler cmd arg-value)))
+    (pcase cmd
+      ('conn-transform-reset
+       (setf (conn-transform-argument-value arg) nil)
+       arg)
+      ((guard (not (eq next arg-value)))
+       (setf (conn-transform-argument-value arg) next)
+       arg))))
 
 ;; TODO: better mutual exclusion checking
 (cl-defgeneric conn-transform-command-handler (cmd transform))
@@ -584,28 +585,13 @@ words."))
         (cons cmd transforms))
     transforms))
 
-(defun conn-transform-argument (&rest initial)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (oclosure-lambda (conn-transform-argument
-                    (arg-value initial)
-                    (arg-keymap conn-transform-map))
-      (self cmd)
-    (let* ((next (conn-transform-command-handler cmd arg-value)))
-      (pcase cmd
-        ('conn-transform-reset
-         (conn-set-argument self nil))
-        ((guard (not (eq next arg-value)))
-         (conn-set-argument self next))
-        (_ self)))))
-
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
   (and (symbolp sym)
        (get sym :conn-bounds-transformation)))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
-  (when-let* ((ts (conn-read-args-argument-value arg)))
+  (when-let* ((ts (conn-argument-value arg)))
     (concat
      "T: "
      (propertize

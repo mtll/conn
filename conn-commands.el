@@ -324,22 +324,16 @@ of line proper."
 (conn-define-state conn-replace-state (conn-read-thing-state)
   :lighter "REPLACE")
 
-(oclosure-define (conn-replace-thing-argument
-                  (:parent conn-thing-argument)))
-
 (defvar-keymap conn-replace-thing-argument-map
   "p" 'project)
 
-(defun conn-replace-thing-argument ()
-  (oclosure-lambda (conn-replace-thing-argument
-                    (arg-keymap conn-replace-thing-argument-map)
-                    (recursive-edit t)
-                    (arg-required t))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list cmd (conn-read-args-consume-prefix-arg)))
-      self)))
+(cl-defstruct (conn-replace-thing-argument
+               (:include conn-thing-argument)
+               (:constructor conn-replace-thing-argument
+                             (&aux
+                              (required t)
+                              (keymap conn-replace-thing-argument-map)
+                              (recursive-edit t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        cmd)
@@ -699,24 +693,18 @@ instances of from-string.")
 (conn-define-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
 
-(oclosure-define (conn-isearch-thing-argument
-                  (:parent conn-thing-argument)))
-
 (defvar-keymap conn-isearch-thing-map
   "F" 'multi-file
   "B" 'multi-buffer
   "p" 'project)
 
-(defun conn-isearch-thing-argument ()
-  (oclosure-lambda (conn-isearch-thing-argument
-                    (arg-keymap conn-isearch-thing-map)
-                    (recursive-edit t)
-                    (arg-required t))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list cmd (conn-read-args-consume-prefix-arg)))
-      self)))
+(cl-defstruct (conn-isearch-thing-argument
+               (:include conn-thing-argument)
+               (:constructor conn-isearch-thing-argument
+                             (&aux
+                              (keymap conn-isearch-thing-map)
+                              (required t)
+                              (recursive-edit t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-isearch-thing-argument)
                                        cmd)
@@ -1190,7 +1178,10 @@ With a prefix ARG `push-mark' without activating it."
                      :prompt "Transpose Dispatch test"
                      :prefix arg)
         ((`(,thing ,thing-arg) (conn-thing-argument t))
-         (restrict-windows (conn-dispatch-restrict-windows-argument)))
+         (restrict-windows
+          (conn-boolean-argument 'restrict-windows
+                                 conn-dispatch-restrict-windows-map
+                                 "this-win")))
       (conn-dispatch-setup
        (oclosure-lambda (conn-action
                          (action-description "Transpose")
@@ -1448,23 +1439,20 @@ With arg N, insert N newlines."
     (conn--narrow-to-region beg end record)
     (deactivate-mark)))
 
-(oclosure-define (conn-indirect-argument
-                  (:parent conn-read-args-argument)))
-
 (defvar-keymap conn-indirect-map
   "d" 'indirect)
 
-(defun conn-indirect-argument (&rest initial)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (oclosure-lambda (conn-indirect-argument
-                    (arg-value initial)
-                    (arg-keymap conn-indirect-map))
-      (self cmd)
-    (pcase cmd
-      ('indirect
-       (conn-set-argument self (not arg-value)))
-      (_ self))))
+(cl-defstruct (conn-indirect-argument
+               (:include conn-argument)
+               (:constructor conn-indirect-argument
+                             ( &optional value
+                               &aux (keymap conn-indirect-map)))))
+
+(cl-defmethod conn-argument-update ((arg conn-indirect-argument)
+                                    cmd)
+  (when (eq cmd 'indirect)
+    (cl-callf not (conn-argument-value arg))
+    arg))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-indirect-argument)
                                        (_sym (eql indirect)))
@@ -1474,7 +1462,7 @@ With arg N, insert N newlines."
   (substitute-command-keys
    (concat
     "\\[indirect] "
-    (let ((ts (conn-read-args-argument-value arg)))
+    (let ((ts (conn-argument-value arg)))
       (propertize
        "Indirect"
        'face (when ts 'eldoc-highlight-function-argument))))))
@@ -2011,7 +1999,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-display ((arg conn-separator-argument))
   (concat "\\[separator]/\\[register-separator] separator"
-          (when-let* ((sep (conn-read-args-argument-value arg)))
+          (when-let* ((sep (conn-argument-value arg)))
             (concat
              ": "
              (propertize (format "<%s>" sep)
@@ -2060,10 +2048,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   :delete delete
                                   :register register))
          (transform (conn-dispatch-transform-argument transform))
-         (repeat (conn-dispatch-repeat-argument))
+         (repeat
+          (conn-boolean-argument 'repeat-dispatch
+                                 conn-dispatch-repeat-arg-map
+                                 "repeat"))
          (separator (when (not delete)
                       (conn-separator-argument 'default)))
-         (restrict-windows (conn-dispatch-restrict-windows-argument t)))
+         (restrict-windows
+          (conn-boolean-argument 'restrict-windows
+                                 conn-dispatch-restrict-windows-map
+                                 "this-win"
+                                 t)))
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'dispatch-other-end)
@@ -2192,38 +2187,34 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   :keymap (conn-get-state-map 'conn-copy-state)
   "j" 'move-end-of-line)
 
-(oclosure-define (conn-copy-how-argument
-                  (:parent conn-read-args-argument)
-                  (:copier conn-set-copy-how (append register)))
-  (append)
-  (register))
-
 (defvar-keymap conn-copy-how-map
   "z" 'append-next-kill
   "<" 'register)
 
-(cl-defun conn-copy-how-argument (&key append register)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (oclosure-lambda (conn-copy-how-argument
-                    (append append)
-                    (register register)
-                    (arg-keymap conn-copy-how-map))
-      (self cmd)
-    (pcase cmd
-      ('append-next-kill
-       (conn-set-copy-how self
-                          (pcase append
-                            ('nil 'append)
-                            ('append 'prepend)
-                            ('prepend nil))
-                          register))
-      ('register
-       (if register
-           (conn-set-copy-how self append nil)
-         (conn-set-copy-how self append
-                            (register-read-with-preview "Register:"))))
-      (_ self))))
+(cl-defstruct (conn-copy-how-argument
+               (:include conn-argument)
+               (:constructor conn-copy-how-argument
+                             ( &key append register
+                               &aux (keymap conn-copy-how-map))))
+  (append nil)
+  (register nil))
+
+(cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
+                                    cmd)
+  (pcase cmd
+    ('append-next-kill
+     (setf (conn-copy-how-argument-append arg)
+           (pcase (conn-copy-how-argument-append arg)
+             ('nil 'append)
+             ('append 'prepend)
+             ('prepend nil)))
+     arg)
+    ('register
+     (setf (conn-copy-how-argument-register arg)
+           (if (conn-copy-how-argument-register arg)
+               nil
+             (register-read-with-preview "Register:")))
+     arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-how-argument)
                                        sym)
@@ -2234,28 +2225,31 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
    (substitute-command-keys
     (concat
      "\\[append-next-kill] "
-     (pcase (conn-copy-how-argument--append arg)
-       ('nil "append")
-       ('prepend
-        (propertize
-         "prepend"
-         'face 'eldoc-highlight-function-argument))
-       (_
-        (propertize
-         "append"
-         'face 'eldoc-highlight-function-argument)))))
+     (propertize "(" 'face 'shadow)
+     (propertize
+      "append"
+      'face (if (eq 'append (conn-copy-how-argument-append arg))
+                'eldoc-highlight-function-argument
+              'shadow))
+     (propertize "|" 'face 'shadow)
+     (propertize
+      "prepend"
+      'face (if (eq 'prepend (conn-copy-how-argument-append arg))
+                'eldoc-highlight-function-argument
+              'shadow))
+     (propertize ")" 'face 'shadow)))
    (substitute-command-keys
     (concat
      "\\[register] "
-     (if-let* ((ts (conn-copy-how-argument--register arg)))
+     (if-let* ((ts (conn-copy-how-argument-register arg)))
          (propertize
           (format "register <%c>" ts)
           'face 'eldoc-highlight-function-argument)
        "register")))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
-  (list (conn-copy-how-argument--append arg)
-        (conn-copy-how-argument--register arg)))
+  (list (conn-copy-how-argument-append arg)
+        (conn-copy-how-argument-register arg)))
 
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
@@ -2299,10 +2293,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                    :reference (list conn-dispatch-thing-ref))
       ((`(,thing ,thing-arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
-       (repeat (conn-dispatch-repeat-argument))
-       (append (conn-copy-how-argument append))
+       (repeat
+        (conn-boolean-argument 'repeat-dispatch
+                               conn-dispatch-repeat-arg-map
+                               "repeat"))
+       (append (conn-copy-how-argument :append append))
        (separator (conn-separator-argument 'default))
-       (restrict-windows (conn-dispatch-restrict-windows-argument t)))
+       (restrict-windows
+        (conn-boolean-argument 'restrict-windows
+                               conn-dispatch-restrict-windows-map
+                               "this-win"
+                               t)))
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (eq cmd 'dispatch-other-end)
@@ -2423,32 +2424,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                        _comment)
   (copy-from-above-command arg))
 
-(oclosure-define (conn-duplicate-comment-argument
-                  (:parent conn-read-args-argument)))
-
 (defvar-keymap conn-duplicate-comment-argument-map
   "q" 'duplicate-comment)
-
-(defun conn-duplicate-comment-argument (&optional value)
-  (oclosure-lambda (conn-duplicate-comment-argument
-                    (arg-value value)
-                    (arg-keymap conn-duplicate-comment-argument-map))
-      (self cmd)
-    (pcase cmd
-      ('duplicate-comment
-       (conn-set-argument self (not value)))
-      (_ self))))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-duplicate-comment-argument)
-                                       (_cmd (eql duplicate-comment)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-duplicate-comment-argument))
-  (concat
-   "\\[duplicate-comment] "
-   (propertize "comment"
-               'face (when (conn-read-args-argument-value arg)
-                       'eldoc-highlight-function-argument))))
 
 (defun conn-duplicate-thing (thing-mover thing-arg transform &optional comment)
   "Duplicate the region defined by a thing command.
@@ -2459,7 +2436,10 @@ With prefix arg N duplicate region N times."
                     :prompt "Thing")
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
-        (comment (conn-duplicate-comment-argument)))
+        (comment
+         (conn-boolean-argument 'duplicate-comment
+                                conn-duplicate-comment-argument-map
+                                "comment")))
      (list thing thing-arg transform comment)))
   (conn-make-command-repeatable)
   (conn-duplicate-thing-do thing-mover thing-arg transform comment))

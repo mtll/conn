@@ -78,7 +78,6 @@
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
-  "y" 'yank-rectangle
   "DEL" 'clear-rectangle
   "<backspace>" 'clear-rectangle
   "SPC d" 'delete-whitespace-rectangle

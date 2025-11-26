@@ -28,6 +28,7 @@
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function kmacro-p "kmacro")
 (declare-function project-files "project")
+(declare-function fileloop-continue "fileloop")
 
 ;;;; Kapply
 
@@ -291,6 +292,28 @@ of highlighting."
                    (list (cons (point-min) (point-max)))
                    regexp-flag)))
         matches)
+    (fileloop-initialize
+     files
+     (lambda ()
+       (replace-search string (point-max) regexp-flag
+                       delimited-flag case-fold-search))
+     (let (last-buffer)
+       (lambda ()
+         (unless (eq last-buffer (current-buffer))
+           (setq last-buffer (current-buffer))
+           (save-match-data
+             (goto-char (point-min))
+             (while (replace-search string (point-max) regexp-flag
+                                    delimited-flag case-fold-search)
+               (pcase (match-data t)
+                 (`(,mb ,me . ,_)
+                  (push (cons (conn--create-marker mb nil t)
+                              (conn--create-marker me))
+                        matches)))))
+           (setq matches (nreverse matches))
+           (when sort-function
+             (setq matches (funcall sort-function matches))))
+         (not matches))))
     (lambda (state)
       (pcase state
         (:cleanup
@@ -300,21 +323,8 @@ of highlighting."
                    (set-marker end nil))
                  matches)))
         ((or :next :record)
-         (while (and files (null matches))
-           (with-current-buffer (find-file-noselect (pop files))
-             (save-match-data
-               (save-excursion
-                 (goto-char (point-min))
-                 (while (replace-search string (point-max) regexp-flag
-                                        delimited-flag case-fold-search)
-                   (pcase (match-data t)
-                     (`(,mb ,me . ,_)
-                      (push (cons (conn--create-marker mb nil t)
-                                  (conn--create-marker me))
-                            matches)))))))
-           (setq matches (nreverse matches))
-           (when sort-function
-             (setq matches (funcall sort-function matches))))
+         (unless matches
+           (ignore-errors (fileloop-continue)))
          (pop matches))))))
 
 (cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
