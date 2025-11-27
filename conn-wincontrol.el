@@ -610,7 +610,7 @@
 
 (defalias 'conn-other-window 'other-window)
 
-(defvar conn-goto-window-cycle-limit 3)
+(defvar conn-goto-window-cycle-limit 2)
 
 (defun conn-goto-window (&optional arg)
   "Prompt for a window and then select it."

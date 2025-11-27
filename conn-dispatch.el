@@ -383,7 +383,9 @@ themselves once the selection process has concluded."
       (concat padding label))))
 
 (defvar conn--window-label-pool
-  (conn-simple-labels 30))
+  (mapcar (lambda (str)
+            (propertize str 'face 'conn-window-label-face))
+          (conn-simple-labels 30)))
 
 (defun conn--ensure-window-labels ()
   (let* ((windows (conn--get-windows nil 'nomini t))
