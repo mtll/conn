@@ -1213,6 +1213,13 @@ Transpose defines some addition thing bindings:
       (("symbol" forward-symbol))
       (("recursive-edit" recursive-edit))))))
 
+(cl-defstruct (conn-transpose-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-transpose-thing-argument
+                ( &optional recursive-edit
+                  &aux (required t)))))
+
 (defun conn-transpose-things (mover arg)
   "Exchange regions defined by a thing command.
 
@@ -1225,7 +1232,7 @@ region after a `recursive-edit'."
                     :prompt "Transpose"
                     :prefix current-prefix-arg
                     :reference conn-transpose-reference)
-       ((`(,thing ,thing-arg) (conn-thing-argument t)))
+       ((`(,thing ,thing-arg) (conn-transpose-thing-argument t)))
      (list thing thing-arg)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
@@ -1779,6 +1786,18 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-kill-how-argument-append arg)
         (conn-kill-how-argument-register arg)))
 
+(cl-defstruct (conn-kill-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-kill-thing-argument
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-kill-thing (cmd
                         arg
                         transform
@@ -1792,7 +1811,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
                     :reference conn-kill-reference)
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,thing-arg) (conn-kill-thing-argument t))
         (transform (conn-transform-argument))
         (`(,delete ,append ,register)
          (conn-kill-how-argument
@@ -2234,12 +2253,24 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (list (conn-copy-how-argument-append arg)
         (conn-copy-how-argument-register arg)))
 
+(cl-defstruct (conn-copy-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor
+                 conn-copy-thing-argument
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
   (interactive
    (conn-read-args (conn-copy-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
+       ((`(,thing ,thing-arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
         (`(,append ,register)
          (conn-copy-how-argument
@@ -2364,11 +2395,23 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     ((conn-bounds `(,beg . ,end) transform)
      (comment-or-uncomment-region beg end))))
 
+(cl-defstruct (conn-comment-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-comment-thing-argument
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-comment-thing (thing thing-arg transform)
   (interactive
    (conn-read-args (conn-comment-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,thing-arg) (conn-comment-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
   (conn-comment-thing-do thing thing-arg transform))
@@ -2410,6 +2453,18 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defvar-keymap conn-duplicate-comment-argument-map
   "q" 'duplicate-comment)
 
+(cl-defstruct (conn-duplicate-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-duplicate-thing-argument
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-duplicate-thing (thing-mover thing-arg transform &optional comment)
   "Duplicate the region defined by a thing command.
 
@@ -2417,7 +2472,7 @@ With prefix arg N duplicate region N times."
   (interactive
    (conn-read-args (conn-duplicate-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,thing-arg) (conn-duplicate-thing-argument t))
         (transform (conn-transform-argument))
         (comment
          (conn-boolean-argument 'duplicate-comment
@@ -2563,12 +2618,24 @@ Interactively `region-beginning' and `region-end'."
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
 
+(cl-defstruct (conn-change-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-change-thing-argument
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD and ARG."
   (interactive
    (conn-read-args (conn-change-state
                     :prompt "Thing")
-       ((`(,thing ,thing-arg) (conn-thing-argument-dwim))
+       ((`(,thing ,thing-arg) (conn-change-thing-argument))
         (transform (conn-transform-argument)))
      (list thing thing-arg transform)))
   (conn-change-thing-do cmd arg transform))
