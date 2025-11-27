@@ -1486,24 +1486,18 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (let ((valid t))
-             (catch 'conn-read-args-handle
-               (when command-handler
-                 (funcall command-handler cmd))
-               (setq valid nil))
-             (let ((as arguments))
-               (conn-named-loop loop
-                 (if-let* ((arg (car as)))
-                     (conn-argument-update
-                      arg cmd (lambda (newval)
-                                (setf (car as) newval
-                                      valid t)))
-                   (:return-from
-                    loop
-                    (unless valid
-                      (setf conn--read-args-error-message
-                            (format "Invalid Command <%s>" cmd)))))
-                 (pop as)))))
+           (catch 'conn-read-args-handle
+             (when command-handler
+               (funcall command-handler cmd))
+             (let (valid)
+               (cl-loop for as on arguments
+                        do (conn-argument-update
+                            (car as) cmd (lambda (newval)
+                                           (setf (car as) newval
+                                                 valid t))))
+               (unless valid
+                 (setf conn--read-args-error-message
+                       (format "Invalid Command <%s>" cmd))))))
          (read-command ()
            (let ((cmd (key-binding (read-key-sequence nil) t)))
              (while (arrayp cmd) ; keyboard macro

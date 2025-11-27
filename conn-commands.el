@@ -336,9 +336,8 @@ of line proper."
                               (recursive-edit t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
-                                       cmd)
-  (or (eq cmd 'project)
-      (cl-call-next-method)))
+                                       (cmd (eql project)))
+  t)
 
 (cl-defmethod conn-argument-display ((_arg conn-replace-thing-argument))
   "\\[project] project")
@@ -1213,12 +1212,18 @@ Transpose defines some addition thing bindings:
       (("symbol" forward-symbol))
       (("recursive-edit" recursive-edit))))))
 
+(defvar-keymap conn-transpose-thing-argument-map)
+
 (cl-defstruct (conn-transpose-thing-argument
                (:include conn-thing-argument)
                (:constructor
                 conn-transpose-thing-argument
-                ( &optional recursive-edit
-                  &aux (required t)))))
+                ( &optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-transpose-thing-argument-map)
+                  (required t)
+                  (keymap conn-transpose-thing-argument-map)))))
 
 (defun conn-transpose-things (mover arg)
   "Exchange regions defined by a thing command.
@@ -1786,6 +1791,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-kill-how-argument-append arg)
         (conn-kill-how-argument-register arg)))
 
+(defvar-keymap conn-kill-thing-argument-map)
+
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
                (:constructor
@@ -1793,6 +1800,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 ( &optional
                   recursive-edit
                   &aux
+                  (keymap conn-kill-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
@@ -2253,6 +2261,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (list (conn-copy-how-argument-append arg)
         (conn-copy-how-argument-register arg)))
 
+(defvar-keymap conn-copy-thing-argument-map)
+
 (cl-defstruct (conn-copy-thing-argument
                (:include conn-thing-argument)
                ( :constructor
@@ -2260,6 +2270,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                  (&optional
                   recursive-edit
                   &aux
+                  (keymap conn-copy-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
@@ -2395,6 +2406,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     ((conn-bounds `(,beg . ,end) transform)
      (comment-or-uncomment-region beg end))))
 
+(defvar-keymap conn-comment-thing-argument-map)
+
 (cl-defstruct (conn-comment-thing-argument
                (:include conn-thing-argument)
                (:constructor
@@ -2402,6 +2415,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 ( &optional
                   recursive-edit
                   &aux
+                  (keymap conn-comment-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
@@ -2453,6 +2467,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defvar-keymap conn-duplicate-comment-argument-map
   "q" 'duplicate-comment)
 
+(defvar-keymap conn-duplicate-thing-argument-map)
+
 (cl-defstruct (conn-duplicate-thing-argument
                (:include conn-thing-argument)
                (:constructor
@@ -2460,6 +2476,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                 ( &optional
                   recursive-edit
                   &aux
+                  (keymap conn-duplicate-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
@@ -2618,6 +2635,8 @@ Interactively `region-beginning' and `region-end'."
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
 
+(defvar-keymap conn-change-thing-argument-map)
+
 (cl-defstruct (conn-change-thing-argument
                (:include conn-thing-argument)
                (:constructor
@@ -2625,6 +2644,7 @@ Interactively `region-beginning' and `region-end'."
                 ( &optional
                   recursive-edit
                   &aux
+                  (keymap conn-change-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
