@@ -1493,8 +1493,6 @@ chooses to handle a command."
                                 (u (conn-argument-update (car arguments) cmd)))
                (cond (conn--read-args-error-flag)
                      (u (setf (car as) u))
-                     ;; ((not (eq u (car as)))
-                     ;;  (setf (car as) u))
                      ((null (cdr as))
                       (setf conn--read-args-error-message
                             (format "Invalid Command <%s>" cmd)))
@@ -1600,7 +1598,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (arg-keymap :type keymap))
 
 (cl-defstruct (conn-argument
-               (:constructor nil))
+               (:constructor nil)
+               (:constructor
+                conn-argument
+                (value &aux (required nil) (set-flag nil))))
   (value nil)
   (set-flag nil)
   (required nil :read-only t)

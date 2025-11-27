@@ -1706,55 +1706,58 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   :keymap (conn-get-state-map 'conn-kill-state)
   "j" 'move-end-of-line)
 
-(oclosure-define (conn-kill-how-argument
-                  (:parent conn-read-args-argument)
-                  (:copier conn-set-kill-how (delete append register)))
-  (delete)
-  (append)
-  (register))
-
 (defvar-keymap conn-kill-how-map
   "z" 'append-next-kill
   "c" 'copy
   "d" 'delete
   "<" 'register)
 
-(cl-defun conn-kill-how-argument (&key delete append register)
+(cl-defstruct (conn-kill-how-argument
+               (:include conn-argument)
+               (:constructor nil)
+               (:constructor conn--kill-how-argument))
+  (delete nil)
+  (append nil)
+  (register nil))
+
+(cl-defsubst conn-kill-how-argument (&key delete append register)
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq delete '(nil delete copy)))
   (cl-assert (not (and (eq delete 'delete)
                        (or append register))))
-  (oclosure-lambda (conn-kill-how-argument
-                    (delete delete)
-                    (append append)
-                    (register register)
-                    (arg-keymap conn-kill-how-map))
-      (self cmd)
+  (conn--kill-how-argument :delete delete
+                           :append append
+                           :register register
+                           :keymap conn-kill-how-map))
+
+(cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
+                                    cmd)
+  (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
+                       (register (conn-kill-how-argument-register arg))
+                       (append (conn-kill-how-argument-append arg)))
     (pcase cmd
       ('append-next-kill
-       (conn-set-kill-how self
-                          (if (eq delete 'delete) nil delete)
-                          (pcase append
-                            ('nil 'append)
-                            ('append 'prepend)
-                            ('prepend nil))
-                          register))
+       (setf delete (if (eq delete 'delete) nil delete)
+             append (pcase append
+                      ('nil 'append)
+                      ('append 'prepend)
+                      ('prepend nil)))
+       arg)
       ('delete
-       (conn-set-kill-how self (if (eq delete 'delete) nil 'delete) nil nil))
+       (setf delete (if (eq delete 'delete) nil 'delete)
+             register nil
+             append nil)
+       arg)
       ('copy
-       (pcase delete
-         ('delete (conn-set-kill-how self 'copy nil nil))
-         ('copy (conn-set-kill-how self nil append register))
-         ('nil (conn-set-kill-how self 'copy append register))))
+       (setf delete (unless (eq delete 'copy) 'copy))
+       arg)
       ('register
-       (conn-set-kill-how self
-                          (if (eq delete 'delete) nil delete)
-                          append
-                          (if register
-                              nil
-                            (register-read-with-preview "Register:"))))
-      (_ self))))
+       (setf delete (if (eq delete 'delete) nil delete)
+             register (if register
+                          nil
+                        (register-read-with-preview "Register:")))
+       arg))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
                                        sym)
@@ -1764,7 +1767,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (list
    (concat
     "\\[append-next-kill] "
-    (pcase (conn-kill-how-argument--append arg)
+    (pcase (conn-kill-how-argument-append arg)
       ('nil "append")
       ('prepend
        (propertize
@@ -1776,7 +1779,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         'face 'eldoc-highlight-function-argument))))
    (concat
     "\\[register] "
-    (if-let* ((ts (conn-kill-how-argument--register arg)))
+    (if-let* ((ts (conn-kill-how-argument-register arg)))
         (propertize
          (format "register <%c>" ts)
          'face 'eldoc-highlight-function-argument)
@@ -1785,19 +1788,19 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     "\\[copy] "
     (propertize
      "copy"
-     'face (if (eq (conn-kill-how-argument--delete arg) 'copy)
+     'face (if (eq (conn-kill-how-argument-delete arg) 'copy)
                'eldoc-highlight-function-argument)))
    (concat
     "\\[delete] "
     (propertize
      "delete"
-     'face (if (eq (conn-kill-how-argument--delete arg) 'delete)
+     'face (if (eq (conn-kill-how-argument-delete arg) 'delete)
                'eldoc-highlight-function-argument)))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
-  (list (conn-kill-how-argument--delete arg)
-        (conn-kill-how-argument--append arg)
-        (conn-kill-how-argument--register arg)))
+  (list (conn-kill-how-argument-delete arg)
+        (conn-kill-how-argument-append arg)
+        (conn-kill-how-argument-register arg)))
 
 (defun conn-kill-thing (cmd
                         arg
@@ -1823,7 +1826,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (fixup (conn-fixup-whitespace-argument
                 (unless (region-active-p)
                   conn-kill-fixup-whitespace-default)))
-        (check-bounds (conn-check-bounds-argument t)))
+        (check-bounds
+         (conn-boolean-argument 'check-bounds
+                                conn-check-bounds-argument-map
+                                "check bounds"
+                                t)))
      (list thing thing-arg transform append
            delete register fixup check-bounds)))
   (when (and (null append)
@@ -1964,33 +1971,32 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
-(oclosure-define (conn-separator-argument
-                  (:parent conn-read-args-argument)))
-
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
   "SPC" 'separator)
 
-(defun conn-separator-argument (&optional initial-value)
-  (oclosure-lambda (conn-separator-argument
-                    (arg-value initial-value)
-                    (arg-keymap conn-separator-argument-map))
-      (self cmd)
+(cl-defstruct (conn-separator-argument
+               (:include conn-argument)
+               (:constructor
+                conn-separator-argument
+                (value
+                 &aux (keymap conn-separator-argument-map)))))
+
+(cl-defmethod conn-argument-update ((arg conn-separator-argument)
+                                    cmd)
+  (cl-symbol-macrolet ((value (conn-argument-value arg)))
     (pcase cmd
       ('separator
-       (if (or (stringp arg-value)
-               (eq 'default arg-value))
-           (conn-unset-argument self nil)
-         (conn-set-argument
-          self
-          (if (conn-read-args-consume-prefix-arg)
-              (read-string "Separator: " nil nil nil t)
-            'default))))
+       (if (or (stringp value)
+               (eq 'default value))
+           (setf value nil)
+         (setf value (if (conn-read-args-consume-prefix-arg)
+                         (read-string "Separator: " nil nil nil t)
+                       'default))))
       ('register-separator
-       (if (eq arg-value 'register)
-           (conn-unset-argument self nil)
-         (conn-set-argument self (get-register register-separator))))
-      (_ self))))
+       (if (eq value 'register)
+           (setf value nil)
+         (setf value (get-register register-separator)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-separator-argument)
                                        sym)
@@ -2228,15 +2234,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
      (propertize "(" 'face 'shadow)
      (propertize
       "append"
-      'face (if (eq 'append (conn-copy-how-argument-append arg))
-                'eldoc-highlight-function-argument
-              'shadow))
+      'face (when (eq 'append (conn-copy-how-argument-append arg))
+              'eldoc-highlight-function-argument))
      (propertize "|" 'face 'shadow)
      (propertize
       "prepend"
-      'face (if (eq 'prepend (conn-copy-how-argument-append arg))
-                'eldoc-highlight-function-argument
-              'shadow))
+      'face (when (eq 'prepend (conn-copy-how-argument-append arg))
+              'eldoc-highlight-function-argument))
      (propertize ")" 'face 'shadow)))
    (substitute-command-keys
     (concat

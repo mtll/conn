@@ -105,9 +105,7 @@ If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
   (unless (or (region-active-p)
-              (memq last-command '(conn-expand
-                                   conn-contract
-                                   conn-expand-exchange)))
+              (conn--valid-expansions-p))
     (conn--push-ephemeral-mark))
   (conn--expand-create-expansions)
   (if (< arg 0)
@@ -123,11 +121,10 @@ Expansions are provided by functions in `conn-expansion-functions'."
              (cl-loop for (_beg . end) in conn--current-expansions
                       when (> end (point)) return (goto-char end)
                       finally (user-error "No more expansions")))
-            ((cl-loop for (beg . end) in conn--current-expansions
-                      when (or (and (< beg (region-beginning))
-                                    (>= end (region-end)))
-                               (and (<= beg (region-beginning))
-                                    (> end (region-end))))
+            (t
+             (cl-loop for (beg . end) in conn--current-expansions
+                      when (> (abs (- end beg))
+                              (abs (- (region-end) (region-beginning))))
                       return (progn
                                (goto-char (if (= (point) (region-beginning)) beg end))
                                (conn--push-ephemeral-mark
@@ -206,34 +203,41 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (conn--push-ephemeral-mark (point))
   (call-interactively cmd)
-  (conn-read-args (conn-expand-state
-                   :prompt "Expansion"
-                   :prefix arg
-                   :display-handler #'conn--read-expand-display)
+  (conn-read-args
+      (conn-expand-state
+       :prompt "Expansion"
+       :prefix arg
+       :display-handler #'conn--read-expand-display
+       :command-handler (lambda (command)
+                          (pcase command
+                            ('conn-expand-exchange
+                             (conn-expand-exchange)
+                             (conn-read-args-handle))
+                            ('conn-contract
+                             (ignore-error user-error
+                               (conn-contract
+                                (prefix-numeric-value
+                                 (conn-read-args-consume-prefix-arg))))
+                             (conn-read-args-handle))
+                            ('conn-expand
+                             (ignore-error user-error
+                               (conn-expand
+                                (prefix-numeric-value
+                                 (conn-read-args-consume-prefix-arg))))
+                             (conn-read-args-handle))
+                            ('conn-toggle-mark-command
+                             (if mark-active
+                                 (deactivate-mark)
+                               (activate-mark))
+                             (conn-read-args-handle)))))
       ((bounds
         (oclosure-lambda (conn-read-args-argument
                           (arg-required t))
             (self command)
           (pcase command
-            ('conn-expand-exchange
-             (conn-expand-exchange)
-             (conn-read-args-handle))
-            ('conn-contract
-             (ignore-error user-error
-               (conn-contract (conn-read-args-consume-prefix-arg)))
-             (conn-read-args-handle))
-            ('conn-expand
-             (ignore-error user-error
-               (conn-expand (conn-read-args-consume-prefix-arg)))
-             (conn-read-args-handle))
-            ('conn-toggle-mark-command
-             (if mark-active
-                 (deactivate-mark)
-               (activate-mark))
-             (conn-read-args-handle))
             ((or 'end 'exit-recursive-edit)
-             (conn-set-argument self (cons (region-beginning)
-                                           (region-end))))
+             (conn-argument (cons (region-beginning)
+                                  (region-end))))
             (_ self)))))
     (conn-make-bounds cmd arg bounds)))
 

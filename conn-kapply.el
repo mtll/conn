@@ -292,40 +292,57 @@ of highlighting."
                    (list (cons (point-min) (point-max)))
                    regexp-flag)))
         matches)
-    (fileloop-initialize
-     files
-     (lambda ()
-       (replace-search string (point-max) regexp-flag
-                       delimited-flag case-fold-search))
-     (let (last-buffer)
-       (lambda ()
-         (unless (eq last-buffer (current-buffer))
-           (setq last-buffer (current-buffer))
-           (save-match-data
-             (goto-char (point-min))
-             (while (replace-search string (point-max) regexp-flag
-                                    delimited-flag case-fold-search)
-               (pcase (match-data t)
-                 (`(,mb ,me . ,_)
-                  (push (cons (conn--create-marker mb nil t)
-                              (conn--create-marker me))
-                        matches)))))
+    (cl-labels
+        ((find-matches (buffer)
+           (with-current-buffer buffer
+             (save-excursion
+               (save-match-data
+                 (goto-char (point-min))
+                 (while (replace-search string (point-max) regexp-flag
+                                        delimited-flag case-fold-search)
+                   (pcase (match-data t)
+                     (`(,mb ,me . ,_)
+                      (push (cons (conn--create-marker mb nil t)
+                                  (conn--create-marker me))
+                            matches)))))))
            (setq matches (nreverse matches))
            (when sort-function
              (setq matches (funcall sort-function matches))))
-         (not matches))))
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (when (consp matches)
-           (mapc (pcase-lambda (`(,beg . ,end))
-                   (set-marker beg nil)
-                   (set-marker end nil))
-                 matches)))
-        ((or :next :record)
-         (unless matches
-           (ignore-errors (fileloop-continue)))
-         (pop matches))))))
+         (check-buffer (buffer)
+           (with-current-buffer buffer
+             (save-excursion
+               (goto-char (point-min))
+               (replace-search string (point-max) regexp-flag
+                               delimited-flag case-fold-search))))
+         (next ()
+           (when-let* ((next (pop files)))
+             (let ((buffer (get-file-buffer next)))
+               (cond ((and buffer (check-buffer buffer))
+                      (find-matches buffer))
+                     ((with-work-buffer
+                        (condition-case err
+                            (insert-file-contents next nil)
+                          (file-missing nil)
+                          (file-error
+                           (let ((msg (error-message-string err)))
+                             (unless (string-search next msg)
+                               (setq msg (format "%s: %s" next msg)))
+                             (delay-warning 'file-error msg :error))
+                           nil))
+                        (check-buffer (current-buffer)))
+                      (find-matches (find-file-noselect next)))
+                     (t (next)))))))
+      (lambda (state)
+        (pcase state
+          (:cleanup
+           (when (consp matches)
+             (mapc (pcase-lambda (`(,beg . ,end))
+                     (set-marker beg nil)
+                     (set-marker end nil))
+                   matches)))
+          ((or :next :record)
+           (unless matches (next))
+           (pop matches)))))))
 
 (cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
                                           thing-arg

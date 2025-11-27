@@ -402,6 +402,10 @@ order to mark the region that should be defined by any of COMMANDS."
                                        (_sym (conn-thing dispatch)))
   (not (or defining-kbd-macro executing-kbd-macro)))
 
+(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
+                                       (_sym (eql recursive-edit)))
+  (conn-thing-argument-recursive-edit arg))
+
 (cl-defmethod conn-argument-completion-annotation ((_arg conn-thing-argument)
                                                    sym)
   (and-let* ((thing (or (and (conn-anonymous-thing-p sym)
@@ -409,10 +413,6 @@ order to mark the region that should be defined by any of COMMANDS."
                         (conn-command-thing sym)
                         (and (conn-thing-p sym) sym))))
     (format " (%s)" thing)))
-
-(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
-                                       (_sym (eql recursive-edit)))
-  (conn-thing-argument-recursive-edit arg))
 
 ;;;;;; Subregions
 
@@ -511,27 +511,6 @@ words."))
 (defvar-keymap conn-check-bounds-argument-map
   "!" 'check-bounds)
 
-(cl-defstruct (conn-check-bounds-argument
-               (:include conn-argument)
-               (:constructor
-                conn-check-bounds-argument
-                ( &optional value
-                  &aux (keymap conn-check-bounds-argument-map)))))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-check-bounds-argument)
-                                       (_sym (eql check-bounds)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-check-bounds-argument))
-  (substitute-command-keys
-   (concat
-    "\\[check-bounds] "
-    (if-let* ((ts (conn-argument-value arg)))
-        (propertize
-         "check region"
-         'face 'eldoc-highlight-function-argument)
-      "check region"))))
-
 ;;;;;; Thing Transform Argument
 
 (defvar conn-transformations-quick-ref
@@ -563,15 +542,16 @@ words."))
                 ( &optional value
                   &aux (keymap conn-transform-map)))))
 
-(cl-defmethod conn-update-argument ((arg conn-transform-argument)
+(cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd)
-  (let* ((next (conn-transform-command-handler cmd arg-value)))
+  (let* ((next (conn-transform-command-handler
+                cmd (conn-argument-value arg))))
     (pcase cmd
       ('conn-transform-reset
-       (setf (conn-transform-argument-value arg) nil)
+       (setf (conn-argument-value arg) nil)
        arg)
-      ((guard (not (eq next arg-value)))
-       (setf (conn-transform-argument-value arg) next)
+      ((guard (not (eq next (conn-argument-value arg))))
+       (setf (conn-argument-value arg) next)
        arg))))
 
 ;; TODO: better mutual exclusion checking
@@ -1217,6 +1197,7 @@ words."))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-multi-thing-select-state)
+  "z" 'conn-exchange-mark-command
   "f" 'conn-expand
   "l" 'conn-expand
   "s" 'conn-contract
@@ -1282,7 +1263,36 @@ Only the background color is used."
                (when (> size 1)
                  (concat
                   "; \\[conn-expand] next; "
-                  "\\[conn-contract] prev"))))))))
+                  "\\[conn-contract] prev")))))))
+         (command-handler
+          (lambda (command)
+            (pcase command
+              ('recenter-top-bottom
+               (let ((this-command 'recenter-top-bottom)
+                     (last-command conn-read-args-last-command))
+                 (recenter-top-bottom (conn-read-args-prefix-arg)))
+               (conn-read-args-handle))
+              ('conn-exchange-mark-command
+               (conn-exchange-mark-command)
+               (conn-read-args-handle))
+              ('conn-contract
+               (setq curr (mod (1- curr) size))
+               (pcase (nth curr bounds)
+                 ((conn-bounds `(,beg . ,end))
+                  (goto-char (if (< (point) (mark)) beg end))
+                  (conn--push-ephemeral-mark
+                   (if (< (point) (mark)) end beg))))
+               (conn-read-args-handle))
+              ('conn-expand
+               (setq curr (mod (1+ curr) size))
+               (pcase (nth curr bounds)
+                 ((conn-bounds `(,beg . ,end))
+                  (goto-char (if (< (point) (mark)) beg end))
+                  (conn--push-ephemeral-mark
+                   (if (< (point) (mark)) end beg))))
+               (conn-read-args-handle))
+              ('abort
+               (user-error "Aborted"))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
       ((and `(,bound . nil)
@@ -1295,41 +1305,15 @@ Only the background color is used."
          (activate-mark)
          (conn-read-args (conn-multi-thing-select-state
                           :prompt "Thing"
-                          :display-handler display-handler)
+                          :display-handler display-handler
+                          :command-handler command-handler)
              ((bound
                (oclosure-lambda (conn-read-args-argument
-                                 (arg-required t)
-                                 (arg-keymap (define-keymap "z" 'conn-exchange-mark-command)))
+                                 (arg-required t))
                    (self command)
                  (pcase command
-                   ('recenter-top-bottom
-                    (let ((this-command 'recenter-top-bottom)
-                          (last-command conn-read-args-last-command))
-                      (recenter-top-bottom (conn-read-args-prefix-arg)))
-                    (conn-read-args-handle))
-                   ('conn-exchange-mark-command
-                    (conn-exchange-mark-command)
-                    (conn-read-args-handle))
-                   ('conn-contract
-                    (setq curr (mod (1- curr) size))
-                    (pcase (nth curr bounds)
-                      ((conn-bounds `(,beg . ,end))
-                       (goto-char (if (< (point) (mark)) beg end))
-                       (conn--push-ephemeral-mark
-                        (if (< (point) (mark)) end beg))))
-                    (conn-read-args-handle))
-                   ('conn-expand
-                    (setq curr (mod (1+ curr) size))
-                    (pcase (nth curr bounds)
-                      ((conn-bounds `(,beg . ,end))
-                       (goto-char (if (< (point) (mark)) beg end))
-                       (conn--push-ephemeral-mark
-                        (if (< (point) (mark)) end beg))))
-                    (conn-read-args-handle))
                    ('select
-                    (conn-set-argument self (nth curr bounds)))
-                   ('abort
-                    (user-error "Aborted"))
+                    (conn-argument (nth curr bounds)))
                    (_ self)))))
            bound))))))
 

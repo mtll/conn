@@ -3287,7 +3287,11 @@ contain targets."
        (transform (conn-transform-argument))
        (fixup (conn-fixup-whitespace-argument
                (not (region-active-p))))
-       (check-bounds (conn-check-bounds-argument))
+       (check-bounds
+        (conn-boolean-argument 'check-bounds
+                               conn-check-bounds-argument-map
+                               "check bounds"
+                               t))
        (separator (conn-dispatch-separator-argument 'default)))
     (let* ((cg (conn--action-buffer-change-group))
            (str (progn
@@ -3357,7 +3361,11 @@ contain targets."
                             (transform (conn-transform-argument))
                             (fixup (conn-fixup-whitespace-argument
                                     (not (region-active-p))))
-                            (check-bounds (conn-check-bounds-argument t)))
+                            (check-bounds
+                             (conn-boolean-argument 'check-bounds
+                                                    conn-check-bounds-argument-map
+                                                    "check bounds"
+                                                    t)))
                          (progn
                            (conn-kill-thing thing thing-arg transform
                                             nil nil nil
