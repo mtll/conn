@@ -336,7 +336,7 @@ of line proper."
                               (recursive-edit t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
-                                       (cmd (eql project)))
+                                       (_cmd (eql project)))
   t)
 
 (cl-defmethod conn-argument-display ((_arg conn-replace-thing-argument))
@@ -1221,7 +1221,6 @@ Transpose defines some addition thing bindings:
                 ( &optional
                   recursive-edit
                   &aux
-                  (keymap conn-transpose-thing-argument-map)
                   (required t)
                   (keymap conn-transpose-thing-argument-map)))))
 
@@ -1977,14 +1976,15 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
-  "SPC" 'separator)
+  "TAB" 'separator)
 
 (cl-defstruct (conn-separator-argument
                (:include conn-argument)
                (:constructor
                 conn-separator-argument
                 (value
-                 &aux (keymap conn-separator-argument-map)))))
+                 &aux
+                 (keymap conn-separator-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-separator-argument)
                                     cmd update-fn)
@@ -2206,8 +2206,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defstruct (conn-copy-how-argument
                (:include conn-argument)
                (:constructor conn-copy-how-argument
-                             ( &key append register
-                               &aux (keymap conn-copy-how-map))))
+                             (&key
+                              append
+                              register
+                              &aux
+                              (keymap conn-copy-how-map))))
   (append nil)
   (register nil))
 

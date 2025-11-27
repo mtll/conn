@@ -540,43 +540,25 @@ themselves once the selection process has concluded."
        (funcall conn--dispatch-thing-predicate sym)))
 
 (defvar-keymap conn-dispatch-separator-argument-map
-  "TAB" 'separator
-  "M-TAB" 'unset-separator)
-
-(cl-defstruct (conn-dispatch-separator-argument
-               (:include conn-argument)
-               (:constructor
-                conn-dispatch-separator-argument
-                ( &optional value
-                  &aux (keymap conn-dispatch-separator-argument-map)))))
+  "TAB" 'separator)
 
 (defvar conn-separator-history nil)
 
-(cl-defmethod conn-argument-update ((arg conn-dispatch-separator-argument)
-                                    cmd update-fn)
-  (pcase cmd
-    ('unset-separator
-     (conn-read-args-consume-prefix-arg)
-     (setf (conn-argument-value arg) nil)
-     (funcall update-fn arg))
-    ('separator
-     (setf (conn-argument-value arg)
-           (if (eq (conn-argument-value arg) 'default)
-               (read-string "Separator: " nil 'conn-separator-history)
-             'default))
-     (funcall update-fn arg))))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-separator-argument)
-                                       sym)
-  (or (eq sym 'separator)
-      (eq sym 'unset-separator)))
-
-(cl-defmethod conn-argument-display ((arg conn-dispatch-separator-argument))
-  (when-let* ((sep (conn-argument-value arg)))
-    (propertize (if (eq sep 'default)
-                    "Separator: default"
-                  (format "Separator: <%s>" sep))
-                'face 'eldoc-highlight-function-argument)))
+(defun conn-dispatch-separator-argument (&optional initial-value)
+  (conn-read-argument
+   "separator"
+   'separator
+   conn-dispatch-separator-argument-map
+   (lambda (val)
+     (if (eq val 'default)
+         (read-string "Separator: " nil 'conn-separator-history)
+       'default))
+   (lambda (val)
+     (propertize (cond ((eq val 'default) "default")
+                       ((string-empty-p val) "")
+                       (t (format "<%s>" val)))
+                 'face (when val 'conn-argument-active-face)))
+   initial-value))
 
 ;;;;;; Dispatch Quick Ref
 

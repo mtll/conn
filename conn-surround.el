@@ -51,10 +51,12 @@
                (:include conn-argument)
                (:constructor
                 conn-surround-property-argument
-                ( &optional value
-                  &aux (keymap (define-keymap
-                                 "w" :whole
-                                 "e" :inner))))))
+                ( &optional
+                  value
+                  &aux
+                  (keymap (define-keymap
+                            "w" :whole
+                            "e" :inner))))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd update-fn)
@@ -172,7 +174,9 @@
                (:include conn-argument)
                (:constructor
                 conn-surround-with-argument
-                (&aux (required t)))))
+                (&aux
+                 (required t)
+                 (annotation "surround with")))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
                                     cmd update-fn)
@@ -199,10 +203,11 @@
 ;;;;;; Padding Arg
 
 (defvar-keymap conn-surround-padding-map
-  "RET" 'conn-padding-flag)
+  "TAB" 'conn-padding-flag)
 
 (defun conn-surround-padding-argument ()
   (conn-read-argument
+   "padding"
    'conn-padding-flag
    conn-surround-padding-map
    (lambda (val)
@@ -211,10 +216,9 @@
            (read-string "Padding: ")
          " ")))
    (lambda (val)
-     (if val
-         (propertize (format "padding <%s>" val)
-                     'face 'conn-argument-active-face)
-       "padding"))))
+     (when val
+       (propertize (format "<%s>" val)
+                   'face 'conn-argument-active-face)))))
 
 ;;;;;; Perform Surround
 
@@ -452,7 +456,9 @@
                (:include conn-argument)
                (:constructor
                 conn-change-surround-argument
-                (&aux (required t)))))
+                (&aux
+                 (required t)
+                 (annotation "change surround")))))
 
 (cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
                                     cmd update-fn)

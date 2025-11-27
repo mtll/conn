@@ -1591,10 +1591,12 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
                   ;; (:predicate conn-anonymous-argument-p)
                   (:copier conn-set-argument (value &optional (set-flag t)))
                   (:copier conn-unset-argument (value &aux (set-flag nil))))
+  (predicate :type (or nil function))
   (value :type t)
   (set-flag :type boolean)
   (required :type boolean)
   (name :type (or nil string function))
+  (annotation :type (or nil string function))
   (keymap :type keymap))
 
 (cl-defstruct (conn-argument
@@ -1606,6 +1608,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (set-flag nil :type boolean)
   (required nil :type boolean :read-only t)
   (name nil :type (or string function nil) :read-only t)
+  (annotation nil :type (or nil string function) :read-only t)
   (keymap nil :type keymap :read-only t))
 
 (defalias 'conn-anonymous-argument-name
@@ -1674,19 +1677,40 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 (cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
            (side-effect-free t))
-  ( :method (_arg _val) nil))
+  ( :method (_arg _val) nil)
+  ( :method ((arg conn-anonymous-argument) cmd)
+    (when-let* ((pred (conn-anonymous-argument--predicate arg)))
+      (funcall pred cmd))))
 
 (cl-defgeneric conn-argument-completion-annotation (argument value)
   (declare (important-return-value t)
            (side-effect-free t))
-  (:method (&rest _) nil))
+  (:method (&rest _) nil)
+  ( :method ((arg conn-anonymous-argument) value)
+    (when-let* ((ann (conn-argument-annotation arg))
+                (_ (conn-argument-predicate arg value)))
+      (pcase ann
+        ((and (pred stringp) str)
+         (concat " (" str ")"))
+        ((and fn (pred functionp)
+              (let (and str (pred stringp))
+                (funcall fn arg)))
+         (concat " (" str ")")))))
+  ( :method ((arg conn-argument) value)
+    (when-let* ((ann (conn-argument-annotation arg))
+                (_ (conn-argument-predicate arg value)))
+      (pcase ann
+        ((and (pred stringp) str)
+         (concat " (" str ")"))
+        ((and fn (pred functionp)
+              (let (and str (pred stringp))
+                (funcall fn arg)))
+         (concat " (" str ")"))))))
 
 (cl-defgeneric conn-argument-keymaps (argument)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg cons))
-    (conn-argument-keymaps (cdr arg)))
   ( :method ((arg conn-anonymous-argument))
     (conn-anonymous-argument-keymap arg))
   ( :method ((arg conn-argument))
@@ -1702,12 +1726,13 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 (cl-defstruct (conn-boolean-argument
                (:include conn-argument)
                (:constructor conn-boolean-argument
-                             ( toggle-command
-                               keymap
-                               description
-                               &optional
-                               value)))
-  (description nil :read-only t)
+                             (toggle-command
+                              keymap
+                              name
+                              &optional
+                              value
+                              annotation
+                              &aux)))
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
@@ -1725,7 +1750,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
    (substitute-command-keys
     (format "\\[%s]" (conn-boolean-argument-toggle-command arg)))
    " "
-   (propertize (conn-boolean-argument-description arg)
+   (propertize (conn-boolean-argument-name arg)
                'face (when (conn-argument-value arg)
                        'conn-argument-active-face))))
 
@@ -1737,14 +1762,16 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 (cl-defstruct (conn-cycling-argument
                (:include conn-argument)
                (:constructor conn-cycling-argument
-                             ( choices
-                               cycling-command
-                               &key
-                               keymap
-                               (format-function #'conn-format-cycling-argument)
-                               required
-                               &aux
-                               (value (car choices)))))
+                             (choices
+                              cycling-command
+                              &key
+                              keymap
+                              (format-function #'conn-format-cycling-argument)
+                              required
+                              name
+                              annotation
+                              &aux
+                              (value (car choices)))))
   (choices nil :type list :read-only t)
   (cycling-command nil :type symbol :read-only t)
   (format-function #'identity :type function :read-only t))
@@ -1787,12 +1814,15 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (cl-defstruct (conn-read-argument
                (:include conn-argument)
-               (:constructor
-                conn-read-argument
-                (toggle-command
-                 keymap
-                 reader-function
-                 format-function)))
+               (:constructor conn-read-argument
+                             (name
+                              toggle-command
+                              keymap
+                              reader-function
+                              format-function
+                              &optional
+                              value
+                              annotation)))
   (reader-function nil :type function :read-only t)
   (format-function nil :type function :read-only t)
   (toggle-command nil :type symbol :read-only t))
@@ -1810,8 +1840,12 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (eq sym (conn-read-argument-toggle-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
-  (concat (format "\\[%s] " (conn-read-argument-toggle-command arg))
-          (funcall (conn-read-argument-format-function arg)
-                   (conn-argument-value arg))))
+  (concat
+   (format "\\[%s] " (conn-read-argument-toggle-command arg))
+   (conn-read-argument-name arg)
+   (when-let* ((v (funcall (conn-read-argument-format-function arg)
+                           (conn-argument-value arg)))
+               (_ (not (string-empty-p v))))
+     (concat ": " v))))
 
 (provide 'conn-states)

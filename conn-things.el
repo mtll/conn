@@ -406,13 +406,18 @@ order to mark the region that should be defined by any of COMMANDS."
                                        (_sym (eql recursive-edit)))
   (conn-thing-argument-recursive-edit arg))
 
-(cl-defmethod conn-argument-completion-annotation ((_arg conn-thing-argument)
+(cl-defmethod conn-argument-completion-annotation ((arg conn-thing-argument)
                                                    sym)
-  (and-let* ((thing (or (and (conn-anonymous-thing-p sym)
-                             (conn-anonymous-thing-parent sym))
-                        (conn-command-thing sym)
-                        (and (conn-thing-p sym) sym))))
-    (format " (%s)" thing)))
+  (when (conn-argument-predicate arg sym)
+    (pcase sym
+      ((and (pred conn-anonymous-thing-p)
+            (let thing (conn-anonymous-thing-parent sym)))
+       (format " (<anonymous %s>)" thing))
+      ((let (and thing (pred identity))
+         (or (conn-command-thing sym)
+             (and (conn-thing-p sym) sym)))
+       (format " (%s)" thing))
+      (_ " (<thing arg>)"))))
 
 ;;;;;; Subregions
 
@@ -423,8 +428,10 @@ order to mark the region that should be defined by any of COMMANDS."
                (:include conn-argument)
                (:constructor
                 conn-subregions-argument
-                ( &optional value
-                  &aux (keymap conn-subregions-map)))))
+                (&optional
+                 value
+                 &aux
+                 (keymap conn-subregions-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-subregions-argument)
                                     cmd update-fn)
@@ -535,8 +542,11 @@ words."))
                (:include conn-argument)
                (:constructor
                 conn-transform-argument
-                ( &optional value
-                  &key (keymap conn-transform-map)))))
+                (&optional
+                 value
+                 &key
+                 (keymap conn-transform-map)
+                 (annotation "transform")))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd update-fn)
