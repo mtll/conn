@@ -1516,7 +1516,7 @@ chooses to handle a command."
                     (setf conn--read-args-prefix-mag
                           (if (integerp conn--read-args-prefix-mag)
                               (+ (* 10 conn--read-args-prefix-mag) digit)
-                            (when (/= 0 digit) digit)))))
+                            digit))))
                  ('backward-delete-arg
                   (when conn--read-args-prefix-mag
                     (cl-callf floor conn--read-args-prefix-mag 10)))

@@ -345,7 +345,7 @@ of line proper."
 (defvar-keymap conn-regexp-argument-map
   "q" 'regexp)
 
-(defvar conn-query-flag nil
+(defvar conn-query-flag t
   "Default value for conn-query-flag.
 
 If flag is t then `conn-replace' and `conn-regexp-replace'
@@ -353,8 +353,8 @@ will query before replacing from-string, otherwise just replace all
 instances of from-string.")
 
 (defvar-keymap conn-replace-query-map
-  "C-RET" 'conn-query-replace
-  "C-<return>" 'conn-query-replace)
+  "C-RET" 'conn-replace-query-invert
+  "C-<return>" 'conn-replace-query-invert)
 
 (defvar-keymap conn-replace-from-map
   :parent conn-replace-query-map
@@ -363,7 +363,7 @@ instances of from-string.")
 (defvar-keymap conn-replace-to-map
   :parent conn-replace-query-map)
 
-(defun conn-query-replace ()
+(defun conn-replace-query-invert ()
   "Invert value of `conn-query-flag' and exit minibuffer."
   (interactive)
   (setq conn-query-flag (not conn-query-flag))
@@ -1090,31 +1090,31 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(cl-defgeneric conn-transpose-things-do (cmd arg)
+(cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mak)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
-(cl-defmethod conn-transpose-things-do :before (_cmd _arg)
+(cl-defmethod conn-transpose-things-do :before (&rest _)
   (conn-make-command-repeatable))
 
-(cl-defmethod conn-transpose-things-do (cmd arg)
+(cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
+                                        arg
+                                        at-point-and-mak)
   (pcase cmd
+    (at-point-and-mak
+     (deactivate-mark t)
+     (pcase-let* (((conn-bounds `(,beg1 . ,end1))
+                   (conn-bounds-of cmd arg))
+                  ((conn-bounds `(,beg2 . ,end2))
+                   (save-excursion
+                     (goto-char (mark t))
+                     (conn-bounds-of cmd arg))))
+       (transpose-regions beg1 end1 beg2 end2)))
     ((guard (use-region-p))
      (deactivate-mark t)
      (pcase-let ((beg1 (region-beginning))
                  (end1 (region-end))
                  ((conn-bounds `(,beg2 . ,end2))
                   (conn-bounds-of cmd arg)))
-       (transpose-regions beg1 end1 beg2 end2)))
-    ((let 0 arg)
-     (deactivate-mark t)
-     (pcase-let* (((conn-bounds `(,beg1 . ,end1))
-                   (if (region-active-p)
-                       (cons (region-beginning) (region-end))
-                     (conn-bounds-of cmd nil)))
-                  ((conn-bounds `(,beg2 . ,end2))
-                   (save-excursion
-                     (goto-char (mark t))
-                     (conn-bounds-of cmd nil))))
        (transpose-regions beg1 end1 beg2 end2)))
     ((let (and thing (pred identity))
        (or (conn-command-thing cmd)
@@ -1126,7 +1126,9 @@ With a prefix ARG `push-mark' without activating it."
                      (prefix-numeric-value arg)))
     (_ (error "Invalid transpose mover"))))
 
-(cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch)) arg)
+(cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch))
+                                        arg
+                                        at-point-and-mark)
   (pcase-let* ((bounds (conn-bounds-of cmd arg))
                ((conn-bounds `(,beg1 . ,end1))
                 bounds)
@@ -1135,7 +1137,9 @@ With a prefix ARG `push-mark' without activating it."
                                 (conn-bounds-arg bounds))))
     (transpose-regions beg1 end1 beg2 end2)))
 
-(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing recursive-edit-thing)) _arg)
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing recursive-edit-thing))
+                                        _arg
+                                        at-point-and-mark)
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer)))
@@ -1161,7 +1165,9 @@ With a prefix ARG `push-mark' without activating it."
                       (conn-make-bounds 'region nil bounds2))))
      nil nil)))
 
-(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch)) arg)
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch))
+                                        arg
+                                        at-point-and-mark)
   (conn-disable-repeating)
   (let ((pt1 (point))
         (buf1 (current-buffer))
@@ -1224,7 +1230,10 @@ Transpose defines some addition thing bindings:
                   (required t)
                   (keymap conn-transpose-thing-argument-map)))))
 
-(defun conn-transpose-things (mover arg)
+(defvar-keymap conn-transpose-point-and-mark-argument-map
+  "z" 'transpose-at-point-and-mark)
+
+(defun conn-transpose-things (mover arg at-point-and-mark)
   "Exchange regions defined by a thing command.
 
 With argument ARG 0, exchange the things at point and mark.
@@ -1236,11 +1245,15 @@ region after a `recursive-edit'."
                     :prompt "Transpose"
                     :prefix current-prefix-arg
                     :reference conn-transpose-reference)
-       ((`(,thing ,thing-arg) (conn-transpose-thing-argument t)))
-     (list thing thing-arg)))
+       ((`(,thing ,thing-arg) (conn-transpose-thing-argument t))
+        (at-point-and-mark (conn-boolean-argument
+                            'transpose-at-point-and-mark
+                            conn-transpose-point-and-mark-argument-map
+                            "transpose at point and mark")))
+     (list thing thing-arg at-point-and-mark)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
-  (conn-transpose-things-do mover arg))
+  (conn-transpose-things-do mover arg at-point-and-mark))
 
 ;;;;; Line Commands
 
