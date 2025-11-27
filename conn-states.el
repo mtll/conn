@@ -686,7 +686,8 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
              ,(macroexp-progn body)
            (with-current-buffer ,buffer
              (setq conn--state-stack ,stack)
-             (conn-enter-state (car ,stack))))))))
+             (conn-enter-state (car ,stack))
+             (conn-update-lighter)))))))
 
 (defmacro conn-without-recursive-stack (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."

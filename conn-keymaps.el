@@ -546,17 +546,7 @@
   "C-w" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
-  "C-o" 'other-window
-  "o" (conn-anonymous-thing
-        'word
-        :pretty-print (:method (_self) "all-words")
-        :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'word)))
-  "u" (conn-anonymous-thing
-        'symbol
-        :pretty-print (:method (_self) "all-symbols")
-        :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'symbol))))
+  "C-o" 'other-window)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state

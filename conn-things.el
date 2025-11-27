@@ -386,6 +386,10 @@ order to mark the region that should be defined by any of COMMANDS."
                         (bound-and-true-p rectangle-mark-mode))))))
   (recursive-edit nil))
 
+(cl-defmethod conn-argument-display ((arg conn-thing-argument))
+  (when (conn-thing-argument-recursive-edit arg)
+    "\\[recursive-edit] recursive-edit"))
+
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     cmd update-fn)
   (when (conn-argument-predicate arg cmd)

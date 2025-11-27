@@ -1090,7 +1090,7 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mak)
+(cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mark)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
 (cl-defmethod conn-transpose-things-do :before (&rest _)
@@ -1098,9 +1098,9 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
                                         arg
-                                        at-point-and-mak)
+                                        at-point-and-mark)
   (pcase cmd
-    (at-point-and-mak
+    ((guard at-point-and-mark)
      (deactivate-mark t)
      (pcase-let* (((conn-bounds `(,beg1 . ,end1))
                    (conn-bounds-of cmd arg))
@@ -1128,7 +1128,7 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch))
                                         arg
-                                        at-point-and-mark)
+                                        _at-point-and-mark)
   (pcase-let* ((bounds (conn-bounds-of cmd arg))
                ((conn-bounds `(,beg1 . ,end1))
                 bounds)
@@ -1139,7 +1139,7 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing recursive-edit-thing))
                                         _arg
-                                        at-point-and-mark)
+                                        _at-point-and-mark)
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer)))
@@ -1167,7 +1167,7 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch))
                                         arg
-                                        at-point-and-mark)
+                                        _at-point-and-mark)
   (conn-disable-repeating)
   (let ((pt1 (point))
         (buf1 (current-buffer))
@@ -1786,17 +1786,15 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          'face 'eldoc-highlight-function-argument)
       "register"))
    (concat
-    "\\[copy] "
-    (propertize
-     "copy"
-     'face (if (eq (conn-kill-how-argument-delete arg) 'copy)
-               'eldoc-highlight-function-argument)))
-   (concat
     "\\[delete] "
     (propertize
      "delete"
      'face (if (eq (conn-kill-how-argument-delete arg) 'delete)
-               'eldoc-highlight-function-argument)))))
+               'eldoc-highlight-function-argument)))
+   (when (eq (conn-kill-how-argument-delete arg) 'copy)
+     (concat
+      "\\[copy] "
+      (propertize "copy" 'face 'conn-argument-active-face)))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument-delete arg)
