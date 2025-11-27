@@ -1486,18 +1486,24 @@ chooses to handle a command."
              (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (catch 'conn-read-args-handle
-             (when command-handler
-               (funcall command-handler cmd))
-             (named-let update ((as arguments)
-                                (u (conn-argument-update (car arguments) cmd)))
-               (cond (conn--read-args-error-flag)
-                     (u (setf (car as) u))
-                     ((null (cdr as))
+           (let ((valid t))
+             (catch 'conn-read-args-handle
+               (when command-handler
+                 (funcall command-handler cmd))
+               (setq valid nil))
+             (let ((as arguments))
+               (conn-named-loop loop
+                 (if-let* ((arg (car as)))
+                     (conn-argument-update
+                      arg cmd (lambda (newval)
+                                (setf (car as) newval
+                                      valid t)))
+                   (:return-from
+                    loop
+                    (unless valid
                       (setf conn--read-args-error-message
-                            (format "Invalid Command <%s>" cmd)))
-                     (t (update (cdr as)
-                                (conn-argument-update (cadr as) cmd)))))))
+                            (format "Invalid Command <%s>" cmd)))))
+                 (pop as)))))
          (read-command ()
            (let ((cmd (key-binding (read-key-sequence nil) t)))
              (while (arrayp cmd) ; keyboard macro
@@ -1587,15 +1593,15 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 ;;;;; Loop Arguments
 
-(oclosure-define (conn-read-args-argument
-                  ;; (:predicate conn-read-args-argument-p)
-                  (:copier conn-set-argument (arg-value &optional (arg-set-flag t)))
-                  (:copier conn-unset-argument (arg-value &aux (arg-set-flag nil))))
-  (arg-value :type t)
-  (arg-set-flag :type boolean)
-  (arg-required :type boolean)
-  (arg-name :type (or nil string function))
-  (arg-keymap :type keymap))
+(oclosure-define (conn-anonymous-argument
+                  ;; (:predicate conn-anonymous-argument-p)
+                  (:copier conn-set-argument (value &optional (set-flag t)))
+                  (:copier conn-unset-argument (value &aux (set-flag nil))))
+  (value :type t)
+  (set-flag :type boolean)
+  (required :type boolean)
+  (name :type (or nil string function))
+  (keymap :type keymap))
 
 (cl-defstruct (conn-argument
                (:constructor nil)
@@ -1603,25 +1609,25 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
                 conn-argument
                 (value &aux (required nil) (set-flag nil))))
   (value nil)
-  (set-flag nil)
-  (required nil :read-only t)
-  (name nil :read-only t)
-  (keymap nil :read-only t))
+  (set-flag nil :type boolean)
+  (required nil :type boolean :read-only t)
+  (name nil :type (or string function nil) :read-only t)
+  (keymap nil :type keymap :read-only t))
 
-(defalias 'conn-read-args-argument-name
-  'conn-read-args-argument--arg-name)
+(defalias 'conn-anonymous-argument-name
+  'conn-anonymous-argument--name)
 
-(defalias 'conn-read-args-argument-required
-  'conn-read-args-argument--arg-required)
+(defalias 'conn-anonymous-argument-required
+  'conn-anonymous-argument--required)
 
-(defalias 'conn-read-args-argument-set-flag
-  'conn-read-args-argument--arg-set-flag)
+(defalias 'conn-anonymous-argument-set-flag
+  'conn-anonymous-argument--set-flag)
 
-(defalias 'conn-read-args-argument-value
-  'conn-read-args-argument--arg-value)
+(defalias 'conn-anonymous-argument-value
+  'conn-anonymous-argument--value)
 
-(defalias 'conn-read-args-argument-keymap
-  'conn-read-args-argument--arg-keymap)
+(defalias 'conn-anonymous-argument-keymap
+  'conn-anonymous-argument--keymap)
 
 (cl-defgeneric conn-argument-cancel (argument)
   ( :method (_arg) nil))
@@ -1630,25 +1636,23 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg conn-read-args-argument))
-    (and (conn-read-args-argument-required arg)
-         (not (conn-read-args-argument-set-flag arg))))
+  ( :method ((arg conn-anonymous-argument))
+    (and (conn-anonymous-argument-required arg)
+         (not (conn-anonymous-argument-set-flag arg))))
   ( :method ((arg conn-argument))
     (and (conn-argument-required arg)
          (not (conn-argument-set-flag arg)))))
 
-(cl-defgeneric conn-argument-update (argument form)
-  ( :method (_arg _form) nil)
-  ( :method ((arg conn-read-args-argument) form)
-    (let ((result (funcall arg arg form)))
-      (unless (eq result arg)
-        result))))
+(cl-defgeneric conn-argument-update (argument form update-fn)
+  ( :method (_arg _form _update-fn) nil)
+  ( :method ((arg conn-anonymous-argument) form update-fn)
+    (funcall arg arg form update-fn)))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   (declare (important-return-value t))
   ( :method (arg) arg)
-  ( :method ((arg conn-read-args-argument))
-    (conn-read-args-argument-value arg))
+  ( :method ((arg conn-anonymous-argument))
+    (conn-anonymous-argument-value arg))
   ( :method ((arg conn-argument))
     (conn-argument-value arg)))
 
@@ -1656,8 +1660,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((arg conn-read-args-argument))
-    (pcase (conn-read-args-argument-name arg)
+  ( :method ((arg conn-anonymous-argument))
+    (pcase (conn-anonymous-argument-name arg)
       ((and (pred stringp) str)
        str)
       ((and fn (pred functionp)
@@ -1689,8 +1693,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method (_arg) nil)
   ( :method ((arg cons))
     (conn-argument-keymaps (cdr arg)))
-  ( :method ((arg conn-read-args-argument))
-    (conn-read-args-argument-keymap arg))
+  ( :method ((arg conn-anonymous-argument))
+    (conn-anonymous-argument-keymap arg))
   ( :method ((arg conn-argument))
     (conn-argument-keymap arg)))
 
@@ -1707,15 +1711,16 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
                              ( toggle-command
                                keymap
                                description
-                               &optional value)))
+                               &optional
+                               value)))
   (description nil :read-only t)
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
-                                    cmd)
+                                    cmd update-fn)
   (when (eq cmd (conn-boolean-argument-toggle-command arg))
     (cl-callf not (conn-boolean-argument-value arg))
-    arg))
+    (funcall update-fn arg)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -1729,5 +1734,90 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
    (propertize (conn-boolean-argument-description arg)
                'face (when (conn-argument-value arg)
                        'conn-argument-active-face))))
+
+;;;;;; Cycling Argument
+
+(defun conn-format-cycling-argument (choice)
+  (format "%s" choice))
+
+(cl-defstruct (conn-cycling-argument
+               (:include conn-argument)
+               (:constructor conn-cycling-argument
+                             ( choices
+                               cycling-command
+                               &key
+                               keymap
+                               (format-function #'conn-format-cycling-argument)
+                               required
+                               &aux
+                               (value (car choices)))))
+  (choices nil :type list :read-only t)
+  (cycling-command nil :type symbol :read-only t)
+  (format-function #'identity :type function :read-only t))
+
+(cl-defmethod conn-argument-update ((arg conn-cycling-argument)
+                                    _cmd update-fn)
+  (pcase (memq (conn-cycling-argument-value arg)
+               (conn-cycling-argument-choices arg))
+    (`(,_ ,next . ,_)
+     (setf (conn-cycling-argument-value arg) next)
+     (funcall update-fn arg))
+    (`(,_ . nil)
+     (setf (conn-cycling-argument-value arg)
+           (car (conn-cycling-argument-choices arg)))
+     (funcall update-fn arg))))
+
+(cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
+                                       sym)
+  (eq sym (conn-cycling-argument-cycling-command arg)))
+
+(cl-defmethod conn-argument-display ((arg conn-cycling-argument))
+  (concat
+   (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
+   (propertize "(" 'face 'shadow)
+   (let ((choices (conn-cycling-argument-choices arg))
+         (format (conn-cycling-argument-format-function arg))
+         result)
+     (conn-named-loop loop
+       (let* ((choice (pop choices))
+              (str (funcall format choice)))
+         (when (eq choice (conn-cycling-argument-value arg))
+           (cl-callf propertize str 'face 'conn-argument-active-face))
+         (cl-callf concat result str)
+         (if choices
+             (cl-callf concat result (propertize "|" 'face 'shadow))
+           (:return-from loop result)))))
+   (propertize ")" 'face 'shadow)))
+
+;;;;;; Read Argument
+
+(cl-defstruct (conn-read-argument
+               (:include conn-argument)
+               (:constructor
+                conn-read-argument
+                (toggle-command
+                 keymap
+                 reader-function
+                 format-function)))
+  (reader-function nil :type function :read-only t)
+  (format-function nil :type function :read-only t)
+  (toggle-command nil :type symbol :read-only t))
+
+(cl-defmethod conn-argument-update ((arg conn-read-argument)
+                                    cmd update-fn)
+  (when (eq cmd (conn-read-argument-toggle-command arg))
+    (setf (conn-argument-value arg)
+          (funcall (conn-read-argument-reader-function arg)
+                   (conn-argument-value arg)))
+    (funcall update-fn arg)))
+
+(cl-defmethod conn-argument-predicate ((arg conn-read-argument)
+                                       sym)
+  (eq sym (conn-read-argument-toggle-command arg)))
+
+(cl-defmethod conn-argument-display ((arg conn-read-argument))
+  (concat (format "\\[%s] " (conn-read-argument-toggle-command arg))
+          (funcall (conn-read-argument-format-function arg)
+                   (conn-argument-value arg))))
 
 (provide 'conn-states)

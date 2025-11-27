@@ -1442,31 +1442,6 @@ With arg N, insert N newlines."
 (defvar-keymap conn-indirect-map
   "d" 'indirect)
 
-(cl-defstruct (conn-indirect-argument
-               (:include conn-argument)
-               (:constructor conn-indirect-argument
-                             ( &optional value
-                               &aux (keymap conn-indirect-map)))))
-
-(cl-defmethod conn-argument-update ((arg conn-indirect-argument)
-                                    cmd)
-  (when (eq cmd 'indirect)
-    (cl-callf not (conn-argument-value arg))
-    arg))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-indirect-argument)
-                                       (_sym (eql indirect)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-indirect-argument))
-  (substitute-command-keys
-   (concat
-    "\\[indirect] "
-    (let ((ts (conn-argument-value arg)))
-      (propertize
-       "Indirect"
-       'face (when ts 'eldoc-highlight-function-argument))))))
-
 (defun conn-narrow-to-thing (thing-mover arg transform &optional indirect)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
@@ -1475,7 +1450,9 @@ With arg N, insert N newlines."
                     :prefix current-prefix-arg)
        ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
-        (indirect (conn-indirect-argument)))
+        (indirect (conn-boolean-argument 'indirect
+                                         conn-indirect-map
+                                         "indirect")))
      (list thing thing-arg transform indirect)))
   (pcase (conn-bounds-of thing-mover arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -1732,7 +1709,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                            :keymap conn-kill-how-map))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
-                                    cmd)
+                                    cmd update-fn)
   (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
                        (register (conn-kill-how-argument-register arg))
                        (append (conn-kill-how-argument-append arg)))
@@ -1743,21 +1720,21 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                       ('nil 'append)
                       ('append 'prepend)
                       ('prepend nil)))
-       arg)
+       (funcall update-fn arg))
       ('delete
        (setf delete (if (eq delete 'delete) nil 'delete)
              register nil
              append nil)
-       arg)
+       (funcall update-fn arg))
       ('copy
        (setf delete (unless (eq delete 'copy) 'copy))
-       arg)
+       (funcall update-fn arg))
       ('register
        (setf delete (if (eq delete 'delete) nil delete)
              register (if register
                           nil
                         (register-read-with-preview "Register:")))
-       arg))))
+       (funcall update-fn arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
                                        sym)
@@ -1983,7 +1960,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                  &aux (keymap conn-separator-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-separator-argument)
-                                    cmd)
+                                    cmd update-fn)
   (cl-symbol-macrolet ((value (conn-argument-value arg)))
     (pcase cmd
       ('separator
@@ -1992,11 +1969,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
            (setf value nil)
          (setf value (if (conn-read-args-consume-prefix-arg)
                          (read-string "Separator: " nil nil nil t)
-                       'default))))
+                       'default)))
+       (funcall update-fn arg))
       ('register-separator
        (if (eq value 'register)
            (setf value nil)
-         (setf value (get-register register-separator)))))))
+         (setf value (get-register register-separator)))
+       (funcall update-fn arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-separator-argument)
                                        sym)
@@ -2206,7 +2185,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (register nil))
 
 (cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
-                                    cmd)
+                                    cmd update-fn)
   (pcase cmd
     ('append-next-kill
      (setf (conn-copy-how-argument-append arg)
@@ -2214,13 +2193,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              ('nil 'append)
              ('append 'prepend)
              ('prepend nil)))
-     arg)
+     (funcall update-fn arg))
     ('register
      (setf (conn-copy-how-argument-register arg)
            (if (conn-copy-how-argument-register arg)
                nil
              (register-read-with-preview "Register:")))
-     arg)))
+     (funcall update-fn arg))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-how-argument)
                                        sym)

@@ -231,14 +231,14 @@ Expansions and contractions are provided by functions in
                                (activate-mark))
                              (conn-read-args-handle)))))
       ((bounds
-        (oclosure-lambda (conn-read-args-argument
-                          (arg-required t))
-            (self command)
+        (oclosure-lambda (conn-anonymous-argument
+                          (required t))
+            (_self command update-fn)
           (pcase command
             ((or 'end 'exit-recursive-edit)
-             (conn-argument (cons (region-beginning)
-                                  (region-end))))
-            (_ self)))))
+             (funcall update-fn
+                      (conn-argument (cons (region-beginning)
+                                           (region-end)))))))))
     (conn-make-bounds cmd arg bounds)))
 
 (provide 'conn-expand)

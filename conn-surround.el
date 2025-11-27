@@ -47,19 +47,20 @@
 (conn-define-state conn-surrounding-state (conn-surround-with-state)
   :lighter "SURROUNDING")
 
-(oclosure-define (conn-surround-property-argument
-                  (:parent conn-read-args-argument)))
+(cl-defstruct (conn-surround-property-argument
+               (:include conn-argument)
+               (:constructor
+                conn-surround-property-argument
+                ( &optional value
+                  &aux (keymap (define-keymap
+                                 "w" :whole
+                                 "e" :inner))))))
 
-(defun conn-surround-property-argument (&optional value)
-  (oclosure-lambda (conn-surround-property-argument
-                    (arg-value (or value :whole))
-                    (arg-keymap (define-keymap
-                                  "w" :whole
-                                  "e" :inner)))
-      (self cmd)
-    (if (memq cmd '(:whole :inner))
-        (conn-set-argument self cmd)
-      self)))
+(cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
+                                    cmd update-fn)
+  (when (memq cmd '(:whole :inner))
+    (setf (conn-argument-value arg) cmd)
+    (funcall update-fn arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-property-argument)
                                        sym)
@@ -150,7 +151,6 @@
   "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
   "SPC <t>" 'surround-self-insert
-  "RET" 'conn-padding-flag
   "DEL" 'backward-delete-arg
   "<backspace>" 'backward-delete-arg
   "M-DEL" 'reset-arg
@@ -168,19 +168,20 @@
 
 ;;;;;; Surround With arg
 
-(oclosure-define (conn-surround-with-argument
-                  (:parent conn-read-args-argument)))
+(cl-defstruct (conn-surround-with-argument
+               (:include conn-argument)
+               (:constructor
+                conn-surround-with-argument
+                (&aux (required t)))))
 
-(defun conn-surround-with-argument ()
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-surround-with-argument
-                    (arg-required t))
-      (self cmd)
-    (if (conn-argument-predicate self cmd)
-        (conn-set-argument
-         self (list (conn-handle-surround-with-argument cmd)
-                    (conn-read-args-consume-prefix-arg)))
-      self)))
+(cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
+                                    cmd update-fn)
+  (when (conn-argument-predicate arg cmd)
+    (setf (conn-argument-set-flag arg) t
+          (conn-argument-value arg)
+          (list (conn-handle-surround-with-argument cmd)
+                (conn-read-args-consume-prefix-arg)))
+    (funcall update-fn arg)))
 
 (cl-defgeneric conn-handle-surround-with-argument (cmd)
   ( :method (cmd) cmd))
@@ -193,35 +194,27 @@
   (memq sym '(surround-self-insert surround-command)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-surround-with-argument))
-  (conn-read-args-argument-value arg))
+  (conn-argument-value arg))
 
 ;;;;;; Padding Arg
 
-(oclosure-define (conn-surround-padding-argument
-                  (:parent conn-read-args-argument)))
+(defvar-keymap conn-surround-padding-map
+  "RET" 'conn-padding-flag)
 
 (defun conn-surround-padding-argument ()
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-surround-padding-argument)
-      (self cmd)
-    (if (eq cmd 'conn-padding-flag)
-        (conn-set-argument
-         self (unless arg-value
-                (if (conn-read-args-consume-prefix-arg)
-                    (read-string "Padding: ")
-                  " ")))
-      self)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-surround-padding-argument)
-                                       (_sym (eql conn-padding-flag)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-surround-padding-argument))
-  (concat "\\[conn-padding-flag] "
-          (if-let* ((p (conn-read-args-argument-value arg)))
-              (propertize (format "padding <%s>" p)
-                          'face 'eldoc-highlight-function-argument)
-            "padding")))
+  (conn-read-argument
+   'conn-padding-flag
+   conn-surround-padding-map
+   (lambda (val)
+     (unless val
+       (if (conn-read-args-consume-prefix-arg)
+           (read-string "Padding: ")
+         " ")))
+   (lambda (val)
+     (if val
+         (propertize (format "padding <%s>" val)
+                     'face 'conn-argument-active-face)
+       "padding"))))
 
 ;;;;;; Perform Surround
 
@@ -455,19 +448,20 @@
   (conn-set-argument
    arg (list cmd (conn-read-args-consume-prefix-arg))))
 
-(oclosure-define (conn-change-surround-argument
-                  (:parent conn-read-args-argument)))
+(cl-defstruct (conn-change-surround-argument
+               (:include conn-argument)
+               (:constructor
+                conn-change-surround-argument
+                (&aux (required t)))))
 
-(defun conn-change-surround-argument ()
-  (declare (important-return-value t))
-  (oclosure-lambda (conn-change-surround-argument
-                    (arg-required t))
-      (self cmd)
-    (if (eq 'surround-self-insert cmd)
-        (conn-set-argument
-         self (list (conn--self-insert last-input-event)
-                    (conn-read-args-consume-prefix-arg)))
-      self)))
+(cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
+                                    cmd update-fn)
+  (when (conn-argument-predicate arg cmd)
+    (setf (conn-argument-set-flag arg) t
+          (conn-argument-value arg)
+          (list (conn--self-insert last-input-event)
+                (conn-read-args-consume-prefix-arg)))
+    (funcall update-fn arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
                                        (_sym (eql surround-self-insert)))

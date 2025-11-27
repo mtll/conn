@@ -522,24 +522,8 @@ themselves once the selection process has concluded."
   "v" 'conn-dispatch-bounds-over
   "X" 'conn-transform-reset)
 
-(cl-defstruct (conn-dispatch-transform-argument
-               (:include conn-transform-argument)
-               (:constructor
-                conn-dispatch-transform-argument
-                ( &optional value
-                  &aux (keymap conn-dispatch-transform-map)))))
-
-(cl-defmethod conn-argument-update ((arg conn-dispatch-transform-argument)
-                                    cmd)
-  (let* ((next (conn-transform-command-handler
-                cmd (conn-argument-value arg))))
-    (pcase cmd
-      ('conn-transform-reset
-       (setf (conn-argument-value arg) nil)
-       arg)
-      ((guard (not (eq next (conn-argument-value arg))))
-       (setf (conn-argument-value arg) next)
-       arg))))
+(defun conn-dispatch-transform-argument (&optional value)
+  (conn-transform-argument value :keymap conn-dispatch-transform-map))
 
 (defvar conn--dispatch-thing-predicate nil)
 
@@ -569,18 +553,18 @@ themselves once the selection process has concluded."
 (defvar conn-separator-history nil)
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-separator-argument)
-                                    cmd)
+                                    cmd update-fn)
   (pcase cmd
     ('unset-separator
      (conn-read-args-consume-prefix-arg)
      (setf (conn-argument-value arg) nil)
-     arg)
+     (funcall update-fn arg))
     ('separator
      (setf (conn-argument-value arg)
            (if (eq (conn-argument-value arg) 'default)
                (read-string "Separator: " nil 'conn-separator-history)
              'default))
-     arg)))
+     (funcall update-fn arg))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-dispatch-separator-argument)
                                        sym)
@@ -706,31 +690,31 @@ themselves once the selection process has concluded."
    :keymap conn-dispatch-action-map))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
-                                    cmd)
+                                    cmd update-fn)
   (pcase cmd
     ('repeat-dispatch
      (cl-callf not (conn-dispatch-action-argument-repeat arg))
-     arg)
+     (funcall update-fn arg))
     ((guard (conn-argument-predicate arg cmd))
      (conn-cancel-action (conn-argument-value arg))
      (condition-case err
          (when-let* ((_(not (cl-typep (conn-argument-value arg) cmd)))
                      (action (conn-make-action cmd)))
-           (setq conn--dispatch-thing-predicate
+           (setf conn--dispatch-thing-predicate
                  (or (conn-action--action-thing-predicate action)
                      #'always))
-           (setf (conn-argument-value arg) action
-                 (conn-dispatch-action-argument-repeat arg)
+           (setf (conn-argument-value arg) action)
+           (setf (conn-dispatch-action-argument-repeat arg)
                  (pcase (conn-dispatch-action-argument-repeat arg)
                    ((or 'auto 'nil)
                     (and (conn-action--action-auto-repeat action)
                          'auto))
                    (_ (conn-dispatch-action-argument-repeat arg))))
-           arg)
+           (funcall update-fn arg))
        (error
         (conn-read-args-error (error-message-string err))
         (setf (conn-argument-value arg) nil)
-        arg)))))
+        (funcall update-fn arg))))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-argument-value arg)))

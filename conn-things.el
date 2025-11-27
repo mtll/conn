@@ -387,12 +387,12 @@ order to mark the region that should be defined by any of COMMANDS."
   (recursive-edit nil))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    cmd)
+                                    cmd update-fn)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list cmd (conn-read-args-consume-prefix-arg)))
-    arg))
+    (funcall update-fn arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -427,11 +427,11 @@ order to mark the region that should be defined by any of COMMANDS."
                   &aux (keymap conn-subregions-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-subregions-argument)
-                                    cmd)
+                                    cmd update-fn)
   (if (eq cmd 'toggle-subregions)
       (progn
         (cl-callf not (conn-argument-value arg))
-        arg)
+        (funcall update-fn arg))
     (conn-subregions-default-value cmd arg)))
 
 (cl-defgeneric conn-subregions-default-value (cmd arg)
@@ -439,18 +439,15 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-subregions-default-value ((_cmd (eql conn-things-in-region))
                                              arg)
-  (setf (conn-argument-value arg) t)
-  arg)
+  (setf (conn-argument-value arg) t))
 
 (cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
                                              arg)
-  (setf (conn-argument-value arg) t)
-  arg)
+  (setf (conn-argument-value arg) t))
 
 (cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
                                              arg)
-  (setf (conn-argument-value arg) t)
-  arg)
+  (setf (conn-argument-value arg) t))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
                                        (_sym (eql toggle-subregions)))
@@ -486,11 +483,10 @@ words."))
                   (keymap conn-fixup-whitespace-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
-                                    cmd)
+                                    cmd update-fn)
   (when (eq cmd 'fixup-whitespace)
-    (progn
-      (cl-callf null (conn-argument-value arg))
-      arg)))
+    (cl-callf null (conn-argument-value arg))
+    (funcall update-fn arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
                                        (_sym (eql fixup-whitespace)))
@@ -540,30 +536,26 @@ words."))
                (:constructor
                 conn-transform-argument
                 ( &optional value
-                  &aux (keymap conn-transform-map)))))
+                  &key (keymap conn-transform-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
-                                    cmd)
-  (let* ((next (conn-transform-command-handler
-                cmd (conn-argument-value arg))))
-    (pcase cmd
-      ('conn-transform-reset
-       (setf (conn-argument-value arg) nil)
-       arg)
-      ((guard (not (eq next (conn-argument-value arg))))
-       (setf (conn-argument-value arg) next)
-       arg))))
-
-;; TODO: better mutual exclusion checking
-(cl-defgeneric conn-transform-command-handler (cmd transform))
-
-(cl-defmethod conn-transform-command-handler (cmd transforms)
-  (if (and (symbolp cmd)
-           (get cmd :conn-bounds-transformation))
-      (if (memq cmd transforms)
-          (remq cmd transforms)
-        (cons cmd transforms))
-    transforms))
+                                    cmd update-fn)
+  (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
+    (cl-labels ((update ()
+                  (if (and (symbolp cmd)
+                           (get cmd :conn-bounds-transformation))
+                      (if (memq cmd transforms)
+                          (remq cmd transforms)
+                        (cons cmd transforms))
+                    transforms)))
+      (pcase cmd
+        ('conn-transform-reset
+         (setf transforms nil)
+         (funcall update-fn arg))
+        ((and (let ts (update))
+              (guard (not (eq ts transforms))))
+         (setf transforms ts)
+         (funcall update-fn arg))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
@@ -900,15 +892,6 @@ words."))
 (put 'conn-bounds-last :conn-bounds-transformation t)
 (put 'conn-bounds-last :conn-transform-description "last")
 
-(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-last))
-                                              transforms)
-  (if (memq cmd '(conn-bounds-before-point
-                  conn-bounds-before-point-exclusive
-                  conn-bounds-after-point
-                  conn-bounds-after-point-exclusive))
-      (remq cmd transforms)
-    (cl-call-next-method)))
-
 (cl-defgeneric conn-bounds-last (bounds)
   ( :method (bounds)
     (or (car (last (conn-bounds-get bounds :subregions)))
@@ -943,15 +926,6 @@ words."))
 (put 'conn-bounds-after-point :conn-bounds-transformation t)
 (put 'conn-bounds-after-point :conn-transform-description "after")
 
-(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point))
-                                              transforms)
-  (if (memq cmd '(conn-bounds-last
-                  conn-bounds-before-point
-                  conn-bounds-before-point-exclusive
-                  conn-bounds-after-point-exclusive))
-      (remq cmd transforms)
-    (cl-call-next-method)))
-
 (cl-defgeneric conn-bounds-after-point (bounds &optional exclusive))
 
 (cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
@@ -965,29 +939,11 @@ words."))
 (put 'conn-bounds-after-point-exclusive :conn-bounds-transformation t)
 (put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
 
-(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-after-point-exclusive))
-                                              transforms)
-  (if (memq cmd '(conn-bounds-last
-                  conn-bounds-before-point
-                  conn-bounds-before-point-exclusive
-                  conn-bounds-after-point))
-      (remq cmd transforms)
-    (cl-call-next-method)))
-
 (defun conn-bounds-after-point-exclusive (bounds)
   (conn-bounds-after-point bounds t))
 
 (put 'conn-bounds-before-point :conn-bounds-transformation t)
 (put 'conn-bounds-before-point :conn-transform-description "before")
-
-(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point))
-                                              transforms)
-  (if (memq cmd '(conn-bounds-last
-                  conn-bounds-before-point-exclusive
-                  conn-bounds-after-point
-                  conn-bounds-after-point-exclusive))
-      (remq cmd transforms)
-    (cl-call-next-method)))
 
 (cl-defgeneric conn-bounds-before-point (bounds &optional exclusive))
 
@@ -1001,15 +957,6 @@ words."))
 
 (put 'conn-bounds-before-point-exclusive :conn-bounds-transformation t)
 (put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
-
-(cl-defmethod conn-transform-command-handler ((cmd (eql conn-bounds-before-point-exclusive))
-                                              transforms)
-  (if (memq cmd '(conn-bounds-last
-                  conn-bounds-before-point
-                  conn-bounds-after-point
-                  conn-bounds-after-point-exclusive))
-      (remq cmd transforms)
-    (cl-call-next-method)))
 
 (defun conn-bounds-before-point-exclusive (bounds)
   (conn-bounds-before-point bounds t))
@@ -1308,13 +1255,12 @@ Only the background color is used."
                           :display-handler display-handler
                           :command-handler command-handler)
              ((bound
-               (oclosure-lambda (conn-read-args-argument
-                                 (arg-required t))
-                   (self command)
+               (oclosure-lambda (conn-anonymous-argument
+                                 (required t))
+                   (_self command update-fn)
                  (pcase command
                    ('select
-                    (conn-argument (nth curr bounds)))
-                   (_ self)))))
+                    (funcall update-fn (conn-argument (nth curr bounds))))))))
            bound))))))
 
 ;;;; Thing Definitions
