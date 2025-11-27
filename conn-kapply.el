@@ -293,7 +293,7 @@ of highlighting."
                    regexp-flag)))
         matches)
     (cl-labels
-        ((find-matches (buffer)
+        ((collect-matches (buffer)
            (with-current-buffer buffer
              (save-excursion
                (save-match-data
@@ -317,8 +317,9 @@ of highlighting."
          (next ()
            (when-let* ((next (pop files)))
              (let ((buffer (get-file-buffer next)))
-               (cond ((and buffer (check-buffer buffer))
-                      (find-matches buffer))
+               (cond (buffer
+                      (when (check-buffer buffer)
+                        (collect-matches buffer)))
                      ((with-work-buffer
                         (condition-case err
                             (insert-file-contents next nil)
@@ -330,7 +331,7 @@ of highlighting."
                              (delay-warning 'file-error msg :error))
                            nil))
                         (check-buffer (current-buffer)))
-                      (find-matches (find-file-noselect next)))
+                      (collect-matches (find-file-noselect next)))
                      (t (next)))))))
       (lambda (state)
         (pcase state
