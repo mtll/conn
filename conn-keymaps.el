@@ -561,7 +561,6 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state
                                    'conn-transpose-recursive-edit-mode)
-  "d" 'exit-recursive-edit
-  "q" 'abort-recursive-edit)
+  "q" 'exit-recursive-edit)
 
 (provide 'conn-keymaps)

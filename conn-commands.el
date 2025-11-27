@@ -1143,9 +1143,9 @@ With a prefix ARG `push-mark' without activating it."
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer)))
-    (conn-transpose-recursive-edit-mode 1)
     (unwind-protect
-        (conn-with-recursive-stack 'conn-bounds-of-recursive-edit-state
+        (conn-with-recursive-stack 'conn-command-state
+          (conn-transpose-recursive-edit-mode 1)
           (recursive-edit))
       (conn-transpose-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
@@ -1153,7 +1153,7 @@ With a prefix ARG `push-mark' without activating it."
      (car bounds1)
      (conn-anonymous-thing
        'region
-       :bounds-op ( :method (_)
+       :bounds-op ( :method (_self _arg)
                     (conn-make-bounds 'region nil bounds1)))
      nil nil
      (current-buffer)
@@ -1161,8 +1161,8 @@ With a prefix ARG `push-mark' without activating it."
      (let ((bounds2 (cons (region-beginning) (region-end))))
        (conn-anonymous-thing
          'region
-         :bounds-op ( :method (_)
-                      (conn-make-bounds 'region nil bounds2))))
+         :bounds-op ( :method (_self _arg)
+                      (conn-make-bounds 'recursive-edit nil bounds2))))
      nil nil)))
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch))
