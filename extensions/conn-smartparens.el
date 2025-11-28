@@ -242,6 +242,7 @@
 (keymap-set (conn-get-minor-mode-map 'conn-transpose-state 'smartparens-mode)
             "c" (conn-anonymous-thing
                   'sexp
+                  :pretty-print (:method (_self) "convolute")
                   :transpose-op ( :method (_self arg _)
                                   (sp-convolute-sexp arg))))
 
