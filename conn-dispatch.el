@@ -4240,28 +4240,33 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (cl-defmethod conn-dispatch-bounds-between (bounds)
   (pcase bounds
     ((conn-dispatch-bounds `(,beg . ,end))
-     (let (obeg oend)
-       (conn-dispatch-setup
-        (oclosure-lambda (conn-action
-                          (action-no-history t)
-                          (action-description "Bounds")
-                          (action-window-predicate
-                           (let ((win (selected-window)))
-                             (lambda (window) (eq win window)))))
-            ()
-          (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
-                        (conn-select-target)))
-            (with-selected-window window
-              (pcase (conn-bounds-of-dispatch thing thing-arg pt)
-                ((conn-dispatch-bounds `(,beg . ,end) transform)
-                 (setq obeg beg
-                       oend end))
-                (_ (user-error "No %s found at point" thing))))))
-        (conn-bounds-thing bounds)
-        (conn-bounds-arg bounds)
-        (when (conn-transformed-bounds-p bounds)
-          (conn-transformed-bounds-transforms bounds))
-        :other-end nil)
+     (let (obeg oend ov)
+       (unwind-protect
+           (progn
+             (setq ov (make-overlay beg end))
+             (overlay-put ov 'face 'region)
+             (conn-dispatch-setup
+              (oclosure-lambda (conn-action
+                                (action-no-history t)
+                                (action-description "Bounds")
+                                (action-window-predicate
+                                 (let ((win (selected-window)))
+                                   (lambda (window) (eq win window)))))
+                  ()
+                (pcase-let* ((`(,pt ,window ,thing ,thing-arg ,transform)
+                              (conn-select-target)))
+                  (with-selected-window window
+                    (pcase (conn-bounds-of-dispatch thing thing-arg pt)
+                      ((conn-dispatch-bounds `(,beg . ,end) transform)
+                       (setq obeg beg
+                             oend end))
+                      (_ (user-error "No %s found at point" thing))))))
+              (conn-bounds-thing bounds)
+              (conn-bounds-arg bounds)
+              (when (conn-transformed-bounds-p bounds)
+                (conn-transformed-bounds-transforms bounds))
+              :other-end nil))
+         (delete-overlay ov))
        (conn-make-transformed-bounds
         'conn-dispatch-bounds-between
         bounds
