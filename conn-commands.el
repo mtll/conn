@@ -1753,16 +1753,17 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (list
    (concat
     "\\[append-next-kill] "
-    (pcase (conn-kill-how-argument-append arg)
-      ('nil "append")
-      ('prepend
-       (propertize
-        "prepend"
-        'face 'eldoc-highlight-function-argument))
-      (_
-       (propertize
-        "append"
-        'face 'eldoc-highlight-function-argument))))
+    (propertize "(" 'face 'shadow)
+    (propertize
+     "append"
+     'face (when (eq 'append (conn-kill-how-argument-append arg))
+             'eldoc-highlight-function-argument))
+    (propertize "|" 'face 'shadow)
+    (propertize
+     "prepend"
+     'face (when (eq 'prepend (conn-kill-how-argument-append arg))
+             'eldoc-highlight-function-argument))
+    (propertize ")" 'face 'shadow))
    (concat
     "\\[register] "
     (if-let* ((ts (conn-kill-how-argument-register arg)))
@@ -1813,7 +1814,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
-                    :reference conn-kill-reference)
+                    :reference conn-kill-reference
+                    :command-handler
+                    (lambda (cmd)
+                      (when (eq cmd 'conn-set-register-separator)
+                        (call-interactively #'conn-set-register-separator)
+                        (conn-read-args-handle))))
        ((`(,thing ,thing-arg) (conn-kill-thing-argument t))
         (transform (conn-transform-argument))
         (`(,delete ,append ,register)
@@ -2233,28 +2239,26 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
   (list
-   (substitute-command-keys
-    (concat
-     "\\[append-next-kill] "
-     (propertize "(" 'face 'shadow)
-     (propertize
-      "append"
-      'face (when (eq 'append (conn-copy-how-argument-append arg))
-              'eldoc-highlight-function-argument))
-     (propertize "|" 'face 'shadow)
-     (propertize
-      "prepend"
-      'face (when (eq 'prepend (conn-copy-how-argument-append arg))
-              'eldoc-highlight-function-argument))
-     (propertize ")" 'face 'shadow)))
-   (substitute-command-keys
-    (concat
-     "\\[register] "
-     (if-let* ((ts (conn-copy-how-argument-register arg)))
-         (propertize
-          (format "register <%c>" ts)
-          'face 'eldoc-highlight-function-argument)
-       "register")))))
+   (concat
+    "\\[append-next-kill] "
+    (propertize "(" 'face 'shadow)
+    (propertize
+     "append"
+     'face (when (eq 'append (conn-copy-how-argument-append arg))
+             'eldoc-highlight-function-argument))
+    (propertize "|" 'face 'shadow)
+    (propertize
+     "prepend"
+     'face (when (eq 'prepend (conn-copy-how-argument-append arg))
+             'eldoc-highlight-function-argument))
+    (propertize ")" 'face 'shadow))
+   (concat
+    "\\[register] "
+    (if-let* ((ts (conn-copy-how-argument-register arg)))
+        (propertize
+         (format "register <%c>" ts)
+         'face 'eldoc-highlight-function-argument)
+      "register"))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
   (list (conn-copy-how-argument-append arg)
@@ -2279,7 +2283,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Copy THING at point."
   (interactive
    (conn-read-args (conn-copy-state
-                    :prompt "Thing")
+                    :prompt "Thing"
+                    :command-handler
+                    (lambda (cmd)
+                      (when (eq cmd 'conn-set-register-separator)
+                        (call-interactively #'conn-set-register-separator)
+                        (conn-read-args-handle))))
        ((`(,thing ,thing-arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
         (`(,append ,register)
