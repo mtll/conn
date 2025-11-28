@@ -1055,34 +1055,13 @@ With a prefix ARG `push-mark' without activating it."
 
 ;;;;; Transpose
 
+(defvar conn--recursive-edit-transpose nil)
+
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
 
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
-
-(defun conn--transpose-recursive-message ()
-  (message
-   (substitute-command-keys
-    (concat
-     "Define region. "
-     "Press \\[exit-recursive-edit] to end and use current region. "
-     "Press \\[abort-recursive-edit] to abort."))))
-
-(defvar conn--transpose-eldoc-prev-msg-fn)
-
-(define-minor-mode conn-transpose-recursive-edit-mode
-  "Find a region to transpose in a recursive edit."
-  :global t
-  :group 'conn
-  (if conn-transpose-recursive-edit-mode
-      (progn
-        (setq conn--transpose-eldoc-prev-msg-fn eldoc-message-function
-              eldoc-message-function #'ignore)
-        (add-hook 'post-command-hook 'conn--transpose-recursive-message))
-    (setq eldoc-message-function conn--transpose-eldoc-prev-msg-fn
-          conn--transpose-eldoc-prev-msg-fn nil)
-    (remove-hook 'post-command-hook 'conn--transpose-recursive-message)))
 
 (oclosure-define (conn-transpose-command
                   (:parent conn-dispatch-transpose))
@@ -1147,12 +1126,13 @@ With a prefix ARG `push-mark' without activating it."
                                         _at-point-and-mark)
   (deactivate-mark t)
   (let ((bounds1 (cons (region-beginning) (region-end)))
-        (buf (current-buffer)))
+        (buf (current-buffer))
+        (conn--recursive-edit-transpose t))
     (unwind-protect
         (conn-with-recursive-stack 'conn-command-state
-          (conn-transpose-recursive-edit-mode 1)
+          (conn-bounds-of-recursive-edit-mode 1)
           (recursive-edit))
-      (conn-transpose-recursive-edit-mode -1))
+      (conn-bounds-of-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
      buf
      (car bounds1)
@@ -1254,7 +1234,7 @@ region after a `recursive-edit'."
                             conn-transpose-point-and-mark-argument-map
                             "transpose at point and mark")))
      (list thing thing-arg at-point-and-mark)))
-  (when conn-transpose-recursive-edit-mode
+  (when conn--recursive-edit-transpose
     (user-error "Recursive call to conn-transpose-things"))
   (conn-transpose-things-do thing arg at-point-and-mark))
 

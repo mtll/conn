@@ -998,26 +998,44 @@ words."))
 
 ;;;;; Perform Bounds
 
-(defvar conn--bounds-of-recursive-edit nil)
+(defvar conn--eldoc-prev-msg-fn nil)
+
+(defun conn--bounds-of-recursive-edit-message ()
+  (message
+   (substitute-command-keys
+    (concat
+     "Recursive Edit: Press \\[exit-recursive-edit] to exit, "
+     "\\[abort-recursive-edit] to abort"))))
+
+(define-minor-mode conn-bounds-of-recursive-edit-mode
+  "Mode for `conn-bounds-of' `recursive-edit'."
+  :group 'conn
+  :global t
+  (if conn-bounds-of-recursive-edit-mode
+      (progn
+        (setq conn--eldoc-prev-msg-fn eldoc-message-function
+              eldoc-message-function #'ignore)
+        (conn--bounds-of-recursive-edit-message)
+        (add-hook 'pre-command-hook #'conn--bounds-of-recursive-edit-message))
+    (remove-hook 'pre-command-hook #'conn--bounds-of-recursive-edit-message)
+    (setq eldoc-message-function conn--eldoc-prev-msg-fn
+          conn--eldoc-prev-msg-fn nil)
+    (message nil)))
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-command-state
+                                   'conn-bounds-of-recursive-edit-mode)
+  "e" 'exit-recursive-edit
+  "q" 'abort-recursive-edit)
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
-  (let* ((eldoc-message-function 'ignore)
-         (conn--bounds-of-recursive-edit t)
-         (pre (make-symbol "pre")))
-    (fset pre (lambda ()
-                (message
-                 (substitute-command-keys
-                  (concat
-                   "Recursive Edit: Press \\[exit-recursive-edit] to exit, "
-                   "\\[abort-recursive-edit] to abort")))))
-    (unwind-protect
-        (progn
-          (add-hook 'pre-command-hook pre)
-          (conn-with-recursive-stack 'conn-command-state
-            (funcall pre)
-            (recursive-edit))
-          (conn-bounds-of 'region nil))
-      (remove-hook 'pre-command-hook pre))))
+  (unwind-protect
+      (progn
+        (conn-bounds-of-recursive-edit-mode 1)
+        (conn-with-recursive-stack 'conn-command-state
+          (recursive-edit))
+        (conn-bounds-of 'region nil))
+    (conn-bounds-of-recursive-edit-mode -1)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state)) arg)
   (setq arg (prefix-numeric-value arg))
