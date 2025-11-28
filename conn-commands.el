@@ -1093,7 +1093,7 @@ With a prefix ARG `push-mark' without activating it."
 (cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mark)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
-(cl-defmethod conn-transpose-things-do :before (&rest _)
+(cl-defmethod conn-transpose-things-do :after (&rest _)
   (conn-make-command-repeatable))
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
@@ -1124,7 +1124,12 @@ With a prefix ARG `push-mark' without activating it."
      (deactivate-mark t)
      (transpose-subr (lambda (N) (forward-thing thing N))
                      (prefix-numeric-value arg)))
-    (_ (error "Invalid transpose mover"))))
+    (_ (user-error "Invalid transpose thing"))))
+
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing expansion))
+                                        _arg
+                                        _at-point-and-mark)
+  (user-error "Invalid transpose thing"))
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch))
                                         arg
@@ -1233,12 +1238,10 @@ Transpose defines some addition thing bindings:
 (defvar-keymap conn-transpose-point-and-mark-argument-map
   "z" 'transpose-at-point-and-mark)
 
-(defun conn-transpose-things (mover arg at-point-and-mark)
+(defun conn-transpose-things (thing arg at-point-and-mark)
   "Exchange regions defined by a thing command.
 
-With argument ARG 0, exchange the things at point and mark.
-
-If MOVER is \\='recursive-edit then exchange the current region and the
+If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-read-args (conn-transpose-state
@@ -1253,7 +1256,7 @@ region after a `recursive-edit'."
      (list thing thing-arg at-point-and-mark)))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-things"))
-  (conn-transpose-things-do mover arg at-point-and-mark))
+  (conn-transpose-things-do thing arg at-point-and-mark))
 
 ;;;;; Line Commands
 
@@ -1680,6 +1683,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;;; Kill Thing
 
+(defvar conn-check-bounds-default t)
+
 (defvar conn-kill-option-ref
   (conn-reference-quote
     (("append" append-next-kill)
@@ -1844,7 +1849,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
          (conn-boolean-argument 'check-bounds
                                 conn-check-bounds-argument-map
                                 "check bounds"
-                                t)))
+                                conn-check-bounds-default)))
      (list thing thing-arg transform append
            delete register fixup check-bounds)))
   (when (and (null append)
