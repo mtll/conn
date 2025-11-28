@@ -1028,7 +1028,8 @@ words."))
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
 
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-thing))
+                              _arg)
   (unwind-protect
       (progn
         (conn-bounds-of-recursive-edit-mode 1)
@@ -1037,7 +1038,8 @@ words."))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
+                              arg)
   (setq arg (prefix-numeric-value arg))
   (when (> arg 0) (cl-decf arg))
   (when (eq cmd 'conn-next-emacs-state)
@@ -1047,7 +1049,8 @@ words."))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
+                              _arg)
   (unless conn-previous-mark-state
     (user-error "No previous mark state"))
   (save-mark-and-excursion
@@ -1064,7 +1067,8 @@ words."))
        (rectangle--col-pos pc 'point)))
     (conn-bounds-of 'region nil)))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing isearch)) _arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
+                              _arg)
   (conn-read-args (conn-read-thing-state
                    :prompt "Thing")
       ((`(,thing ,thing-arg) (conn-thing-argument)))
@@ -1113,8 +1117,10 @@ words."))
            (important-return-value t)))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
-                                         arg transforms
-                                         beg end)
+                                         arg
+                                         transforms
+                                         beg
+                                         end)
   (save-excursion
     (goto-char beg)
     (when-let* ((thing (seq-find #'conn-thing-p
@@ -1169,7 +1175,8 @@ words."))
 
 (conn-register-thing 'conn-things-in-region)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region)) arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region))
+                              arg)
   (conn-read-args (conn-read-thing-state
                    :prompt "Things in Region"
                    :prefix arg)
