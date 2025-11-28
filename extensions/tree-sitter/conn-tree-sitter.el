@@ -23,6 +23,9 @@
 (require 'conn-things)
 (require 'conn-dispatch)
 (require 'treesit)
+(eval-when-compile
+  (require 'cl-lib)
+  (require 'map))
 
 (cl-defstruct (conn-ts--thing
                (:constructor conn--make-ts-thing))
@@ -34,7 +37,10 @@
 (defconst conn-ts--compiled-query-cache (make-hash-table :test 'eq))
 (defvar conn-ts--custom-queries nil)
 
-(defvar conn-ts-query-dir nil)
+(defvar conn-ts-query-dir
+  (expand-file-name
+   "queries"
+   (file-name-directory (locate-library "conn-tree-sitter"))))
 
 (defvar conn-ts--symbol-tick 0)
 
@@ -214,9 +220,9 @@
            (cons inherits toplevel)))
        (get-query (lang)
          (with-memoization (gethash lang conn-ts--queries)
-           (let ((filename (concat conn-ts-query-dir
-                                   (symbol-name lang)
-                                   "/textobjects.scm")))
+           (let ((filename (expand-file-name
+                            (concat (symbol-name lang) "/textobjects.scm")
+                            conn-ts-query-dir)))
              (when (file-exists-p filename)
                (with-temp-buffer
                  (insert-file-contents-literally filename)
