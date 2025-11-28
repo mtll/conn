@@ -561,7 +561,7 @@
           (window-predicate
            :initform (lambda (win)
                        (treesit-parser-list (window-buffer win)))))
-  ( :update-function (state)
+  ( :update-handler (state)
     (let* ((thing (oref state thing))
            (query (conn-ts--thing-node-query thing)))
       (cl-flet ((make-bounds (bounds parent-thing type)
