@@ -1242,10 +1242,13 @@ Only the background color is used."
              (substitute-command-keys
               (concat
                (propertize prompt 'face 'minibuffer-prompt)
-               (cl-loop for i below size
-                        concat " "
-                        if (= i curr) concat (car pips)
-                        else concat (cdr pips))
+               (if (> size 4)
+                   (propertize (format " [%s/%s]" curr size)
+                               'face 'minibuffer-prompt)
+                 (cl-loop for i below size
+                          concat " "
+                          if (= i curr) concat (car pips)
+                          else concat (cdr pips)))
                " ("
                (let* ((desc (conn-thing-pretty-print
                              (conn-bounds-thing (nth curr bounds)))))
