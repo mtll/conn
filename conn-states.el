@@ -1386,7 +1386,7 @@ chooses to handle a command."
   (message (conn--read-args-prompt prompt arguments)))
 
 ;; From embark
-(defun conn--read-args-bindings (args)
+(defun conn--read-args-bindings (args &optional keymap)
   (let ((result nil))
     (cl-labels ((predicate (item)
                   (cl-loop for arg in args
@@ -1411,50 +1411,53 @@ chooses to handle a command."
                                     item)
                               result))))
                    (keymap-canonicalize keymap))))
-      (mapc #'bindings (current-active-maps))
+      (if keymap
+          (bindings keymap)
+        (mapc #'bindings (current-active-maps)))
       result)))
 
-(defun conn--read-args-affixation-function (args)
+(defun conn--read-args-affixation-function (args &optional keymap)
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
-      (conn--where-is-with-remaps
-        (cl-loop
-         for command-name in command-names
-         collect
-         (let* ((fun (or (get-char-property 0 'command command-name)
-                         (and (stringp command-name) (intern-soft command-name))))
-                (binding (where-is-internal fun nil t))
-                (binding (if (and binding (not (stringp binding)))
-                             (format " {%s}" (key-description binding))
-                           ""))
-                (annotation
-                 (or (cl-loop for arg in args
-                              thereis (conn-argument-completion-annotation arg fun))
-                     "")))
-           (put-text-property 0 (length binding)
-                              'face 'help-key-binding binding)
-           (when annotation
-             (put-text-property 0 (length annotation)
-                                'face 'completions-annotations annotation))
-           (list command-name "" (concat annotation binding))))))))
+      (cl-loop
+       for command-name in command-names
+       collect
+       (let* ((fun (or (get-char-property 0 'command command-name)
+                       (and (stringp command-name) (intern-soft command-name))))
+              (binding (where-is-internal fun keymap t))
+              (binding (if (and binding (not (stringp binding)))
+                           (format " {%s}" (key-description binding))
+                         ""))
+              (annotation
+               (or (cl-loop for arg in args
+                            thereis (conn-argument-completion-annotation arg fun))
+                   "")))
+         (put-text-property 0 (length binding)
+                            'face 'help-key-binding binding)
+         (when annotation
+           (put-text-property 0 (length annotation)
+                              'face 'completions-annotations annotation))
+         (list command-name "" (concat annotation binding)))))))
 
-(defun conn--read-args-completing-read (state args)
+(defun conn--read-args-completing-read (state args &optional keymap)
   (let ((inhibit-message nil))
     (message nil))
   (and-let* ((metadata
-              `((affixation-function . ,(conn--read-args-affixation-function args))
+              `((affixation-function . ,(conn--read-args-affixation-function
+                                         args keymap))
                 ,@(conn-state-get state :loop-completion-metadata)))
-             (table (conn--read-args-bindings args)))
-    (condition-case _
-        (alist-get (completing-read
-                    "Command: "
-                    (lambda (string pred action)
-                      (if (eq action 'metadata)
-                          `(metadata ,@metadata)
-                        (complete-with-action action table string pred)))
-                    nil t)
-                   table nil nil #'equal)
-      (quit nil))))
+             (table (conn--read-args-bindings args keymap)))
+    (conn--where-is-with-remaps
+      (condition-case _
+          (alist-get (completing-read
+                      "Command: "
+                      (lambda (string pred action)
+                        (if (eq action 'metadata)
+                            `(metadata ,@metadata)
+                          (complete-with-action action table string pred)))
+                      nil t)
+                     table nil nil #'equal)
+        (quit nil)))))
 
 (cl-defun conn--read-args (state
                            arglist
@@ -1495,17 +1498,24 @@ chooses to handle a command."
                (funcall command-handler cmd))
              (let (valid)
                (cl-loop for as on arguments
-                        do (conn-argument-update
-                            (car as) cmd (lambda (newval)
-                                           (setf (car as) newval
-                                                 valid t))))
+                        do (conn-argument-update (car as)
+                                                 cmd
+                                                 (lambda (newval)
+                                                   (setf (car as) newval
+                                                         valid t))))
                (unless valid
                  (setf conn--read-args-error-message
                        (format "Invalid Command <%s>" cmd))))))
          (read-command ()
-           (let ((cmd (key-binding (read-key-sequence nil) t)))
+           (let* ((keyseq (read-key-sequence nil))
+                  (cmd (key-binding keyseq t))
+                  keymap)
              (while (arrayp cmd) ; keyboard macro
                (setq cmd (key-binding cmd t)))
+             (when (and (null cmd)
+                        (eql help-char (aref keyseq (1- (length keyseq)))))
+               (setq cmd 'execute-extended-command
+                     keymap (key-binding (seq-subseq keyseq 0 -1))))
              (when cmd
                (when pre (funcall pre cmd))
                (pcase cmd
@@ -1532,7 +1542,7 @@ chooses to handle a command."
                   (keyboard-quit))
                  ('execute-extended-command
                   (when-let* ((cmd (conn--read-args-completing-read
-                                    state arguments)))
+                                    state arguments keymap)))
                     (update-args cmd)))
                  (_ (update-args cmd)))
                (setq conn-read-args-last-command cmd)
@@ -1553,6 +1563,8 @@ chooses to handle a command."
                                     (mapcar #'conn-argument-compose-keymap arguments)
                                     (cons conn-read-args-map)
                                     (cons overriding-map)
+                                    (cons (define-keymap
+                                            "C-h" 'execute-extended-command))
                                     (delq nil)
                                     (<>- make-composed-keymap))))
                       ,@emulation-mode-map-alists)))
