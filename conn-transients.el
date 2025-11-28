@@ -22,6 +22,7 @@
 (require 'conn)
 (require 'conn-states)
 (require 'conn-commands)
+(require 'kmacro)
 (require 'transient)
 (require 'text-property-search)
 (eval-when-compile
@@ -549,53 +550,12 @@ A zero means repeat until error."
   :description "Resume"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (let ((pipeline (conn--transient-kapply-pipeline-args args))
-        (applier (alist-get :kmacro args)))
-    (when (and (eq applier 'conn--kmacro-apply-step-edit)
-               (length= last-kbd-macro 0))
-      (error "No keyboard macro to edit"))
-    (thread-last
-      (oclosure-lambda (conn-dispatch-kapply
-                        (macro nil)
-                        (action-auto-repeat t))
-          ()
-        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                      (conn-select-target))
-                     (counter (if macro
-                                  (kmacro--counter macro)
-                                kmacro-counter)))
-          (while
-              (condition-case err
-                  (progn
-                    (with-selected-window window
-                      (conn-dispatch-change-group)
-                      (pcase (conn-bounds-of-dispatch thing arg pt)
-                        ((conn-bounds (and bounds `(,beg . ,end))
-                                      transform)
-                         (conn-dispatch-undo-case 50
-                           (:undo (conn-dispatch-undo-pulse beg end)))
-                         (with-undo-amalgamate
-                           (conn-with-dispatch-suspended
-                             (let ((conn-kapply-suppress-message t))
-                               (conn--kapply-macro
-                                (pcase applier
-                                  ((or 'conn--kmacro-apply
-                                       (guard macro))
-                                   (lambda (iterator)
-                                     (conn--kmacro-apply iterator nil macro)))
-                                  (_ applier))
-                                (conn-kapply-region-iterator (list bounds))
-                                `(conn--kapply-relocate-to-region
-                                  conn--kapply-pulse-region
-                                  ,@pipeline))))))
-                        (_ (user-error "Cannot find thing at point"))))
-                    nil)
-                (user-error (message (cadr err)) t)))
-          (unless macro (setq macro (kmacro-ring-head)))
-          (conn-dispatch-undo-case 0
-            ((or :undo :cancel)
-             (setf (kmacro--counter macro) counter)))))
-      (funcall callback))))
+  (when (and (eq applier 'conn--kmacro-apply-step-edit)
+             (length= last-kbd-macro 0))
+    (error "No keyboard macro to edit"))
+  (funcall callback
+           (alist-get :kmacro args)
+           (conn--transient-kapply-pipeline-args args)))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."

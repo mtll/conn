@@ -31,7 +31,6 @@
 
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function conn--kmacro-display "conn-transient")
-(declare-function kmacro--keys "kmacro")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 (declare-function conn-scroll-up "conn-commands")
 (declare-function conn-scroll-down "conn-commands")
@@ -1580,7 +1579,7 @@ Target overlays may override this default by setting the
                   (user-error
                    (pcase-dolist (`(,_ . ,undo-fn)
                                   (pop conn--dispatch-change-groups))
-                     (funcall undo-fn :undo))
+                     (funcall undo-fn :cancel))
                    (setf conn--read-args-error-message
                          (error-message-string err)))))))
           (setq success (not dispatch-quit-flag)))
@@ -3609,13 +3608,15 @@ contain targets."
   (macro :mutable t))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
-  (let ((action nil)
-        (setup (make-symbol "setup-dispatch-kapply")))
+  (let ((setup (make-symbol "setup-dispatch-kapply"))
+        (applier nil)
+        (pipeline nil))
     (fset setup (lambda ()
                   (conn-without-recursive-stack
                     (conn-dispatch-kapply-prefix
-                     (lambda (kapply-action)
-                       (setf action kapply-action))))
+                     (lambda (a p)
+                       (setq applier a
+                             pipeline p))))
                   (remove-hook 'post-command-hook setup)))
     (unwind-protect
         (progn
@@ -3624,7 +3625,41 @@ contain targets."
           (recursive-edit))
       (remove-hook 'post-command-hook setup)
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
-    action))
+    (oclosure-lambda (conn-dispatch-kapply
+                      (macro nil)
+                      (action-auto-repeat t))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target))
+                   (counter (if macro
+                                (kmacro--counter macro)
+                              kmacro-counter)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (pcase (conn-bounds-of-dispatch thing arg pt)
+            ((conn-bounds (and bounds `(,beg . ,end))
+                          transform)
+             (conn-dispatch-undo-case 50
+               (:undo (conn-dispatch-undo-pulse beg end)))
+             (with-undo-amalgamate
+               (conn-with-dispatch-suspended
+                 (let ((conn-kapply-suppress-message t))
+                   (conn--kapply-macro
+                    (pcase applier
+                      ((or 'conn--kmacro-apply
+                           (guard macro))
+                       (lambda (iterator)
+                         (conn--kmacro-apply iterator nil macro)))
+                      (_ applier))
+                    (conn-kapply-region-iterator (list bounds))
+                    `(conn--kapply-relocate-to-region
+                      conn--kapply-pulse-region
+                      ,@pipeline))))))
+            (_ (user-error "Cannot find thing at point"))))
+        (unless macro (setq macro (kmacro-ring-head)))
+        (conn-dispatch-undo-case 0
+          ((or :undo :cancel)
+           (setf (kmacro--counter macro) counter)))))))
 
 (cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply)
                                             _repeat)

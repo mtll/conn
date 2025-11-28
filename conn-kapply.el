@@ -17,6 +17,7 @@
 
 ;;; Code
 
+(require 'kmacro)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-states)
@@ -28,8 +29,6 @@
 
 (declare-function conn-exchange-mark-command "conn-commands")
 (declare-function conn-replace-read-default "conn-commands")
-(declare-function kmacro-step-edit-macro "kmacro")
-(declare-function kmacro-p "kmacro")
 (declare-function project-files "project")
 (declare-function fileloop-continue "fileloop")
 
