@@ -26,6 +26,7 @@
   (require 'cl-lib))
 
 (declare-function conn--end-of-inner-line-1 "conn-commands")
+(declare-function conn-exchange-mark-command "conn-command")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 
@@ -356,35 +357,46 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;;; Thing Args
 
+(defvar-keymap conn-recursive-edit-thing-map
+  "`" 'recursive-edit)
+
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
                (:constructor
                 conn-thing-argument
-                ( &optional recursive-edit
-                  &aux (required t)))
+                (&optional
+                 recursive-edit
+                 &aux
+                 (required t)))
                (:constructor
                 conn-thing-argument-dwim
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (required t)
-                  (value (when (use-region-p)
-                           (list 'region nil)))
-                  (set-flag (use-region-p))))
+                (&optional
+                 recursive-edit
+                 &aux
+                 (required t)
+                 (value (when (use-region-p)
+                          (list 'region nil)))
+                 (set-flag (use-region-p))))
                (:constructor
                 conn-thing-argument-dwim-rectangle
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (required t)
-                  (value
-                   (when (and (use-region-p)
-                              (bound-and-true-p rectangle-mark-mode))
-                     (list 'region nil)))
-                  (set-flag
-                   (and (use-region-p)
-                        (bound-and-true-p rectangle-mark-mode))))))
+                (&optional
+                 recursive-edit
+                 &aux
+                 (required t)
+                 (value
+                  (when (and (use-region-p)
+                             (bound-and-true-p rectangle-mark-mode))
+                    (list 'region nil)))
+                 (set-flag
+                  (and (use-region-p)
+                       (bound-and-true-p rectangle-mark-mode))))))
   (recursive-edit nil))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
+  (if (conn-thing-argument-recursive-edit arg)
+      (make-composed-keymap conn-recursive-edit-thing-map
+                            (conn-thing-argument-keymap arg))
+    (conn-thing-argument-keymap arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-argument))
   (when (conn-thing-argument-recursive-edit arg)

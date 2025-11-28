@@ -24,7 +24,10 @@
 (eval-when-compile
   (require 'cl-lib))
 
+(defvar conn-replace-to-map)
+
 (declare-function conn-exchange-mark-command "conn-commands")
+(declare-function conn-replace-read-default "conn-commands")
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function kmacro-p "kmacro")
 (declare-function project-files "project")

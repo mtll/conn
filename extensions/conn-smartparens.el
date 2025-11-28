@@ -242,7 +242,7 @@
 (keymap-set (conn-get-minor-mode-map 'conn-transpose-state 'smartparens-mode)
             "c" (conn-anonymous-thing
                   'sexp
-                  :transpose-op ( :method (_self arg)
+                  :transpose-op ( :method (_self arg _)
                                   (sp-convolute-sexp arg))))
 
 (put 'conn-sp-pair :conn-thing t)

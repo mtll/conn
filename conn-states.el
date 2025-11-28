@@ -27,9 +27,10 @@
   (require 'cl-lib))
 
 (defvar conn-local-mode)
-
-(declare-function face-remap-remove-relative "face-remap")
 (declare-function conn-local-mode "conn")
+
+(declare-function conn-thing-pretty-print "conn-things")
+(declare-function face-remap-remove-relative "face-remap")
 
 ;;;; States
 
@@ -75,13 +76,15 @@ necessary state as well.")
 (cl-defstruct (conn-state
                (:constructor nil)
                ( :constructor conn--make-state
-                 ( name docstring parents
-                   &aux
-                   (properties (make-hash-table :test 'eq))
-                   (minor-mode-depths (make-hash-table :test 'eq))
-                   (minor-mode-sort-tick conn--minor-mode-maps-sort-tick)
-                   (minor-mode-maps (list :conn-minor-mode-map-alist))
-                   (major-mode-maps (make-hash-table :test 'eq))))
+                 (name
+                  docstring
+                  parents
+                  &aux
+                  (properties (make-hash-table :test 'eq))
+                  (minor-mode-depths (make-hash-table :test 'eq))
+                  (minor-mode-sort-tick conn--minor-mode-maps-sort-tick)
+                  (minor-mode-maps (list :conn-minor-mode-map-alist))
+                  (major-mode-maps (make-hash-table :test 'eq))))
                (:conc-name conn-state--)
                (:copier nil))
   (name nil :type symbol :read-only t)
@@ -1547,7 +1550,7 @@ chooses to handle a command."
                    (inhibit-message t)
                    (emulation-mode-map-alists
                     `(((,state . ,(conn-thread-last
-                                    (mapcar #'conn-argument-keymaps arguments)
+                                    (mapcar #'conn-argument-compose-keymap arguments)
                                     (cons conn-read-args-map)
                                     (cons overriding-map)
                                     (delq nil)
@@ -1708,7 +1711,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
                 (funcall fn arg)))
          (concat " (" str ")"))))))
 
-(cl-defgeneric conn-argument-keymaps (argument)
+(cl-defgeneric conn-argument-compose-keymap (argument)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)

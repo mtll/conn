@@ -41,7 +41,6 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "," conn-thing-remap
-  "'" 'recursive-edit
   "c" 'conn-things-in-region)
 
 ;;;; Keymaps
