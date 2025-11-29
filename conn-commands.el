@@ -741,82 +741,109 @@ Exiting the recursive edit will resume the isearch."
      (atomic-change-group
        (recursive-edit)))))
 
-(cl-defun conn--isearch-in-thing (thing-cmd
-                                  thing-arg
-                                  transform
-                                  &key
-                                  backward
-                                  regexp
-                                  subregions-p)
-  (pcase thing-cmd
-    ('multi-buffer
-     (require 'misearch)
-     (let ((isearch-forward (not backward)))
-       (multi-isearch-buffers
-        (if thing-arg
-	    (multi-isearch-read-matching-buffers)
-	  (multi-isearch-read-buffers)))))
-    ('multi-file
-     (require 'misearch)
-     (let ((isearch-forward (not backward)))
-       (multi-isearch-files
-        (if thing-arg
-	    (multi-isearch-read-matching-files)
-	  (multi-isearch-read-files)))))
-    ('project
-     (require 'project)
-     (require 'misearch)
-     (let ((files (project-files (project-current)))
-           (isearch-forward (not backward)))
-       (multi-isearch-files
-        (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
-            (cons (buffer-file-name)
-                  (seq-remove-at-position files n))
-          files))))
-    (_
-     (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
-            (regions
-             (if-let* ((sr (and subregions-p
-                                (conn-bounds-get bounds :subregions transform))))
-                 (conn--merge-overlapping-regions
-                  (cl-loop for bound in sr collect (conn-bounds bound))
-                  t)
-               (list (conn-bounds bounds transform))))
-            (regions
-             (cl-loop for (beg . end) in regions
-                      collect (cons (conn--create-marker beg)
-                                    (conn--create-marker end nil t))))
-            (depth (recursion-depth))
-            (in-regions-p
-             (lambda (beg end)
-               (or (/= depth (recursion-depth))
-                   (cl-loop for (nbeg . nend) in regions
-                            thereis (<= nbeg beg end nend)))))
-            (thing (upcase
-                    (symbol-name
-                     (or (conn-command-thing thing-cmd)
-                         thing-cmd))))
-            (prefix (concat "[in " thing "] ")))
-       (let ((setup (make-symbol "setup"))
-             (cleanup (make-symbol "cleanup")))
-         (fset setup (lambda ()
-                       (when (= depth (recursion-depth))
-                         (add-function :after-while (local 'isearch-filter-predicate)
-                                       in-regions-p `((isearch-message-prefix . ,prefix)))
-                         (remove-hook 'isearch-mode-hook setup t))))
-         (fset cleanup (lambda ()
-                         (if (and (= depth (recursion-depth))
-                                  (not isearch-suspended))
-                             (remove-hook 'isearch-mode-end-hook cleanup t)
-                           (add-hook 'isearch-mode-hook setup nil t))
-                         (remove-function (local 'isearch-filter-predicate)
-                                          in-regions-p)))
-         (add-hook 'isearch-mode-end-hook cleanup nil t))
-       (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
-                     `((isearch-message-prefix . ,prefix)))
-       (if backward
-           (isearch-backward regexp t)
-         (isearch-forward regexp t))))))
+(cl-defgeneric conn-isearch-in-thing-do (thing-cmd
+                                         thing-arg
+                                         transform
+                                         &key
+                                         backward
+                                         regexp
+                                         subregions-p))
+
+(cl-defmethod conn-isearch-in-thing-do ((thing-cmd (conn-thing t))
+                                        thing-arg
+                                        transform
+                                        &key
+                                        backward
+                                        regexp
+                                        subregions-p)
+  (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
+         (regions
+          (if-let* ((sr (and subregions-p
+                             (conn-bounds-get bounds :subregions transform))))
+              (conn--merge-overlapping-regions
+               (cl-loop for bound in sr collect (conn-bounds bound))
+               t)
+            (list (conn-bounds bounds transform))))
+         (regions
+          (cl-loop for (beg . end) in regions
+                   collect (cons (conn--create-marker beg)
+                                 (conn--create-marker end nil t))))
+         (depth (recursion-depth))
+         (in-regions-p
+          (lambda (beg end)
+            (or (/= depth (recursion-depth))
+                (cl-loop for (nbeg . nend) in regions
+                         thereis (<= nbeg beg end nend)))))
+         (thing (upcase
+                 (symbol-name
+                  (or (conn-command-thing thing-cmd)
+                      thing-cmd))))
+         (prefix (concat "[in " thing "] ")))
+    (let ((setup (make-symbol "setup"))
+          (cleanup (make-symbol "cleanup")))
+      (fset setup (lambda ()
+                    (when (= depth (recursion-depth))
+                      (add-function :after-while (local 'isearch-filter-predicate)
+                                    in-regions-p `((isearch-message-prefix . ,prefix)))
+                      (remove-hook 'isearch-mode-hook setup t))))
+      (fset cleanup (lambda ()
+                      (if (and (= depth (recursion-depth))
+                               (not isearch-suspended))
+                          (remove-hook 'isearch-mode-end-hook cleanup t)
+                        (add-hook 'isearch-mode-hook setup nil t))
+                      (remove-function (local 'isearch-filter-predicate)
+                                       in-regions-p)))
+      (add-hook 'isearch-mode-end-hook cleanup nil t))
+    (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
+                  `((isearch-message-prefix . ,prefix)))
+    (if backward
+        (isearch-backward regexp t)
+      (isearch-forward regexp t))))
+
+(cl-defmethod conn-isearch-in-thing-do ((_thing-cmd (eql multi-buffer))
+                                        thing-arg
+                                        _transform
+                                        &key
+                                        backward
+                                        _regexp
+                                        _subregions-p)
+  (require 'misearch)
+  (let ((isearch-forward (not backward)))
+    (multi-isearch-buffers
+     (if thing-arg
+	 (multi-isearch-read-matching-buffers)
+       (multi-isearch-read-buffers)))))
+
+(cl-defmethod conn-isearch-in-thing-do ((_thing-cmd (eql multi-file))
+                                        thing-arg
+                                        _transform
+                                        &key
+                                        backward
+                                        _regexp
+                                        _subregions-p)
+  (require 'misearch)
+  (let ((isearch-forward (not backward)))
+    (multi-isearch-files
+     (if thing-arg
+	 (multi-isearch-read-matching-files)
+       (multi-isearch-read-files)))))
+
+(cl-defmethod conn-isearch-in-thing-do ((_thing-cmd (eql project))
+                                        _thing-arg
+                                        _transform
+                                        &key
+                                        backward
+                                        _regexp
+                                        _subregions-p)
+  (require 'project)
+  (require 'misearch)
+  (let ((files (project-files (project-current)))
+        (isearch-forward (not backward)))
+    (multi-isearch-files
+     (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
+         (cons (buffer-file-name)
+               (seq-remove-at-position files n))
+       files))))
 
 (defun conn-isearch-forward (thing-cmd
                              thing-arg
@@ -835,12 +862,12 @@ Exiting the recursive edit will resume the isearch."
                                        conn-regexp-argument-map
                                        "regexp")))
      (list thing thing-arg transform regexp subregions)))
-  (conn--isearch-in-thing thing-cmd
-                          thing-arg
-                          transform
-                          :backward nil
-                          :regexp regexp
-                          :subregions-p subregions-p))
+  (conn-isearch-in-thing-do thing-cmd
+                            thing-arg
+                            transform
+                            :backward nil
+                            :regexp regexp
+                            :subregions-p subregions-p))
 
 (defun conn-isearch-backward (thing-cmd
                               thing-arg
@@ -859,12 +886,12 @@ Exiting the recursive edit will resume the isearch."
                                        conn-regexp-argument-map
                                        "regexp")))
      (list thing thing-arg transform regexp subregions)))
-  (conn--isearch-in-thing thing-cmd
-                          thing-arg
-                          transform
-                          :backward t
-                          :regexp regexp
-                          :subregions-p subregions-p))
+  (conn-isearch-in-thing-do thing-cmd
+                            thing-arg
+                            transform
+                            :backward t
+                            :regexp regexp
+                            :subregions-p subregions-p))
 
 (defun conn-isearch-region-forward (thing-cmd
                                     thing-arg
@@ -887,12 +914,12 @@ Interactively `region-beginning' and `region-end'."
      (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
-    (conn--isearch-in-thing thing-cmd
-                            thing-arg
-                            transform
-                            :backward nil
-                            :regexp regexp
-                            :subregions-p subregions)
+    (conn-isearch-in-thing-do thing-cmd
+                              thing-arg
+                              transform
+                              :backward nil
+                              :regexp regexp
+                              :subregions-p subregions)
     (with-isearch-suspended
      (setq isearch-new-string (if regexp (regexp-quote string) string)
            isearch-new-message (mapconcat #'isearch-text-char-description
@@ -919,12 +946,12 @@ Interactively `region-beginning' and `region-end'."
      (list thing thing-arg transform regexp subregions)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
-    (conn--isearch-in-thing thing-cmd
-                            thing-arg
-                            transform
-                            :backward t
-                            :regexp regexp
-                            :subregions-p subregions)
+    (conn-isearch-in-thing-do thing-cmd
+                              thing-arg
+                              transform
+                              :backward t
+                              :regexp regexp
+                              :subregions-p subregions)
     (with-isearch-suspended
      (setq isearch-new-string (if regexp (regexp-quote string) string)
            isearch-new-message (mapconcat #'isearch-text-char-description
