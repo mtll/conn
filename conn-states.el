@@ -1162,23 +1162,23 @@ the state stays active if the previous command was a prefix command."
               (funcall fn)
               (remove-hook 'post-command-hook msg-fn t))))
     (fset preserve-state (lambda () (setq prefix-command t)))
-    (fset post (let ((pred (conn-state-get state :pop-predicate)))
-                 (cl-check-type pred function)
-                 (lambda ()
-                   (if (or (cl-shiftf prefix-command nil)
-                           (not (funcall pred)))
-                       (progn
-                         (remove-hook 'post-command-hook post t)
-                         (remove-hook 'prefix-command-preserve-state-hook preserve-state)
-                         (add-hook 'pre-command-hook pre 99 t))
-                     (when (eq conn-current-state state)
-                       (conn-enter-state (conn-peek-state)))))))
     (fset pre (lambda ()
                 (remove-hook 'pre-command-hook pre t)
                 (add-hook 'prefix-command-preserve-state-hook preserve-state)
                 (add-hook 'post-command-hook post 90 t)
                 (when (symbol-function msg-fn)
                   (add-hook 'post-command-hook msg-fn 91 t))))
+    (fset post (let ((pred (conn-state-get state :pop-predicate)))
+                 (cl-check-type pred function)
+                 (lambda ()
+                   (when (eq conn-current-state state)
+                     (if (or (cl-shiftf prefix-command nil)
+                             (not (funcall pred)))
+                         (progn
+                           (remove-hook 'post-command-hook post t)
+                           (remove-hook 'prefix-command-preserve-state-hook preserve-state)
+                           (add-hook 'pre-command-hook pre 99 t))
+                       (conn-enter-state (conn-peek-state)))))))
     (conn-state-defer
       (setq conn--state-stack
             (append (remq state (take-while #'identity conn--state-stack))
@@ -1459,6 +1459,11 @@ chooses to handle a command."
                      table nil nil #'equal)
         (quit nil)))))
 
+(defmacro conn-read-args-return (&rest body)
+  (declare (indent 0))
+  `(throw 'conn-read-args-return
+          (list (lambda () ,@body))))
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -1582,11 +1587,6 @@ chooses to handle a command."
            (unless executing-kbd-macro
              (message nil)))
          (cons callback (mapcar #'conn-argument-extract-value arguments)))))))
-
-(defmacro conn-read-args-return (&rest body)
-  (declare (indent 0))
-  `(throw 'conn-read-args-return
-          (list (lambda () ,@body))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.
