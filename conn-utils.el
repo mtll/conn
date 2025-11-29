@@ -335,23 +335,25 @@ If ring is (1 2 3 4) 4 would be returned."
   (declare (debug (form form body))
            (indent 1))
   (cl-with-gensyms (overlays)
-    `(let (,overlays)
-       (unwind-protect
-           (progn
-             (cl-loop for (beg end) on (nconc (list (point-min))
-                                              (thread-first
-                                                (conn--merge-overlapping-regions
-                                                 ,regions t)
-                                                flatten-tree sort)
-                                              (list (point-max)))
-                      by #'cddr
-                      while beg
-                      for ov = (make-overlay beg end)
-                      do (progn
-                           (overlay-put ov 'face 'shadow)
-                           (push ov ,overlays)))
-             ,@body)
-         (mapc #'delete-overlay ,overlays)))))
+    (cl-once-only (regions)
+      `(let (,overlays)
+         (unwind-protect
+             (progn
+               (when ,regions
+                 (cl-loop for (beg end) on (nconc (list (point-min))
+                                                  (thread-first
+                                                    (conn--merge-overlapping-regions
+                                                     ,regions t)
+                                                    flatten-tree sort)
+                                                  (list (point-max)))
+                          by #'cddr
+                          while beg
+                          for ov = (make-overlay beg end)
+                          do (progn
+                               (overlay-put ov 'face 'shadow)
+                               (push ov ,overlays))))
+               ,@body)
+           (mapc #'delete-overlay ,overlays))))))
 
 ;; From expand-region
 (defun conn--point-in-comment-p ()

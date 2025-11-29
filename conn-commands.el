@@ -329,11 +329,19 @@ of line proper."
 
 (cl-defstruct (conn-replace-thing-argument
                (:include conn-thing-argument)
-               (:constructor conn-replace-thing-argument
-                             (&aux
-                              (required t)
-                              (keymap conn-replace-thing-argument-map)
-                              (recursive-edit t)))))
+               (:constructor
+                conn-replace-thing-argument
+                (&aux
+                 (required t)
+                 (keymap conn-replace-thing-argument-map)
+                 (recursive-edit t)
+                 (value
+                  (when (and (use-region-p)
+                             (bound-and-true-p rectangle-mark-mode))
+                    (list 'region nil)))
+                 (set-flag
+                  (and (use-region-p)
+                       (bound-and-true-p rectangle-mark-mode)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        (_cmd (eql project)))
@@ -445,33 +453,31 @@ instances of from-string.")
                                 noerror)
   (unless noerror
     (barf-if-buffer-read-only))
-  (unless regions
-    (setq regions (list (cons (point-min) (point-max)))))
+  (deactivate-mark)
   (conn--with-region-emphasis regions
-    (save-mark-and-excursion
-      (let* ((conn-query-flag conn-query-flag)
-             (delimited-flag (and current-prefix-arg
-                                  (not (eq current-prefix-arg '-))))
-             (from (conn--replace-read-from prompt
-                                            regions
-                                            regexp-flag
-                                            delimited-flag))
-             (to (if (consp from)
-                     (prog1 (cdr from) (setq from (car from)))
-                   (minibuffer-with-setup-hook
-                       (lambda ()
-                         (thread-last
-                           (current-local-map)
-                           (make-composed-keymap conn-replace-to-map)
-                           (use-local-map)))
-                     (query-replace-read-to from prompt regexp-flag)))))
-        (list from to
-              (or delimited-flag
-                  (and (plist-member (text-properties-at 0 from)
-                                     'isearch-regexp-function)
-                       (get-text-property 0 'isearch-regexp-function from)))
-              (and current-prefix-arg (eq current-prefix-arg '-))
-              conn-query-flag)))))
+    (let* ((conn-query-flag conn-query-flag)
+           (delimited-flag (and current-prefix-arg
+                                (not (eq current-prefix-arg '-))))
+           (from (conn--replace-read-from prompt
+                                          regions
+                                          regexp-flag
+                                          delimited-flag))
+           (to (if (consp from)
+                   (prog1 (cdr from) (setq from (car from)))
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-to-map)
+                         (use-local-map)))
+                   (query-replace-read-to from prompt regexp-flag)))))
+      (list from to
+            (or delimited-flag
+                (and (plist-member (text-properties-at 0 from)
+                                   'isearch-regexp-function)
+                     (get-text-property 0 'isearch-regexp-function from)))
+            (and current-prefix-arg (eq current-prefix-arg '-))
+            conn-query-flag))))
 
 (cl-defgeneric conn-replace-do (thing-mover
                                 arg
