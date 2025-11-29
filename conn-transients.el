@@ -550,12 +550,12 @@ A zero means repeat until error."
   :description "Resume"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (when (and (eq applier 'conn--kmacro-apply-step-edit)
-             (length= last-kbd-macro 0))
-    (error "No keyboard macro to edit"))
-  (funcall callback
-           (alist-get :kmacro args)
-           (conn--transient-kapply-pipeline-args args)))
+  (let ((applier (alist-get :kmacro args))
+        (pipeline (conn--transient-kapply-pipeline-args args)))
+    (when (and (eq applier 'conn--kmacro-apply-step-edit)
+               (length= last-kbd-macro 0))
+      (error "No keyboard macro to edit"))
+    (funcall callback applier pipeline)))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
