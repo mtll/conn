@@ -186,7 +186,7 @@
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (conn--run-defered)
+    (conn--run-deferred)
     (conn--clear-overlays)
     (setq cursor-type t)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)

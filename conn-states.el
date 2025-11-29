@@ -730,20 +730,20 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(defvar-local conn--state-defered (list 'conn--state-defered-default)
+(defvar-local conn--state-deferred (list 'conn--state-deferred-default)
   "Code to be run when the current state is exited.")
 
-(defvar-local conn--state-defered-ids nil)
+(defvar-local conn--state-deferred-ids nil)
 
-(defun conn--state-defered-default (_)
+(defun conn--state-deferred-default (_)
   (when conn-current-state
     (set (cl-shiftf conn-current-state nil) nil)))
 
-(defun conn--run-defered ()
-  (unwind-protect
-      (funcall (car conn--state-defered) (cdr conn--state-defered))
-    (setq conn--state-defered (list 'conn--state-defered-default)
-          conn--state-defered-ids nil)))
+(defun conn--run-deferred ()
+  (let ((deferred conn--state-deferred))
+    (setq conn--state-deferred (list 'conn--state-deferred-default)
+          conn--state-deferred-ids nil)
+    (funcall (car deferred) (cdr deferred))))
 
 (defmacro conn-state-defer (&rest body)
   "Defer evaluation of BODY until the current state is exited.
@@ -761,7 +761,7 @@ that is being entered after the current state has exited."
              (unwind-protect
                  ,(macroexp-progn body)
                (funcall (car ,rest) (cdr ,rest))))
-           conn--state-defered)))
+           conn--state-deferred)))
 
 (defmacro conn-state-defer-once (&rest body)
   "Like `conn-state-defer' but BODY will be evaluated only once per state.
@@ -769,13 +769,13 @@ that is being entered after the current state has exited."
 For more information see `conn-state-defer'."
   (declare (indent 0))
   (cl-with-gensyms (rest id)
-    `(unless (memq ',id conn--state-defered-ids)
-       (push ',id conn--state-defered-ids)
+    `(unless (memq ',id conn--state-deferred-ids)
+       (push ',id conn--state-deferred-ids)
        (push (lambda (,rest)
                (unwind-protect
                    ,(macroexp-progn body)
                  (funcall (car ,rest) (cdr ,rest))))
-             conn--state-defered))))
+             conn--state-deferred))))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -864,7 +864,7 @@ To execute code when a state is exiting use `conn-state-defer'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (conn--run-defered))
+              (conn--run-deferred))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties)
             (conn--setup-state-keymaps)
@@ -1703,8 +1703,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
            (side-effect-free t))
   (:method (&rest _) nil)
   ( :method ((arg conn-anonymous-argument) value)
-    (when-let* ((ann (conn-argument-annotation arg))
-                (_ (conn-argument-predicate arg value)))
+    (when-let* ((ann (conn-anonymous-argument--annotation arg))
+                (_ (conn-anonymous-argument--predicate arg value)))
       (pcase ann
         ((and (pred stringp) str)
          (concat " (" str ")"))
