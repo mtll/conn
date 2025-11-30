@@ -95,8 +95,15 @@
 
 ;;;;; Top-level Command State Maps
 
+(defvar-keymap conn-indent-relative-repeat-map
+  :repeat t
+  "=" 'indent-relative
+  "+" 'indent-relative-first-indent-point)
+
 (define-keymap
   :keymap conn-default-region-map
+  "=" 'indent-relative
+  "+" 'indent-relative-first-indent-point
   "m" 'conn-replace
   "'" 'conn-kapply-on-thing-prefix
   "TAB" 'indent-rigidly
