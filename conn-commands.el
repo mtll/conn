@@ -2307,7 +2307,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (list (conn-copy-how-argument-append arg)
         (conn-copy-how-argument-register arg)))
 
-(defvar-keymap conn-copy-thing-argument-map)
+(defvar-keymap conn-copy-thing-argument-map
+  "." 'filename)
 
 (cl-defstruct (conn-copy-thing-argument
                (:include conn-thing-argument)
@@ -2323,6 +2324,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
                                  conn-argument-region-dwim))))))
+
+(cl-defmethod conn-argument-predicate ((arg conn-copy-thing-argument)
+                                       (cmd (eql 'filename)))
+  t)
 
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
@@ -2345,6 +2350,30 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defgeneric conn-copy-thing-do (cmd arg &optional transform append register)
   (declare (conn-anonymous-thing-property :copy-op)))
+
+(cl-defmethod conn-copy-thing-do ((cmd (eql filename))
+                                  _arg
+                                  &optional
+                                  transform
+                                  append
+                                  register)
+  (let* ((str (cond ((memq 'conn-bounds-after-point transform)
+                     (file-name-nondirectory (buffer-file-name)))
+                    ((memq 'conn-bounds-before-point transform)
+                     (file-name-directory (buffer-file-name)))
+                    (t
+                     (buffer-file-name)))))
+    (when (memq 'conn-bounds-trim transform)
+      (setq str (file-name-sans-extension str)))
+    (conn--kill-string str append register)))
+
+(cl-defmethod conn-copy-thing-do ((cmd (eql file-base-name))
+                                  _arg
+                                  &optional
+                                  _transform
+                                  append
+                                  register)
+  (conn--kill-string (buffer-file-name) append register))
 
 (cl-defmethod conn-copy-thing-do (cmd arg &optional transform append register)
   (pcase (conn-bounds-of cmd arg)
