@@ -1616,7 +1616,6 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (keymap :type keymap))
 
 (cl-defstruct (conn-argument
-               (:constructor nil)
                (:constructor
                 conn-argument
                 (value &aux (required nil) (set-flag nil))))

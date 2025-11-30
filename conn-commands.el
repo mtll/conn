@@ -1732,9 +1732,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "<" 'register)
 
 (cl-defstruct (conn-kill-how-argument
-               (:include conn-argument)
-               (:constructor nil)
-               (:constructor conn--kill-how-argument))
+               (:include conn-argument))
   (delete nil)
   (append nil)
   (register nil))
@@ -1745,10 +1743,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (cl-assert (memq delete '(nil delete copy)))
   (cl-assert (not (and (eq delete 'delete)
                        (or append register))))
-  (conn--kill-how-argument :delete delete
-                           :append append
-                           :register register
-                           :keymap conn-kill-how-map))
+  (make-conn-kill-how-argument :delete delete
+                               :append append
+                               :register register
+                               :keymap conn-kill-how-map))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
                                     cmd update-fn)
