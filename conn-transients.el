@@ -266,9 +266,9 @@ the edit in the macro."
   :description "Query"
   :key "q"
   :choices `(nil
-             ("record" . conn--kapply-query)
              ("per iteration" . ,(lambda (iterator)
-                                   (conn--kapply-query iterator t)))))
+                                   (conn--kapply-query iterator t)))
+             ("record" . conn--kapply-query)))
 
 (transient-define-argument conn--kapply-sort-infix ()
   :class 'conn-transient-lisp-choices
