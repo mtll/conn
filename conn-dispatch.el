@@ -1012,58 +1012,6 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
 
-(cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (pcase-let* (((cl-struct conn-dispatch-label string target)
-                label)
-               (start (overlay-start target))
-               (win (overlay-get target 'window))
-               (face (overlay-get target 'label-face)))
-    (conn-dispatch-undo-case 0
-      (:undo
-       (conn-make-target-overlay
-        start 0
-        :window win
-        :properties `( label-face ,face
-                       label-string ,string))))
-    (list start win (overlay-get target 'thing))))
-
-(cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (setf (conn-dispatch-label-narrowed-string label)
-        (conn-dispatch-label-string label)))
-
-(cl-defmethod conn-label-delete ((label conn-dispatch-label))
-  (delete-overlay (conn-dispatch-label-overlay label)))
-
-(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (if (thread-first
-        (conn-dispatch-label-narrowed-string label)
-        (aref 0) (eql prefix-char) not)
-      (setf (conn-dispatch-label-narrowed-string label) nil)
-    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
-    label))
-
-(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label
-                          overlay
-                          target
-                          narrowed-string
-                          setup-function)
-               label))
-    (with-current-buffer (overlay-buffer overlay)
-      (if (length> narrowed-string 0)
-          (progn
-            (overlay-put overlay 'display nil)
-            (overlay-put overlay 'before-string nil)
-            (overlay-put overlay 'after-string nil)
-            (funcall setup-function label)
-            (overlay-put target 'face 'conn-target-overlay-face))
-        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-        (overlay-put overlay 'display nil)
-        (overlay-put overlay 'after-string nil)
-        (overlay-put overlay 'before-string nil)
-        (overlay-put target 'after-string nil)
-        (overlay-put target 'face nil)))))
-
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
   (and (eq (selected-frame) (window-frame win))
@@ -1616,7 +1564,8 @@ depths will be sorted before greater depths.
                         (push nil conn--dispatch-change-groups)
                         (funcall action)
                         (cl-incf conn-dispatch-iteration-count)
-                        (unless (equal wconf (current-window-configuration))
+                        (unless (or (equal wconf (current-window-configuration))
+                                    (null (car conn--dispatch-change-groups)))
                           (conn-dispatch-undo-case -90
                             (:undo
                              (select-frame frame)
@@ -1969,6 +1918,60 @@ the meaning of depth."
                      (pop conn--dispatch-change-groups))
         (funcall undo-fn :undo))))
   (throw 'dispatch-undo nil))
+
+;;;;; Dispatch Labels
+
+(cl-defmethod conn-label-payload ((label conn-dispatch-label))
+  (pcase-let* (((cl-struct conn-dispatch-label string target)
+                label)
+               (start (overlay-start target))
+               (win (overlay-get target 'window))
+               (face (overlay-get target 'label-face)))
+    (conn-dispatch-undo-case 0
+      (:undo
+       (conn-make-target-overlay
+        start 0
+        :window win
+        :properties `( label-face ,face
+                       label-string ,string))))
+    (list start win (overlay-get target 'thing))))
+
+(cl-defmethod conn-label-reset ((label conn-dispatch-label))
+  (setf (conn-dispatch-label-narrowed-string label)
+        (conn-dispatch-label-string label)))
+
+(cl-defmethod conn-label-delete ((label conn-dispatch-label))
+  (delete-overlay (conn-dispatch-label-overlay label)))
+
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
+  (if (thread-first
+        (conn-dispatch-label-narrowed-string label)
+        (aref 0) (eql prefix-char) not)
+      (setf (conn-dispatch-label-narrowed-string label) nil)
+    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
+    label))
+
+(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay
+                          target
+                          narrowed-string
+                          setup-function)
+               label))
+    (with-current-buffer (overlay-buffer overlay)
+      (if (length> narrowed-string 0)
+          (progn
+            (overlay-put overlay 'display nil)
+            (overlay-put overlay 'before-string nil)
+            (overlay-put overlay 'after-string nil)
+            (funcall setup-function label)
+            (overlay-put target 'face 'conn-target-overlay-face))
+        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+        (overlay-put overlay 'display nil)
+        (overlay-put overlay 'after-string nil)
+        (overlay-put overlay 'before-string nil)
+        (overlay-put target 'after-string nil)
+        (overlay-put target 'face nil)))))
 
 ;;;;; Dispatch Target Finders
 
