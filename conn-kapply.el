@@ -30,7 +30,6 @@
 (declare-function conn-exchange-mark-command "conn-commands")
 (declare-function conn-replace-read-default "conn-commands")
 (declare-function project-files "project")
-(declare-function fileloop-continue "fileloop")
 
 ;;;; Kapply
 
