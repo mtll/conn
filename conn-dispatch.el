@@ -1093,6 +1093,7 @@ Target overlays may override this default by setting the
             ;; display-line-numbers, line-prefix and wrap-prefix break
             ;; width calculations, temporarily disable them.
             (setq ov (make-overlay (point-min) (point-max)))
+            (overlay-put ov 'priority most-positive-fixnum)
             (overlay-put ov 'display-line-numbers-disable t)
             (overlay-put ov 'line-prefix "")
             (overlay-put ov 'wrap-prefix "")
