@@ -88,7 +88,7 @@ Your options are: \\<query-replace-map>
                     (defining-kbd-macro nil))
                 (message "%s" msg)
                 (lookup-key query-replace-map (vector (read-event))))
-         ('act (:return-from query))
+         ('act (cl-return))
          ('skip
           (setq executing-kbd-macro "")
           (cl-return))

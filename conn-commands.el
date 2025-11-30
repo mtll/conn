@@ -1829,7 +1829,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   &aux
                   (keymap conn-kill-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
@@ -2306,7 +2307,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   &aux
                   (keymap conn-copy-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
@@ -2456,7 +2458,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   &aux
                   (keymap conn-comment-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
@@ -2517,7 +2520,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   &aux
                   (keymap conn-duplicate-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
@@ -2685,7 +2689,8 @@ Interactively `region-beginning' and `region-end'."
                   &aux
                   (keymap conn-change-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 

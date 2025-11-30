@@ -357,6 +357,8 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;;; Thing Args
 
+(defvar conn-argument-region-dwim t)
+
 (defvar-keymap conn-recursive-edit-thing-map
   "`" 'recursive-edit)
 
@@ -374,7 +376,8 @@ order to mark the region that should be defined by any of COMMANDS."
                  recursive-edit
                  &aux
                  (required t)
-                 (value (when (use-region-p)
+                 (value (when (and (use-region-p)
+                                   conn-argument-region-dwim)
                           (list 'region nil)))
                  (set-flag (use-region-p))))
                (:constructor
