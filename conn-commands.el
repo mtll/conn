@@ -705,11 +705,19 @@ instances of from-string.")
 
 (cl-defstruct (conn-isearch-thing-argument
                (:include conn-thing-argument)
-               (:constructor conn-isearch-thing-argument
-                             (&aux
-                              (keymap conn-isearch-thing-map)
-                              (required t)
-                              (recursive-edit t)))))
+               (:constructor
+                conn-isearch-thing-argument
+                (&aux
+                 (keymap conn-isearch-thing-map)
+                 (required t)
+                 (recursive-edit t)
+                 (value
+                  (when (and (use-region-p)
+                             (bound-and-true-p rectangle-mark-mode))
+                    (list 'region nil)))
+                 (set-flag
+                  (and (use-region-p)
+                       (bound-and-true-p rectangle-mark-mode)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-isearch-thing-argument)
                                        cmd)
@@ -1832,7 +1840,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (value (when (and (use-region-p)
                                     conn-argument-region-dwim)
                            (list 'region nil)))
-                  (set-flag (use-region-p))))))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))))
 
 (defun conn-kill-thing (cmd
                         arg
@@ -2310,7 +2319,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (value (when (and (use-region-p)
                                     conn-argument-region-dwim)
                            (list 'region nil)))
-                  (set-flag (use-region-p))))))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))))
 
 (defun conn-copy-thing (thing arg &optional transform append register)
   "Copy THING at point."
@@ -2458,8 +2468,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   &aux
                   (keymap conn-comment-thing-argument-map)
                   (required t)
-                  (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                  (value (when (use-region-p)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
@@ -2523,7 +2532,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (value (when (and (use-region-p)
                                     conn-argument-region-dwim)
                            (list 'region nil)))
-                  (set-flag (use-region-p))))))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))))
 
 (defun conn-duplicate-thing (thing-mover thing-arg transform &optional comment)
   "Duplicate the region defined by a thing command.
@@ -2689,8 +2699,7 @@ Interactively `region-beginning' and `region-end'."
                   &aux
                   (keymap conn-change-thing-argument-map)
                   (required t)
-                  (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                  (value (when (use-region-p)
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 

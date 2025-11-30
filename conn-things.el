@@ -379,7 +379,8 @@ order to mark the region that should be defined by any of COMMANDS."
                  (value (when (and (use-region-p)
                                    conn-argument-region-dwim)
                           (list 'region nil)))
-                 (set-flag (use-region-p))))
+                 (set-flag (and (use-region-p)
+                                conn-argument-region-dwim))))
                (:constructor
                 conn-thing-argument-dwim-rectangle
                 (&optional
