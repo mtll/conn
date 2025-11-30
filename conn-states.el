@@ -1814,15 +1814,15 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
    (let ((choices (conn-cycling-argument-choices arg))
          (format (conn-cycling-argument-format-function arg))
          result)
-     (conn-named-loop loop
-       (let* ((choice (pop choices))
-              (str (funcall format choice)))
-         (when (eq choice (conn-cycling-argument-value arg))
-           (cl-callf propertize str 'face 'conn-argument-active-face))
-         (cl-callf concat result str)
-         (if choices
-             (cl-callf concat result (propertize "|" 'face 'shadow))
-           (:return-from loop result)))))
+     (cl-loop
+      (let* ((choice (pop choices))
+             (str (funcall format choice)))
+        (when (eq choice (conn-cycling-argument-value arg))
+          (cl-callf propertize str 'face 'conn-argument-active-face))
+        (cl-callf concat result str)
+        (if choices
+            (cl-callf concat result (propertize "|" 'face 'shadow))
+          (cl-return)))))
    (propertize ")" 'face 'shadow)))
 
 ;;;;;; Read Argument

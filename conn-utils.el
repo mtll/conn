@@ -100,32 +100,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
         (let* ((rargs (nconc (list a1 getter) args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
-(defvar conn--named-loop-env nil)
-
-(defmacro conn-named-loop (name &rest body)
-  (declare (indent 1))
-  (let* ((return (make-symbol (format "return-from-%s" name)))
-         (continue (make-symbol (format "continue-to-%s" name)))
-         (conn--named-loop-env
-          (cons `(,name ,return . ,continue)
-                conn--named-loop-env)))
-    (macroexpand-all
-     `(catch ',return
-        (while t
-          (catch ',continue
-            ,@body)))
-     `((:return-from
-        . ,(lambda (tag &optional val)
-             `(throw ',(or (car (alist-get tag conn--named-loop-env))
-                           (error "No loop named %s" tag))
-                     ,val)))
-       (:continue-to
-        . ,(lambda (tag)
-             `(throw ',(or (cdr (alist-get tag conn--named-loop-env))
-                           (error "No loop named %s" tag))
-                     nil)))
-       ,@macroexpand-all-environment))))
-
 ;; From repeat-mode
 (defun conn--command-property (propname)
   "Return the value of the current commands PROPNAME property."

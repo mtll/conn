@@ -1587,26 +1587,25 @@ depths will be sorted before greater depths.
     (when dispatch-quit-flag (keyboard-quit))))
 
 (defun conn-select-target ()
-  (conn-named-loop select
-    (catch 'dispatch-change-target
-      (catch 'dispatch-redisplay
-        (pcase-let* ((emulation-mode-map-alists
-                      `(((conn-dispatch-select-mode
-                          . ,(make-composed-keymap
-                              (conn-target-finder-keymaps
-                               conn-dispatch-target-finder))))
-                        ,@emulation-mode-map-alists))
-                     (`(,pt ,win ,thing-override)
-                      (conn-target-finder-select
-                       conn-dispatch-target-finder))
-                     (`(,thing ,arg ,transform)
-                      conn--dispatch-current-thing))
-          (:return-from
-           select (list pt
-                        win
-                        (or thing-override thing)
-                        arg
-                        transform)))))))
+  (cl-loop
+   (catch 'dispatch-change-target
+     (catch 'dispatch-redisplay
+       (pcase-let* ((emulation-mode-map-alists
+                     `(((conn-dispatch-select-mode
+                         . ,(make-composed-keymap
+                             (conn-target-finder-keymaps
+                              conn-dispatch-target-finder))))
+                       ,@emulation-mode-map-alists))
+                    (`(,pt ,win ,thing-override)
+                     (conn-target-finder-select
+                      conn-dispatch-target-finder))
+                    (`(,thing ,arg ,transform)
+                     conn--dispatch-current-thing))
+         (cl-return (list pt
+                          win
+                          (or thing-override thing)
+                          arg
+                          transform)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -1688,56 +1687,54 @@ the meaning of depth."
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
                                        conn-dispatch-read-char-map)))
     (if seconds
-        (conn-named-loop read
-          (if-let* ((ev (conn-with-input-method
-                          (read-event (unless inhibit-message
-                                        (concat prompt
-                                                ": " prompt-suffix
-                                                (when prompt-suffix " ")
-                                                error-msg))
-                                      inherit-input-method seconds))))
-              (when (characterp ev) (:return-from read ev))
-            (:return-from read nil)))
-      (conn-named-loop read
-        (pcase (conn-with-overriding-map keymap
-                 (thread-first
-                   (unless inhibit-message
-                     (concat prompt
-                             (conn--dispatch-read-char-prefix keymap)
-                             ": " prompt-suffix
-                             (when prompt-suffix " ") error-msg))
-                   (read-key-sequence-vector)
-                   (key-binding t)))
-          ('restart (:return-from read 8))
-          ('dispatch-character-event
-           (setq conn--read-args-error-message nil
-                 conn--dispatch-must-prompt nil)
-           (push `(no-record . ,last-input-event) unread-command-events)
-           (:return-from
-            read
-            (conn-with-input-method
-              (read-event
-               (unless inhibit-message
-                 (concat prompt
-                         (conn--dispatch-read-char-prefix keymap)
-                         ": " prompt-suffix))
-               inherit-input-method))))
-          (cmd
-           (setq conn--read-args-error-message nil)
-           (let ((unhandled nil))
-             (unwind-protect
-                 (catch 'dispatch-handle
-                   (cl-loop for handler in conn--dispatch-read-char-handlers
-                            do (funcall handler cmd))
-                   (setq unhandled t))
-               (if unhandled
-                   (setq error-msg (propertize
-                                    (format "Invalid command <%s>" cmd)
-                                    'face 'error))
-                 (setf conn-read-args-last-command cmd)
-                 (setq conn--read-args-error-message nil)))
-             (when (and unhandled (eq cmd 'keyboard-quit))
-               (keyboard-quit)))))))))
+        (cl-loop
+         (if-let* ((ev (conn-with-input-method
+                         (read-event (unless inhibit-message
+                                       (concat prompt
+                                               ": " prompt-suffix
+                                               (when prompt-suffix " ")
+                                               error-msg))
+                                     inherit-input-method seconds))))
+             (when (characterp ev) (cl-return ev))
+           (cl-return)))
+      (cl-loop
+       (pcase (conn-with-overriding-map keymap
+                (thread-first
+                  (unless inhibit-message
+                    (concat prompt
+                            (conn--dispatch-read-char-prefix keymap)
+                            ": " prompt-suffix
+                            (when prompt-suffix " ") error-msg))
+                  (read-key-sequence-vector)
+                  (key-binding t)))
+         ('restart (cl-return 8))
+         ('dispatch-character-event
+          (setq conn--read-args-error-message nil
+                conn--dispatch-must-prompt nil)
+          (push `(no-record . ,last-input-event) unread-command-events)
+          (cl-return (conn-with-input-method
+                       (read-event
+                        (unless inhibit-message
+                          (concat prompt
+                                  (conn--dispatch-read-char-prefix keymap)
+                                  ": " prompt-suffix))
+                        inherit-input-method))))
+         (cmd
+          (setq conn--read-args-error-message nil)
+          (let ((unhandled nil))
+            (unwind-protect
+                (catch 'dispatch-handle
+                  (cl-loop for handler in conn--dispatch-read-char-handlers
+                           do (funcall handler cmd))
+                  (setq unhandled t))
+              (if unhandled
+                  (setq error-msg (propertize
+                                   (format "Invalid command <%s>" cmd)
+                                   'face 'error))
+                (setf conn-read-args-last-command cmd)
+                (setq conn--read-args-error-message nil)))
+            (when (and unhandled (eq cmd 'keyboard-quit))
+              (keyboard-quit)))))))))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&optional (must-prompt t))
   (redisplay)

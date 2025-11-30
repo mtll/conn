@@ -263,26 +263,26 @@
       (funcall display-function buf nil)
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
-            (conn-named-loop ref-cmd-loop
-              (let ((keys (read-key-sequence-vector nil)))
-                (pcase (key-binding keys)
-                  ('close
-                   (:return-from ref-cmd-loop))
-                  ('next
-                   (setq pages (nconc (cdr pages) (list (car pages))))
-                   (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall display-function buf nil))
-                  ('previous
-                   (setq pages (nconc (last pages) (butlast pages)))
-                   (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall display-function buf nil))
-                  ((or 'quit 'keyboard-quit)
-                   (keyboard-quit))
-                  (_ (setq unread-command-events
-                           (mapcar (lambda (key)
-                                     (cons 'no-record key))
-                                   (listify-key-sequence keys)))
-                     (:return-from ref-cmd-loop))))))
+            (cl-loop
+             (let ((keys (read-key-sequence-vector nil)))
+               (pcase (key-binding keys)
+                 ('close
+                  (cl-return))
+                 ('next
+                  (setq pages (nconc (cdr pages) (list (car pages))))
+                  (conn-quick-ref-insert-page (car pages) buf)
+                  (funcall display-function buf nil))
+                 ('previous
+                  (setq pages (nconc (last pages) (butlast pages)))
+                  (conn-quick-ref-insert-page (car pages) buf)
+                  (funcall display-function buf nil))
+                 ((or 'quit 'keyboard-quit)
+                  (keyboard-quit))
+                 (_ (setq unread-command-events
+                          (mapcar (lambda (key)
+                                    (cons 'no-record key))
+                                  (listify-key-sequence keys)))
+                    (cl-return))))))
         (funcall display-function buf t)))))
 
 (defun conn-quick-ref-to-cols (list &optional col-count)
