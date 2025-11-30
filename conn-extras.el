@@ -196,6 +196,7 @@
   "t" 'outline-hide-body
   "u" 'outline-up-heading
   "v" 'conn-toggle-mark-command
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)
@@ -294,6 +295,7 @@
   "s" conn-dired-search-remap
   "r" conn-dired-regexp-remap
   "," conn-dired-mark-remap
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "f" 'conn-dired-dispatch-state
   "M-SPC" 'dired-toggle-marks
@@ -533,6 +535,7 @@
   "t" 'diff-test-hunk
   "s" 'diff-split-hunk
   "X" 'diff-delete-other-hunks
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Magit
@@ -565,6 +568,7 @@
   "n" 'magit-gitignore
   "`" 'conn-wincontrol-mru-window
   "@" 'magit-am
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Ibuffer
@@ -735,6 +739,7 @@
   "i" 'ibuffer-backward-line
   "w" 'ibuffer-do-kill-lines
   "u" 'ibuffer-do-kill-on-deletion-marks
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "s" (conn-remap-key "M-s" t)
   "t a" 'ibuffer-do-sort-by-alphabetic
@@ -909,6 +914,7 @@
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 (define-keymap
@@ -924,6 +930,7 @@
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Info
@@ -1001,6 +1008,7 @@
   "v" 'Info-index
   "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Treemacs
@@ -1015,6 +1023,7 @@
   "k" 'treemacs-next-line
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Messages
@@ -1031,6 +1040,7 @@
   "k" 'scroll-up
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Debugger mode
@@ -1047,6 +1057,7 @@
   "K" 'scroll-up
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Occur mode
@@ -1062,6 +1073,7 @@
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 (defun conn-occur-edit-map-setup ()
@@ -1082,6 +1094,7 @@
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 ;;;; pdf-tools
@@ -1089,6 +1102,7 @@
 (conn-set-mode-property 'pdf-view-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
+  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
   "h" 'conn-wincontrol-one-command
