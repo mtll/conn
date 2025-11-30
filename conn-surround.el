@@ -296,7 +296,7 @@
                    :prompt "Surround"
                    :prefix arg)
       ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
-       (transform (conn-transform-argument))
+       (transform (conn-transform-argument '(conn-bounds-trim)))
        (subregions (conn-subregions-argument
                     (use-region-p))))
     (atomic-change-group
