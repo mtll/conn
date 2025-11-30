@@ -410,8 +410,7 @@ of highlighting."
     (kapply-relocate . 85)
     (kapply-invisible . 75)
     (kapply-nth . 70)
-    (kapply-query-record . 50)
-    (kapply-query-per-iteration . 49)
+    (kapply-query . 50)
     (kapply-ibuffer . 40)
     (kapply-restrictions . 10)
     (kapply-excursions . 0)
@@ -421,44 +420,62 @@ of highlighting."
     (kapply-wconf . -70)
     (kapply-pulse . -90)))
 
-(defun conn--kapply-query (iterator &optional each-iteration)
+(defun conn--kapply-query (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
-  (when each-iteration
-    (add-function
-     :around (var iterator)
-     (let ((hl (make-overlay (point-min) (point-min))))
-       (overlay-put hl 'priority 2000)
-       (overlay-put hl 'face 'query-replace)
-       (overlay-put hl 'conn-overlay t)
-       (lambda (iterator state)
-         (let ((msg (substitute-command-keys
-                     "Proceed with macro?\\<query-replace-map>\
+  (add-function
+   :around (var iterator)
+   (let ((hl (make-overlay (point-min) (point-min))))
+     (overlay-put hl 'priority 2000)
+     (overlay-put hl 'face 'query-replace)
+     (overlay-put hl 'conn-overlay t)
+     (lambda (iterator state)
+       (let ((msg (substitute-command-keys
+                   "Proceed with macro?\\<query-replace-map>\
  (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
-           (pcase state
-             (:next
-              (let ((res (funcall iterator state)))
-                (if conn--kapply-automatic-flag
-                    res
+         (pcase state
+           ;; TODO: add more options to recording query
+           (:record
+            (let ((hl (make-overlay (point) (point))))
+              (overlay-put hl 'priority 2000)
+              (overlay-put hl 'face 'query-replace)
+              (overlay-put hl 'conn-overlay t)
+              (unwind-protect
                   (cl-loop
-                   (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                   (pcase (let ((executing-kbd-macro nil)
-                                (defining-kbd-macro nil))
-                            (message "%s" msg)
-                            (lookup-key query-replace-map (vector (read-event))))
-                     ('act (cl-return res))
-                     ('skip (setq res (funcall iterator state)))
-                     ('exit (cl-return))
-                     ('recenter (recenter nil))
-                     ('quit (signal 'quit nil))
-                     ('automatic
-                      (setq conn--kapply-automatic-flag t)
-                      (cl-return res))
-                     ('help
-                      (with-output-to-temp-buffer "*Help*"
-                        (princ
-                         (substitute-command-keys
-                          "Specify how to proceed with keyboard macro execution.
+                   for val = (funcall iterator state)
+                   until (or (null val)
+                             (progn
+                               (recenter nil)
+                               (move-overlay hl
+                                             (region-beginning)
+                                             (region-end)
+                                             (current-buffer))
+                               (y-or-n-p (format "Record here?"))))
+                   finally return val)
+                (delete-overlay hl))))
+           (:next
+            (let ((res (funcall iterator state)))
+              (if conn--kapply-automatic-flag
+                  res
+                (cl-loop
+                 (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                 (pcase (let ((executing-kbd-macro nil)
+                              (defining-kbd-macro nil))
+                          (message "%s" msg)
+                          (lookup-key query-replace-map (vector (read-event))))
+                   ('act (cl-return res))
+                   ('skip (setq res (funcall iterator state)))
+                   ('exit (cl-return))
+                   ('recenter (recenter nil))
+                   ('quit (signal 'quit nil))
+                   ('automatic
+                    (setq conn--kapply-automatic-flag t)
+                    (cl-return res))
+                   ('help
+                    (with-output-to-temp-buffer "*Help*"
+                      (princ
+                       (substitute-command-keys
+                        "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
@@ -466,42 +483,15 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
 \\[automatic]   Apply keyboard macro to rest."))
-                        (with-current-buffer standard-output
-                          (help-mode))))
-                     (_ (ding t)))))))
-             (:cleanup
-              (delete-overlay hl)
-              (funcall iterator state))
-             (_ (funcall iterator state))))))
-     `((depth . ,(alist-get 'kapply-query-per-iteration
-                            conn--kapply-pipeline-depths))
-       (name . kapply-query-per-iteration))))
-  (add-function
-   :around (var iterator)
-   (lambda (iterator state)
-     (pcase state
-       (:record
-        (let ((hl (make-overlay (point) (point))))
-          (overlay-put hl 'priority 2000)
-          (overlay-put hl 'face 'query-replace)
-          (overlay-put hl 'conn-overlay t)
-          (unwind-protect
-              (cl-loop
-               for val = (funcall iterator state)
-               until (or (null val)
-                         (progn
-                           (recenter nil)
-                           (move-overlay hl
-                                         (region-beginning)
-                                         (region-end)
-                                         (current-buffer))
-                           (y-or-n-p (format "Record here?"))))
-               finally return val)
-            (delete-overlay hl))))
-       (_ (funcall iterator state))))
-   `((depth . ,(alist-get 'kapply-query-record
-                          conn--kapply-pipeline-depths))
-     (name . kapply-query-record))))
+                      (with-current-buffer standard-output
+                        (help-mode))))
+                   (_ (ding t)))))))
+           (:cleanup
+            (delete-overlay hl)
+            (funcall iterator state))
+           (_ (funcall iterator state))))))
+   `((depth . ,(alist-get 'kapply-query conn--kapply-pipeline-depths))
+     (name . kapply-query))))
 
 (defun conn--kapply-skip-empty (iterator)
   (declare (important-return-value t)

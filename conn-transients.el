@@ -266,9 +266,7 @@ the edit in the macro."
   :description "Query"
   :key "q"
   :choices `(nil
-             ("per iteration" . ,(lambda (iterator)
-                                   (conn--kapply-query iterator t)))
-             ("record" . conn--kapply-query)))
+             ("query" . conn--kapply-query)))
 
 (transient-define-argument conn--kapply-sort-infix ()
   :class 'conn-transient-lisp-choices
@@ -485,8 +483,7 @@ before each iteration."
             'conn--kapply-skip-invisible-regions)
          conn--kapply-pulse-region
          ,@(conn--transient-kapply-pipeline-args args)
-         ,(lambda (iterator)
-            (conn--kapply-query iterator t)))))))
+         conn--kapply-query)))))
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
