@@ -242,49 +242,6 @@ returned."
   "Return LABEL\'s payload."
   (declare (important-return-value t)))
 
-(cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (let ((overlay (conn-dispatch-label-target label)))
-    (list (overlay-start overlay)
-          (overlay-get overlay 'window)
-          (overlay-get overlay 'thing))))
-
-(cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (setf (conn-dispatch-label-narrowed-string label)
-        (conn-dispatch-label-string label)))
-
-(cl-defmethod conn-label-delete ((label conn-dispatch-label))
-  (delete-overlay (conn-dispatch-label-overlay label)))
-
-(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (if (thread-first
-        (conn-dispatch-label-narrowed-string label)
-        (aref 0) (eql prefix-char) not)
-      (setf (conn-dispatch-label-narrowed-string label) nil)
-    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
-    label))
-
-(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label
-                          overlay
-                          target
-                          narrowed-string
-                          setup-function)
-               label))
-    (with-current-buffer (overlay-buffer overlay)
-      (if (length> narrowed-string 0)
-          (progn
-            (overlay-put overlay 'display nil)
-            (overlay-put overlay 'before-string nil)
-            (overlay-put overlay 'after-string nil)
-            (funcall setup-function label)
-            (overlay-put target 'face 'conn-target-overlay-face))
-        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-        (overlay-put overlay 'display nil)
-        (overlay-put overlay 'after-string nil)
-        (overlay-put overlay 'before-string nil)
-        (overlay-put target 'after-string nil)
-        (overlay-put target 'face nil)))))
-
 (cl-defmethod conn-label-payload ((label conn-window-label))
   (conn-window-label-window label))
 
@@ -988,8 +945,7 @@ Optionally the overlay may have an associated THING."
           (when-let* ((str (overlay-get o 'label-string)))
             (setf (overlay-get ov 'label-string) str
                   (overlay-get o 'label-string) nil
-                  (overlay-get ov 'label-face)
-                  (overlay-get o 'label-face))
+                  (overlay-get ov 'label-face) (overlay-get o 'label-face))
             (throw 'done nil))))
       (when thing (overlay-put ov 'thing thing))
       (cl-loop for (prop val) on properties by #'cddr
@@ -1055,6 +1011,58 @@ Target overlays may override this default by setting the
 
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
+
+(cl-defmethod conn-label-payload ((label conn-dispatch-label))
+  (pcase-let* (((cl-struct conn-dispatch-label string target)
+                label)
+               (start (overlay-start target))
+               (win (overlay-get target 'window))
+               (face (overlay-get target 'label-face)))
+    (conn-dispatch-undo-case 0
+      (:undo
+       (conn-make-target-overlay
+        start 0
+        :window win
+        :properties `( label-face ,face
+                       label-string ,string))))
+    (list start win (overlay-get target 'thing))))
+
+(cl-defmethod conn-label-reset ((label conn-dispatch-label))
+  (setf (conn-dispatch-label-narrowed-string label)
+        (conn-dispatch-label-string label)))
+
+(cl-defmethod conn-label-delete ((label conn-dispatch-label))
+  (delete-overlay (conn-dispatch-label-overlay label)))
+
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
+  (if (thread-first
+        (conn-dispatch-label-narrowed-string label)
+        (aref 0) (eql prefix-char) not)
+      (setf (conn-dispatch-label-narrowed-string label) nil)
+    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
+    label))
+
+(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay
+                          target
+                          narrowed-string
+                          setup-function)
+               label))
+    (with-current-buffer (overlay-buffer overlay)
+      (if (length> narrowed-string 0)
+          (progn
+            (overlay-put overlay 'display nil)
+            (overlay-put overlay 'before-string nil)
+            (overlay-put overlay 'after-string nil)
+            (funcall setup-function label)
+            (overlay-put target 'face 'conn-target-overlay-face))
+        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+        (overlay-put overlay 'display nil)
+        (overlay-put overlay 'after-string nil)
+        (overlay-put overlay 'before-string nil)
+        (overlay-put target 'after-string nil)
+        (overlay-put target 'face nil)))))
 
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
@@ -1375,7 +1383,7 @@ Target overlays may override this default by setting the
         ;; used to ensure any target having its label string reused in
         ;; this way maintains the same prefix.
         (dolist (str pool)
-          (puthash str t in-use))
+          (puthash str 'recycle in-use))
         (setf size (max (ceiling (* 1.8 count))
                         (let ((len (length conn-simple-label-characters)))
                           (+ (- len 3)
@@ -1391,10 +1399,11 @@ Target overlays may override this default by setting the
                          (compat-call sort targets
                                       :lessp conn-target-sort-function)
                        targets))
-          (if-let* ((str (overlay-get tar 'label-string)))
+          (if-let* ((str (overlay-get tar 'label-string))
+                    (_ (not (eq t (gethash str in-use)))))
               ;; Try to reuse a target's existing label.
               (progn
-                (when (gethash str in-use)
+                (when (eq 'recycle (gethash str in-use))
                   ;; This target has had its label string reused as a
                   ;; prefix for new labels, ensure that it gets a new
                   ;; label that has its old label as a prefix.
@@ -1471,7 +1480,7 @@ Target overlays may override this default by setting the
   (let ((old nil))
     (unwind-protect
         (progn
-          (pcase-dolist (`(_ . ,targets) conn-targets)
+          (pcase-dolist (`(,_ . ,targets) conn-targets)
             (dolist (target targets)
               (overlay-put target 'category 'conn-old-target)
               (push target old)))
@@ -1539,6 +1548,34 @@ Target overlays may override this default by setting the
 
 (defvar conn-dispatch-amalgamate-undo nil)
 
+(defmacro conn-dispatch-undo-case (depth &rest cases)
+  "Add an undo case to the current iterations undo list.
+
+CASES is a list of the form (PATTERN CODE...).  PATTERN is a `pcase'
+pattern.  The first PATTERN to match the current undo signal will have
+its corresponding CODE run.  The undo signal will be one of:
+
+  :undo     A single iteration of the undo loop is being undone.
+            This signal will only be received by an undo case when
+            the iteration that was current when it was added to the
+            undo list is being undone.
+  :cancel   A quit or error was signaled during dispatch and all
+            iterations of the dispatch loop are being undone.
+  :accept   Dispatch is exiting normally.
+
+DEPTH controls were in the undo list the undo case will be put.  Lesser
+depths will be sorted before greater depths.
+`conn-dispatch-change-group' undo cases have a depth of 0."
+  (declare (indent 1))
+  (cl-assert (<= -100 depth 100))
+  (cl-with-gensyms (buf signal)
+    `(conn--dispatch-push-undo-case
+      ,depth
+      (let ((,buf (current-buffer)))
+        (lambda (,signal)
+          (with-current-buffer ,buf
+            (pcase ,signal ,@cases)))))))
+
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
@@ -1573,9 +1610,20 @@ Target overlays may override this default by setting the
               (while (or repeat (< conn-dispatch-iteration-count 1))
                 (condition-case err
                     (catch 'dispatch-undo
-                      (push nil conn--dispatch-change-groups)
-                      (funcall action)
-                      (cl-incf conn-dispatch-iteration-count))
+                      (let ((frame (selected-frame))
+                            (wconf (current-window-configuration))
+                            (pt (point)))
+                        (push nil conn--dispatch-change-groups)
+                        (funcall action)
+                        (cl-incf conn-dispatch-iteration-count)
+                        (unless (equal wconf (current-window-configuration))
+                          (conn-dispatch-undo-case -90
+                            (:undo
+                             (select-frame frame)
+                             (set-window-configuration wconf)
+                             (goto-char pt)))
+                          (conn-dispatch-undo-case 100
+                            (:undo (redisplay))))))
                   (user-error
                    (pcase-dolist (`(,_ . ,undo-fn)
                                   (pop conn--dispatch-change-groups))
@@ -1628,34 +1676,6 @@ Target overlays may override this default by setting the
   (conn--compat-callf sort (car conn--dispatch-change-groups)
     :key #'car
     :in-place t))
-
-(defmacro conn-dispatch-undo-case (depth &rest cases)
-  "Add an undo case to the current iterations undo list.
-
-CASES is a list of the form (PATTERN CODE...).  PATTERN is a `pcase'
-pattern.  The first PATTERN to match the current undo signal will have
-its corresponding CODE run.  The undo signal will be one of:
-
-  :undo     A single iteration of the undo loop is being undone.
-            This signal will only be received by an undo case when
-            the iteration that was current when it was added to the
-            undo list is being undone.
-  :cancel   A quit or error was signaled during dispatch and all
-            iterations of the dispatch loop are being undone.
-  :accept   Dispatch is exiting normally.
-
-DEPTH controls were in the undo list the undo case will be put.  Lesser
-depths will be sorted before greater depths.
-`conn-dispatch-change-group' undo cases have a depth of 0."
-  (declare (indent 1))
-  (cl-assert (<= -100 depth 100))
-  (cl-with-gensyms (buf signal)
-    `(conn--dispatch-push-undo-case
-      ,depth
-      (let ((,buf (current-buffer)))
-        (lambda (,signal)
-          (with-current-buffer ,buf
-            (pcase ,signal ,@cases)))))))
 
 (defun conn-dispatch-change-group (&rest buffers)
   "Create a dispatch change group for the current buffer.
@@ -1755,16 +1775,17 @@ the meaning of depth."
           (cmd
            (setq conn--read-args-error-message nil)
            (let ((unhandled nil))
-             (catch 'dispatch-handle
-               (cl-loop for handler in conn--dispatch-read-char-handlers
-                        do (funcall handler cmd))
-               (setq unhandled t))
-             (if unhandled
-                 (setq error-msg (propertize
-                                  (format "Invalid command <%s>" cmd)
-                                  'face 'error))
-               (setf conn-read-args-last-command cmd)
-               (setq conn--read-args-error-message nil))
+             (unwind-protect
+                 (catch 'dispatch-handle
+                   (cl-loop for handler in conn--dispatch-read-char-handlers
+                            do (funcall handler cmd))
+                   (setq unhandled t))
+               (if unhandled
+                   (setq error-msg (propertize
+                                    (format "Invalid command <%s>" cmd)
+                                    'face 'error))
+                 (setf conn-read-args-last-command cmd)
+                 (setq conn--read-args-error-message nil)))
              (when (and unhandled (eq cmd 'keyboard-quit))
                (keyboard-quit)))))))))
 
