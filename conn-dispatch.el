@@ -1547,43 +1547,50 @@ depths will be sorted before greater depths.
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
 (cl-defmethod conn-dispatch-perform-action (action repeat)
-  (let* ((success nil)
-         (conn--dispatch-label-state nil)
-         (conn--dispatch-change-groups nil)
-         (conn--read-args-error-message nil))
-    (unwind-protect
-        (progn
-          (redisplay)
-          (catch 'dispatch-exit
-            (let ((conn-dispatch-in-progress t))
-              (while (or repeat (< conn-dispatch-iteration-count 1))
-                (condition-case err
-                    (catch 'dispatch-undo
-                      (let ((frame (selected-frame))
-                            (wconf (current-window-configuration))
-                            (pt (point)))
-                        (push nil conn--dispatch-change-groups)
-                        (funcall action)
-                        (cl-incf conn-dispatch-iteration-count)
-                        (unless (or (equal wconf (current-window-configuration))
-                                    (null (car conn--dispatch-change-groups)))
-                          (conn-dispatch-undo-case -90
-                            (:undo
-                             (select-frame frame)
-                             (set-window-configuration wconf)
-                             (goto-char pt)))
-                          (conn-dispatch-undo-case 100
-                            (:undo (redisplay))))))
-                  (user-error
-                   (pcase-dolist (`(,_ . ,undo-fn)
-                                  (pop conn--dispatch-change-groups))
-                     (funcall undo-fn :cancel))
-                   (setf conn--read-args-error-message
-                         (error-message-string err)))))))
-          (setq success (not dispatch-quit-flag)))
+  (let ((success nil)
+        (owconf (current-window-configuration))
+        (oframe (selected-frame))
+        (opoint (point))
+        (conn--dispatch-label-state nil)
+        (conn--dispatch-change-groups nil)
+        (conn--read-args-error-message nil))
+    (conn--unwind-protect-all
+      (progn
+        (redisplay)
+        (catch 'dispatch-exit
+          (let ((conn-dispatch-in-progress t))
+            (while (or repeat (< conn-dispatch-iteration-count 1))
+              (condition-case err
+                  (catch 'dispatch-undo
+                    (let ((frame (selected-frame))
+                          (wconf (current-window-configuration))
+                          (pt (point)))
+                      (push nil conn--dispatch-change-groups)
+                      (funcall action)
+                      (cl-incf conn-dispatch-iteration-count)
+                      (unless (or (equal wconf (current-window-configuration))
+                                  (null (car conn--dispatch-change-groups)))
+                        (conn-dispatch-undo-case -90
+                          (:undo
+                           (select-frame frame)
+                           (set-window-configuration wconf)
+                           (goto-char pt)))
+                        (conn-dispatch-undo-case 100
+                          (:undo (redisplay))))))
+                (user-error
+                 (pcase-dolist (`(,_ . ,undo-fn)
+                                (pop conn--dispatch-change-groups))
+                   (funcall undo-fn :cancel))
+                 (setf conn--read-args-error-message
+                       (error-message-string err)))))))
+        (setq success (not dispatch-quit-flag)))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
-          (funcall undo-fn (if success :accept :cancel)))))
+          (funcall undo-fn (if success :accept :cancel))))
+      (unless success
+        (select-frame oframe)
+        (set-window-configuration owconf)
+        (goto-char opoint)))
     (when dispatch-quit-flag (keyboard-quit))))
 
 (defun conn-select-target ()
@@ -3970,7 +3977,6 @@ contain targets."
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
          (conn--dispatch-current-thing (list thing thing-arg thing-transform))
-         (opoint (point-marker))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-read-args-last-command nil)
@@ -4054,15 +4060,8 @@ contain targets."
           (conn-dispatch-push-history (conn-make-dispatch action)))
         (conn-cleanup-targets)
         (conn-cleanup-labels)
-        (progn
-          (with-current-buffer (marker-buffer opoint)
-            (if dispatch-quit-flag
-                (goto-char opoint)
-              (unless (eql (point) (marker-position opoint))
-                (conn--push-mark-ring opoint))))
-          (set-marker opoint nil)
-          (let ((inhibit-message conn-read-args-inhibit-message))
-            (message nil)))))))
+        (let ((inhibit-message conn-read-args-inhibit-message))
+          (message nil))))))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
