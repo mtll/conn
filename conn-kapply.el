@@ -263,7 +263,7 @@ of highlighting."
                 from)))))))
 
 (cl-defgeneric conn-kapply-match-iterator (thing
-                                           thing-arg
+                                           arg
                                            transform
                                            &optional
                                            subregions
@@ -272,7 +272,7 @@ of highlighting."
                                            sort-function))
 
 (cl-defmethod conn-kapply-match-iterator ((_thing (eql project))
-                                          _thing-arg
+                                          _arg
                                           _transform
                                           &optional
                                           _subregions
@@ -347,7 +347,7 @@ of highlighting."
            (pop matches)))))))
 
 (cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
-                                          thing-arg
+                                          arg
                                           transform
                                           &optional
                                           subregions
@@ -356,7 +356,7 @@ of highlighting."
                                           sort-function)
   (let* ((regions
           (prog1
-              (pcase (conn-bounds-of thing thing-arg)
+              (pcase (conn-bounds-of thing arg)
                 ((and (guard subregions)
                       (conn-bounds-get :subregions
                                        transform

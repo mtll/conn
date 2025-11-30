@@ -1072,10 +1072,11 @@ words."))
     (conn-bounds-of 'region nil)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
-                              _arg)
+                              arg)
   (conn-read-args (conn-read-thing-state
-                   :prompt "Thing")
-      ((`(,thing ,thing-arg) (conn-thing-argument)))
+                   :prompt "Thing"
+                   :prefix arg)
+      ((`(,thing ,arg) (conn-thing-argument)))
     (let* ((name (symbol-name cmd))
            (start (point))
            (max nil)
@@ -1086,7 +1087,7 @@ words."))
                              (null isearch-other-end))
                      (abort-recursive-edit))
                    (setq max (> (point) isearch-other-end)
-                         bounds (conn-bounds-of thing thing-arg))))
+                         bounds (conn-bounds-of thing arg))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)

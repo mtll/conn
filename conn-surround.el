@@ -69,18 +69,20 @@
   (or (eq sym :whole)
       (eq sym :inner)))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-surround)) arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-surround))
+                              arg)
   (conn-read-args (conn-surround-with-state
                    :prompt "Surround"
                    :prefix arg)
-      ((`(,thing ,thing-arg) (conn-surround-with-argument))
+      ((`(,thing ,arg) (conn-surround-with-argument))
        (property (conn-surround-property-argument)))
-    (let ((bounds (conn-bounds-of thing thing-arg)))
+    (let ((bounds (conn-bounds-of thing arg)))
       (if (eq property :whole)
           bounds
         (conn-bounds-get bounds property)))))
 
-(cl-defmethod conn-bounds-of ((cmd conn-self-insert-event) arg)
+(cl-defmethod conn-bounds-of ((cmd conn-self-insert-event)
+                              arg)
   (catch 'return
     (save-mark-and-excursion
       (pcase-let* (((cl-struct conn-self-insert-event id)
@@ -131,8 +133,8 @@
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"
                    :prefix arg)
-      ((`(,thing ,thing-arg) (conn-surround-with-argument)))
-    (conn-delete-surround thing thing-arg)))
+      ((`(,thing ,arg) (conn-surround-with-argument)))
+    (conn-delete-surround thing arg)))
 
 ;;;;; Surround
 
@@ -295,14 +297,14 @@
   (conn-read-args (conn-surround-thing-state
                    :prompt "Surround"
                    :prefix arg)
-      ((`(,thing ,thing-arg) (conn-thing-argument-dwim t))
+      ((`(,thing ,arg) (conn-thing-argument-dwim t))
        (transform (conn-transform-argument '(conn-bounds-trim)))
        (subregions (conn-subregions-argument
                     (use-region-p))))
     (atomic-change-group
       (save-mark-and-excursion
         (pcase-let* ((`(,regions . ,prep-keys)
-                      (conn-prepare-surround thing thing-arg transform
+                      (conn-prepare-surround thing arg transform
                                              :subregions subregions))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
@@ -323,7 +325,7 @@
                   (add-to-history
                    'command-history
                    `(conn-previous-surround
-                     ',(cons (list thing thing-arg transform
+                     ',(cons (list thing arg transform
                                    :subregions subregions)
                              (list with with-arg
                                    :padding padding))))
@@ -487,17 +489,18 @@
        (delete-region obeg oend)))))
 
 (cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
-                                    _arg
+                                    arg
                                     _transform
                                     &optional
                                     _kill)
   (atomic-change-group
     (save-mark-and-excursion
       (conn-read-args (conn-change-surround-state
-                       :prompt "Change Surrounding")
-          ((`(,thing ,thing-arg) (conn-change-surround-argument)))
+                       :prompt "Change Surrounding"
+                       :prefix arg)
+          ((`(,thing ,arg) (conn-change-surround-argument)))
         (pcase-let* ((`(,ov . ,prep-keys)
-                      (conn-prepare-change-surround thing thing-arg))
+                      (conn-prepare-change-surround thing arg))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
           (unwind-protect
@@ -514,7 +517,7 @@
                 (add-to-history
                  'command-history
                  `(conn-previous-change-surround
-                   ',(cons (list thing thing-arg)
+                   ',(cons (list thing arg)
                            (list with with-arg :padding padding))))
                 (setq success t))
             (delete-overlay ov)

@@ -460,7 +460,7 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (conn-read-args (conn-read-thing-state
                    :prompt "Thing")
-      ((`(,thing ,thing-arg) (conn-replace-thing-argument))
+      ((`(,thing ,arg) (conn-replace-thing-argument))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument (use-region-p)))
        (regexp (conn-boolean-argument 'regexp
@@ -470,7 +470,7 @@ before each iteration."
       (conn--kapply-macro
        (alist-get :kmacro args)
        (conn-kapply-match-iterator thing
-                                   thing-arg
+                                   arg
                                    transform
                                    subregions
                                    regexp
@@ -500,11 +500,11 @@ apply to each contiguous component of the region."
    (conn-kapply-region-iterator
     (conn-read-args (conn-read-thing-state
                      :prompt "Thing")
-        ((`(,thing ,thing-arg)
+        ((`(,thing ,arg)
           (conn-thing-argument-dwim-rectangle t))
          (transform (conn-transform-argument)))
       (mapcar #'conn-bounds (conn-bounds-get
-                             (conn-bounds-of thing thing-arg)
+                             (conn-bounds-of thing arg)
                              :subregions transform))))
    `(conn--kapply-relocate-to-region
      conn--kapply-skip-invisible-points
@@ -600,8 +600,8 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (conn-read-args (conn-read-thing-state
                    :prompt "Thing")
-      ((`(,thing ,thing-arg) (conn-thing-argument-dwim)))
-    (pcase (conn-bounds-of thing thing-arg)
+      ((`(,thing ,arg) (conn-thing-argument-dwim)))
+    (pcase (conn-bounds-of thing arg)
       ((conn-bounds `(,beg . ,end))
        (conn--kapply-macro
         (alist-get :kmacro args)

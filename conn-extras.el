@@ -213,7 +213,7 @@
   (conn-read-args (conn-dired-dispatch-state
                    :prefix initial-arg
                    :prompt "Dired Dispatch")
-      ((`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
         (conn-boolean-argument 'restrict-windows
@@ -221,7 +221,7 @@
                                "this-win"))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
-     action thing thing-arg transform
+     action thing arg transform
      :repeat repeat
      :restrict-windows restrict-windows
      :other-end :no-other-end)))
@@ -428,7 +428,7 @@
                                                (window-buffer win))
                            'dired-mode))))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
         (save-excursion
@@ -451,7 +451,7 @@
                                                (window-buffer win))
                            'dired-mode))))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
         (save-excursion
@@ -470,7 +470,7 @@
                                                (window-buffer win))
                            'dired-mode))))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
         (save-excursion
@@ -584,7 +584,7 @@
   (conn-read-args (conn-ibuffer-dispatch-state
                    :prefix initial-arg
                    :prompt "Ibuffer Dispatch")
-      ((`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
         (conn-boolean-argument 'restrict-windows
@@ -592,7 +592,7 @@
                                "this-win"))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
-     action thing thing-arg transform
+     action thing arg transform
      :repeat repeat
      :restrict-windows restrict-windows
      :other-end :no-other-end)))
@@ -670,7 +670,7 @@
                                                (window-buffer win))
                            'ibuffer-mode))))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
         (save-excursion
@@ -777,11 +777,11 @@
   (conn-read-args (conn-bmenu-dispatch-state
                    :prefix initial-arg
                    :prompt "Bookmark Dispatch")
-      ((`(,thing ,thing-arg) (conn-thing-argument))
+      ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
-     action thing thing-arg transform
+     action thing arg transform
      :repeat repeat
      :restrict-windows t
      :other-end :no-other-end)))
@@ -798,7 +798,7 @@
                                                (window-buffer win))
                            'bookmark-bmenu-mode))))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_thing-arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
         (save-excursion

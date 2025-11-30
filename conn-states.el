@@ -1748,8 +1748,7 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
                               name
                               &optional
                               value
-                              annotation
-                              &aux)))
+                              annotation)))
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
@@ -1778,17 +1777,18 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (cl-defstruct (conn-cycling-argument
                (:include conn-argument)
-               (:constructor conn-cycling-argument
-                             (choices
-                              cycling-command
-                              &key
-                              keymap
-                              (format-function #'conn-format-cycling-argument)
-                              required
-                              name
-                              annotation
-                              &aux
-                              (value (car choices)))))
+               (:constructor
+                conn-cycling-argument
+                (choices
+                 cycling-command
+                 &key
+                 keymap
+                 (format-function #'conn-format-cycling-argument)
+                 required
+                 name
+                 annotation
+                 &aux
+                 (value (car choices)))))
   (choices nil :type list :read-only t)
   (cycling-command nil :type symbol :read-only t)
   (format-function #'identity :type function :read-only t))

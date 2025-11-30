@@ -170,7 +170,7 @@
 (cl-defmethod conn-make-action ((_type (eql conn-open-org-link)))
   (oclosure-lambda (conn-open-org-link
                     (action-description "Open Link"))
-      (window pt _thing _thing-arg)
+      (window pt _thing _arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
