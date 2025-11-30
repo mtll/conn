@@ -348,7 +348,8 @@ of line proper."
   t)
 
 (cl-defmethod conn-argument-display ((_arg conn-replace-thing-argument))
-  "\\[project] project")
+  (list (cl-call-next-method)
+        "\\[project] project"))
 
 (defvar-keymap conn-regexp-argument-map
   "q" 'regexp)
@@ -725,7 +726,8 @@ instances of from-string.")
       (cl-call-next-method)))
 
 (cl-defmethod conn-argument-display ((_arg conn-isearch-thing-argument))
-  (list "\\[multi-buffer] multi-buffer"
+  (list (cl-call-next-method)
+        "\\[multi-buffer] multi-buffer"
         "\\[multi-file] multi-file"
         "\\[project] project"))
 
