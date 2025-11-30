@@ -454,7 +454,7 @@ before each iteration."
        ,(lambda (iterator)
           (conn--kapply-with-state iterator 'conn-command-state))))))
 
-(transient-define-suffix conn--kapply-string-suffix (args)
+(transient-define-suffix conn--kapply-match-suffix (args)
   "Apply keyboard macro to every occurrence of a string within a region."
   :transient 'transient--do-exit
   :key "m"
@@ -484,7 +484,9 @@ before each iteration."
               'conn--kapply-open-invisible
             'conn--kapply-skip-invisible-regions)
          conn--kapply-pulse-region
-         ,@(conn--transient-kapply-pipeline-args args))))))
+         ,@(conn--transient-kapply-pipeline-args args)
+         ,(lambda (iterator)
+            (conn--kapply-query iterator t)))))))
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
@@ -726,7 +728,7 @@ A zero means repeat until error."
     [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "Apply Kmacro On:"
       (conn--kapply-occur)
-      (conn--kapply-string-suffix)
+      (conn--kapply-match-suffix)
       (conn--kapply-things-suffix)
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
@@ -1281,7 +1283,7 @@ A zero means repeat until error."
 
   (transient-append-suffix
     'conn-kapply-prefix
-    'conn--kapply-string-suffix
+    'conn--kapply-match-suffix
     '(conn--kapply-compilation)
     t))
 
