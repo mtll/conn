@@ -1846,8 +1846,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (set-flag (and (use-region-p)
                                  conn-argument-region-dwim))))))
 
-(cl-defmethod conn-argument-predicate ((arg conn-kill-thing-argument)
-                                       (cmd (eql filename)))
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql filename)))
   t)
 
 (defun conn-kill-thing (cmd
@@ -2024,7 +2024,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
 
-(cl-defmethod conn-kill-thing-do ((cmd (eql filename))
+(cl-defmethod conn-kill-thing-do ((_cmd (eql filename))
                                   _arg
                                   transform
                                   &optional
@@ -2033,15 +2033,20 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                   register
                                   _fixup-whitespace
                                   _check-bounds)
-  (let* ((str (cond ((memq 'conn-bounds-after-point transform)
-                     (file-name-nondirectory (buffer-file-name)))
-                    ((memq 'conn-bounds-before-point transform)
-                     (file-name-directory (buffer-file-name)))
-                    (t
-                     (buffer-file-name)))))
-    (when (memq 'conn-bounds-trim transform)
-      (setq str (file-name-sans-extension str)))
-    (conn--kill-string str append register)))
+  (if-let* ((fname (buffer-file-name
+                    (if (minibuffer-window-active-p (selected-window))
+                        (window-buffer (minibuffer-selected-window))
+                      (current-buffer))))
+            (str (cond ((memq 'conn-bounds-after-point transform)
+                        (file-name-nondirectory fname))
+                       ((memq 'conn-bounds-before-point transform)
+                        (file-name-directory fname))
+                       (t fname))))
+      (progn
+        (when (memq 'conn-bounds-trim transform)
+          (setq str (file-name-sans-extension str)))
+        (conn--kill-string str append register))
+    (user-error "Buffer does not have a file")))
 
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
@@ -2349,8 +2354,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (set-flag (and (use-region-p)
                                  conn-argument-region-dwim))))))
 
-(cl-defmethod conn-argument-predicate ((arg conn-copy-thing-argument)
-                                       (cmd (eql 'filename)))
+(cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
+                                       (_cmd (eql 'filename)))
   t)
 
 (defun conn-copy-thing (thing arg &optional transform append register)
@@ -2375,29 +2380,26 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (cl-defgeneric conn-copy-thing-do (cmd arg &optional transform append register)
   (declare (conn-anonymous-thing-property :copy-op)))
 
-(cl-defmethod conn-copy-thing-do ((cmd (eql filename))
+(cl-defmethod conn-copy-thing-do ((_cmd (eql filename))
                                   _arg
                                   &optional
                                   transform
                                   append
                                   register)
-  (let* ((str (cond ((memq 'conn-bounds-after-point transform)
-                     (file-name-nondirectory (buffer-file-name)))
-                    ((memq 'conn-bounds-before-point transform)
-                     (file-name-directory (buffer-file-name)))
-                    (t
-                     (buffer-file-name)))))
-    (when (memq 'conn-bounds-trim transform)
-      (setq str (file-name-sans-extension str)))
-    (conn--kill-string str append register)))
-
-(cl-defmethod conn-copy-thing-do ((cmd (eql file-base-name))
-                                  _arg
-                                  &optional
-                                  _transform
-                                  append
-                                  register)
-  (conn--kill-string (buffer-file-name) append register))
+  (if-let* ((fname (buffer-file-name
+                    (if (minibuffer-window-active-p (selected-window))
+                        (window-buffer (minibuffer-selected-window))
+                      (current-buffer))))
+            (str (cond ((memq 'conn-bounds-after-point transform)
+                        (file-name-nondirectory fname))
+                       ((memq 'conn-bounds-before-point transform)
+                        (file-name-directory fname))
+                       (t fname))))
+      (progn
+        (when (memq 'conn-bounds-trim transform)
+          (setq str (file-name-sans-extension str)))
+        (conn--kill-string str append register))
+    (user-error "Buffer does not have a file")))
 
 (cl-defmethod conn-copy-thing-do (cmd arg &optional transform append register)
   (pcase (conn-bounds-of cmd arg)
