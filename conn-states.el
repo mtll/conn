@@ -681,16 +681,16 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (declare (debug (form body))
            (indent 1))
   (cl-with-gensyms (buffer stack)
-    `(progn
-       (conn-enter-recursive-stack ,state)
-       (let ((,stack (cdr (memq nil conn--state-stack)))
-             (,buffer (current-buffer)))
-         (unwind-protect
-             ,(macroexp-progn body)
-           (with-current-buffer ,buffer
-             (setq conn--state-stack ,stack)
-             (conn-enter-state (car ,stack))
-             (conn-update-lighter)))))))
+    `(let ((,stack conn--state-stack)
+           (,buffer (current-buffer)))
+       (unwind-protect
+           (progn
+             (conn-enter-recursive-stack ,state)
+             ,@body)
+         (with-current-buffer ,buffer
+           (setq conn--state-stack ,stack)
+           (conn-enter-state (car ,stack))
+           (conn-update-lighter))))))
 
 (defmacro conn-without-recursive-stack (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
@@ -699,12 +699,14 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (cl-with-gensyms (stack buffer)
     `(let ((,stack conn--state-stack)
            (,buffer (current-buffer)))
-       (conn-exit-recursive-stack)
        (unwind-protect
-           ,(macroexp-progn body)
+           (progn
+             (conn-exit-recursive-stack)
+             ,@body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
-           (conn-enter-state (car ,stack)))))))
+           (conn-enter-state (car ,stack))
+           (conn-update-lighter))))))
 
 ;;;;; Cl-Generic Specializers
 
