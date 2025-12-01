@@ -20,6 +20,7 @@
 ;;; Code
 
 (require 'compat)
+(require 'sort)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-things)
@@ -1095,6 +1096,184 @@ With a prefix ARG `push-mark' without activating it."
     (conn-ring-rotate-backward conn-mark-ring)
     (goto-char (conn-ring-head conn-mark-ring)))
   (deactivate-mark))
+
+;;;;; Sort
+
+(conn-define-state conn-sort-state (conn-read-thing-state)
+  :lighter "SORT")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-sort-state)
+  "*" 'sort-regexp-fields
+  "#" 'sort-numeric-fields
+  "TAB" 'sort-fields
+  "|" 'sort-columns)
+
+(cl-defstruct (conn-sort-things-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-sort-things-argument
+                (&aux
+                 (required t)
+                 (value
+                  (when (and (use-region-p)
+                             (bound-and-true-p rectangle-mark-mode))
+                    (list 'region nil)))
+                 (set-flag
+                  (and (use-region-p)
+                       (bound-and-true-p rectangle-mark-mode)))))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-sort-things-argument)
+                                       cmd)
+  (memq cmd '(sort-numeric-fields
+              sort-fields
+              sort-regexp-fields
+              sort-columns)))
+
+(defvar-keymap conn-sort-reverse-map
+  "r" 'reverse)
+
+(defvar-keymap conn-sort-fold-case-map
+  "g" 'sort-fold-case)
+
+(defun conn-sort-things (thing
+                         arg
+                         transform
+                         &optional
+                         reverse
+                         fold-case)
+  (interactive
+   (conn-read-args (conn-sort-state
+                    :prompt "Things")
+       ((`(,thing ,arg) (conn-sort-things-argument))
+        (transform (conn-transform-argument))
+        (reverse (conn-boolean-argument 'reverse
+                                        conn-sort-reverse-map
+                                        "reverse"))
+        (fold-case (conn-boolean-argument 'sort-fold-case
+                                          conn-sort-fold-case-map
+                                          "fold case"
+                                          (bound-and-true-p sort-fold-case))))
+     (list thing arg transform reverse fold-case)))
+  (conn-sort-things-do thing arg transform reverse fold-case))
+
+(cl-defgeneric conn-sort-things-do (thing
+                                    arg
+                                    transform
+                                    &optional
+                                    reverse
+                                    predicate
+                                    fold-case))
+
+(cl-defmethod conn-sort-things-do ((thing (conn-thing t))
+                                   arg
+                                   transform
+                                   &optional
+                                   reverse
+                                   predicate
+                                   fold-case)
+  (pcase (conn-bounds-of thing arg)
+    ((and (conn-bounds `(,beg . ,end))
+          (conn-bounds-get :subregions nil
+                           (and regions (pred identity))))
+     (save-excursion
+       (with-restriction beg end
+         (let* ((sort-lists nil)
+                (messages (> (- (point-max) (point-min)) 50000)))
+           (pcase-dolist ((conn-bounds cons transform)
+                          regions)
+             (push (cons cons cons) sort-lists))
+           (let ((old (reverse sort-lists))
+	         (case-fold-search fold-case))
+             (when sort-lists
+	       (or reverse (setq sort-lists (nreverse sort-lists)))
+	       (if messages (message "Sorting records..."))
+	       (setq sort-lists
+	             (sort sort-lists
+		           (cond (predicate
+			          `(lambda (a b) (,predicate (car a) (car b))))
+			         ((numberp (car (car sort-lists)))
+			          'car-less-than-car)
+			         ((consp (car (car sort-lists)))
+			          (lambda (a b)
+			            (> 0 (compare-buffer-substrings
+				          nil (car (car a)) (cdr (car a))
+				          nil (car (car b)) (cdr (car b))))))
+			         (t
+			          (lambda (a b) (string< (car a) (car b)))))))
+	       (if reverse (setq sort-lists (nreverse sort-lists)))
+	       (if messages (message "Reordering buffer..."))
+               (with-buffer-unmodified-if-unchanged
+	         (sort-reorder-buffer sort-lists old))))))))
+    (_ (user-error "No regions to sort"))))
+
+(cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
+                                   arg
+                                   _transform
+                                   &optional
+                                   _reverse
+                                   _predicate
+                                   _fold-case)
+  ;; TODO: make reverse work somehow?
+  (sort-numeric-fields (prefix-numeric-value arg)
+                       (region-beginning)
+                       (region-end)))
+
+(cl-defmethod conn-sort-things-do ((_thing (eql sort-fields))
+                                   arg
+                                   _transform
+                                   &optional
+                                   _reverse
+                                   _predicate
+                                   fold-case)
+  (let ((sort-fold-case fold-case))
+    (sort-fields (prefix-numeric-value arg)
+                 (region-beginning)
+                 (region-end))))
+
+(cl-defmethod conn-sort-things-do ((_thing (eql sort-columns))
+                                   _arg
+                                   _transform
+                                   &optional
+                                   reverse
+                                   _predicate
+                                   fold-case)
+  (let ((sort-fold-case fold-case))
+    (sort-columns reverse
+                  (region-beginning)
+                  (region-end))))
+
+(cl-defmethod conn-sort-things-do ((_thing (eql sort-regexp-fields))
+                                   _arg
+                                   _transform
+                                   &optional
+                                   reverse
+                                   _predicate
+                                   fold-case)
+  (let* ((sort-fold-case fold-case)
+         (beg (region-beginning))
+         (end (region-end))
+         (record-re (minibuffer-with-setup-hook
+                        (minibuffer-lazy-highlight-setup
+                         :case-fold case-fold-search
+                         :filter (lambda (mb me) (<= beg mb me end))
+                         :highlight query-replace-lazy-highlight
+                         :regexp t
+                         :regexp-function (lambda (str _) str)
+                         :lax-whitespace nil)
+                      (read-regexp "Regexp specifying records to sort: "
+                                   nil 'regexp-history)))
+         (key-re (minibuffer-with-setup-hook
+                     (minibuffer-lazy-highlight-setup
+                      :case-fold case-fold-search
+                      :filter (lambda (mb me) (<= beg mb me end))
+                      :highlight query-replace-lazy-highlight
+                      :regexp t
+                      :regexp-function (lambda (str _) str)
+                      :lax-whitespace nil)
+                   (read-regexp "Regexp specifying key within record: "
+                                nil 'regexp-history))))
+    (sort-regexp-fields reverse record-re key-re beg end)))
 
 ;;;;; Transpose
 

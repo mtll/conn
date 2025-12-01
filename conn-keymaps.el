@@ -351,6 +351,7 @@
   "C-5" (conn-remap-key "C-x 5" t)
   "G" 'conn-surround
   "<escape>" 'conn-pop-state
+  "S" 'conn-sort-things
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
