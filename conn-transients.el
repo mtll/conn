@@ -1161,31 +1161,6 @@ A zero means repeat until error."
       ("p" "Prefix" conn--set-fill-prefix-infix)
       ("a" conn-auto-fill-suffix)]])
 
-;;;; Sort Prefix
-
-(transient-define-infix conn--case-fold-infix ()
-  "Toggle `sort-fold-case'."
-  :class 'transient-lisp-variable
-  :variable 'sort-fold-case
-  :reader (lambda (&rest _) (not sort-fold-case)))
-
-;;;###autoload (autoload 'conn-sort-prefix "conn-transients" nil t)
-(transient-define-prefix conn-sort-prefix ()
-  "Transient menu for buffer sorting functions."
-  [ [ "Sort Region: "
-      ("a" "sort pages" sort-pages)
-      ("c" "sort columns" sort-columns)
-      ("l" "sort lines" sort-lines)
-      ("o" "org sort" org-sort
-       :if (lambda () (eq major-mode 'org-mode)))]
-    [ ("f" "case fold" conn--case-fold-infix)
-      ("n" "sort numeric fields" sort-numeric-fields)
-      ("p" "sort paragraphs" sort-paragraphs)
-      ("r" "sort regexp fields" sort-regexp-fields)]]
-  (interactive)
-  (require 'sort)
-  (transient-setup 'conn-sort-prefix))
-
 ;;;; Ibuffer
 
 (declare-function ibuffer-format-qualifier "ibuf-ext")

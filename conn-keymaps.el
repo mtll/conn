@@ -130,7 +130,6 @@
   "k" 'conn-emacs-state-open-line
   "d" 'conn-duplicate-thing
   "y" 'yank-in-context
-  "s" 'conn-sort-prefix
   "r" 'yank-rectangle
   "DEL" 'clear-rectangle
   "a c" 'align-current
@@ -317,6 +316,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "#" 'eshell
+  "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
   "=" 'conn-repeat-last-complex-command
   "S-<return>" 'conn-open-line-and-indent
@@ -410,8 +411,6 @@
   "<mouse-3>" 'undo
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  ;; "C-f" 'retarget
-  ;; "M-f" 'always-retarget
   "C-t" 'change-target-finder
   "<escape>" 'finish
   "C-o" 'conn-goto-window
