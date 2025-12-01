@@ -1148,13 +1148,15 @@ With a prefix ARG `push-mark' without activating it."
                     :prompt "Things")
        ((`(,thing ,arg) (conn-sort-things-argument))
         (transform (conn-transform-argument))
-        (reverse (conn-boolean-argument 'reverse
-                                        conn-sort-reverse-map
-                                        "reverse"))
-        (fold-case (conn-boolean-argument 'sort-fold-case
-                                          conn-sort-fold-case-map
-                                          "fold case"
-                                          (bound-and-true-p sort-fold-case))))
+        (reverse
+         (conn-boolean-argument 'reverse
+                                conn-sort-reverse-map
+                                "reverse"))
+        (fold-case
+         (conn-boolean-argument 'sort-fold-case
+                                conn-sort-fold-case-map
+                                "fold case"
+                                (bound-and-true-p sort-fold-case))))
      (list thing arg transform reverse fold-case)))
   (conn-sort-things-do thing arg transform reverse fold-case))
 
