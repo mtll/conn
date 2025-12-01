@@ -1125,10 +1125,11 @@ With a prefix ARG `push-mark' without activating it."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-sort-things-argument)
                                        cmd)
-  (memq cmd '(sort-numeric-fields
-              sort-fields
-              sort-regexp-fields
-              sort-columns)))
+  (or (memq cmd '(sort-numeric-fields
+                  sort-fields
+                  sort-regexp-fields
+                  sort-columns))
+      (cl-call-next-method)))
 
 (defvar-keymap conn-sort-reverse-map
   "r" 'reverse)
