@@ -984,7 +984,7 @@ Optionally the overlay may have an associated THING."
 (defvar conn-dispatch-label-function 'conn-dispatch-simple-labels
   "Function responsible for labeling all `conn-targets'.
 
-A labeling function should take a single argument STATE and
+A labeling function may take an optional argument STATE and should
 return either a list of label strings or a list of the form
 (:state NEW-STATE . LABELS).  If the labeling function returns such a
 list then NEW-STATE will be passed to the labeling function the next
@@ -1310,7 +1310,7 @@ Target overlays may override this default by setting the
   (in-use nil :type hash-table)
   (size 0 :type fixnum))
 
-(defun conn-dispatch-simple-labels (state)
+(defun conn-dispatch-simple-labels (&optional state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
   (unless state
@@ -1401,6 +1401,16 @@ Target overlays may override this default by setting the
   (when conn--previous-labels-cleanup
     (funcall conn--previous-labels-cleanup)))
 
+(defun conn-dispatch-get-labels ()
+  (pcase (if conn--dispatch-label-state
+             (funcall conn-dispatch-label-function
+                      conn--dispatch-label-state)
+           (funcall conn-dispatch-label-function))
+    (`(:state ,state . ,labels)
+     (setq conn--dispatch-label-state state)
+     labels)
+    (labels labels)))
+
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
   `(progn
@@ -1474,12 +1484,7 @@ Target overlays may override this default by setting the
 
 (cl-defmethod conn-target-finder-select (_target-finder)
   (conn-with-dispatch-labels
-      (labels (pcase (funcall conn-dispatch-label-function
-                              conn--dispatch-label-state)
-                (`(:state ,state . ,labels)
-                 (setq conn--dispatch-label-state state)
-                 labels)
-                (labels labels)))
+      (labels (conn-dispatch-get-labels))
     (conn-label-select
      labels
      #'conn-dispatch-read-char
@@ -2605,10 +2610,10 @@ contain targets."
                (point-min))
           (window-end)
         (goto-char (point-max))
-        (while (and (/= (point) (progn
+        (while (and (/= (point) (point-min))
+                    (/= (point) (progn
                                   (forward-thing thing -1)
-                                  (point)))
-                    (/= (point) (point-min)))
+                                  (point))))
           (conn-make-target-overlay (point) 0))))))
 
 (conn-define-target-finder conn-dispatch-button-targets ()
