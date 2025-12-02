@@ -1509,7 +1509,9 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'list 'conn--down-list-mark-handler
- 'down-list)
+ 'down-list
+ 'conn-backward-up-inner-list
+ 'conn-forward-up-inner-list)
 
 (conn-register-thing 'whitespace :forward-op 'forward-whitespace)
 

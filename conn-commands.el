@@ -113,6 +113,22 @@ Respects the current restriction."
     (cl-decf line))
   (forward-line line))
 
+(defun conn-backward-up-inner-list (arg)
+  (interactive "p")
+  (unless (= 0 arg)
+    (conn-protected-let* ((pt (point) (goto-char pt)))
+      (backward-up-list (cl-signum arg))
+      (down-list (cl-signum arg))
+      (if (= pt (point))
+          (backward-up-list (cl-signum arg))
+        (cl-decf arg (cl-signum arg)))
+      (backward-up-list arg)
+      (down-list (cl-signum arg)))))
+
+(defun conn-forward-up-inner-list (arg)
+  (interactive "p")
+  (conn-backward-up-inner-list (- arg)))
+
 (defun conn-forward-defun (N)
   "Move forward by defuns.
 
@@ -1099,6 +1115,19 @@ With a prefix ARG `push-mark' without activating it."
 
 ;;;;; Sort
 
+(defvar conn-sort-special-bindings-ref
+  (conn-reference-quote
+    (("columns" sort-columns)
+     ("regexp fields" sort-regexp-fields)
+     ("numeric fields" sort-numeric-fields)
+     ("fields" sort-fields))))
+
+(defvar conn-sort-bindings-ref
+  (list (conn-reference-page "Sort"
+          "Special bindings"
+          (:eval (conn-quick-ref-to-cols
+                  conn-sort-special-bindings-ref 4)))))
+
 (conn-define-state conn-sort-state (conn-read-thing-state)
   :lighter "SORT")
 
@@ -1145,7 +1174,9 @@ With a prefix ARG `push-mark' without activating it."
                          fold-case)
   (interactive
    (conn-read-args (conn-sort-state
-                    :prompt "Things")
+                    :prompt "Things"
+                    :reference conn-sort-bindings-ref
+                    :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-sort-things-argument))
         (transform (conn-transform-argument))
         (reverse

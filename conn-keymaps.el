@@ -326,12 +326,14 @@
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
   "u" conn-backward-word-remap
+  "{" 'conn-backward-up-inner-list
+  "}" 'conn-forward-up-inner-list
   "(" conn-backward-list-remap
   ")" conn-forward-list-remap
   "[" conn-backward-up-list-remap
   "]" conn-down-list-remap
-  "{" conn-backward-sentence-remap
-  "}" conn-forward-sentence-remap
+  ;; "{" conn-backward-sentence-remap
+  ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
   "i" conn-previous-line-remap
   "J" 'conn-backward-inner-line-dwim
