@@ -1176,9 +1176,15 @@ With a prefix ARG `push-mark' without activating it."
                                    predicate
                                    fold-case)
   (pcase (conn-bounds-of thing arg)
-    ((and (conn-bounds `(,beg . ,end))
-          (conn-bounds-get :subregions nil
-                           (and regions (pred identity))))
+    ((and (conn-bounds-get :subregions nil
+                           (and regions (pred identity)))
+          (conn-bounds `(,beg . ,end)))
+     (conn--compat-callf sort regions
+       :lessp (pcase-lambda ((conn-bounds `(,b1 . ,e1))
+                             (conn-bounds `(,b2 . ,e2)))
+                (cond ((<= b1 e1 b2 e2) t)
+                      ((>= e1 b1 e2 b2) nil)
+                      (t (error "Overlapping regions")))))
      (save-excursion
        (with-restriction beg end
          (let* ((sort-lists nil)
@@ -1194,7 +1200,7 @@ With a prefix ARG `push-mark' without activating it."
 	       (setq sort-lists
 	             (sort sort-lists
 		           (cond (predicate
-			          `(lambda (a b) (,predicate (car a) (car b))))
+			          (lambda (a b) (funcall predicate (car a) (car b))))
 			         ((numberp (car (car sort-lists)))
 			          'car-less-than-car)
 			         ((consp (car (car sort-lists)))
