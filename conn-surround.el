@@ -149,6 +149,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-with-state)
   :suppress t
+  "a" 'conn-adjust-surround
+  "z" 'conn-adjust-surround-other-end
   "r" 'conn-read-pair
   "c" 'surround-comment
   ";" 'surround-comment
@@ -176,12 +178,16 @@
                (:include conn-argument)
                (:constructor
                 conn-surround-with-argument
-                (&aux
+                (&optional
+                 adjustable
+                 &aux
                  (required t)
-                 (annotation "surround with")))))
+                 (annotation "surround with"))))
+  (adjustable nil :type boolean :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
-                                    cmd update-fn)
+                                    cmd
+                                    update-fn)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
@@ -195,9 +201,11 @@
 (cl-defmethod conn-handle-surround-with-argument ((_cmd (eql surround-self-insert)))
   (conn--self-insert last-input-event))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
+(cl-defmethod conn-argument-predicate ((arg conn-surround-with-argument)
                                        sym)
-  (memq sym '(surround-self-insert surround-command)))
+  (or (memq sym '(surround-self-insert surround-command))
+      (and (conn-surround-with-argument-adjustable arg)
+           (memq sym '(conn-adjust-surround conn-adjust-surround-other-end)))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-surround-with-argument))
   (conn-argument-value arg))
@@ -277,9 +285,14 @@
 (cl-defgeneric conn-prepare-surround (cmd arg transform &key &allow-other-keys)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
-  ( :method ((_ (eql nil)) _ _ &rest _ &key &allow-other-keys) nil))
+  (:method ((_ (eql nil)) &rest _) nil))
 
-(cl-defmethod conn-prepare-surround (cmd arg transform &key subregions &allow-other-keys)
+(cl-defmethod conn-prepare-surround (cmd
+                                     arg
+                                     transform
+                                     &key
+                                     subregions
+                                     &allow-other-keys)
   (let (regions)
     (pcase (conn-bounds-of cmd arg)
       ((and (guard subregions)
@@ -429,7 +442,8 @@
                                ((pred stringp) open)
                                (_ (string open)))))))
 
-(cl-defmethod conn-surround-do ((with conn-surround-pair) arg
+(cl-defmethod conn-surround-do ((with conn-surround-pair)
+                                arg
                                 &key
                                 padding
                                 &allow-other-keys)
@@ -440,6 +454,94 @@
    padding
    arg))
 
+(defun conn--adjust-surround-edit-message ()
+  (message
+   (substitute-command-keys
+    (concat
+     "Adjusting: Press \\[conn-pop-state] to finish, "
+     "\\[conn-change-thing] to change surround"))))
+
+(define-minor-mode conn-adjust-surround-mode
+  "Mode for adjusting surround."
+  :group 'conn
+  :global t
+  (if conn-adjust-surround-mode
+      (progn
+        (setq conn--eldoc-prev-msg-fn eldoc-message-function
+              eldoc-message-function #'ignore)
+        (conn--adjust-surround-edit-message)
+        (add-hook 'pre-command-hook #'conn--adjust-surround-edit-message))
+    (remove-hook 'pre-command-hook #'conn--adjust-surround-edit-message)
+    (setq eldoc-message-function conn--eldoc-prev-msg-fn
+          conn--eldoc-prev-msg-fn nil)
+    (message nil)))
+
+(keymap-set (conn-get-minor-mode-map 'conn-mark-state 'conn-adjust-surround-mode)
+            "e" 'exit-recursive-edit)
+
+(cl-defun conn--adjust-surround-subr (other-end
+                                      &rest
+                                      keys
+                                      &key
+                                      regions
+                                      keymap
+                                      open
+                                      close
+                                      &allow-other-keys)
+  (mapc #'delete-overlay regions)
+  (conn-with-recursive-stack conn-current-state
+    (conn-push-state 'conn-mark-state)
+    (when other-end (conn-exchange-mark-command))
+    (let ((adjust t)
+          with arg)
+      (conn-with-overriding-map
+          (define-keymap
+            "<remap> <conn-change-thing>"
+            (lambda ()
+              (interactive)
+              (conn-read-args (conn-surround-with-state
+                               :prompt "Surround With"
+                               :overriding-map keymap
+                               :prefix arg)
+                  ((next-with (conn-surround-with-argument)))
+                (pcase-setq `(,with ,arg) next-with
+                            adjust nil)
+                (exit-recursive-edit)))
+            "<remap> <conn-pop-state>" #'exit-recursive-edit)
+        (let ((buffer-read-only t))
+          (unwind-protect
+              (progn
+                (conn-adjust-surround-mode 1)
+                (recursive-edit))
+            (conn-adjust-surround-mode -1)))
+        (if adjust
+            (let ((beg (region-beginning))
+                  (end (region-end)))
+              (save-excursion
+                (goto-char end)
+                (insert close)
+                (goto-char beg)
+                (insert open)))
+          (let ((ov (make-overlay (region-beginning) (region-end))))
+            (unwind-protect
+                (apply #'conn-surround-do
+                       `( ,with ,arg
+                          :regions ,(list ov)
+                          ,@keys))
+              (delete-overlay ov))))))))
+
+(cl-defmethod conn-surround-do ((_with (eql conn-adjust-surround))
+                                _arg
+                                &rest
+                                keys)
+  (apply #'conn--adjust-surround-subr nil keys))
+
+(cl-defmethod conn-surround-do ((_with (eql conn-adjust-surround-other-end))
+                                _arg
+                                &rest
+                                keys)
+  (apply #'conn--adjust-surround-subr t keys))
+
 ;;;;;; Change Surround
 
 (define-error 'conn-no-surround "No surround at point" 'user-error)
@@ -447,7 +549,9 @@
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")
 
-(keymap-set (conn-get-state-map 'conn-change-state) "g" 'conn-surround)
+(define-keymap
+  :keymap (conn-get-state-map 'conn-change-state)
+  "g" 'conn-surround)
 
 (cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
                                            arg)
@@ -484,7 +588,9 @@
     ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
           (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend)))
           (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend))))
-     (prog1 (list (conn--make-surround-region ibeg iend))
+     (prog1 (list (conn--make-surround-region ibeg iend)
+                  :open (buffer-substring-no-properties obeg oend)
+                  :close (buffer-substring-no-properties cbeg cend))
        (delete-region cbeg cend)
        (delete-region obeg oend)))))
 
@@ -493,36 +599,37 @@
                                     _transform
                                     &optional
                                     _kill)
-  (atomic-change-group
-    (save-mark-and-excursion
-      (conn-read-args (conn-change-surround-state
-                       :prompt "Change Surrounding"
-                       :prefix arg)
-          ((`(,thing ,arg) (conn-change-surround-argument)))
-        (pcase-let* ((`(,ov . ,prep-keys)
-                      (conn-prepare-change-surround thing arg))
-                     (cleanup (plist-get prep-keys :cleanup))
-                     (success nil))
-          (unwind-protect
-              (conn-read-args (conn-surround-with-state
-                               :prompt "Surround With"
-                               :overriding-map (plist-get prep-keys :keymap))
-                  ((`(,with ,with-arg) (conn-surround-with-argument))
-                   (padding (conn-surround-padding-argument)))
-                (apply #'conn-surround-do
-                       `(,with ,with-arg
-                               :regions ,(list ov)
-                               ,@prep-keys
-                               :padding ,padding))
-                (add-to-history
-                 'command-history
-                 `(conn-previous-change-surround
-                   ',(cons (list thing arg)
-                           (list with with-arg :padding padding))))
-                (setq success t))
-            (delete-overlay ov)
-            (when cleanup
-              (funcall cleanup (if success :accept :cancel)))))))))
+  (with-undo-amalgamate
+    (atomic-change-group
+      (save-mark-and-excursion
+        (conn-read-args (conn-change-surround-state
+                         :prompt "Change Surrounding"
+                         :prefix arg)
+            ((`(,thing ,arg) (conn-change-surround-argument)))
+          (pcase-let* ((`(,ov . ,prep-keys)
+                        (conn-prepare-change-surround thing arg))
+                       (cleanup (plist-get prep-keys :cleanup))
+                       (success nil))
+            (unwind-protect
+                (conn-read-args (conn-surround-with-state
+                                 :prompt "Surround With"
+                                 :overriding-map (plist-get prep-keys :keymap))
+                    ((`(,with ,with-arg) (conn-surround-with-argument t))
+                     (padding (conn-surround-padding-argument)))
+                  (apply #'conn-surround-do
+                         `( ,with ,with-arg
+                            :regions ,(list ov)
+                            ,@prep-keys
+                            :padding ,padding))
+                  (add-to-history
+                   'command-history
+                   `(conn-previous-change-surround
+                     ',(cons (list thing arg)
+                             (list with with-arg :padding padding))))
+                  (setq success t))
+              (delete-overlay ov)
+              (when cleanup
+                (funcall cleanup (if success :accept :cancel))))))))))
 
 (defun conn-previous-change-surround (data)
   (save-mark-and-excursion
@@ -541,5 +648,30 @@
           (delete-overlay ov)
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
+
+;;;; Adjust Surround
+
+(defun conn-adjust-surround (&optional front)
+  (interactive "P")
+  (conn-read-args (conn-change-surround-state
+                   :prompt "Adjust Surrounding")
+      ((`(,thing ,arg) (conn-change-surround-argument)))
+    (with-undo-amalgamate
+      (atomic-change-group
+        (pcase-let* ((`(,ov . ,prep-keys)
+                      (conn-prepare-change-surround thing arg))
+                     (cleanup (plist-get prep-keys :cleanup))
+                     (success nil))
+          (unwind-protect
+              (apply #'conn-surround-do
+                     `(,(if front
+                            'conn-adjust-surround
+                          'conn-adjust-surround-other-end)
+                       nil
+                       :regions ,(list ov)
+                       ,@prep-keys))
+            (delete-overlay ov)
+            (when cleanup
+              (funcall cleanup (if success :accept :cancel)))))))))
 
 (provide 'conn-surround)
