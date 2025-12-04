@@ -920,7 +920,6 @@ Possibilities: \\<query-replace-map>
 (defvar conn-kapply-suppress-message nil)
 
 (defun conn--perform-kapply (iterator body)
-  (require 'kmacro)
   (let* ((undo-outer-limit nil)
          (undo-limit most-positive-fixnum)
          (undo-strong-limit most-positive-fixnum)

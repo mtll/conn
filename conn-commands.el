@@ -1230,17 +1230,13 @@ With a prefix ARG `push-mark' without activating it."
 	       (if messages (message "Sorting records..."))
 	       (setq sort-lists
 	             (sort sort-lists
-		           (cond (predicate
-			          (lambda (a b) (funcall predicate (car a) (car b))))
-			         ((numberp (car (car sort-lists)))
-			          'car-less-than-car)
-			         ((consp (car (car sort-lists)))
-			          (lambda (a b)
-			            (> 0 (compare-buffer-substrings
-				          nil (car (car a)) (cdr (car a))
-				          nil (car (car b)) (cdr (car b))))))
-			         (t
-			          (lambda (a b) (string< (car a) (car b)))))))
+		           (if predicate
+			       (lambda (a b)
+                                 (funcall predicate (car a) (car b)))
+			     (lambda (a b)
+			       (> 0 (compare-buffer-substrings
+				     nil (car (car a)) (cdr (car a))
+				     nil (car (car b)) (cdr (car b))))))))
 	       (if reverse (setq sort-lists (nreverse sort-lists)))
 	       (if messages (message "Reordering buffer..."))
                (with-buffer-unmodified-if-unchanged

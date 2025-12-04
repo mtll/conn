@@ -489,46 +489,46 @@
                                       close
                                       &allow-other-keys)
   (mapc #'delete-overlay regions)
-  (conn-with-recursive-stack conn-current-state
-    (conn-push-state 'conn-mark-state)
-    (when other-end (conn-exchange-mark-command))
-    (let ((adjust t)
-          with arg)
-      (conn-with-overriding-map
-          (define-keymap
-            "<remap> <conn-change-thing>"
-            (lambda ()
-              (interactive)
-              (conn-read-args (conn-surround-with-state
-                               :prompt "Surround With"
-                               :overriding-map keymap
-                               :prefix arg)
-                  ((next-with (conn-surround-with-argument)))
-                (pcase-setq `(,with ,arg) next-with
-                            adjust nil)
-                (exit-recursive-edit)))
-            "<remap> <conn-pop-state>" #'exit-recursive-edit)
-        (let ((buffer-read-only t))
-          (unwind-protect
-              (progn
-                (conn-adjust-surround-mode 1)
-                (recursive-edit))
-            (conn-adjust-surround-mode -1)))
-        (if adjust
-            (let ((beg (region-beginning))
-                  (end (region-end)))
-              (save-excursion
+  (save-mark-and-excursion
+    (conn-with-recursive-stack conn-current-state
+      (conn-push-state 'conn-mark-state)
+      (when other-end (conn-exchange-mark-command))
+      (let ((adjust t)
+            with arg)
+        (conn-with-overriding-map
+            (define-keymap
+              "<remap> <conn-change-thing>"
+              (lambda ()
+                (interactive)
+                (conn-read-args (conn-surround-with-state
+                                 :prompt "Surround With"
+                                 :overriding-map keymap
+                                 :prefix arg)
+                    ((next-with (conn-surround-with-argument)))
+                  (pcase-setq `(,with ,arg) next-with
+                              adjust nil)
+                  (exit-recursive-edit)))
+              "<remap> <conn-pop-state>" #'exit-recursive-edit)
+          (let ((buffer-read-only t))
+            (unwind-protect
+                (progn
+                  (conn-adjust-surround-mode 1)
+                  (recursive-edit))
+              (conn-adjust-surround-mode -1)))
+          (if adjust
+              (let ((beg (region-beginning))
+                    (end (region-end)))
                 (goto-char end)
                 (insert close)
                 (goto-char beg)
-                (insert open)))
-          (let ((ov (make-overlay (region-beginning) (region-end))))
-            (unwind-protect
-                (apply #'conn-surround-do
-                       `( ,with ,arg
-                          :regions ,(list ov)
-                          ,@keys))
-              (delete-overlay ov))))))))
+                (insert open))
+            (let ((ov (make-overlay (region-beginning) (region-end))))
+              (unwind-protect
+                  (apply #'conn-surround-do
+                         `( ,with ,arg
+                            :regions ,(list ov)
+                            ,@keys))
+                (delete-overlay ov)))))))))
 
 (cl-defmethod conn-surround-do ((_with (eql conn-adjust-surround))
                                 _arg
@@ -651,11 +651,18 @@
 
 ;;;; Adjust Surround
 
-(defun conn-adjust-surround (&optional front)
+(defvar-keymap conn-adjust-other-end-map
+  "z" 'other-end)
+
+(defun conn-adjust-surround ()
   (interactive "P")
   (conn-read-args (conn-change-surround-state
                    :prompt "Adjust Surrounding")
-      ((`(,thing ,arg) (conn-change-surround-argument)))
+      ((`(,thing ,arg) (conn-change-surround-argument))
+       (at-end (conn-boolean-argument 'other-end
+                                      conn-adjust-other-end-map
+                                      "At End"
+                                      t)))
     (with-undo-amalgamate
       (atomic-change-group
         (pcase-let* ((`(,ov . ,prep-keys)
@@ -664,9 +671,9 @@
                      (success nil))
           (unwind-protect
               (apply #'conn-surround-do
-                     `(,(if front
-                            'conn-adjust-surround
-                          'conn-adjust-surround-other-end)
+                     `(,(if at-end
+                            'conn-adjust-surround-other-end
+                          'conn-adjust-surround)
                        nil
                        :regions ,(list ov)
                        ,@prep-keys))

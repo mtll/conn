@@ -20,7 +20,6 @@
 (require 'conn-utils)
 (require 'conn-mark)
 (require 'conn-states)
-(require 'mule-util)
 (require 'thingatpt)
 (eval-when-compile
   (require 'cl-lib))
