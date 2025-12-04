@@ -1331,35 +1331,8 @@ With a prefix ARG `push-mark' without activating it."
   (declare (conn-anonymous-thing-property :transpose-op)))
 
 (defvar-keymap conn-transpose-repeat-map
-  "q" 'repeat-transpose
-  "Q" 'repeat-transpose-other-direction)
-
-(cl-defmethod conn-transpose-things-do :before (cmd
-                                                arg
-                                                at-point-and-mark)
-  (unless repeat-map
-    (let* ((map (make-sparse-keymap))
-           (repeat
-            (lambda ()
-              (interactive)
-              (let ((repeat-map t))
-                (conn-transpose-things-do cmd arg at-point-and-mark))
-              (setq repeat-map map)))
-           (repeat-back
-            (lambda ()
-              (interactive)
-              (let ((repeat-map t))
-                (conn-transpose-things-do cmd
-                                          (- (prefix-numeric-value arg))
-                                          at-point-and-mark))
-              (setq repeat-map map))))
-      (dolist (binding (where-is-internal 'repeat-transpose
-                                          (list conn-transpose-repeat-map)))
-        (define-key map binding repeat))
-      (dolist (binding (where-is-internal 'repeat-transpose-other-direction
-                                          (list conn-transpose-repeat-map)))
-        (define-key map binding repeat-back))
-      (setq repeat-map map))))
+  "q" 'conn-transpose-repeat
+  "Q" 'conn-transpose-repeat-inverse)
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
                                         arg
@@ -1388,7 +1361,23 @@ With a prefix ARG `push-mark' without activating it."
                 cmd)))
      (deactivate-mark t)
      (transpose-subr (lambda (N) (forward-thing thing N))
-                     (prefix-numeric-value arg)))
+                     (prefix-numeric-value arg))
+     (unless repeat-map
+       (fset 'conn-transpose-repeat
+             (lambda ()
+               (interactive)
+               (let ((repeat-map t))
+                 (conn-transpose-things-do cmd arg at-point-and-mark))
+               (setq repeat-map conn-transpose-repeat-map)))
+       (fset 'conn-transpose-repeat-inverse
+             (lambda ()
+               (interactive)
+               (let ((repeat-map t))
+                 (conn-transpose-things-do cmd
+                                           (- (prefix-numeric-value arg))
+                                           at-point-and-mark))
+               (setq repeat-map conn-transpose-repeat-map)))
+       (setq repeat-map conn-transpose-repeat-map)))
     (_ (user-error "Invalid transpose thing"))))
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing expansion))
