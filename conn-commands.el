@@ -1330,8 +1330,36 @@ With a prefix ARG `push-mark' without activating it."
 (cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mark)
   (declare (conn-anonymous-thing-property :transpose-op)))
 
-(cl-defmethod conn-transpose-things-do :after (&rest _)
-  (conn-make-command-repeatable))
+(defvar-keymap conn-transpose-repeat-map
+  "q" 'repeat-transpose
+  "Q" 'repeat-transpose-other-direction)
+
+(cl-defmethod conn-transpose-things-do :before (cmd
+                                                arg
+                                                at-point-and-mark)
+  (unless repeat-map
+    (let* ((map (make-sparse-keymap))
+           (repeat
+            (lambda ()
+              (interactive)
+              (let ((repeat-map t))
+                (conn-transpose-things-do cmd arg at-point-and-mark))
+              (setq repeat-map map)))
+           (repeat-back
+            (lambda ()
+              (interactive)
+              (let ((repeat-map t))
+                (conn-transpose-things-do cmd
+                                          (- (prefix-numeric-value arg))
+                                          at-point-and-mark))
+              (setq repeat-map map))))
+      (dolist (binding (where-is-internal 'repeat-transpose
+                                          (list conn-transpose-repeat-map)))
+        (define-key map binding repeat))
+      (dolist (binding (where-is-internal 'repeat-transpose-other-direction
+                                          (list conn-transpose-repeat-map)))
+        (define-key map binding repeat-back))
+      (setq repeat-map map))))
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
                                         arg
