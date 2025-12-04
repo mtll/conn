@@ -1999,6 +1999,9 @@ the meaning of depth."
                      :initarg :window-predicate))
   :abstract t)
 
+(defvar conn-dispatch-post-update-functions nil)
+(defvar conn-dispatch-pre-update-functions nil)
+
 (defmacro conn-define-target-finder (name superclasses &rest rest)
   (declare (indent 2))
   (pcase rest
@@ -2079,6 +2082,13 @@ the meaning of depth."
 (cl-defmethod conn-target-finder-update (target-finder)
   (when (functionp target-finder)
     (funcall target-finder)))
+
+(cl-defmethod conn-target-finder-update :around (_target-finder)
+  (dolist (win (conn--get-target-windows))
+    (run-hook-with-args 'conn-dispatch-pre-update-functions win))
+  (cl-call-next-method)
+  (dolist (win (conn--get-target-windows))
+    (run-hook-with-args 'conn-dispatch-post-update-functions win)))
 
 (cl-defgeneric conn-target-finder-label-faces (target-finder))
 

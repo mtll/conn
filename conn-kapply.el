@@ -123,6 +123,16 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
+(defun conn--kapply-make-region (beg end &optional buffer)
+  (make-overlay beg end buffer t))
+
+(defun conn--kapply-consume-region (ov)
+  (when ov
+    (prog1 (cons (cons (overlay-start ov)
+                       (overlay-end ov))
+                 (overlay-buffer ov))
+      (delete-overlay ov))))
+
 (defun conn--kapply-macro (applier iterator pipeline)
   (funcall applier
            (seq-reduce (lambda (it ctor) (funcall ctor it))
@@ -132,7 +142,7 @@ Possibilities: \\<query-replace-map>
 (defun conn-kapply-infinite-iterator ()
   (declare (important-return-value t)
            (side-effect-free t))
-  (lambda (_state) (cons (point) (point))))
+  (lambda (_state) `(,(point) ,(point) . ,(current-buffer))))
 
 (defun conn-kapply-highlight-iterator (beg end &optional sort-function read-patterns)
   (declare (important-return-value t)
@@ -159,8 +169,8 @@ Possibilities: \\<query-replace-map>
         (pcase-dolist (`(,fn (,subexp . ,_)) patterns)
           (goto-char (point-min))
           (while-let ((match (funcall fn (point-max))))
-            (push (cons (conn--create-marker (match-beginning subexp) nil t)
-                        (conn--create-marker (match-end subexp)))
+            (push (conn--kapply-make-region (match-beginning subexp)
+                                            (match-end subexp))
                   matches)))))
     (unless matches
       (user-error "No highlights for kapply."))
@@ -170,53 +180,38 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         (:cleanup
-         (when (consp matches)
-           (pcase-dolist (`(,beg . ,end) matches)
-             (set-marker beg nil)
-             (set-marker end nil))))
+         (mapc #'delete-overlay matches))
         ((or :record :next)
-         (pop matches))))))
+         (conn--kapply-consume-region (pop matches)))))))
 
 (defun conn-kapply-region-iterator (regions &optional sort-function)
   (declare (important-return-value t))
   (unless regions
     (user-error "No regions for kapply."))
-  (pcase-dolist ((and reg `(,beg . ,end))
-                 (setq regions (funcall (or sort-function #'identity)
-                                        regions)))
-    (if (markerp beg)
-        (set-marker-insertion-type beg t)
-      (setcar reg (conn--create-marker beg nil t)))
-    (if (markerp end)
-        (set-marker-insertion-type end nil)
-      (setcdr reg (conn--create-marker end (marker-buffer (car reg))))))
+  (when sort-function
+    (setq regions (funcall sort-function regions)))
   (lambda (state)
     (pcase state
       (:cleanup
-       (when (consp regions)
-         (pcase-dolist (`(,beg . ,end) regions)
-           (set-marker beg nil)
-           (set-marker end nil))))
+       (mapc #'delete-overlay regions))
       ((or :record :next)
-       (pop regions))
-      (_ state))))
+       (conn--kapply-consume-region (pop regions))))))
 
 (defun conn-kapply-point-iterator (points &optional sort-function)
   (declare (important-return-value t))
   (unless points
     (user-error "No points for kapply."))
   (let ((points
-         (cl-loop for pt in (funcall (or sort-function #'identity) points)
-                  collect (if (markerp pt) pt (conn--create-marker pt)))))
+         (cl-loop for pt in points
+                  collect (conn--kapply-make-region pt pt))))
+    (when sort-function
+      (funcall sort-function points))
     (lambda (state)
       (pcase state
         (:cleanup
-         (when (consp points)
-           (dolist (pt points)
-             (set-marker pt nil))))
+         (mapc #'delete-overlay points))
         ((or :record :next)
-         (when-let* ((pt (pop points)))
-           (cons pt pt)))))))
+         (conn--kapply-consume-region (pop points)))))))
 
 (defun conn--kapply-read-from-with-preview (prompt bounds &optional regexp-flag)
   "Read a from string with `minibuffer-lazy-highlight-setup' previews.
@@ -303,8 +298,7 @@ of highlighting."
                                         delimited-flag case-fold-search)
                    (pcase (match-data t)
                      (`(,mb ,me . ,_)
-                      (push (cons (conn--create-marker mb nil t)
-                                  (conn--create-marker me))
+                      (push (conn--kapply-make-region mb me)
                             matches)))))))
            (setq matches (nreverse matches))
            (when sort-function
@@ -337,14 +331,10 @@ of highlighting."
       (lambda (state)
         (pcase state
           (:cleanup
-           (when (consp matches)
-             (mapc (pcase-lambda (`(,beg . ,end))
-                     (set-marker beg nil)
-                     (set-marker end nil))
-                   matches)))
+           (mapc #'delete-overlay matches))
           ((or :next :record)
            (unless matches (next))
-           (pop matches)))))))
+           (conn--kapply-consume-region (pop matches))))))))
 
 (cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
                                           arg
@@ -383,8 +373,7 @@ of highlighting."
                                delimited-flag case-fold-search)
           (pcase (match-data t)
             (`(,mb ,me . ,_)
-             (push (cons (conn--create-marker mb nil t)
-                         (conn--create-marker me))
+             (push (conn--kapply-make-region mb me)
                    matches))))))
     (unless matches
       (user-error "No matches for kapply."))
@@ -394,13 +383,9 @@ of highlighting."
     (lambda (state)
       (pcase state
         (:cleanup
-         (when (consp matches)
-           (mapc (pcase-lambda (`(,beg . ,end))
-                   (set-marker beg nil)
-                   (set-marker end nil))
-                 matches)))
+         (mapc #'delete-overlay matches))
         ((or :next :record)
-         (pop matches))))))
+         (conn--kapply-consume-region (pop matches)))))))
 
 ;;;;; Pipeline Functions
 
@@ -503,13 +488,10 @@ Possibilities: \\<query-replace-map>
         (catch 'non-empty
           (while-let ((region (funcall iterator state)))
             (pcase region
-              ((and `(,beg . ,end)
+              ((and `(,beg ,end . ,_)
                     (guard (/= beg end))
                     region)
-               (throw 'non-empty region))
-              (`(,beg . ,end)
-               (when (markerp beg) (set-marker beg nil))
-               (when (markerp end) (set-marker end nil)))))))
+               (throw 'non-empty region))))))
        (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-skip-empty
                           conn--kapply-pipeline-depths))
@@ -524,10 +506,7 @@ Possibilities: \\<query-replace-map>
      (pcase state
        ((or :next :record)
         (dotimes (_ (1- N))
-          (pcase (funcall iterator state)
-            (`(,beg . ,end)
-             (when (markerp beg) (set-marker beg nil))
-             (when (markerp end) (set-marker end nil)))))
+          (funcall iterator state))
         (funcall iterator state))
        (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-nth conn--kapply-pipeline-depths))
@@ -544,7 +523,6 @@ Possibilities: \\<query-replace-map>
         (cl-loop for ret = (funcall iterator state)
                  until (or (null ret)
                            (not (invisible-p (car ret))))
-                 when (markerp ret) do (set-marker ret nil)
                  finally return ret))
        (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
@@ -560,10 +538,7 @@ Possibilities: \\<query-replace-map>
        ((or :next :record)
         (cl-loop for ret = (funcall iterator state)
                  until (or (null ret)
-                           (conn--region-visible-p (car ret) (cdr ret)))
-                 do (pcase-let ((`(,beg . ,end) ret))
-                      (when (markerp beg) (set-marker beg nil))
-                      (when (markerp end) (set-marker end nil)))
+                           (conn--region-visible-p (caar ret) (cdar ret)))
                  finally return ret))
        (_ (funcall iterator state))))
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
@@ -580,11 +555,8 @@ Possibilities: \\<query-replace-map>
          ((or :next :record)
           (cl-loop for next = (funcall iterator state)
                    for res = (or (null next)
-                                 (conn--open-invisible (car next) (cdr next)))
+                                 (conn--open-invisible (caar next) (cdar next)))
                    until res
-                   do (pcase-let ((`(,beg . ,end) next))
-                        (when (markerp beg) (set-marker beg nil))
-                        (when (markerp end) (set-marker end nil)))
                    finally return (prog1 next
                                     (when (consp res)
                                       (setq restore (nconc res restore))))))
@@ -606,15 +578,16 @@ Possibilities: \\<query-replace-map>
          ((or :next :record)
           (pcase region
             ((and (pred identity)
-                  `(,beg . ,end))
-             (when-let* ((buffer (and (markerp beg) (marker-buffer beg)))
-                         ((not (eq buffer (current-buffer)))))
+                  `((,beg . ,end) . ,buffer))
+             (unless (eq buffer (current-buffer))
                (switch-to-buffer buffer t)
                (deactivate-mark t)
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
              (goto-char beg)
-             (conn--push-ephemeral-mark end)))))
+             (conn--push-ephemeral-mark end))
+            ('nil)
+            (_ (error "Invalid region %s" region)))))
        region))
    `((depth . ,(alist-get 'kapply-relocate conn--kapply-pipeline-depths))
      (name . kapply-relocate))))
@@ -928,12 +901,8 @@ Possibilities: \\<query-replace-map>
          (iterations 0)
          (success nil)
          (iterator (lambda (&optional state)
-                     (when-let* ((ret (funcall iterator (or state :next))))
-                       (pcase ret
-                         (`(,beg . ,end)
-                          (when (markerp beg) (set-marker beg nil))
-                          (when (markerp end) (set-marker end nil))))
-                       (cl-incf iterations)))))
+                     (and (funcall iterator (or state :next))
+                          (cl-incf iterations)))))
     (deactivate-mark)
     (unwind-protect
         (cl-letf (((symbol-function 'kmacro-loop-setup-function)))

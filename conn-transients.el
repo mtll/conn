@@ -392,10 +392,11 @@ before each iteration."
   :key "m"
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
-  (let ((regions (region-bounds)))
+  (let ((regions (cl-loop for (beg . end) in (region-bounds)
+                          collect (conn--kapply-make-region beg end))))
     (deactivate-mark)
     (unless (or (length= regions 1)
-                (< (point) (car (nth 1 regions))))
+                (< (point) (overlay-start (nth 1 regions))))
       (setq regions (nreverse regions)))
     (conn--kapply-macro
      (alist-get :kmacro args)
@@ -412,9 +413,10 @@ before each iteration."
   :key "e"
   :description "Emacs"
   (interactive (list (transient-args transient-current-command)))
-  (let ((regions (region-bounds)))
+  (let ((regions (cl-loop for (beg . end) in (region-bounds)
+                          collect (conn--kapply-make-region beg end))))
     (unless (or (length= regions 1)
-                (< (point) (car (nth 1 regions))))
+                (< (point) (overlay-start (nth 1 regions))))
       (setq regions (nreverse regions)))
     (deactivate-mark)
     (conn--kapply-macro
@@ -422,7 +424,7 @@ before each iteration."
      (conn-kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
-       ,(when (> (point) (caar regions))
+       ,(when (> (point) (overlay-start (car regions)))
           'conn--kapply-at-end)
        conn--kapply-pulse-region
        ,@(conn--transient-kapply-pipeline-args args)
@@ -435,9 +437,10 @@ before each iteration."
   :key "c"
   :description "Command"
   (interactive (list (transient-args transient-current-command)))
-  (let ((regions (region-bounds)))
+  (let ((regions (cl-loop for (beg . end) in (region-bounds)
+                          collect (conn--kapply-make-region beg end))))
     (unless (or (length= regions 1)
-                (< (point) (car (nth 1 regions))))
+                (< (point) (overlay-start (nth 1 regions))))
       (setq regions (nreverse regions)))
     (deactivate-mark)
     (conn--kapply-macro
@@ -445,7 +448,7 @@ before each iteration."
      (conn-kapply-region-iterator regions)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions
-       ,(when (> (point) (caar regions))
+       ,(when (> (point) (overlay-start (car regions)))
           'conn--kapply-at-end)
        conn--kapply-pulse-region
        ,@(conn--transient-kapply-pipeline-args args)
@@ -503,9 +506,11 @@ apply to each contiguous component of the region."
         ((`(,thing ,arg)
           (conn-thing-argument-dwim-rectangle t))
          (transform (conn-transform-argument)))
-      (mapcar #'conn-bounds (conn-bounds-get
-                             (conn-bounds-of thing arg)
-                             :subregions transform))))
+      (cl-loop for b in (conn-bounds-get
+                         (conn-bounds-of thing arg)
+                         :subregions transform)
+               for (beg . end) = (conn-bounds b)
+               collect (conn--kapply-make-region beg end))))
    `(conn--kapply-relocate-to-region
      conn--kapply-skip-invisible-points
      conn--kapply-pulse-region
@@ -562,29 +567,30 @@ A zero means repeat until error."
   :key "m"
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
-  (let* ((matches
-          (cond ((bound-and-true-p multi-isearch-file-list)
-                 (mapcan 'conn--isearch-matches
-                         (nconc
-                          (delq (current-buffer)
-                                (mapcar 'find-file-noselect
-                                        multi-isearch-file-list))
-                          (list (current-buffer)))))
-                ((bound-and-true-p multi-isearch-buffer-list)
-                 (mapcan 'conn--isearch-matches
-                         (nconc
-                          (remq (current-buffer) multi-isearch-buffer-list)
-                          (list (current-buffer)))))
-                (t
-                 (conn--isearch-matches
-                  (current-buffer)
-                  (alist-get :matches args))))))
+  (let ((matches
+         (cond ((bound-and-true-p multi-isearch-file-list)
+                (mapcan 'conn--isearch-matches
+                        (nconc
+                         (delq (current-buffer)
+                               (mapcar 'find-file-noselect
+                                       multi-isearch-file-list))
+                         (list (current-buffer)))))
+               ((bound-and-true-p multi-isearch-buffer-list)
+                (mapcan 'conn--isearch-matches
+                        (nconc
+                         (remq (current-buffer) multi-isearch-buffer-list)
+                         (list (current-buffer)))))
+               (t
+                (conn--isearch-matches
+                 (current-buffer)
+                 (alist-get :matches args))))))
     (unwind-protect
         (isearch-done)
       (conn--kapply-macro
        (alist-get :kmacro args)
        (conn-kapply-region-iterator
-        matches
+        (cl-loop for (beg . end) in matches
+                 collect (conn--kapply-make-region beg end))
         (or (alist-get :order args)
             'conn--nnearest-first))
        `(conn--kapply-relocate-to-region
@@ -630,10 +636,15 @@ A zero means repeat until error."
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'occur-target)
                while match
-               append (pcase (prop-match-value match)
-                        ((and pt (guard (markerp pt)))
-                         (list (cons pt (marker-position pt))))
-                        (reg reg))))
+               nconc (pcase (prop-match-value match)
+                       ((and pt (guard (markerp pt)))
+                        (list (conn--kapply-make-region
+                               pt pt (marker-buffer pt))))
+                       (regs
+                        (cl-loop
+                         for (beg . end) in regs
+                         collect (conn--kapply-make-region
+                                  beg end (marker-buffer beg)))))))
     (or (alist-get :order args)
         'conn--nnearest-first))
    `(conn--kapply-relocate-to-region
@@ -664,8 +675,9 @@ A zero means repeat until error."
       (goto-char (point-min))
       (let (regions)
         (while-let ((match (text-property-search-forward prop value t)))
-          (push (cons (prop-match-beginning match)
-                      (prop-match-end match))
+          (push (conn--kapply-make-region
+                 (prop-match-beginning match)
+                 (prop-match-end match))
                 regions))
         regions))
     (or (alist-get :order args)
@@ -1246,7 +1258,9 @@ A zero means repeat until error."
                               (save-excursion
                                 (forward-line (1- line))
                                 (forward-char (1- col))
-                                (cons (point-marker) (line-end-position))))))))
+                                (conn--kapply-make-region
+                                 (point)
+                                 (line-end-position))))))))
       'conn--nnearest-first)
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-regions

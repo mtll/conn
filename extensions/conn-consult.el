@@ -156,23 +156,11 @@
            (mapcar
             (lambda (cand)
               (when-let* ((xref (get-text-property 0 'consult-xref cand))
-                          (loc (xref-item-location xref))
-                          (type (type-of loc))
-                          (marker
-                           (pcase type
-                             ((or 'xref-file-location 'xref-etags-location)
-                              (consult--marker-from-line-column
-                               (find-file-noselect
-                                ;; xref-location-group returns the file name
-                                (let ((xref-file-name-display 'abs))
-                                  (xref-location-group loc)))
-                               (xref-location-line loc)
-                               (if (eq type 'xref-file-location)
-                                   (xref-file-location-column loc)
-                                 0)))
-                             (_ (xref-location-marker loc)))))
-                (set-marker-insertion-type marker t)
-                marker))
+                          (marker (xref-location-marker (xref-item-location xref)))
+                          (pt (marker-position marker)))
+                (prog1
+                    (conn--kapply-make-region pt pt (marker-buffer marker))
+                  (set-marker marker nil))))
             cands)))
       (conn-regions-kapply-prefix
        (conn-kapply-point-iterator regions))))
@@ -184,28 +172,24 @@
       (mapcar (lambda (cand)
                 (pcase-let ((`(,line-marker (,beg . ,end) . _)
                              (consult--grep-position cand 'find-file-noselect)))
-                  (cons (move-marker line-marker
-                                     (+ line-marker beg)
-                                     (marker-buffer line-marker))
-                        (+ line-marker end))))
+                  (prog1
+                      (conn--kapply-make-region (+ line-marker beg)
+                                                (+ line-marker end)
+                                                (marker-buffer line-marker))
+                    (set-marker line-marker nil))))
               cands))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
     (conn-regions-kapply-prefix
-     (let ((regions (mapcar (lambda (cand)
-                              (car (consult--get-location cand)))
-                            cands)))
-       (lambda (state)
-         (pcase state
-           (:finalize
-            (dolist (line regions)
-              (set-marker line nil)))
-           ((or :record :next)
-            (when-let* ((line (pop regions)))
-              (cons line (save-excursion
-                           (goto-char line)
-                           (line-end-position))))))))))
+     (conn-kapply-region-iterator
+      (mapcar (lambda (cand)
+                (pcase (car (get-text-property 0 'consult-location cand))
+                  ((and mk (pred markerp))
+                   (conn--kapply-make-region mk mk (marker-buffer mk)))
+                  (`(,buf . ,pt)
+                   (conn--kapply-make-region pt pt buf))))
+              cands))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-xref-map
