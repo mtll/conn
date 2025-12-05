@@ -142,7 +142,9 @@ Possibilities: \\<query-replace-map>
 (defun conn-kapply-infinite-iterator ()
   (declare (important-return-value t)
            (side-effect-free t))
-  (lambda (_state) `(,(point) ,(point) . ,(current-buffer))))
+  (lambda (_state)
+    (cons (cons (point) (point))
+          (current-buffer))))
 
 (defun conn-kapply-highlight-iterator (beg end &optional sort-function read-patterns)
   (declare (important-return-value t)
