@@ -371,6 +371,9 @@ of line proper."
 (defvar-keymap conn-regexp-argument-map
   "q" 'regexp)
 
+(defvar-keymap conn-delimited-argument-map
+  "d" 'delimited)
+
 (defvar conn-query-flag t
   "Default value for conn-query-flag.
 
@@ -468,14 +471,13 @@ instances of from-string.")
                                 regexp-flag
                                 &optional
                                 regions
-                                noerror)
+                                noerror
+                                delimited-flag)
   (unless noerror
     (barf-if-buffer-read-only))
   (deactivate-mark)
   (conn--with-region-emphasis regions
     (let* ((conn-query-flag conn-query-flag)
-           (delimited-flag (and current-prefix-arg
-                                (not (eq current-prefix-arg '-))))
            (from (conn--replace-read-from prompt
                                           regions
                                           regexp-flag
@@ -598,7 +600,10 @@ instances of from-string.")
         (subregions-p (conn-subregions-argument (use-region-p)))
         (regexp-flag (conn-boolean-argument 'regexp
                                             conn-regexp-argument-map
-                                            "regexp")))
+                                            "regexp"))
+        (delimited-flag (conn-boolean-argument 'delimited
+                                               conn-delimited-argument-map
+                                               "word delimited")))
      (let* ((bounds
              (ignore-errors
                (conn-transform-bounds (conn-bounds-of thing arg)
@@ -615,7 +620,8 @@ instances of from-string.")
               (if (and subregions-p subregions)
                   (cl-loop for bound in subregions
                            collect (conn-bounds bound))
-                (and bounds (list (conn-bounds bounds)))))))
+                (and bounds (list (conn-bounds bounds))))
+              nil delimited-flag)))
        (append (list thing arg transform) common
                (list regexp-flag
                      (and subregions-p subregions t))))))

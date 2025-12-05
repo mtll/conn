@@ -468,25 +468,27 @@ before each iteration."
        (subregions (conn-subregions-argument (use-region-p)))
        (regexp (conn-boolean-argument 'regexp
                                       conn-regexp-argument-map
-                                      "regexp")))
-    (let ((delimited (oref transient-current-prefix scope)))
-      (conn-kapply-macro
-       (alist-get :kmacro args)
-       (conn-kapply-match-iterator thing
-                                   arg
-                                   transform
-                                   subregions
-                                   regexp
-                                   delimited
-                                   (or (alist-get :order args)
-                                       'conn--nnearest-first))
-       `(conn-kapply-relocate-to-region
-         ,(if (eq search-invisible 'open)
-              'conn-kapply-open-invisible
-            'conn-kapply-skip-invisible-regions)
-         conn-kapply-pulse-region
-         ,@(conn-transient-kapply-pipeline-args args)
-         conn-kapply-query)))))
+                                      "regexp"))
+       (delimited (conn-boolean-argument 'delimited
+                                         conn-delimited-argument-map
+                                         "word delimited")))
+    (conn-kapply-macro
+     (alist-get :kmacro args)
+     (conn-kapply-match-iterator thing
+                                 arg
+                                 transform
+                                 subregions
+                                 regexp
+                                 delimited
+                                 (or (alist-get :order args)
+                                     'conn--nnearest-first))
+     `(conn-kapply-relocate-to-region
+       ,(if (eq search-invisible 'open)
+            'conn-kapply-open-invisible
+          'conn-kapply-skip-invisible-regions)
+       conn-kapply-pulse-region
+       ,@(conn-transient-kapply-pipeline-args args)
+       conn-kapply-query))))
 
 (transient-define-suffix conn-kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
@@ -690,7 +692,7 @@ A zero means repeat until error."
 ;;;;; Kapply prefixes
 
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kapply-prefix (arg)
+(transient-define-prefix conn-kapply-prefix ()
   "Transient menu for keyboard macro application on regions."
   [ :description conn--kmacro-ring-display
     [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
@@ -746,9 +748,9 @@ A zero means repeat until error."
       (conn-kapply-save-windows-infix)
       (conn-kapply-save-restriction-infix)
       (conn-kapply-save-excursion-infix)]]
-  (interactive "P")
+  (interactive)
   (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-prefix nil nil :scope arg))
+  (transient-setup 'conn-kapply-prefix))
 
 ;;;###autoload (autoload 'conn-kapply-hightlight-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-hightlight-prefix ()
