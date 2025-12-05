@@ -1305,78 +1305,68 @@ Target overlays may override this default by setting the
        :overlay ov
        :target target))))
 
-(cl-defstruct (conn-simple-label-state)
-  (pool nil :type list)
-  (in-use nil :type hash-table)
-  (size 0 :type fixnum))
-
 (defun conn-dispatch-simple-labels (&optional state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
-  (unless state
-    (setq state (make-conn-simple-label-state
-                 :pool nil
-                 :in-use (make-hash-table :test 'equal)
-                 :size 0)))
-  (cl-symbol-macrolet ((pool (conn-simple-label-state-pool state))
-                       (in-use (conn-simple-label-state-in-use state))
-                       (size (conn-simple-label-state-size state)))
-    (let ((sel-win (selected-window))
-          (count (cl-loop for (_ . c) in conn-target-count sum c))
-          (unlabeled nil)
-          (labels nil))
-      (clrhash in-use)
-      (when (> count size)
-        ;; Use the in-use table to find labels that are being removed
-        ;; to be used as prefixes for new labels.  Later this will be
-        ;; used to ensure any target having its label string reused in
-        ;; this way maintains the same prefix.
-        (dolist (str pool)
-          (puthash str 'recycle in-use))
-        (setf size (max (ceiling (* 1.8 count))
-                        (let ((len (length conn-simple-label-characters)))
-                          (+ (- len 3)
-                             (* (- len 3) 3))))
-              pool (conn-simple-labels size))
-        (dolist (str pool)
-          (remhash str in-use)))
-      (pcase-dolist (`(,win . ,targets) conn-targets)
-        (when-let* ((ov (buffer-local-value 'conn--mark-cursor
-                                            (window-buffer win))))
-          (delete-overlay ov))
-        (dolist (tar (if (eq win (selected-window))
-                         (compat-call sort targets
-                                      :lessp conn-target-sort-function)
-                       targets))
-          (if-let* ((str (overlay-get tar 'label-string))
-                    (_ (not (eq t (gethash str in-use)))))
-              ;; Try to reuse a target's existing label.
-              (progn
-                (when (eq 'recycle (gethash str in-use))
-                  ;; This target has had its label string reused as a
-                  ;; prefix for new labels, ensure that it gets a new
-                  ;; label that has its old label as a prefix.
-                  (setf str (concat str (car conn-simple-label-characters))
-                        (overlay-get tar 'label-string) str))
-                (puthash str t in-use)
-                (unless (and (eq win sel-win)
-                             (<= (overlay-start tar)
-                                 (point)
-                                 (overlay-end tar)))
-                  (push (conn-dispatch-create-label tar str) labels)))
-            (push tar unlabeled))))
-      (cl-callf nreverse unlabeled)
-      (cl-loop for str in pool
-               while unlabeled
-               unless (gethash str in-use)
-               do (let ((tar (pop unlabeled)))
-                    (overlay-put tar 'label-string str)
-                    (unless (and (eq (overlay-get tar 'window) sel-win)
-                                 (<= (overlay-start tar)
-                                     (point)
-                                     (overlay-end tar)))
-                      (push (conn-dispatch-create-label tar str) labels))))
-      `(:state ,state ,@labels))))
+  (pcase-let ((`(,pool ,size ,in-use)
+               (or state
+                   (list nil 0 (make-hash-table :test 'equal))))
+              (sel-win (selected-window))
+              (count (cl-loop for (_ . c) in conn-target-count sum c))
+              (unlabeled nil)
+              (labels nil))
+    (clrhash in-use)
+    (when (> count size)
+      ;; Use the in-use table to find labels that are being removed
+      ;; to be used as prefixes for new labels.  Later this will be
+      ;; used to ensure any target having its label string reused in
+      ;; this way maintains the same prefix.
+      (dolist (str pool)
+        (puthash str 'recycle in-use))
+      (setf size (max (ceiling (* 1.8 count))
+                      (let ((len (length conn-simple-label-characters)))
+                        (+ (- len 3)
+                           (* (- len 3) 3))))
+            pool (conn-simple-labels size))
+      (dolist (str pool)
+        (remhash str in-use)))
+    (pcase-dolist (`(,win . ,targets) conn-targets)
+      (when-let* ((ov (buffer-local-value 'conn--mark-cursor
+                                          (window-buffer win))))
+        (delete-overlay ov))
+      (dolist (tar (if (eq win (selected-window))
+                       (compat-call sort targets
+                                    :lessp conn-target-sort-function)
+                     targets))
+        (if-let* ((str (overlay-get tar 'label-string))
+                  (_ (not (eq t (gethash str in-use)))))
+            ;; Try to reuse a target's existing label.
+            (progn
+              (when (eq 'recycle (gethash str in-use))
+                ;; This target has had its label string reused as a
+                ;; prefix for new labels, ensure that it gets a new
+                ;; label that has its old label as a prefix.
+                (setf str (concat str (car conn-simple-label-characters))
+                      (overlay-get tar 'label-string) str))
+              (puthash str t in-use)
+              (unless (and (eq win sel-win)
+                           (<= (overlay-start tar)
+                               (point)
+                               (overlay-end tar)))
+                (push (conn-dispatch-create-label tar str) labels)))
+          (push tar unlabeled))))
+    (cl-callf nreverse unlabeled)
+    (cl-loop for str in pool
+             while unlabeled
+             unless (gethash str in-use)
+             do (let ((tar (pop unlabeled)))
+                  (overlay-put tar 'label-string str)
+                  (unless (and (eq (overlay-get tar 'window) sel-win)
+                               (<= (overlay-start tar)
+                                   (point)
+                                   (overlay-end tar)))
+                    (push (conn-dispatch-create-label tar str) labels))))
+    `(:state ,(list pool size in-use) ,@labels)))
 
 (defun conn--dispatch-read-char-prefix (keymap)
   (declare (important-return-value t))
@@ -3681,8 +3671,7 @@ contain targets."
         (with-selected-window window
           (conn-dispatch-change-group)
           (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds (and bounds `(,beg . ,end))
-                          transform)
+            ((conn-bounds `(,beg . ,end) transform)
              (conn-dispatch-undo-case 50
                (:undo (conn-dispatch-undo-pulse beg end)))
              (with-undo-amalgamate
@@ -3695,7 +3684,8 @@ contain targets."
                        (lambda (iterator)
                          (conn-kmacro-apply iterator nil macro)))
                       (_ applier))
-                    (conn-kapply-region-iterator (list bounds))
+                    (conn-kapply-region-iterator
+                     (list (conn-kapply-make-region beg end)))
                     `(conn-kapply-relocate-to-region
                       conn-kapply-pulse-region
                       ,@pipeline))))))
