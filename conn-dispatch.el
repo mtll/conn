@@ -3688,16 +3688,16 @@ contain targets."
              (with-undo-amalgamate
                (conn-with-dispatch-suspended
                  (let ((conn-kapply-suppress-message t))
-                   (conn--kapply-macro
+                   (conn-kapply-macro
                     (pcase applier
-                      ((or 'conn--kmacro-apply
+                      ((or 'conn-kmacro-apply
                            (guard macro))
                        (lambda (iterator)
-                         (conn--kmacro-apply iterator nil macro)))
+                         (conn-kmacro-apply iterator nil macro)))
                       (_ applier))
                     (conn-kapply-region-iterator (list bounds))
-                    `(conn--kapply-relocate-to-region
-                      conn--kapply-pulse-region
+                    `(conn-kapply-relocate-to-region
+                      conn-kapply-pulse-region
                       ,@pipeline))))))
             (_ (user-error "Cannot find thing at point"))))
         (unless macro (setq macro (kmacro-ring-head)))

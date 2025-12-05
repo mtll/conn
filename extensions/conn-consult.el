@@ -159,7 +159,7 @@
                           (marker (xref-location-marker (xref-item-location xref)))
                           (pt (marker-position marker)))
                 (prog1
-                    (conn--kapply-make-region pt pt (marker-buffer marker))
+                    (conn-kapply-make-region pt pt (marker-buffer marker))
                   (set-marker marker nil))))
             cands)))
       (conn-regions-kapply-prefix
@@ -173,9 +173,9 @@
                 (pcase-let ((`(,line-marker (,beg . ,end) . _)
                              (consult--grep-position cand 'find-file-noselect)))
                   (prog1
-                      (conn--kapply-make-region (+ line-marker beg)
-                                                (+ line-marker end)
-                                                (marker-buffer line-marker))
+                      (conn-kapply-make-region (+ line-marker beg)
+                                               (+ line-marker end)
+                                               (marker-buffer line-marker))
                     (set-marker line-marker nil))))
               cands))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
@@ -186,9 +186,9 @@
       (mapcar (lambda (cand)
                 (pcase (car (get-text-property 0 'consult-location cand))
                   ((and mk (pred markerp))
-                   (conn--kapply-make-region mk mk (marker-buffer mk)))
+                   (conn-kapply-make-region mk mk (marker-buffer mk)))
                   (`(,buf . ,pt)
-                   (conn--kapply-make-region pt pt buf))))
+                   (conn-kapply-make-region pt pt buf))))
               cands))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 

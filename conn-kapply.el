@@ -123,17 +123,17 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
-(defun conn--kapply-make-region (beg end &optional buffer)
+(defun conn-kapply-make-region (beg end &optional buffer)
   (make-overlay beg end buffer t))
 
-(defun conn--kapply-consume-region (ov)
+(defun conn-kapply-consume-region (ov)
   (when ov
     (prog1 (cons (cons (overlay-start ov)
                        (overlay-end ov))
                  (overlay-buffer ov))
       (delete-overlay ov))))
 
-(defun conn--kapply-macro (applier iterator pipeline)
+(defun conn-kapply-macro (applier iterator pipeline)
   (funcall applier
            (seq-reduce (lambda (it ctor) (funcall ctor it))
                        (remq nil pipeline)
@@ -169,8 +169,8 @@ Possibilities: \\<query-replace-map>
         (pcase-dolist (`(,fn (,subexp . ,_)) patterns)
           (goto-char (point-min))
           (while-let ((match (funcall fn (point-max))))
-            (push (conn--kapply-make-region (match-beginning subexp)
-                                            (match-end subexp))
+            (push (conn-kapply-make-region (match-beginning subexp)
+                                           (match-end subexp))
                   matches)))))
     (unless matches
       (user-error "No highlights for kapply."))
@@ -182,7 +182,7 @@ Possibilities: \\<query-replace-map>
         (:cleanup
          (mapc #'delete-overlay matches))
         ((or :record :next)
-         (conn--kapply-consume-region (pop matches)))))))
+         (conn-kapply-consume-region (pop matches)))))))
 
 (defun conn-kapply-region-iterator (regions &optional sort-function)
   (declare (important-return-value t))
@@ -195,7 +195,7 @@ Possibilities: \\<query-replace-map>
       (:cleanup
        (mapc #'delete-overlay regions))
       ((or :record :next)
-       (conn--kapply-consume-region (pop regions))))))
+       (conn-kapply-consume-region (pop regions))))))
 
 (defun conn-kapply-point-iterator (points &optional sort-function)
   (declare (important-return-value t))
@@ -203,7 +203,7 @@ Possibilities: \\<query-replace-map>
     (user-error "No points for kapply."))
   (let ((points
          (cl-loop for pt in points
-                  collect (conn--kapply-make-region pt pt))))
+                  collect (conn-kapply-make-region pt pt))))
     (when sort-function
       (funcall sort-function points))
     (lambda (state)
@@ -211,7 +211,7 @@ Possibilities: \\<query-replace-map>
         (:cleanup
          (mapc #'delete-overlay points))
         ((or :record :next)
-         (conn--kapply-consume-region (pop points)))))))
+         (conn-kapply-consume-region (pop points)))))))
 
 (defun conn--kapply-read-from-with-preview (prompt bounds &optional regexp-flag)
   "Read a from string with `minibuffer-lazy-highlight-setup' previews.
@@ -298,7 +298,7 @@ of highlighting."
                                         delimited-flag case-fold-search)
                    (pcase (match-data t)
                      (`(,mb ,me . ,_)
-                      (push (conn--kapply-make-region mb me)
+                      (push (conn-kapply-make-region mb me)
                             matches)))))))
            (setq matches (nreverse matches))
            (when sort-function
@@ -334,7 +334,7 @@ of highlighting."
            (mapc #'delete-overlay matches))
           ((or :next :record)
            (unless matches (next))
-           (conn--kapply-consume-region (pop matches))))))))
+           (conn-kapply-consume-region (pop matches))))))))
 
 (cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
                                           arg
@@ -373,7 +373,7 @@ of highlighting."
                                delimited-flag case-fold-search)
           (pcase (match-data t)
             (`(,mb ,me . ,_)
-             (push (conn--kapply-make-region mb me)
+             (push (conn-kapply-make-region mb me)
                    matches))))))
     (unless matches
       (user-error "No matches for kapply."))
@@ -385,11 +385,11 @@ of highlighting."
         (:cleanup
          (mapc #'delete-overlay matches))
         ((or :next :record)
-         (conn--kapply-consume-region (pop matches)))))))
+         (conn-kapply-consume-region (pop matches)))))))
 
 ;;;;; Pipeline Functions
 
-(defvar conn--kapply-pipeline-depths
+(defconst conn--kapply-pipeline-depths
   '((kapply-skip-empty . 95)
     (kapply-relocate . 85)
     (kapply-invisible . 75)
@@ -404,7 +404,7 @@ of highlighting."
     (kapply-wconf . -70)
     (kapply-pulse . -90)))
 
-(defun conn--kapply-query (iterator)
+(defun conn-kapply-query (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -477,7 +477,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-query conn--kapply-pipeline-depths))
      (name . kapply-query))))
 
-(defun conn--kapply-skip-empty (iterator)
+(defun conn-kapply-skip-empty (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -497,7 +497,7 @@ Possibilities: \\<query-replace-map>
                           conn--kapply-pipeline-depths))
      (name . kapply-skip-empty))))
 
-(defun conn--kapply-every-nth (iterator N)
+(defun conn-kapply-every-nth (iterator N)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -512,7 +512,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-nth conn--kapply-pipeline-depths))
      (name . kapply-nth))))
 
-(defun conn--kapply-skip-invisible-points (iterator)
+(defun conn-kapply-skip-invisible-points (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -528,7 +528,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
-(defun conn--kapply-skip-invisible-regions (iterator)
+(defun conn-kapply-skip-invisible-regions (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -544,7 +544,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
-(defun conn--kapply-open-invisible (iterator)
+(defun conn-kapply-open-invisible (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -567,7 +567,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
-(defun conn--kapply-relocate-to-region (iterator)
+(defun conn-kapply-relocate-to-region (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -592,7 +592,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-relocate conn--kapply-pipeline-depths))
      (name . kapply-relocate))))
 
-(defun conn--kapply-per-buffer-undo (iterator)
+(defun conn-kapply-per-buffer-undo (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -617,7 +617,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
-(defun conn--kapply-per-buffer-atomic-undo (iterator)
+(defun conn-kapply-per-buffer-atomic-undo (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -644,7 +644,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
-(defun conn--kapply-per-iteration-undo (iterator)
+(defun conn-kapply-per-iteration-undo (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -678,7 +678,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
-(defun conn--kapply-ibuffer-overview (iterator)
+(defun conn-kapply-ibuffer-overview (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -735,7 +735,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-ibuffer conn--kapply-pipeline-depths))
      (name . kapply-ibuffer))))
 
-(defun conn--kapply-save-excursion (iterator)
+(defun conn-kapply-save-excursion (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -769,7 +769,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-excursions conn--kapply-pipeline-depths))
      (name . kapply-excursions))))
 
-(defun conn--kapply-save-restriction (iterator)
+(defun conn-kapply-save-restriction (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -804,7 +804,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-restrictions conn--kapply-pipeline-depths))
      (name . kapply-restrictions))))
 
-(defun conn--kapply-change-region (iterator)
+(defun conn-kapply-change-region (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -817,9 +817,9 @@ Possibilities: \\<query-replace-map>
        ret))
    `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region)))
-  (conn--kapply-with-state iterator 'conn-emacs-state))
+  (conn-kapply-with-state iterator 'conn-emacs-state))
 
-(defun conn--kapply-at-end (iterator)
+(defun conn-kapply-at-end (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -830,7 +830,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region))))
 
-(defun conn--kapply-with-state (iterator conn-state)
+(defun conn-kapply-with-state (iterator conn-state)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -857,7 +857,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))
 
-(defun conn--kapply-pulse-region (iterator)
+(defun conn-kapply-pulse-region (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -870,7 +870,7 @@ Possibilities: \\<query-replace-map>
    `((depth . ,(alist-get 'kapply-pulse conn--kapply-pipeline-depths))
      (name . kapply-pulse))))
 
-(defun conn--kapply-save-windows (iterator)
+(defun conn-kapply-save-windows (iterator)
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -917,7 +917,7 @@ Possibilities: \\<query-replace-map>
         (funcall iterator :cleanup)
         (run-hooks 'conn-kmacro-apply-end-hook)))))
 
-(defmacro conn--define-kapplier (name arglist &rest body)
+(defmacro conn-define-kapplier (name arglist &rest body)
   "Define a macro application function.
 
 The iterator must be the first argument in ARGLIST.
@@ -934,7 +934,7 @@ The iterator must be the first argument in ARGLIST.
        (conn--perform-kapply ,(car arglist)
                              (lambda (,(car arglist)) ,@exps)))))
 
-(conn--define-kapplier conn--kmacro-apply (iterator &optional count macro)
+(conn-define-kapplier conn-kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
     ((pred kmacro-p)
      (funcall macro (or count 0)))
@@ -954,7 +954,7 @@ The iterator must be the first argument in ARGLIST.
            (user-error "New keyboard macro not defined"))
          (kmacro-call-macro (or count 0)))))))
 
-(conn--define-kapplier conn--kmacro-apply-append (iterator &optional count skip-exec)
+(conn-define-kapplier conn-kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
     (kmacro-start-macro (if skip-exec '(16) '(4)))
     (unwind-protect
@@ -965,7 +965,7 @@ The iterator must be the first argument in ARGLIST.
       (when defining-kbd-macro (kmacro-end-macro nil)))
     (kmacro-call-macro (or count 0))))
 
-(conn--define-kapplier conn--kmacro-apply-step-edit (iterator &optional count)
+(conn-define-kapplier conn-kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
     (let* ((apply nil)
            (hook (lambda () (setq apply kmacro-step-edit-replace))))
