@@ -276,6 +276,7 @@
   "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "A" 'dired-find-alternate-file
   "b" 'dired-up-directory
   "k" 'dired-next-line
@@ -305,7 +306,8 @@
   ";" 'conn-wincontrol
   "`" 'conn-wincontrol-mru-window
   "v" 'dired-mark
-  "c" 'dired-unmark
+  "V" 'dired-toggle-marks
+  "C-d" 'dired-unmark
   "u" 'dired-do-delete
   "M-w" 'dired-copy-filename-as-kill
   "RET" 'dired-find-file
@@ -726,6 +728,7 @@
   "C-q" 'conn-ibuffer-quick-ref
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   ";" 'conn-wincontrol
   "/" 'ibuffer-do-revert
   "`" 'conn-wincontrol-mru-window
@@ -759,8 +762,9 @@
   "M-SPC" 'ibuffer-toggle-marks
   "C-M-l" 'ibuffer-redisplay
   "v" 'ibuffer-mark-forward
-  "c" 'ibuffer-unmark-forward
-  "C" 'ibuffer-unmark-backward
+  "V" 'ibuffer-toggle-marks
+  "C-d" 'ibuffer-unmark-forward
+  "D" 'ibuffer-mark-for-delete-backwards
   "o" 'ibuffer-visit-buffer-other-window
   "RET" 'ibuffer-visit-buffer)
 
@@ -859,8 +863,12 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
   "C-q" 'conn-bookmark-bmenu-quick-ref
+  "x" (conn-remap-key "C-x" t)
+  "c" (conn-remap-key "C-c" t)
+  "`" 'conn-wincontrol-mru-window
   "e" 'bookmark-bmenu-edit-annotation
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "n" 'bookmark-bmenu-show-annotation
   "N" 'bookmark-bmenu-show-all-annotations
   "v" 'bookmark-bmenu-mark
@@ -874,8 +882,9 @@
   "j" 'bookmark-bmenu-select
   "f" 'conn-bmenu-dispatch-state
   "w" 'bookmark-bmenu-this-window
-  "b" 'bookmark-bmenu-unmark
-  "B" 'bookmark-bmenu-unmark-all
+  "D" 'bookmark-bmenu-delete-backwards
+  "C-d" 'bookmark-bmenu-unmark
+  "M-DEL" 'bookmark-bmenu-unmark-all
   "L" 'bookmark-locate
   "u" 'bookmark-bmenu-execute-deletions
   "y" 'tabulated-list-sort)
@@ -907,6 +916,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'help-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
   "j" 'backward-button
@@ -923,6 +933,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'helpful-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
   "j" 'backward-button
@@ -1004,6 +1015,7 @@
   "n" 'Info-backward-node
   "r" 'Info-up
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "p" 'Info-menu
   "z" 'Info-toc
   "f" 'dispatch-on-info-refs
@@ -1020,6 +1032,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "`" 'treemacs-select-window
   "i" 'treemacs-previous-line
   "k" 'treemacs-next-line
@@ -1035,6 +1048,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
   "`" 'conn-wincontrol-mru-window
@@ -1052,6 +1066,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
   "i" 'backtrace-backward-frame
   "k" 'backtrace-forward-frame
@@ -1071,6 +1086,7 @@
   "'" 'conn-kapply-prefix
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
@@ -1093,6 +1109,7 @@
   "'" 'conn-kapply-prefix
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
