@@ -844,7 +844,7 @@ Exiting the recursive edit will resume the isearch."
   (let ((isearch-forward (not backward)))
     (multi-isearch-buffers
      (if arg
-	 (multi-isearch-read-matching-buffers)
+         (multi-isearch-read-matching-buffers)
        (multi-isearch-read-buffers)))))
 
 (cl-defmethod conn-isearch-in-thing-do ((_thing (eql multi-file))
@@ -858,7 +858,7 @@ Exiting the recursive edit will resume the isearch."
   (let ((isearch-forward (not backward)))
     (multi-isearch-files
      (if arg
-	 (multi-isearch-read-matching-files)
+         (multi-isearch-read-matching-files)
        (multi-isearch-read-files)))))
 
 (cl-defmethod conn-isearch-in-thing-do ((_thing (eql project))
@@ -1230,23 +1230,23 @@ With a prefix ARG `push-mark' without activating it."
                           regions)
              (push (cons cons cons) sort-lists))
            (let ((old (reverse sort-lists))
-	         (case-fold-search fold-case))
+                 (case-fold-search fold-case))
              (when sort-lists
-	       (or reverse (setq sort-lists (nreverse sort-lists)))
-	       (if messages (message "Sorting records..."))
-	       (setq sort-lists
-	             (sort sort-lists
-		           (if predicate
-			       (lambda (a b)
+               (or reverse (setq sort-lists (nreverse sort-lists)))
+               (if messages (message "Sorting records..."))
+               (setq sort-lists
+                     (sort sort-lists
+                           (if predicate
+                               (lambda (a b)
                                  (funcall predicate (car a) (car b)))
-			     (lambda (a b)
-			       (> 0 (compare-buffer-substrings
-				     nil (car (car a)) (cdr (car a))
-				     nil (car (car b)) (cdr (car b))))))))
-	       (if reverse (setq sort-lists (nreverse sort-lists)))
-	       (if messages (message "Reordering buffer..."))
+                             (lambda (a b)
+                               (> 0 (compare-buffer-substrings
+                                     nil (car (car a)) (cdr (car a))
+                                     nil (car (car b)) (cdr (car b))))))))
+               (if reverse (setq sort-lists (nreverse sort-lists)))
+               (if messages (message "Reordering buffer..."))
                (with-buffer-unmodified-if-unchanged
-	         (sort-reorder-buffer sort-lists old))))))))
+                 (sort-reorder-buffer sort-lists old))))))))
     (_ (user-error "No regions to sort"))))
 
 (defvar-keymap conn-sort-fields-reverse-map
@@ -1258,7 +1258,7 @@ With a prefix ARG `push-mark' without activating it."
                                    arg
                                    transform
                                    &optional
-                                   _reverse
+                                   reverse
                                    _predicate
                                    _fold-case)
   (conn-read-args (conn-read-thing-state
@@ -1271,6 +1271,9 @@ With a prefix ARG `push-mark' without activating it."
                                  (delete-overlay ov)))
          (overlay-put ov 'face 'lazy-highlight)
          (sort-numeric-fields (prefix-numeric-value arg) beg end)
+         (when reverse
+           (reverse-region (overlay-start ov)
+                           (overlay-end ov)))
          (fset 'conn-sort-reverse
                (lambda ()
                  (interactive)
@@ -1294,7 +1297,7 @@ With a prefix ARG `push-mark' without activating it."
                                    arg
                                    transform
                                    &optional
-                                   _reverse
+                                   reverse
                                    _predicate
                                    fold-case)
   (conn-read-args (conn-read-thing-state
@@ -1308,6 +1311,9 @@ With a prefix ARG `push-mark' without activating it."
          (overlay-put ov 'face 'lazy-highlight)
          (let ((sort-fold-case fold-case))
            (sort-fields (prefix-numeric-value arg) beg end))
+         (when reverse
+           (reverse-region (overlay-start ov)
+                           (overlay-end ov)))
          (fset 'conn-sort-reverse
                (lambda ()
                  (interactive)
@@ -1906,8 +1912,8 @@ for the meaning of prefix ARG."
    (progn
      (barf-if-buffer-read-only)
      (list (register-read-with-preview
-	    "Insert register and replace: "
-	    #'register--insertable-p))))
+            "Insert register and replace: "
+            #'register--insertable-p))))
   (atomic-change-group
     (if (bound-and-true-p rectangle-mark-mode)
         (delete-rectangle (region-beginning) (region-end))
