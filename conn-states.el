@@ -1173,13 +1173,12 @@ the state stays active if the previous command was a prefix command."
     (fset post (let ((pred (conn-state-get state :pop-predicate)))
                  (cl-check-type pred function)
                  (lambda ()
+                   (remove-hook 'post-command-hook post t)
                    (when (eq conn-current-state state)
                      (if (or (cl-shiftf prefix-command nil)
                              (not (funcall pred)))
-                         (progn
-                           (remove-hook 'post-command-hook post t)
-                           (remove-hook 'prefix-command-preserve-state-hook preserve-state)
-                           (add-hook 'pre-command-hook pre 99 t))
+                         (add-hook 'pre-command-hook pre 99 t)
+                       (remove-hook 'prefix-command-preserve-state-hook preserve-state)
                        (conn-enter-state (conn-peek-state)))))))
     (conn-state-defer
       (setq conn--state-stack
