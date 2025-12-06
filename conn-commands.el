@@ -1333,44 +1333,49 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(defun conn-transpose-repeat ()
-  (interactive)
-  (user-error "No transpose to repeat"))
-
-(defun conn-transpose-repeat-inverse ()
-  (interactive)
-  (user-error "No transpose to repeat"))
+(defun conn-transpose-repeat () (interactive))
+(defun conn-transpose-repeat-inverse () (interactive))
 
 (defvar-keymap conn-transpose-repeat-map
+  "0" 'digit-argument
+  "1" 'digit-argument
+  "2" 'digit-argument
+  "3" 'digit-argument
+  "4" 'digit-argument
+  "5" 'digit-argument
+  "6" 'digit-argument
+  "7" 'digit-argument
+  "8" 'digit-argument
+  "9" 'digit-argument
+  "-" 'negative-argument
   "q" 'conn-transpose-repeat
   "Q" 'conn-transpose-repeat-inverse)
 
-(defun conn-transpose-setup-repeat (cmd arg at-point-and-mark)
-  (unless repeat-map
-    (fset 'conn-transpose-repeat
-          (lambda ()
-            (interactive)
-            (let ((repeat-map t))
-              (conn-transpose-things-do cmd arg at-point-and-mark))
-            (setq repeat-map conn-transpose-repeat-map)))
-    (fset 'conn-transpose-repeat-inverse
-          (lambda ()
-            (interactive)
-            (let ((repeat-map t))
-              (conn-transpose-things-do cmd
-                                        (- (prefix-numeric-value arg))
-                                        at-point-and-mark))
-            (setq repeat-map conn-transpose-repeat-map)))
-    (setq repeat-map conn-transpose-repeat-map)))
+(defun conn-transpose-setup-repeat-map ()
+  (set-transient-map
+   conn-transpose-repeat-map
+   t
+   (lambda ()
+     (fset 'conn-transpose-repeat #'ignore)
+     (fset 'conn-transpose-repeat-inverse #'ignore))
+   (concat
+    (format "%s repeat"
+            (propertize
+             (key-description
+              (where-is-internal 'conn-transpose-repeat
+                                 (list conn-transpose-repeat-map)
+                                 t))
+             'face 'help-key-binding))
+    (when-let* ((key (where-is-internal 'conn-transpose-repeat-inverse
+                                        (list conn-transpose-repeat-map)
+                                        t)))
+      (format "; %s other direction"
+              (propertize
+               (key-description key)
+               'face 'help-key-binding))))))
 
 (cl-defgeneric conn-transpose-things-do (cmd arg at-point-and-mark)
   (declare (conn-anonymous-thing-property :transpose-op)))
-
-(cl-defmethod conn-transpose-things-do :before (&rest _)
-  (fset 'conn-transpose-repeat
-        (lambda () (interactive) (user-error "Transpose not repeatable")))
-  (fset 'conn-transpose-repeat-inverse
-        (lambda () (interactive) (user-error "Transpose not repeatable"))))
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing t))
                                         arg
@@ -1392,15 +1397,25 @@ With a prefix ARG `push-mark' without activating it."
                  ((conn-bounds `(,beg2 . ,end2))
                   (conn-bounds-of cmd arg)))
        (transpose-regions beg1 end1 beg2 end2)))
-    ((let (and thing (pred identity))
-       (or (conn-command-thing cmd)
-           (and (symbolp cmd)
-                (get cmd 'forward-op)
-                cmd)))
+    ((and (let (and thing (pred identity))
+            (or (conn-command-thing cmd)
+                (and (symbolp cmd)
+                     (get cmd 'forward-op)
+                     cmd)))
+          (let arg (prefix-numeric-value arg)))
      (deactivate-mark t)
-     (transpose-subr (lambda (N) (forward-thing thing N))
-                     (prefix-numeric-value arg))
-     (conn-transpose-setup-repeat cmd arg at-point-and-mark))
+     (transpose-subr (lambda (N) (forward-thing thing N)) arg)
+     (fset 'conn-transpose-repeat
+           (lambda (n)
+             (interactive "P")
+             (transpose-subr (lambda (N) (forward-thing thing N))
+                             (or arg n))))
+     (fset 'conn-transpose-repeat-inverse
+           (lambda (n)
+             (interactive "P")
+             (transpose-subr (lambda (N) (forward-thing thing N))
+                             (- (or arg n)))))
+     (conn-transpose-setup-repeat-map))
     (_ (user-error "Invalid transpose thing"))))
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing expansion))
@@ -2814,33 +2829,156 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   :keymap (conn-get-state-map 'conn-duplicate-state)
   "c" 'copy-from-above-command)
 
-(cl-defgeneric conn-duplicate-thing-do (cmd arg transform &optional comment)
+(defvar-keymap conn-duplicate-repeat-map
+  "0" 'digit-argument
+  "1" 'digit-argument
+  "2" 'digit-argument
+  "3" 'digit-argument
+  "4" 'digit-argument
+  "5" 'digit-argument
+  "6" 'digit-argument
+  "7" 'digit-argument
+  "8" 'digit-argument
+  "9" 'digit-argument
+  "-" 'negative-argument
+  "D" 'conn-duplicate-repeat
+  "RET" 'conn-duplicate-repeat-toggle-padding
+  ";" 'conn-duplicate-repeat-comment)
+
+(defun conn-duplicate-repeat () (interactive))
+(defun conn-duplicate-repeat-toggle-padding () (interactive))
+(defun conn-duplicate-repeat-comment () (interactive))
+
+(defun conn--duplicate-subr (beg end &optional repeat)
+  (deactivate-mark)
+  (save-excursion
+    (let* ((regions (list (make-overlay beg end nil t)))
+           (str (buffer-substring-no-properties beg end))
+           (multiline (seq-contains-p str ?\n))
+           (padding (if multiline "\n" " "))
+           (regexp (if multiline "\n" "[\t ]"))
+           (commented nil))
+      ;; (overlay-put (car regions) 'face 'region)
+      (goto-char end)
+      (cl-flet ((dup ()
+                  (unless (looking-back regexp 1)
+                    (insert padding))
+                  (let ((rbeg (point))
+                        ov)
+                    (insert str)
+                    (push (make-overlay rbeg (point) nil t)
+                          regions)
+                    (setq ov (car regions))
+                    (overlay-put ov 'face 'lazy-highlight)
+                    (let ((beg (make-marker))
+                          (end (make-marker)))
+                      (set-marker beg (overlay-start ov))
+                      (set-marker end (overlay-end ov))
+                      (set-marker-insertion-type end t)
+                      (when commented
+                        (comment-region beg end))
+                      (move-overlay
+                       ov beg (min end (save-excursion
+                                         (goto-char (overlay-end ov))
+                                         (pos-eol))))
+                      (indent-region beg end)
+                      (set-marker beg nil)
+                      (set-marker end nil))))
+                (cleanup ()
+                  (mapc #'delete-overlay regions)
+                  (fset 'conn-duplicate-repeat #'ignore)
+                  (fset 'conn-duplicate-repeat-comment #'ignore)
+                  (fset 'conn-duplicate-repeat-toggle-padding #'ignore)))
+        (dotimes (_ repeat) (dup))
+        (fset 'conn-duplicate-repeat
+              (lambda (n)
+                (interactive "p")
+                (save-excursion
+                  (goto-char (overlay-end (car regions)))
+                  (dotimes (_ n)
+                    (dup)))))
+        (fset 'conn-duplicate-repeat-comment
+              (lambda ()
+                (interactive)
+                (unless multiline
+                  (conn-duplicate-repeat-toggle-padding))
+                (let ((beg (make-marker))
+                      (end (make-marker)))
+                  (set-marker-insertion-type end t)
+                  (dolist (ov (butlast regions))
+                    (set-marker beg (overlay-start ov))
+                    (set-marker end (overlay-end ov))
+                    (comment-or-uncomment-region beg end)
+                    (move-overlay
+                     ov beg (min end (save-excursion
+                                       (goto-char (overlay-end ov))
+                                       (pos-eol)))))
+                  (set-marker beg nil)
+                  (set-marker end nil))
+                (setq commented (not commented))))
+        (fset 'conn-duplicate-repeat-toggle-padding
+              (lambda ()
+                (interactive)
+                (when commented
+                  (conn-duplicate-repeat-comment))
+                (setq multiline (not multiline)
+                      padding (if multiline "\n" " ")
+                      regexp (if multiline "\n" "[\t ]"))
+                (cl-loop for (ov1 ov2) on (reverse regions)
+                         while ov2
+                         for e1 = (overlay-end ov1)
+                         for b2 = (overlay-start ov2)
+                         do (save-excursion
+                              (goto-char e1)
+                              (delete-region e1 b2)
+                              (unless (looking-back regexp 1)
+                                (insert padding))))))
+        (set-transient-map
+         conn-duplicate-repeat-map
+         t
+         #'cleanup
+         (format "%s repeat; %s toggle multiline; %s comment duplicates"
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat-toggle-padding
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat-comment
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)))))))
+
+(cl-defgeneric conn-duplicate-thing-do (cmd
+                                        arg
+                                        transform
+                                        &optional
+                                        repeat)
   (declare (conn-anonymous-thing-property :duplicate-op)))
 
-(cl-defmethod conn-duplicate-thing-do (cmd arg transform &optional comment)
+(cl-defmethod conn-duplicate-thing-do (cmd
+                                       arg
+                                       transform
+                                       &optional
+                                       repeat)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (save-mark-and-excursion
-       (let* ((region (buffer-substring-no-properties beg end))
-              (multiline (seq-contains-p region ?\n))
-              (padding (if multiline "\n" " "))
-              (regexp (if multiline "\n" "[\t ]")))
-         (goto-char beg)
-         (insert-before-markers region)
-         (unless (looking-back regexp 1)
-           (insert-before-markers padding))
-         (goto-char beg)))
-     (when comment
-       (comment-region beg end)))))
+     (conn--duplicate-subr beg end repeat))))
 
 (cl-defmethod conn-duplicate-thing-do ((_cmd (eql copy-from-above-command))
                                        arg
                                        _transform
-                                       _comment)
+                                       &optional
+                                       _repeat)
   (copy-from-above-command arg))
-
-(defvar-keymap conn-duplicate-comment-argument-map
-  "q" 'duplicate-comment)
 
 (defvar-keymap conn-duplicate-thing-argument-map)
 
@@ -2859,7 +2997,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                   (set-flag (and (use-region-p)
                                  conn-argument-region-dwim))))))
 
-(defun conn-duplicate-thing (thing arg transform &optional comment)
+(defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
@@ -2867,14 +3005,10 @@ With prefix arg N duplicate region N times."
    (conn-read-args (conn-duplicate-state
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-duplicate-thing-argument t))
-        (transform (conn-transform-argument))
-        (comment
-         (conn-boolean-argument 'duplicate-comment
-                                conn-duplicate-comment-argument-map
-                                "comment")))
-     (list thing arg transform comment)))
-  (conn-make-command-repeatable)
-  (conn-duplicate-thing-do thing arg transform comment))
+        (transform (conn-transform-argument)))
+     (list thing arg transform
+           (prefix-numeric-value current-prefix-arg))))
+  (conn-duplicate-thing-do thing arg transform repeat))
 
 ;;;;; Recenter
 
