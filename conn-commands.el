@@ -1249,41 +1249,83 @@ With a prefix ARG `push-mark' without activating it."
 	         (sort-reorder-buffer sort-lists old))))))))
     (_ (user-error "No regions to sort"))))
 
+(defvar-keymap conn-sort-fields-reverse-map
+  "S" 'conn-sort-reverse)
+
+(defun conn-sort-reverse () (interactive))
+
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
                                    arg
-                                   _transform
+                                   transform
                                    &optional
                                    _reverse
                                    _predicate
                                    _fold-case)
-  ;; TODO: make reverse work somehow?
-  (sort-numeric-fields (prefix-numeric-value arg)
-                       (region-beginning)
-                       (region-end)))
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Sort Inside")
+      ((`(,thing ,targ) (conn-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (conn-protected-let* ((ov (make-overlay beg end nil nil t)
+                                 (delete-overlay ov)))
+         (overlay-put ov 'face 'lazy-highlight)
+         (sort-numeric-fields (prefix-numeric-value arg) beg end)
+         (fset 'conn-sort-reverse
+               (lambda ()
+                 (interactive)
+                 (reverse-region (overlay-start ov)
+                                 (overlay-end ov))))
+         (set-transient-map
+          conn-sort-fields-reverse-map
+          t
+          (lambda ()
+            (delete-overlay ov)
+            (fset 'conn-sort-reverse #'ignore))
+          (format "%s reverse sort"
+                  (propertize
+                   (key-description
+                    (where-is-internal 'conn-sort-reverse
+                                       (list conn-sort-fields-reverse-map)
+                                       t))
+                   'face 'help-key-binding))))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-fields))
                                    arg
-                                   _transform
+                                   transform
                                    &optional
                                    _reverse
                                    _predicate
                                    fold-case)
-  (let ((sort-fold-case fold-case))
-    (sort-fields (prefix-numeric-value arg)
-                 (region-beginning)
-                 (region-end))))
-
-(cl-defmethod conn-sort-things-do ((_thing (eql sort-columns))
-                                   _arg
-                                   _transform
-                                   &optional
-                                   reverse
-                                   _predicate
-                                   fold-case)
-  (let ((sort-fold-case fold-case))
-    (sort-columns reverse
-                  (region-beginning)
-                  (region-end))))
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Sort Inside")
+      ((`(,thing ,targ) (conn-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (conn-protected-let* ((ov (make-overlay beg end nil nil t)
+                                 (delete-overlay ov)))
+         (overlay-put ov 'face 'lazy-highlight)
+         (let ((sort-fold-case fold-case))
+           (sort-fields (prefix-numeric-value arg) beg end))
+         (fset 'conn-sort-reverse
+               (lambda ()
+                 (interactive)
+                 (reverse-region (overlay-start ov)
+                                 (overlay-end ov))))
+         (set-transient-map
+          conn-sort-fields-reverse-map
+          t
+          (lambda ()
+            (delete-overlay ov)
+            (fset 'conn-sort-reverse #'ignore))
+          (format "%s reverse sort"
+                  (propertize
+                   (key-description
+                    (where-is-internal 'conn-sort-reverse
+                                       (list conn-sort-fields-reverse-map)
+                                       t))
+                   'face 'help-key-binding))))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-regexp-fields))
                                    _arg
@@ -1316,6 +1358,18 @@ With a prefix ARG `push-mark' without activating it."
                    (read-regexp "Regexp specifying key within record: "
                                 nil 'regexp-history))))
     (sort-regexp-fields reverse record-re key-re beg end)))
+
+(cl-defmethod conn-sort-things-do ((_thing (eql sort-columns))
+                                   _arg
+                                   _transform
+                                   &optional
+                                   reverse
+                                   _predicate
+                                   fold-case)
+  (let ((sort-fold-case fold-case))
+    (sort-columns reverse
+                  (region-beginning)
+                  (region-end))))
 
 ;;;;; Transpose
 
@@ -1478,7 +1532,7 @@ With a prefix ARG `push-mark' without activating it."
                                                     (region-end)))))
                                  (:method (_self _arg) bounds))))))
     (conn-read-args (conn-dispatch-transpose-state
-                     :prompt "Transpose Dispatch test"
+                     :prompt "Transpose Dispatch"
                      :prefix arg)
         ((`(,thing ,arg) (conn-thing-argument t))
          (restrict-windows
