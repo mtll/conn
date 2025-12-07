@@ -2977,6 +2977,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "8" 'digit-argument
   "9" 'digit-argument
   "-" 'negative-argument
+  "TAB" 'conn-duplicate-indent-repeat
+  "DEL" 'conn-duplicate-delete-repeat
   "D" 'conn-duplicate-repeat
   "RET" 'conn-duplicate-repeat-toggle-padding
   ";" 'conn-duplicate-repeat-comment
@@ -2985,135 +2987,162 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-duplicate-repeat () (interactive))
 (defun conn-duplicate-repeat-toggle-padding () (interactive))
 (defun conn-duplicate-repeat-comment () (interactive))
+(defun conn-duplicate-delete-repeat () (interactive))
+(defun conn-duplicate-indent-repeat () (interactive))
 
 (defun conn--duplicate-subr (beg end &optional repeat)
   (deactivate-mark)
-  (save-excursion
-    (let* ((regions (list (make-overlay beg end nil t)))
-           (str (buffer-substring-no-properties beg end))
-           (block (seq-contains-p str ?\n))
-           (extra-newline nil)
-           (padding (if block "\n" " "))
-           (regexp (if block "\n" "[\t ]"))
-           (commented nil))
-      (goto-char end)
-      (cl-flet ((dup ()
-                  (unless (looking-back regexp 1)
-                    (insert padding))
-                  (let ((rbeg (point))
-                        ov)
-                    (insert str)
-                    (push (make-overlay rbeg (point) nil t)
-                          regions)
-                    (setq ov (car regions))
-                    (overlay-put ov 'face 'lazy-highlight)
-                    (let ((beg (make-marker))
-                          (end (make-marker)))
-                      (set-marker beg (overlay-start ov))
-                      (set-marker end (overlay-end ov))
-                      (set-marker-insertion-type end t)
-                      (when commented
-                        (comment-region beg end))
-                      (move-overlay
-                       ov beg (min end (save-excursion
-                                         (goto-char (overlay-end ov))
-                                         (pos-eol))))
-                      (indent-region beg end)
-                      (set-marker beg nil)
-                      (set-marker end nil))))
-                (cleanup ()
-                  (mapc #'delete-overlay regions)
-                  (fset 'conn-duplicate-repeat #'ignore)
-                  (fset 'conn-duplicate-repeat-comment #'ignore)
-                  (fset 'conn-duplicate-repeat-toggle-padding #'ignore)))
-        (dotimes (_ repeat) (dup))
-        (fset 'conn-duplicate-repeat
-              (lambda (n)
-                (interactive "p")
-                (atomic-change-group
-                  (save-excursion
-                    (goto-char (overlay-end (car regions)))
-                    (dotimes (_ n) (dup))))))
-        (fset 'conn-duplicate-repeat-comment
-              (lambda ()
-                (interactive)
-                (atomic-change-group
-                  (unless (or block extra-newline)
-                    (conn-duplicate-repeat-toggle-padding))
-                  (let ((beg (make-marker))
-                        (end (make-marker)))
-                    (set-marker-insertion-type end t)
-                    (dolist (ov (butlast regions))
-                      (set-marker beg (overlay-start ov))
-                      (set-marker end (overlay-end ov))
-                      (comment-or-uncomment-region beg end)
-                      (move-overlay
-                       ov beg (min end (save-excursion
-                                         (goto-char (overlay-end ov))
-                                         (pos-eol)))))
-                    (set-marker beg nil)
-                    (set-marker end nil))
-                  (setq commented (not commented)))))
-        (fset 'conn-duplicate-repeat-toggle-padding
-              (if block
-                  (lambda ()
-                    (interactive)
-                    (atomic-change-group
-                      (dolist (ov (cdr regions))
-                        (save-excursion
-                          (goto-char (overlay-end ov))
-                          (if extra-newline
-                              (progn
-                                (forward-line)
-                                (join-line))
-                            (newline))))
-                      (cl-callf not extra-newline)))
-                (lambda ()
-                  (interactive)
-                  (let* ((extra-newline (not extra-newline))
-                         (padding (if extra-newline "\n" " "))
-                         (regexp (if extra-newline "\n" "[\t ]")))
-                    (atomic-change-group
-                      (when commented
-                        (conn-duplicate-repeat-comment))
-                      (cl-loop for (ov1 ov2) on (reverse regions)
-                               while ov2
-                               for e1 = (overlay-end ov1)
-                               for b2 = (overlay-start ov2)
-                               do (save-excursion
-                                    (goto-char e1)
-                                    (delete-region e1 b2)
-                                    (unless (looking-back regexp 1)
-                                      (insert padding))))
-                      (when extra-newline
-                        (indent-region (overlay-start (car (last regions)))
-                                       (overlay-end (car regions))))))
-                  (setq extra-newline (not extra-newline)
-                        padding (if extra-newline "\n" " ")
-                        regexp (if extra-newline "\n" "[\t ]")))))
-        (set-transient-map
-         conn-duplicate-repeat-map
-         t
-         #'cleanup
-         (format "%s repeat; %s toggle extra newline; %s comment duplicates"
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat-toggle-padding
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat-comment
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)))))))
+  (let* ((regions (list (make-overlay beg end nil t)))
+         (str (buffer-substring-no-properties beg end))
+         (block (seq-contains-p str ?\n))
+         (extra-newline nil)
+         (padding (if block "\n" " "))
+         (regexp (if block "\n" "[\t ]"))
+         (commented nil))
+    (cl-labels
+        ((dup ()
+           (unless (looking-back regexp 1)
+             (insert padding))
+           (let ((rbeg (point))
+                 ov)
+             (insert str)
+             (push (make-overlay rbeg (point) nil t)
+                   regions)
+             (setq ov (car regions))
+             (overlay-put ov 'face 'lazy-highlight)
+             (let ((beg (make-marker))
+                   (end (make-marker)))
+               (set-marker beg (overlay-start ov))
+               (set-marker end (overlay-end ov))
+               (set-marker-insertion-type end t)
+               (when commented
+                 (comment-region beg end))
+               (move-overlay
+                ov beg (min end (save-excursion
+                                  (goto-char (overlay-end ov))
+                                  (pos-eol))))
+               (set-marker beg nil)
+               (set-marker end nil))))
+         (cleanup ()
+           (mapc #'delete-overlay regions)
+           (fset 'conn-duplicate-repeat #'ignore)
+           (fset 'conn-duplicate-repeat-comment #'ignore)
+           (fset 'conn-duplicate-repeat-toggle-padding #'ignore))
+         (indent ()
+           (interactive)
+           (indent-region (overlay-start (car (last regions)))
+                          (overlay-end (car regions))))
+         (repeat (n)
+           (interactive "p")
+           (atomic-change-group
+             (save-excursion
+               (goto-char (overlay-end (car regions)))
+               (dotimes (_ n) (dup)))))
+         (delete (n)
+           (interactive "p")
+           (when (> (length regions) 1)
+             (let* ((n (min (abs n) (1- (length regions))))
+                    (delete (take n regions))
+                    (keep (drop n regions)))
+               (delete-region (overlay-end (car keep))
+                              (overlay-end (car delete)))
+               (mapc #'delete-overlay delete)
+               (setq regions keep))))
+         (comment ()
+           (interactive)
+           (atomic-change-group
+             (unless (or block extra-newline)
+               (conn-duplicate-repeat-toggle-padding))
+             (let ((beg (make-marker))
+                   (end (make-marker)))
+               (set-marker-insertion-type end t)
+               (dolist (ov (butlast regions))
+                 (set-marker beg (overlay-start ov))
+                 (set-marker end (overlay-end ov))
+                 (comment-or-uncomment-region beg end)
+                 (move-overlay
+                  ov beg (min end (save-excursion
+                                    (goto-char (overlay-end ov))
+                                    (pos-eol)))))
+               (set-marker beg nil)
+               (set-marker end nil))
+             (setq commented (not commented))))
+         (block-padding ()
+           (interactive)
+           (atomic-change-group
+             (dolist (ov (cdr regions))
+               (save-excursion
+                 (goto-char (overlay-end ov))
+                 (if extra-newline
+                     (progn
+                       (forward-line)
+                       (join-line))
+                   (newline))))
+             (cl-callf not extra-newline)))
+         (non-block-padding ()
+           (interactive)
+           (let* ((extra-newline (not extra-newline))
+                  (padding (if extra-newline "\n" " "))
+                  (regexp (if extra-newline "\n" "[\t ]")))
+             (atomic-change-group
+               (when commented
+                 (conn-duplicate-repeat-comment))
+               (cl-loop for (ov1 ov2) on (reverse regions)
+                        while ov2
+                        for e1 = (overlay-end ov1)
+                        for b2 = (overlay-start ov2)
+                        do (save-excursion
+                             (goto-char e1)
+                             (delete-region e1 b2)
+                             (unless (looking-back regexp 1)
+                               (insert padding))))))
+           (setq extra-newline (not extra-newline)
+                 padding (if extra-newline "\n" " ")
+                 regexp (if extra-newline "\n" "[\t ]"))))
+      (save-excursion
+        (goto-char end)
+        (dotimes (_ repeat) (dup)))
+      (fset 'conn-duplicate-indent-repeat #'indent)
+      (fset 'conn-duplicate-repeat #'repeat)
+      (fset 'conn-duplicate-delete-repeat #'delete)
+      (fset 'conn-duplicate-repeat-comment #'comment)
+      (fset 'conn-duplicate-repeat-toggle-padding
+            (if block #'block-padding #'non-block-padding))
+      (set-transient-map
+       conn-duplicate-repeat-map
+       t
+       #'cleanup
+       (format "%s repeat; %s newline; %s indent; %s comment; %s delete"
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat-toggle-padding
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-indent-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat-comment
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-delete-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding))))))
 
 (cl-defgeneric conn-duplicate-thing-do (cmd
                                         arg
