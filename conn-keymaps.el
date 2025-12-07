@@ -125,6 +125,7 @@
   "SPC" 'whitespace-cleanup
   "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
+  "#" 'conn-how-many-in-thing
   "L" 'clone-indirect-buffer
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line

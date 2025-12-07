@@ -1295,14 +1295,12 @@ With a prefix ARG `push-mark' without activating it."
       ((`(,thing ,targ) (conn-thing-argument-dwim t))
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
-      ((conn-bounds `(,beg . ,end) transform)
+      ((conn-bounds (and region `(,beg . ,end)) transform)
        (let ((sort-fold-case fold-case))
          (sort-regexp-fields
           reverse
-          (conn-read-regexp "Regexp specifying records to sort: "
-                            beg end)
-          (conn-read-regexp "Regexp specifying key within record: "
-                            beg end)
+          (conn-read-regexp "Regexp specifying records to sort: " region)
+          (conn-read-regexp "Regexp specifying key within record: " region)
           beg end))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-columns))
@@ -2345,16 +2343,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ((`(,thing ,targ) (conn-thing-argument t))
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
-      ((conn-bounds `(,beg . ,end) transform)
+      ((conn-bounds (and region `(,beg . ,end)) transform)
        (if delete
            (flush-lines
-            (conn-read-regexp "Delete lines containing match for regexp"
-                              beg end)
+            (conn-read-regexp "Delete lines containing match for regexp" region)
             beg end t)
          (when append (setq last-command 'kill-region))
          (kill-matching-lines
-          (conn-read-regexp "Kill lines containing match for regexp"
-                            beg end)
+          (conn-read-regexp "Kill lines containing match for regexp" region)
           beg end t))))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (eql keep-lines))
@@ -2372,10 +2368,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ((`(,thing ,targ) (conn-thing-argument t))
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
-      ((conn-bounds `(,beg . ,end) transform)
+      ((conn-bounds (and region `(,beg . ,end)) transform)
        (keep-lines
-        (conn-read-regexp "Keep lines containing match for regexp"
-                          beg end)
+        (conn-read-regexp "Keep lines containing match for regexp" region)
         beg end t)))))
 
 (defvar-keymap conn-separator-argument-map
@@ -2765,11 +2760,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       ((`(,thing ,targ) (conn-thing-argument t))
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
-      ((conn-bounds `(,beg . ,end) transform)
+      ((conn-bounds (and region `(,beg . ,end)) transform)
        (when append (setq last-command 'kill-region))
        (copy-matching-lines
-        (conn-read-regexp "Copy lines containing match for regexp"
-                          beg end)
+        (conn-read-regexp "Copy lines containing match for regexp" region)
         beg end t)))))
 
 (cl-defmethod conn-copy-thing-do ((_cmd (eql filename))
@@ -2882,6 +2876,47 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))))))
+
+;;;;; How Many
+
+(conn-define-state conn-how-many-state (conn-read-thing-state)
+  :lighter "HOW-MANY")
+
+(defvar-keymap conn-how-many-in-thing-argument-map)
+
+(cl-defstruct (conn-how-many-in-thing-argument
+               (:include conn-thing-argument)
+               (:constructor
+                conn-how-many-in-thing-argument
+                (&optional
+                 recursive-edit
+                 &aux
+                 (keymap conn-how-many-in-thing-argument-map)
+                 (required t)
+                 (value (when (use-region-p)
+                          (list 'region nil)))
+                 (set-flag (use-region-p))))))
+
+(defun conn-how-many-in-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-how-many-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-how-many-in-thing-do thing arg transform))
+
+(cl-defgeneric conn-how-many-in-thing-do (thing arg transform)
+  (declare (conn-anonymous-thing-property :how-many-op)))
+
+(cl-defmethod conn-how-many-in-thing-do ((thing (conn-thing t))
+                                         arg
+                                         transform)
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds (and region `(,beg . ,end)) transform)
+     (how-many
+      (conn-read-regexp "How many matches for regexp" region)
+      beg end t))))
 
 ;;;;; Comment Thing
 
