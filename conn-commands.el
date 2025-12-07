@@ -1346,6 +1346,7 @@ With a prefix ARG `push-mark' without activating it."
   "8" 'digit-argument
   "9" 'digit-argument
   "-" 'negative-argument
+  "C-l" 'recenter-top-bottom
   "q" 'conn-transpose-repeat
   "Q" 'conn-transpose-repeat-inverse)
 
@@ -2978,7 +2979,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "-" 'negative-argument
   "D" 'conn-duplicate-repeat
   "RET" 'conn-duplicate-repeat-toggle-padding
-  ";" 'conn-duplicate-repeat-comment)
+  ";" 'conn-duplicate-repeat-comment
+  "C-l" 'recenter-top-bottom)
 
 (defun conn-duplicate-repeat () (interactive))
 (defun conn-duplicate-repeat-toggle-padding () (interactive))
@@ -3064,8 +3066,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                               (progn
                                 (forward-line)
                                 (join-line))
-                            (newline)
-                            (indent-according-to-mode))))
+                            (newline))))
                       (cl-callf not extra-newline)))
                 (lambda ()
                   (interactive)
@@ -3084,14 +3085,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                     (delete-region e1 b2)
                                     (unless (looking-back regexp 1)
                                       (insert padding))))
-                      (save-excursion
-                        (goto-char (overlay-end (car regions)))
-                        (if extra-newline
-                            (progn
-                              (newline)
-                              (indent-according-to-mode))
-                          (forward-line)
-                          (join-line)))))
+                      (when extra-newline
+                        (indent-region (overlay-start (car (last regions)))
+                                       (overlay-end (car regions))))))
                   (setq extra-newline (not extra-newline)
                         padding (if extra-newline "\n" " ")
                         regexp (if extra-newline "\n" "[\t ]")))))
