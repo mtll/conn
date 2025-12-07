@@ -2980,7 +2980,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "TAB" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "D" 'conn-duplicate-repeat
-  "RET" 'conn-duplicate-repeat-toggle-padding
+  "M-RET" 'conn-duplicate-repeat-toggle-padding
   ";" 'conn-duplicate-repeat-comment
   "C-l" 'recenter-top-bottom)
 
@@ -3025,7 +3025,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                (set-marker end nil))))
          (cleanup ()
            (mapc #'delete-overlay regions)
+           (fset 'conn-duplicate-indent-repeat #'ignore)
            (fset 'conn-duplicate-repeat #'ignore)
+           (fset 'conn-duplicate-delete-repeat #'ignore)
            (fset 'conn-duplicate-repeat-comment #'ignore)
            (fset 'conn-duplicate-repeat-toggle-padding #'ignore))
          (indent ()
