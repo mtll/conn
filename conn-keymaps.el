@@ -128,7 +128,6 @@
   "L" 'clone-indirect-buffer
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
-  "d" 'conn-duplicate-thing
   "y" 'yank-in-context
   "r" 'yank-rectangle
   "DEL" 'clear-rectangle

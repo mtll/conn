@@ -159,7 +159,6 @@
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol
-  "." 'point-to-register
   "/" (conn-remap-key conn-undo-keys t)
   "?" (conn-remap-key conn-undo-redo-keys t)
   "DEL" 'conn-scroll-down
@@ -196,7 +195,6 @@
   "t" 'outline-hide-body
   "u" 'outline-up-heading
   "v" 'conn-toggle-mark-command
-  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)
@@ -277,7 +275,7 @@
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "A" 'dired-find-alternate-file
+  ;; "A" 'dired-find-alternate-file
   "b" 'dired-up-directory
   "k" 'dired-next-line
   "i" 'dired-previous-line
@@ -1123,7 +1121,6 @@
 (conn-set-mode-property 'pdf-view-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
-  "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
   "h" 'conn-wincontrol-one-command

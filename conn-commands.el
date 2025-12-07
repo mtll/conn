@@ -1249,11 +1249,6 @@ With a prefix ARG `push-mark' without activating it."
                  (sort-reorder-buffer sort-lists old))))))))
     (_ (user-error "No regions to sort"))))
 
-(defvar-keymap conn-sort-fields-reverse-map
-  "S" 'conn-sort-reverse)
-
-(defun conn-sort-reverse () (interactive))
-
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
                                    arg
                                    transform
@@ -1267,31 +1262,8 @@ With a prefix ARG `push-mark' without activating it."
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
       ((conn-bounds `(,beg . ,end) transform)
-       (conn-protected-let* ((ov (make-overlay beg end nil nil t)
-                                 (delete-overlay ov)))
-         (overlay-put ov 'face 'lazy-highlight)
-         (sort-numeric-fields (prefix-numeric-value arg) beg end)
-         (when reverse
-           (reverse-region (overlay-start ov)
-                           (overlay-end ov)))
-         (fset 'conn-sort-reverse
-               (lambda ()
-                 (interactive)
-                 (reverse-region (overlay-start ov)
-                                 (overlay-end ov))))
-         (set-transient-map
-          conn-sort-fields-reverse-map
-          t
-          (lambda ()
-            (delete-overlay ov)
-            (fset 'conn-sort-reverse #'ignore))
-          (format "%s reverse sort"
-                  (propertize
-                   (key-description
-                    (where-is-internal 'conn-sort-reverse
-                                       (list conn-sort-fields-reverse-map)
-                                       t))
-                   'face 'help-key-binding))))))))
+       (sort-numeric-fields (prefix-numeric-value arg) beg end)
+       (when reverse (reverse-region beg end))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-fields))
                                    arg
@@ -1306,64 +1278,32 @@ With a prefix ARG `push-mark' without activating it."
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
       ((conn-bounds `(,beg . ,end) transform)
-       (conn-protected-let* ((ov (make-overlay beg end nil nil t)
-                                 (delete-overlay ov)))
-         (overlay-put ov 'face 'lazy-highlight)
-         (let ((sort-fold-case fold-case))
-           (sort-fields (prefix-numeric-value arg) beg end))
-         (when reverse
-           (reverse-region (overlay-start ov)
-                           (overlay-end ov)))
-         (fset 'conn-sort-reverse
-               (lambda ()
-                 (interactive)
-                 (reverse-region (overlay-start ov)
-                                 (overlay-end ov))))
-         (set-transient-map
-          conn-sort-fields-reverse-map
-          t
-          (lambda ()
-            (delete-overlay ov)
-            (fset 'conn-sort-reverse #'ignore))
-          (format "%s reverse sort"
-                  (propertize
-                   (key-description
-                    (where-is-internal 'conn-sort-reverse
-                                       (list conn-sort-fields-reverse-map)
-                                       t))
-                   'face 'help-key-binding))))))))
+       (let ((sort-fold-case fold-case))
+         (sort-fields (prefix-numeric-value arg) beg end))
+       (when reverse (reverse-region beg end))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-regexp-fields))
-                                   _arg
-                                   _transform
+                                   arg
+                                   transform
                                    &optional
                                    reverse
                                    _predicate
                                    fold-case)
-  (let* ((sort-fold-case fold-case)
-         (beg (region-beginning))
-         (end (region-end))
-         (record-re (minibuffer-with-setup-hook
-                        (minibuffer-lazy-highlight-setup
-                         :case-fold case-fold-search
-                         :filter (lambda (mb me) (<= beg mb me end))
-                         :highlight query-replace-lazy-highlight
-                         :regexp t
-                         :regexp-function (lambda (str _) str)
-                         :lax-whitespace nil)
-                      (read-regexp "Regexp specifying records to sort: "
-                                   nil 'regexp-history)))
-         (key-re (minibuffer-with-setup-hook
-                     (minibuffer-lazy-highlight-setup
-                      :case-fold case-fold-search
-                      :filter (lambda (mb me) (<= beg mb me end))
-                      :highlight query-replace-lazy-highlight
-                      :regexp t
-                      :regexp-function (lambda (str _) str)
-                      :lax-whitespace nil)
-                   (read-regexp "Regexp specifying key within record: "
-                                nil 'regexp-history))))
-    (sort-regexp-fields reverse record-re key-re beg end)))
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Sort Inside"
+                   :prefix arg)
+      ((`(,thing ,targ) (conn-thing-argument-dwim t))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (let ((sort-fold-case fold-case))
+         (sort-regexp-fields
+          reverse
+          (conn-read-regexp "Regexp specifying records to sort: "
+                            beg end)
+          (conn-read-regexp "Regexp specifying key within record: "
+                            beg end)
+          beg end))))))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-columns))
                                    _arg
@@ -2038,20 +1978,18 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defvar conn-check-bounds-default t)
 
-(defvar conn-kill-option-ref
+(defvar conn-kill-special-ref
   (conn-reference-quote
-    (("append" append-next-kill)
-     ("delete" delete)
-     ("register" register)
-     ("fixup whitespace" fixup-whitespace)
-     ("check bounds" check-bounds))))
+    (("copy filename" filename)
+     ("kill matching lines" kill-matching-lines)
+     ("surround" conn-surround))))
 
 (defvar conn-kill-reference
   (list (conn-reference-page "Kill"
           "Kill some things."
-          (:heading "Options")
+          (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
-                  conn-kill-option-ref 3))
+                  conn-kill-special-ref 3))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -2160,7 +2098,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-kill-how-argument-register arg)))
 
 (defvar-keymap conn-kill-thing-argument-map
-  "." 'filename)
+  "." 'filename
+  ">" 'kill-matching-lines)
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
@@ -2179,6 +2118,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql kill-matching-lines)))
   t)
 
 (defun conn-kill-thing (cmd
@@ -2378,6 +2321,41 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
           (setq str (file-name-sans-extension str)))
         (conn--kill-string str append register))
     (user-error "Buffer does not have a file")))
+
+(defvar conn-keep-lines-map
+  "!" 'keep-lines)
+
+(cl-defmethod conn-kill-thing-do ((_cmd (eql kill-matching-lines))
+                                  arg
+                                  transform
+                                  &optional
+                                  append
+                                  delete
+                                  _register
+                                  _fixup-whitespace
+                                  _check-bounds)
+  (conn-read-args (conn-read-thing-state
+                   :prompt (if delete
+                               "Delete Matching Lines In"
+                             "Kill Matching Lines In")
+                   :prefix arg)
+      ((`(,thing ,targ) (conn-thing-argument t))
+       (transform (conn-transform-argument transform))
+       (keep-lines (conn-boolean-argument 'keep-lines
+                                          conn-keep-lines-map
+                                          "keep lines")))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (if delete
+           (flush-lines
+            (conn-read-regexp "Delete lines containing match for regexp"
+                              nil 'regexp-history)
+            beg end t)
+         (when append (setq last-command 'kill-region))
+         (kill-matching-lines
+          (conn-read-regexp "Kill lines containing match for regexp"
+                            nil 'regexp-history)
+          beg end t))))))
 
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
@@ -2598,6 +2576,22 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;; Copy Thing
 
+(defvar conn-copy-special-ref
+  (conn-reference-quote
+    (("copy filename" filename)
+     ("kill matching lines" copy-matching-lines)
+     ("surround" conn-surround))))
+
+(defvar conn-copy-reference
+  (list (conn-reference-page "Copy"
+          "Copy some things."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-copy-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (conn-define-state conn-copy-state (conn-read-thing-state)
   :lighter "COPY")
 
@@ -2669,7 +2663,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn-copy-how-argument-register arg)))
 
 (defvar-keymap conn-copy-thing-argument-map
-  "." 'filename)
+  "." 'filename
+  ">" 'copy-matching-lines)
 
 (cl-defstruct (conn-copy-thing-argument
                (:include conn-thing-argument)
@@ -2687,7 +2682,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                                  conn-argument-region-dwim))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
-                                       (_cmd (eql 'filename)))
+                                       (_cmd (eql filename)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
+                                       (_cmd (eql copy-matching-lines)))
   t)
 
 (defun conn-copy-thing (thing arg &optional transform append register)
@@ -2695,6 +2694,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive
    (conn-read-args (conn-copy-state
                     :prompt "Thing"
+                    :reference conn-copy-reference
                     :command-handler
                     (lambda (cmd)
                       (when (eq cmd 'conn-set-register-separator)
@@ -2731,6 +2731,25 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
        (conn--kill-region beg end nil append register))
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
+
+(cl-defmethod conn-copy-thing-do ((_cmd (eql copy-matching-lines))
+                                  arg
+                                  &optional
+                                  transform
+                                  append
+                                  _register)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Copy Matching Lines In"
+                   :prefix arg)
+      ((`(,thing ,targ) (conn-thing-argument t))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (when append (setq last-command 'kill-region))
+       (copy-matching-lines
+        (conn-read-regexp "Copy lines containing match for regexp"
+                          beg end)
+        beg end t)))))
 
 (cl-defmethod conn-copy-thing-do ((_cmd (eql filename))
                                   _arg
@@ -2914,11 +2933,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (save-excursion
     (let* ((regions (list (make-overlay beg end nil t)))
            (str (buffer-substring-no-properties beg end))
-           (multiline (seq-contains-p str ?\n))
-           (padding (if multiline "\n" " "))
-           (regexp (if multiline "\n" "[\t ]"))
+           (block (seq-contains-p str ?\n))
+           (extra-newline nil)
+           (padding (if block "\n" " "))
+           (regexp (if block "\n" "[\t ]"))
            (commented nil))
-      ;; (overlay-put (car regions) 'face 'region)
       (goto-char end)
       (cl-flet ((dup ()
                   (unless (looking-back regexp 1)
@@ -2953,51 +2972,78 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (fset 'conn-duplicate-repeat
               (lambda (n)
                 (interactive "p")
-                (save-excursion
-                  (goto-char (overlay-end (car regions)))
-                  (dotimes (_ n)
-                    (dup)))))
+                (atomic-change-group
+                  (save-excursion
+                    (goto-char (overlay-end (car regions)))
+                    (dotimes (_ n) (dup))))))
         (fset 'conn-duplicate-repeat-comment
               (lambda ()
                 (interactive)
-                (unless multiline
-                  (conn-duplicate-repeat-toggle-padding))
-                (let ((beg (make-marker))
-                      (end (make-marker)))
-                  (set-marker-insertion-type end t)
-                  (dolist (ov (butlast regions))
-                    (set-marker beg (overlay-start ov))
-                    (set-marker end (overlay-end ov))
-                    (comment-or-uncomment-region beg end)
-                    (move-overlay
-                     ov beg (min end (save-excursion
-                                       (goto-char (overlay-end ov))
-                                       (pos-eol)))))
-                  (set-marker beg nil)
-                  (set-marker end nil))
-                (setq commented (not commented))))
+                (atomic-change-group
+                  (unless (or block extra-newline)
+                    (conn-duplicate-repeat-toggle-padding))
+                  (let ((beg (make-marker))
+                        (end (make-marker)))
+                    (set-marker-insertion-type end t)
+                    (dolist (ov (butlast regions))
+                      (set-marker beg (overlay-start ov))
+                      (set-marker end (overlay-end ov))
+                      (comment-or-uncomment-region beg end)
+                      (move-overlay
+                       ov beg (min end (save-excursion
+                                         (goto-char (overlay-end ov))
+                                         (pos-eol)))))
+                    (set-marker beg nil)
+                    (set-marker end nil))
+                  (setq commented (not commented)))))
         (fset 'conn-duplicate-repeat-toggle-padding
-              (lambda ()
-                (interactive)
-                (when commented
-                  (conn-duplicate-repeat-comment))
-                (setq multiline (not multiline)
-                      padding (if multiline "\n" " ")
-                      regexp (if multiline "\n" "[\t ]"))
-                (cl-loop for (ov1 ov2) on (reverse regions)
-                         while ov2
-                         for e1 = (overlay-end ov1)
-                         for b2 = (overlay-start ov2)
-                         do (save-excursion
-                              (goto-char e1)
-                              (delete-region e1 b2)
-                              (unless (looking-back regexp 1)
-                                (insert padding))))))
+              (if block
+                  (lambda ()
+                    (interactive)
+                    (atomic-change-group
+                      (dolist (ov (cdr regions))
+                        (save-excursion
+                          (goto-char (overlay-end ov))
+                          (if extra-newline
+                              (progn
+                                (forward-line)
+                                (join-line))
+                            (newline)
+                            (indent-according-to-mode))))
+                      (cl-callf not extra-newline)))
+                (lambda ()
+                  (interactive)
+                  (let* ((extra-newline (not extra-newline))
+                         (padding (if extra-newline "\n" " "))
+                         (regexp (if extra-newline "\n" "[\t ]")))
+                    (atomic-change-group
+                      (when commented
+                        (conn-duplicate-repeat-comment))
+                      (cl-loop for (ov1 ov2) on (reverse regions)
+                               while ov2
+                               for e1 = (overlay-end ov1)
+                               for b2 = (overlay-start ov2)
+                               do (save-excursion
+                                    (goto-char e1)
+                                    (delete-region e1 b2)
+                                    (unless (looking-back regexp 1)
+                                      (insert padding))))
+                      (save-excursion
+                        (goto-char (overlay-end (car regions)))
+                        (if extra-newline
+                            (progn
+                              (newline)
+                              (indent-according-to-mode))
+                          (forward-line)
+                          (join-line)))))
+                  (setq extra-newline (not extra-newline)
+                        padding (if extra-newline "\n" " ")
+                        regexp (if extra-newline "\n" "[\t ]")))))
         (set-transient-map
          conn-duplicate-repeat-map
          t
          #'cleanup
-         (format "%s repeat; %s toggle multiline; %s comment duplicates"
+         (format "%s repeat; %s toggle extra newline; %s comment duplicates"
                  (propertize
                   (key-description
                    (where-is-internal 'conn-duplicate-repeat

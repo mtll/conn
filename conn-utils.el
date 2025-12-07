@@ -412,6 +412,19 @@ the same form and contains disjoint (BEG . END) pairs."
         ('nil (push region merged))))
     (nreverse merged)))
 
+(defun conn-read-regexp (prompt &optional start end)
+  (unless start (setq start (point-min)))
+  (unless end (setq end (point-max)))
+  (minibuffer-with-setup-hook
+      (minibuffer-lazy-highlight-setup
+       :case-fold case-fold-search
+       :filter (lambda (mb me) (<= start mb me end))
+       :highlight query-replace-lazy-highlight
+       :regexp t
+       :regexp-function (lambda (str _) str)
+       :lax-whitespace nil)
+    (read-regexp prompt nil 'regexp-history)))
+
 ;;;;; Derived Mode Utils
 
 (static-if (< emacs-major-version 30)
