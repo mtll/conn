@@ -1331,8 +1331,13 @@ With a prefix ARG `push-mark' without activating it."
   (point :type marker)
   (thing1 :type function))
 
-(defun conn-transpose-repeat () (interactive))
-(defun conn-transpose-repeat-inverse () (interactive))
+(defun conn-transpose-repeat ()
+  (interactive)
+  (user-error "Not repeating transpose"))
+
+(defun conn-transpose-repeat-inverse ()
+  (interactive)
+  (user-error "Not repeating transpose"))
 
 (defvar-keymap conn-transpose-repeat-map
   "0" 'digit-argument
@@ -1350,13 +1355,15 @@ With a prefix ARG `push-mark' without activating it."
   "q" 'conn-transpose-repeat
   "Q" 'conn-transpose-repeat-inverse)
 
-(defun conn-transpose-setup-repeat-map ()
+(defun conn-transpose-setup-repeat-map (repeat repeat-inverse)
+  (advice-add 'conn-transpose-repeat :override repeat)
+  (advice-add 'conn-transpose-repeat-inverse :override repeat-inverse)
   (set-transient-map
    conn-transpose-repeat-map
    t
    (lambda ()
-     (fset 'conn-transpose-repeat #'ignore)
-     (fset 'conn-transpose-repeat-inverse #'ignore))
+     (advice-remove 'conn-transpose-repeat repeat)
+     (advice-remove 'conn-transpose-repeat-inverse repeat-inverse))
    (concat
     (format "%s repeat"
             (propertize
@@ -1404,17 +1411,15 @@ With a prefix ARG `push-mark' without activating it."
           (let arg (prefix-numeric-value arg)))
      (deactivate-mark t)
      (transpose-subr (lambda (N) (forward-thing thing N)) arg)
-     (fset 'conn-transpose-repeat
-           (lambda (n)
-             (interactive "P")
-             (transpose-subr (lambda (N) (forward-thing thing N))
-                             (or arg n))))
-     (fset 'conn-transpose-repeat-inverse
-           (lambda (n)
-             (interactive "P")
-             (transpose-subr (lambda (N) (forward-thing thing N))
-                             (- (or arg n)))))
-     (conn-transpose-setup-repeat-map))
+     (conn-transpose-setup-repeat-map
+      (lambda (n)
+        (interactive "P")
+        (transpose-subr (lambda (N) (forward-thing thing N))
+                        (or arg n)))
+      (lambda (n)
+        (interactive "P")
+        (transpose-subr (lambda (N) (forward-thing thing N))
+                        (- (or arg n))))))
     (_ (user-error "Invalid transpose thing"))))
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing expansion))
@@ -2978,17 +2983,34 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "9" 'digit-argument
   "-" 'negative-argument
   "TAB" 'conn-duplicate-indent-repeat
+  "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
+  "<backspace>" 'conn-duplicate-delete-repeat
   "D" 'conn-duplicate-repeat
   "M-RET" 'conn-duplicate-repeat-toggle-padding
+  "M-<return>" 'conn-duplicate-repeat-toggle-padding
   ";" 'conn-duplicate-repeat-comment
   "C-l" 'recenter-top-bottom)
 
-(defun conn-duplicate-repeat () (interactive))
-(defun conn-duplicate-repeat-toggle-padding () (interactive))
-(defun conn-duplicate-repeat-comment () (interactive))
-(defun conn-duplicate-delete-repeat () (interactive))
-(defun conn-duplicate-indent-repeat () (interactive))
+(defun conn-duplicate-repeat ()
+  (interactive)
+  (user-error "Not repeating duplicate"))
+
+(defun conn-duplicate-repeat-toggle-padding ()
+  (interactive)
+  (user-error "Not repeating duplicate"))
+
+(defun conn-duplicate-repeat-comment ()
+  (interactive)
+  (user-error "Not repeating duplicate"))
+
+(defun conn-duplicate-delete-repeat ()
+  (interactive)
+  (user-error "Not repeating duplicate"))
+
+(defun conn-duplicate-indent-repeat ()
+  (interactive)
+  (user-error "Not repeating duplicate"))
 
 (defun conn--duplicate-subr (beg end &optional repeat)
   (deactivate-mark)
@@ -3025,11 +3047,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                (set-marker end nil))))
          (cleanup ()
            (mapc #'delete-overlay regions)
-           (fset 'conn-duplicate-indent-repeat #'ignore)
-           (fset 'conn-duplicate-repeat #'ignore)
-           (fset 'conn-duplicate-delete-repeat #'ignore)
-           (fset 'conn-duplicate-repeat-comment #'ignore)
-           (fset 'conn-duplicate-repeat-toggle-padding #'ignore))
+           (advice-remove 'conn-duplicate-indent-repeat #'indent)
+           (advice-remove 'conn-duplicate-repeat #'repeat)
+           (advice-remove 'conn-duplicate-delete-repeat #'delete)
+           (advice-remove 'conn-duplicate-repeat-comment #'comment)
+           (advice-remove 'conn-duplicate-repeat-toggle-padding
+                          (if block #'block-padding #'non-block-padding)))
          (indent ()
            (interactive)
            (indent-region (overlay-start (car (last regions)))
@@ -3042,7 +3065,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                (dotimes (_ n) (dup)))))
          (delete (n)
            (interactive "p")
-           (when (> (length regions) 1)
+           (when (> (length regions) 2)
              (let* ((n (min (abs n) (1- (length regions))))
                     (delete (take n regions))
                     (keep (drop n regions)))
@@ -3104,12 +3127,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (save-excursion
         (goto-char end)
         (dotimes (_ repeat) (dup)))
-      (fset 'conn-duplicate-indent-repeat #'indent)
-      (fset 'conn-duplicate-repeat #'repeat)
-      (fset 'conn-duplicate-delete-repeat #'delete)
-      (fset 'conn-duplicate-repeat-comment #'comment)
-      (fset 'conn-duplicate-repeat-toggle-padding
-            (if block #'block-padding #'non-block-padding))
+      (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+      (advice-add 'conn-duplicate-repeat :override #'repeat)
+      (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+      (advice-add 'conn-duplicate-repeat-comment :override #'comment)
+      (advice-add 'conn-duplicate-repeat-toggle-padding :override
+                  (if block #'block-padding #'non-block-padding))
       (set-transient-map
        conn-duplicate-repeat-map
        t
@@ -3295,45 +3318,32 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Change
 
+(defvar conn-change-special-ref
+  (conn-reference-quote
+    (("quoted-insert" quoted-insert)
+     ("emacs-state-overwrite" conn-emacs-state-overwrite)
+     ("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary)
+     ("surround" conn-surround))))
+
+(defvar conn-change-reference
+  (list (conn-reference-page "Change"
+          "Change some things."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-change-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
 
-(cl-defgeneric conn-change-thing-do (cmd arg transform)
-  (declare (conn-anonymous-thing-property :change-op)))
-
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
-  "w" (conn-anonymous-thing
-        'point
-        :change-op ( :method (_self arg _transform)
-                     (atomic-change-group
-                       (delete-char 1)
-                       (conn-with-recursive-stack 'conn-emacs-state
-                         (quoted-insert (prefix-numeric-value arg))))))
-  "e" (conn-anonymous-thing
-        'point
-        :change-op ( :method (&rest _)
-                     (conn-emacs-state-overwrite)))
-  "E" (conn-anonymous-thing
-        'point
-        :change-op ( :method (&rest _)
-                     (conn-emacs-state-overwrite-binary))))
-
-(cl-defmethod conn-change-thing-do (cmd arg transform)
-  (pcase-let (((conn-bounds `(,beg . ,end) transform)
-               (conn-bounds-of cmd arg)))
-    (goto-char beg)
-    (delete-region beg end)
-    (if (eq 'conn-emacs-state (conn-peek-state))
-        (conn-pop-state)
-      (conn-push-state 'conn-emacs-state))))
-
-(cl-defmethod conn-change-thing-do :extra "rectangle" ((_cmd (conn-thing region))
-                                                       _arg
-                                                       _transform)
-  (if (bound-and-true-p rectangle-mark-mode)
-      (call-interactively #'string-rectangle)
-    (cl-call-next-method)))
+  "e" 'conn-emacs-state-overwrite
+  "E" 'conn-emacs-state-overwrite-binary
+  "j" conn-backward-char-remap
+  "l" conn-forward-char-remap)
 
 (defvar-keymap conn-change-thing-argument-map)
 
@@ -3350,11 +3360,60 @@ Interactively `region-beginning' and `region-end'."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
+(cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
+                                       (_cmd (eql conn-emacs-state-overwrite-binary)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
+                                       (_cmd (eql conn-emacs-state-overwrite)))
+  t)
+
+(cl-defgeneric conn-change-thing-do (cmd arg transform)
+  (declare (conn-anonymous-thing-property :change-op)))
+
+(cl-defmethod conn-change-thing-do (cmd arg transform)
+  (pcase-let (((conn-bounds `(,beg . ,end) transform)
+               (conn-bounds-of cmd arg)))
+    (goto-char beg)
+    (delete-region beg end)
+    (if (eq 'conn-emacs-state (conn-peek-state))
+        (conn-pop-state)
+      (conn-push-state 'conn-emacs-state))))
+
+(cl-defmethod conn-change-thing-do ((_cmd (eql conn-emacs-state-overwrite))
+                                    _arg
+                                    _transform)
+  (conn-emacs-state-overwrite))
+
+(cl-defmethod conn-change-thing-do ((_cmd (eql conn-emacs-state-overwrite-binary))
+                                    _arg
+                                    _transform)
+  (conn-emacs-state-overwrite-binary))
+
+(cl-defmethod conn-change-thing-do :extra "rectangle" ((_cmd (conn-thing region))
+                                                       _arg
+                                                       _transform)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (call-interactively #'string-rectangle)
+    (cl-call-next-method)))
+
+(cl-defmethod conn-change-thing-do ((cmd (conn-thing char))
+                                    arg
+                                    transform)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (goto-char beg)
+     (delete-region beg end)
+     (if (= (- end beg) 1)
+         (conn-push-state 'conn-one-emacs-state)
+       (conn-push-state 'conn-emacs-state)))))
+
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD and ARG."
   (interactive
    (conn-read-args (conn-change-state
-                    :prompt "Thing")
+                    :prompt "Thing"
+                    :reference conn-change-reference)
        ((`(,thing ,arg) (conn-change-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
