@@ -1982,6 +1982,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (conn-reference-quote
     (("copy filename" filename)
      ("kill matching lines" kill-matching-lines)
+     ("keep matching lines" keep-lines)
      ("surround" conn-surround))))
 
 (defvar conn-kill-reference
@@ -2099,7 +2100,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defvar-keymap conn-kill-thing-argument-map
   "." 'filename
-  ">" 'kill-matching-lines)
+  ">" 'kill-matching-lines
+  "!" 'keep-lines)
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
@@ -2118,6 +2120,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql keep-lines)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
@@ -2322,9 +2328,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (conn--kill-string str append register))
     (user-error "Buffer does not have a file")))
 
-(defvar conn-keep-lines-map
-  "!" 'keep-lines)
-
 (cl-defmethod conn-kill-thing-do ((_cmd (eql kill-matching-lines))
                                   arg
                                   transform
@@ -2340,22 +2343,40 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                              "Kill Matching Lines In")
                    :prefix arg)
       ((`(,thing ,targ) (conn-thing-argument t))
-       (transform (conn-transform-argument transform))
-       (keep-lines (conn-boolean-argument 'keep-lines
-                                          conn-keep-lines-map
-                                          "keep lines")))
+       (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
       ((conn-bounds `(,beg . ,end) transform)
        (if delete
            (flush-lines
             (conn-read-regexp "Delete lines containing match for regexp"
-                              nil 'regexp-history)
+                              beg end)
             beg end t)
          (when append (setq last-command 'kill-region))
          (kill-matching-lines
           (conn-read-regexp "Kill lines containing match for regexp"
-                            nil 'regexp-history)
+                            beg end)
           beg end t))))))
+
+(cl-defmethod conn-kill-thing-do ((_cmd (eql keep-lines))
+                                  arg
+                                  transform
+                                  &optional
+                                  _append
+                                  _delete
+                                  _register
+                                  _fixup-whitespace
+                                  _check-bounds)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Keep Matching Lines In"
+                   :prefix arg)
+      ((`(,thing ,targ) (conn-thing-argument t))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing targ)
+      ((conn-bounds `(,beg . ,end) transform)
+       (keep-lines
+        (conn-read-regexp "Keep lines containing match for regexp"
+                          beg end)
+        beg end t)))))
 
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
