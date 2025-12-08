@@ -498,10 +498,10 @@ words."))
 (cl-defstruct (conn-fixup-whitespace-argument
                (:include conn-argument)
                ( :constructor conn-fixup-whitespace-argument
-                 ( &optional
-                   value
-                   &aux
-                   (keymap conn-fixup-whitespace-argument-map)))))
+                 (&optional
+                  value
+                  &aux
+                  (keymap conn-fixup-whitespace-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
                                     cmd update-fn)

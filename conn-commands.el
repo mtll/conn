@@ -2190,11 +2190,11 @@ Transpose defines some addition thing bindings:
 (cl-defstruct (conn-transpose-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-transpose-thing-argument
-                 ( &optional
-                   recursive-edit
-                   &aux
-                   (required t)
-                   (keymap conn-transpose-thing-argument-map)))))
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (keymap conn-transpose-thing-argument-map)))))
 
 (defvar-keymap conn-transpose-point-and-mark-argument-map
   "z" 'transpose-at-point-and-mark)
@@ -2351,16 +2351,16 @@ region after a `recursive-edit'."
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-kill-thing-argument
-                 ( &optional
-                   recursive-edit
-                   &aux
-                   (keymap conn-kill-thing-argument-map)
-                   (required t)
-                   (value (when (and (use-region-p)
-                                     conn-argument-region-dwim)
-                            (list 'region nil)))
-                   (set-flag (and (use-region-p)
-                                  conn-argument-region-dwim))))))
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-kill-thing-argument-map)
+                  (required t)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
+                           (list 'region nil)))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
@@ -3434,16 +3434,16 @@ region after a `recursive-edit'."
 (cl-defstruct (conn-duplicate-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-duplicate-thing-argument
-                 ( &optional
-                   recursive-edit
-                   &aux
-                   (keymap conn-duplicate-thing-argument-map)
-                   (required t)
-                   (value (when (and (use-region-p)
-                                     conn-argument-region-dwim)
-                            (list 'region nil)))
-                   (set-flag (and (use-region-p)
-                                  conn-argument-region-dwim))))))
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-duplicate-thing-argument-map)
+                  (required t)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
+                           (list 'region nil)))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))))
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by a thing command.
@@ -3546,14 +3546,14 @@ of `conn-recenter-positions'."
 (cl-defstruct (conn-change-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-change-thing-argument
-                 ( &optional
-                   recursive-edit
-                   &aux
-                   (keymap conn-change-thing-argument-map)
-                   (required t)
-                   (value (when (use-region-p)
-                            (list 'region nil)))
-                   (set-flag (use-region-p))))))
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-change-thing-argument-map)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
                                        (_cmd (eql conn-emacs-state-overwrite-binary)))

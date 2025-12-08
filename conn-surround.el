@@ -50,12 +50,12 @@
 (cl-defstruct (conn-surround-property-argument
                (:include conn-argument)
                ( :constructor conn-surround-property-argument
-                 ( &optional
-                   value
-                   &aux
-                   (keymap (define-keymap
-                             "w" :whole
-                             "e" :inner))))))
+                 (&optional
+                  value
+                  &aux
+                  (keymap (define-keymap
+                            "w" :whole
+                            "e" :inner))))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd update-fn)
