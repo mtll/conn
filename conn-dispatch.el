@@ -143,9 +143,10 @@ strings have `conn-dispatch-label-face'."
   (let ((buckets (make-vector 4 nil)))
     (setf (aref buckets 0) (thread-last
                              (take count conn-simple-label-characters)
-                             (reverse)
+                             (copy-sequence)
                              (mapcar #'copy-sequence)))
     (named-let loop ((curr 0))
+      (cl-callf nreverse (aref buckets curr))
       (let* ((prefixes nil))
         (while (and (aref buckets curr)
                     (> count (+ (length (aref buckets curr))
@@ -157,6 +158,7 @@ strings have `conn-dispatch-label-face'."
               (dolist (a prefixes)
                 (dolist (b conn-simple-label-characters)
                   (push (concat a b) (aref buckets (1+ curr)))))
+              (cl-callf nreverse (aref buckets curr))
               (loop (1+ curr)))
           (catch 'done
             (let ((n (length (aref buckets curr))))
@@ -165,9 +167,8 @@ strings have `conn-dispatch-label-face'."
                   (push (concat prefix c) (aref buckets (1+ curr)))
                   (when (= (cl-incf n) count)
                     (throw 'done nil))))))
-          (let ((result (cl-loop for bucket across buckets
-                                 nconc (nreverse bucket))))
-            result))))))
+          (cl-callf nreverse (aref buckets curr))
+          (cl-loop for bucket across buckets nconc bucket))))))
 
 ;;;;; Label Reading
 
