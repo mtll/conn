@@ -2345,6 +2345,7 @@ region after a `recursive-edit'."
 
 (defvar-keymap conn-kill-thing-argument-map
   "." 'filename
+  "P" 'project-filename
   ">" 'kill-matching-lines
   "!" 'keep-lines)
 
@@ -2364,6 +2365,10 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql project-filename)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
@@ -2569,8 +2574,28 @@ region after a `recursive-edit'."
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register))
+        (conn--kill-string str append register)
+        (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
+
+(cl-defmethod conn-kill-thing-do ((_cmd (eql project-filename))
+                                  _arg
+                                  _transform
+                                  &optional
+                                  append
+                                  _delete
+                                  register
+                                  _fixup-whitespace
+                                  _check-bounds)
+  (if-let* ((fname (buffer-file-name
+                    (if (minibuffer-window-active-p (selected-window))
+                        (window-buffer (minibuffer-selected-window))
+                      (current-buffer))))
+            (str (expand-file-name (project-root (project-current)))))
+      (progn
+        (conn--kill-string str append register)
+        (message "Yanked \"%s\"" str))
+    (user-error "Buffer does not have a project")))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (eql kill-matching-lines))
                                   arg
@@ -2925,6 +2950,7 @@ region after a `recursive-edit'."
 
 (defvar-keymap conn-copy-thing-argument-map
   "." 'filename
+  "P" 'project-filename
   ">" 'copy-matching-lines)
 
 (cl-defstruct (conn-copy-thing-argument
@@ -2944,6 +2970,10 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
                                        (_cmd (eql filename)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
+                                       (_cmd (eql project-filename)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
@@ -3029,8 +3059,25 @@ region after a `recursive-edit'."
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register))
+        (conn--kill-string str append register)
+        (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
+
+(cl-defmethod conn-copy-thing-do ((_cmd (eql project-filename))
+                                  _arg
+                                  &optional
+                                  _transform
+                                  append
+                                  register)
+  (if-let* ((fname (buffer-file-name
+                    (if (minibuffer-window-active-p (selected-window))
+                        (window-buffer (minibuffer-selected-window))
+                      (current-buffer))))
+            (str (expand-file-name (project-root (project-current)))))
+      (progn
+        (conn--kill-string str append register)
+        (message "Yanked \"%s\"" str))
+    (user-error "Buffer does not have a project")))
 
 (cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion)) &rest _)
   (cl-call-next-method))
