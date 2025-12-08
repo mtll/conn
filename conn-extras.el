@@ -508,6 +508,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
+  ";" 'conn-wincontrol
+  "h" 'conn-wincontrol-one-command
   "C-q" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
