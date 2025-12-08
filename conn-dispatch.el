@@ -21,7 +21,6 @@
 (require 'conn-states)
 (require 'conn-mark)
 (require 'conn-things)
-(require 'conn-kapply)
 (eval-when-compile
   (require 'cl-lib)
   (require 'map))
@@ -30,7 +29,6 @@
 (defvar treesit-defun-type-regexp)
 
 (declare-function face-remap-remove-relative "face-remap")
-(declare-function conn--kmacro-display "conn-transient")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 (declare-function conn-scroll-up "conn-commands")
 (declare-function conn-scroll-down "conn-commands")
@@ -38,7 +36,6 @@
 (declare-function conn-end-of-inner-line "conn-commands")
 (declare-function conn-beginning-of-inner-line "conn-commands")
 (declare-function conn-kill-thing "conn-commands")
-(declare-function conn-dispatch-kapply-prefix "conn-transients")
 
 ;;;; Labels
 
@@ -3639,78 +3636,6 @@ contain targets."
           (push-mark nil t))
         (goto-char pt)))))
 
-(oclosure-define (conn-dispatch-kapply
-                  (:parent conn-action))
-  (macro :mutable t))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
-  (let ((setup (make-symbol "setup-dispatch-kapply"))
-        (applier nil)
-        (pipeline nil))
-    (fset setup (lambda ()
-                  (conn-without-recursive-stack
-                    (conn-dispatch-kapply-prefix
-                     (lambda (a p)
-                       (setq applier a
-                             pipeline p))))
-                  (remove-hook 'post-command-hook setup)))
-    (unwind-protect
-        (progn
-          (add-hook 'post-command-hook setup -99)
-          (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
-          (recursive-edit))
-      (remove-hook 'post-command-hook setup)
-      (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
-    (oclosure-lambda (conn-dispatch-kapply
-                      (macro nil)
-                      (action-auto-repeat t))
-        ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target))
-                   (counter (if macro
-                                (kmacro--counter macro)
-                              kmacro-counter)))
-        (with-selected-window window
-          (conn-dispatch-change-group)
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (conn-dispatch-undo-case 50
-               (:undo (conn-dispatch-undo-pulse beg end)))
-             (with-undo-amalgamate
-               (conn-with-dispatch-suspended
-                 (let ((conn-kapply-suppress-message t))
-                   (conn-kapply-macro
-                    (pcase applier
-                      ((or 'conn-kmacro-apply
-                           (guard macro))
-                       (lambda (iterator)
-                         (conn-kmacro-apply iterator nil macro)))
-                      (_ applier))
-                    (conn-kapply-region-iterator
-                     (list (conn-kapply-make-region beg end)))
-                    `(conn-kapply-relocate-to-region
-                      conn-kapply-pulse-region
-                      ,@pipeline))))))
-            (_ (user-error "Cannot find thing at point"))))
-        (unless macro (setq macro (kmacro-ring-head)))
-        (conn-dispatch-undo-case 0
-          ((or :undo :cancel)
-           (setf (kmacro--counter macro) counter)))))))
-
-(cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply)
-                                            _repeat)
-  (let ((conn-label-select-always-prompt t))
-    (cl-call-next-method)
-    (unless conn-kapply-suppress-message
-      (message "Kapply completed successfully after %s iterations"
-               conn-dispatch-iteration-count))))
-
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-kapply) &optional short)
-  (if short "Kapply"
-    (concat "Kapply"
-            (when-let* ((macro (oref action macro)))
-              (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
-
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))
   (command :type list))
@@ -4158,11 +4083,9 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (user-error "Last dispatch action stale"))
   (push `(no-record . (dispatch-mouse-repeat ,@(cdr event)))
         unread-command-events)
-  (let (;; (conn-read-args-inhibit-message t)
-        (conn-kapply-suppress-message t))
-    (conn-repeat-last-dispatch
-     (and (conn-previous-dispatch-repeat (conn-ring-head conn-dispatch-ring))
-          repeat))))
+  (conn-repeat-last-dispatch
+   (and (conn-previous-dispatch-repeat (conn-ring-head conn-dispatch-ring))
+        repeat)))
 
 (defun conn-bind-last-dispatch-to-key ()
   "Bind last dispatch command to a key.

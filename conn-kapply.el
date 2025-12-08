@@ -22,13 +22,12 @@
 (require 'conn-utils)
 (require 'conn-states)
 (require 'conn-things)
+(require 'conn-commands)
 (eval-when-compile
   (require 'cl-lib))
 
-(defvar conn-replace-to-map)
-
-(declare-function conn-exchange-mark-command "conn-commands")
-(declare-function conn-replace-read-default "conn-commands")
+(declare-function conn--kmacro-display "conn-transient")
+(declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function project-files "project")
 
 ;;;; Kapply
@@ -979,5 +978,79 @@ The iterator must be the first argument in ARGLIST.
       (unless apply
         (user-error "Keyboard macro edit aborted")))
     (kmacro-call-macro (or count 0))))
+
+;;;; Dispatch
+
+(oclosure-define (conn-dispatch-kapply
+                  (:parent conn-action))
+  (macro :mutable t))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
+  (let ((setup (make-symbol "setup-dispatch-kapply"))
+        (applier nil)
+        (pipeline nil))
+    (fset setup (lambda ()
+                  (conn-without-recursive-stack
+                    (conn-dispatch-kapply-prefix
+                     (lambda (a p)
+                       (setq applier a
+                             pipeline p))))
+                  (remove-hook 'post-command-hook setup)))
+    (unwind-protect
+        (progn
+          (add-hook 'post-command-hook setup -99)
+          (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
+          (recursive-edit))
+      (remove-hook 'post-command-hook setup)
+      (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
+    (oclosure-lambda (conn-dispatch-kapply
+                      (macro nil)
+                      (action-auto-repeat t))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target))
+                   (counter (if macro
+                                (kmacro--counter macro)
+                              kmacro-counter)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (pcase (conn-bounds-of-dispatch thing arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (conn-dispatch-undo-case 50
+               (:undo (conn-dispatch-undo-pulse beg end)))
+             (with-undo-amalgamate
+               (conn-with-dispatch-suspended
+                 (let ((conn-kapply-suppress-message t))
+                   (conn-kapply-macro
+                    (pcase applier
+                      ((or 'conn-kmacro-apply
+                           (guard macro))
+                       (lambda (iterator)
+                         (conn-kmacro-apply iterator nil macro)))
+                      (_ applier))
+                    (conn-kapply-region-iterator
+                     (list (conn-kapply-make-region beg end)))
+                    `(conn-kapply-relocate-to-region
+                      conn-kapply-pulse-region
+                      ,@pipeline))))))
+            (_ (user-error "Cannot find thing at point"))))
+        (unless macro (setq macro (kmacro-ring-head)))
+        (conn-dispatch-undo-case 0
+          ((or :undo :cancel)
+           (setf (kmacro--counter macro) counter)))))))
+
+(cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply)
+                                            _repeat)
+  (let ((conn-label-select-always-prompt t))
+    (cl-call-next-method)
+    (unless conn-kapply-suppress-message
+      (message "Kapply completed successfully after %s iterations"
+               conn-dispatch-iteration-count))))
+
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-kapply) &optional short)
+  (if short "Kapply"
+    (concat "Kapply"
+            (when-let* ((macro (oref action macro)))
+              (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
 
 (provide 'conn-kapply)
