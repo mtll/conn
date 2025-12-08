@@ -378,7 +378,7 @@
           (if flat
               (progn
                 (cl-callf sort captures
-                  :key #'car
+                  :key #'cadr
                   :reverse (< arg 0)
                   :in-place t)
                 (pcase-dolist (`(,_type . ,node) captures)
@@ -398,12 +398,12 @@
             (cl-callf sort captures
               :key (if (< arg 0)
                        (lambda (n)
-                         (if (>= at (cdr n)) (cdr n) (car n)))
+                         (if (>= at (cddr n)) (cddr n) (cadr n)))
                      (lambda (n)
-                       (if (<= at (car n)) (car n) (cdr n))))
+                       (if (<= at (cadr n)) (cadr n) (cddr n))))
               :reverse (< arg 0)
               :in-place t)
-            (dolist (node captures)
+            (pcase-dolist (`(,_type . ,node) captures)
               (when (and (if (< arg 0)
                              (< (car node) at)
                            (> (cdr node) at))
