@@ -33,6 +33,7 @@
 
 (declare-function outline-insert-heading "outline")
 (declare-function project-files "project")
+(declare-function project-root "project")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 (declare-function multi-isearch-read-matching-files "misearch")
@@ -1651,7 +1652,6 @@ Exiting the recursive edit will resume the isearch."
                                         _regexp
                                         _subregions-p)
   (require 'project)
-  (require 'misearch)
   (let ((files (project-files (project-current)))
         (isearch-forward (not backward)))
     (multi-isearch-files
@@ -2587,6 +2587,7 @@ region after a `recursive-edit'."
                                   register
                                   _fixup-whitespace
                                   _check-bounds)
+  (require 'project)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
