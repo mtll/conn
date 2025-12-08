@@ -39,18 +39,29 @@
     (dotimes (_ N)
       (pcase-let* ((next (sp-get-thing))
                    (prev (sp-get-thing t)))
-        (cond ((if backward
-                   (< (sp-get prev :end) (sp-get next :end))
-                 (> (sp-get next :beg) (sp-get prev :beg)))
-               (goto-char (if backward
-                              (sp-get prev :beg)
-                            (sp-get next :end))))
-              ((and (eql (sp-get prev :end) (sp-get next :end))
-                    (eql (sp-get next :beg) (sp-get prev :beg)))
-               (if backward
-                   (goto-char (sp-get prev :beg))
-                 (goto-char (sp-get prev :end))))
-              (t (signal 'scan-error "No more sexp")))))))
+        (cond
+         ((and (null next) (null prev))
+          (signal 'scan-error "No sexp"))
+         ((null next)
+          (if backward
+              (goto-char (sp-get prev :beg))
+            (signal 'scan-error "No sexp")))
+         ((null prev)
+          (if backward
+              (signal 'scan-error "No sexp")
+            (goto-char (sp-get next :end))))
+         ((if backward
+              (< (sp-get prev :end) (sp-get next :end))
+            (> (sp-get next :beg) (sp-get prev :beg)))
+          (goto-char (if backward
+                         (sp-get prev :beg)
+                       (sp-get next :end))))
+         ((and (eql (sp-get prev :end) (sp-get next :end))
+               (eql (sp-get next :beg) (sp-get prev :beg)))
+          (if backward
+              (goto-char (sp-get prev :beg))
+            (goto-char (sp-get prev :end))))
+         (t (signal 'scan-error "No more sexp")))))))
 
 (defun conn-sp-bounds-of-sexp ()
   (pcase-let* ((next (sp-get-thing))
