@@ -846,7 +846,8 @@ Possibilities: \\<query-replace-map>
               (with-current-buffer buf
                 (setq conn--state-stack stack
                       conn-lighter nil)
-                (conn-enter-state (car stack)))))
+                (conn-enter-state (car stack))
+                (conn-update-lighter))))
            ((and (or :record :next)
                  (guard ret))
             (when conn-local-mode
@@ -881,8 +882,8 @@ Possibilities: \\<query-replace-map>
      (lambda (iterator state)
        (pcase state
          (:cleanup
-          (funcall iterator state)
-          (set-window-configuration wconf))
+          (set-window-configuration wconf)
+          (funcall iterator state))
          ((or :record :next)
           (unless wconf (setq wconf (current-window-configuration)))
           (funcall iterator state))
