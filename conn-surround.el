@@ -49,14 +49,13 @@
 
 (cl-defstruct (conn-surround-property-argument
                (:include conn-argument)
-               (:constructor
-                conn-surround-property-argument
-                ( &optional
-                  value
-                  &aux
-                  (keymap (define-keymap
-                            "w" :whole
-                            "e" :inner))))))
+               ( :constructor conn-surround-property-argument
+                 ( &optional
+                   value
+                   &aux
+                   (keymap (define-keymap
+                             "w" :whole
+                             "e" :inner))))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd update-fn)
@@ -176,13 +175,12 @@
 
 (cl-defstruct (conn-surround-with-argument
                (:include conn-argument)
-               (:constructor
-                conn-surround-with-argument
-                (&optional
-                 adjustable
-                 &aux
-                 (required t)
-                 (annotation "surround with"))))
+               ( :constructor conn-surround-with-argument
+                 (&optional
+                  adjustable
+                  &aux
+                  (required t)
+                  (annotation "surround with"))))
   (adjustable nil :type boolean :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
@@ -560,11 +558,10 @@
 
 (cl-defstruct (conn-change-surround-argument
                (:include conn-argument)
-               (:constructor
-                conn-change-surround-argument
-                (&aux
-                 (required t)
-                 (annotation "change surround")))))
+               ( :constructor conn-change-surround-argument
+                 (&aux
+                  (required t)
+                  (annotation "change surround")))))
 
 (cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
                                     cmd update-fn)

@@ -3838,23 +3838,22 @@ contain targets."
 ;;;;; Dispatch Ring
 
 (cl-defstruct (conn-previous-dispatch
-               (:constructor
-                conn-make-dispatch
-                ( action
-                  &aux
-                  (thing-state conn--dispatch-current-thing)
-                  (restrict-windows (advice-function-member-p
-                                     'conn--dispatch-restrict-windows
-                                     conn-target-window-predicate))
-                  (other-end (if conn-dispatch-no-other-end
-                                 :no-other-end
-                               conn-dispatch-other-end))
-                  (always-retarget conn--dispatch-always-retarget)
-                  (setup-function
-                   (let ((fns (conn-target-finder-save-state conn-dispatch-target-finder)))
-                     (lambda ()
-                       (dolist (fn fns)
-                         (funcall fn conn-dispatch-target-finder)))))))
+               ( :constructor conn-make-dispatch
+                 ( action
+                   &aux
+                   (thing-state conn--dispatch-current-thing)
+                   (restrict-windows (advice-function-member-p
+                                      'conn--dispatch-restrict-windows
+                                      conn-target-window-predicate))
+                   (other-end (if conn-dispatch-no-other-end
+                                  :no-other-end
+                                conn-dispatch-other-end))
+                   (always-retarget conn--dispatch-always-retarget)
+                   (setup-function
+                    (let ((fns (conn-target-finder-save-state conn-dispatch-target-finder)))
+                      (lambda ()
+                        (dolist (fn fns)
+                          (funcall fn conn-dispatch-target-finder)))))))
                (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
   (thing-state nil :type list)

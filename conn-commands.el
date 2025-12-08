@@ -1211,19 +1211,18 @@ Currently selected window remains selected afterwards."
 
 (cl-defstruct (conn-replace-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-replace-thing-argument
-                (&aux
-                 (required t)
-                 (keymap conn-replace-thing-argument-map)
-                 (recursive-edit t)
-                 (value
-                  (when (and (use-region-p)
-                             (bound-and-true-p rectangle-mark-mode))
-                    (list 'region nil)))
-                 (set-flag
-                  (and (use-region-p)
-                       (bound-and-true-p rectangle-mark-mode)))))))
+               ( :constructor conn-replace-thing-argument
+                 (&aux
+                  (required t)
+                  (keymap conn-replace-thing-argument-map)
+                  (recursive-edit t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        (_cmd (eql project)))
@@ -1513,19 +1512,18 @@ instances of from-string.")
 
 (cl-defstruct (conn-isearch-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-isearch-thing-argument
-                (&aux
-                 (keymap conn-isearch-thing-map)
-                 (required t)
-                 (recursive-edit t)
-                 (value
-                  (when (and (use-region-p)
-                             (bound-and-true-p rectangle-mark-mode))
-                    (list 'region nil)))
-                 (set-flag
-                  (and (use-region-p)
-                       (bound-and-true-p rectangle-mark-mode)))))))
+               ( :constructor conn-isearch-thing-argument
+                 (&aux
+                  (keymap conn-isearch-thing-map)
+                  (required t)
+                  (recursive-edit t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-isearch-thing-argument)
                                        cmd)
@@ -1814,17 +1812,16 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defstruct (conn-sort-things-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-sort-things-argument
-                (&aux
-                 (required t)
-                 (value
-                  (when (and (use-region-p)
-                             (bound-and-true-p rectangle-mark-mode))
-                    (list 'region nil)))
-                 (set-flag
-                  (and (use-region-p)
-                       (bound-and-true-p rectangle-mark-mode)))))))
+               ( :constructor conn-sort-things-argument
+                 (&aux
+                  (required t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode)))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-sort-things-argument)
                                        cmd)
@@ -2192,13 +2189,12 @@ Transpose defines some addition thing bindings:
 
 (cl-defstruct (conn-transpose-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-transpose-thing-argument
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (required t)
-                  (keymap conn-transpose-thing-argument-map)))))
+               ( :constructor conn-transpose-thing-argument
+                 ( &optional
+                   recursive-edit
+                   &aux
+                   (required t)
+                   (keymap conn-transpose-thing-argument-map)))))
 
 (defvar-keymap conn-transpose-point-and-mark-argument-map
   "z" 'transpose-at-point-and-mark)
@@ -2354,18 +2350,17 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-kill-thing-argument
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (keymap conn-kill-thing-argument-map)
-                  (required t)
-                  (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
-                           (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))))
+               ( :constructor conn-kill-thing-argument
+                 ( &optional
+                   recursive-edit
+                   &aux
+                   (keymap conn-kill-thing-argument-map)
+                   (required t)
+                   (value (when (and (use-region-p)
+                                     conn-argument-region-dwim)
+                            (list 'region nil)))
+                   (set-flag (and (use-region-p)
+                                  conn-argument-region-dwim))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
@@ -2630,11 +2625,10 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-separator-argument
                (:include conn-argument)
-               (:constructor
-                conn-separator-argument
-                (value
-                 &aux
-                 (keymap conn-separator-argument-map)))))
+               ( :constructor conn-separator-argument
+                 (value
+                  &aux
+                  (keymap conn-separator-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-separator-argument)
                                     cmd
@@ -3137,16 +3131,15 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-how-many-in-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-how-many-in-thing-argument
-                (&optional
-                 recursive-edit
-                 &aux
-                 (keymap conn-how-many-in-thing-argument-map)
-                 (required t)
-                 (value (when (use-region-p)
-                          (list 'region nil)))
-                 (set-flag (use-region-p))))))
+               ( :constructor conn-how-many-in-thing-argument
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-how-many-in-thing-argument-map)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
 
 (defun conn-how-many-in-thing (thing arg transform)
   (interactive
@@ -3186,16 +3179,15 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-comment-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-comment-thing-argument
-                (&optional
-                 recursive-edit
-                 &aux
-                 (keymap conn-comment-thing-argument-map)
-                 (required t)
-                 (value (when (use-region-p)
-                          (list 'region nil)))
-                 (set-flag (use-region-p))))))
+               ( :constructor conn-comment-thing-argument
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-comment-thing-argument-map)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
 
 (defun conn-comment-thing (thing arg transform)
   (interactive
@@ -3441,18 +3433,17 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-duplicate-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-duplicate-thing-argument
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (keymap conn-duplicate-thing-argument-map)
-                  (required t)
-                  (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
-                           (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))))
+               ( :constructor conn-duplicate-thing-argument
+                 ( &optional
+                   recursive-edit
+                   &aux
+                   (keymap conn-duplicate-thing-argument-map)
+                   (required t)
+                   (value (when (and (use-region-p)
+                                     conn-argument-region-dwim)
+                            (list 'region nil)))
+                   (set-flag (and (use-region-p)
+                                  conn-argument-region-dwim))))))
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by a thing command.
@@ -3554,16 +3545,15 @@ of `conn-recenter-positions'."
 
 (cl-defstruct (conn-change-thing-argument
                (:include conn-thing-argument)
-               (:constructor
-                conn-change-thing-argument
-                ( &optional
-                  recursive-edit
-                  &aux
-                  (keymap conn-change-thing-argument-map)
-                  (required t)
-                  (value (when (use-region-p)
-                           (list 'region nil)))
-                  (set-flag (use-region-p))))))
+               ( :constructor conn-change-thing-argument
+                 ( &optional
+                   recursive-edit
+                   &aux
+                   (keymap conn-change-thing-argument-map)
+                   (required t)
+                   (value (when (use-region-p)
+                            (list 'region nil)))
+                   (set-flag (use-region-p))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
                                        (_cmd (eql conn-emacs-state-overwrite-binary)))

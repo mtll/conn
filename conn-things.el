@@ -363,36 +363,33 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
-               (:constructor
-                conn-thing-argument
-                (&optional
-                 recursive-edit
-                 &aux
-                 (required t)))
-               (:constructor
-                conn-thing-argument-dwim
-                (&optional
-                 recursive-edit
-                 &aux
-                 (required t)
-                 (value (when (and (use-region-p)
-                                   conn-argument-region-dwim)
-                          (list 'region nil)))
-                 (set-flag (and (use-region-p)
-                                conn-argument-region-dwim))))
-               (:constructor
-                conn-thing-argument-dwim-rectangle
-                (&optional
-                 recursive-edit
-                 &aux
-                 (required t)
-                 (value
-                  (when (and (use-region-p)
-                             (bound-and-true-p rectangle-mark-mode))
-                    (list 'region nil)))
-                 (set-flag
-                  (and (use-region-p)
-                       (bound-and-true-p rectangle-mark-mode))))))
+               ( :constructor conn-thing-argument
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)))
+               ( :constructor conn-thing-argument-dwim
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (and (use-region-p)
+                                    conn-argument-region-dwim)
+                           (list 'region nil)))
+                  (set-flag (and (use-region-p)
+                                 conn-argument-region-dwim))))
+               ( :constructor conn-thing-argument-dwim-rectangle
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode))))))
   (recursive-edit nil))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
@@ -445,12 +442,11 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defstruct (conn-subregions-argument
                (:include conn-argument)
-               (:constructor
-                conn-subregions-argument
-                (&optional
-                 value
-                 &aux
-                 (keymap conn-subregions-map)))))
+               ( :constructor conn-subregions-argument
+                 (&optional
+                  value
+                  &aux
+                  (keymap conn-subregions-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-subregions-argument)
                                     cmd update-fn)
@@ -501,12 +497,11 @@ words."))
 
 (cl-defstruct (conn-fixup-whitespace-argument
                (:include conn-argument)
-               (:constructor
-                conn-fixup-whitespace-argument
-                ( &optional
-                  value
-                  &aux
-                  (keymap conn-fixup-whitespace-argument-map)))))
+               ( :constructor conn-fixup-whitespace-argument
+                 ( &optional
+                   value
+                   &aux
+                   (keymap conn-fixup-whitespace-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
                                     cmd update-fn)
@@ -559,13 +554,12 @@ words."))
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)
-               (:constructor
-                conn-transform-argument
-                (&optional
-                 value
-                 &key
-                 (keymap conn-transform-map)
-                 (annotation "transform")))))
+               ( :constructor conn-transform-argument
+                 (&optional
+                  value
+                  &key
+                  (keymap conn-transform-map)
+                  (annotation "transform")))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd update-fn)

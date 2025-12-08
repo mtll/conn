@@ -404,17 +404,17 @@ return it."
            (important-return-value t)
            (gv-setter
             (lambda (value)
-              (cl-labels ((set (v)
+              (cl-labels ((setter (v)
                             `(setf (conn-state--minor-mode-sort-tick
                                     (conn--find-state ,state))
                                    ,v)))
                 (pcase value
-                  ('nil (set nil))
+                  ('nil (setter nil))
                   ((pred macroexp-const-p)
-                   (set 'conn--minor-mode-maps-sort-tick))
+                   (setter 'conn--minor-mode-maps-sort-tick))
                   (_ (macroexp-let2 nil value value
                        `(progn
-                          ,(set `(when ,value conn--minor-mode-maps-sort-tick))
+                          ,(setter `(when ,value conn--minor-mode-maps-sort-tick))
                           ,value))))))))
   (inline-quote
    (eql conn--minor-mode-maps-sort-tick
@@ -1617,9 +1617,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (keymap :type keymap))
 
 (cl-defstruct (conn-argument
-               (:constructor
-                conn-argument
-                (value &aux (required nil) (set-flag nil))))
+               ( :constructor conn-argument
+                 (value &aux (required nil) (set-flag nil))))
   (value nil)
   (set-flag nil :type boolean)
   (required nil :type boolean :read-only t)
@@ -1776,18 +1775,17 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 (cl-defstruct (conn-cycling-argument
                (:include conn-argument)
-               (:constructor
-                conn-cycling-argument
-                (choices
-                 cycling-command
-                 &key
-                 keymap
-                 (format-function #'conn-format-cycling-argument)
-                 required
-                 name
-                 annotation
-                 &aux
-                 (value (car choices)))))
+               ( :constructor conn-cycling-argument
+                 (choices
+                  cycling-command
+                  &key
+                  keymap
+                  (format-function #'conn-format-cycling-argument)
+                  required
+                  name
+                  annotation
+                  &aux
+                  (value (car choices)))))
   (choices nil :type list :read-only t)
   (cycling-command nil :type symbol :read-only t)
   (format-function #'identity :type function :read-only t))
