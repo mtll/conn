@@ -610,7 +610,8 @@ words."))
   "<backspace>" 'backward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  "C-q" 'help
+  "C-q" 'reference
+  "C-h" 'help
   "," conn-thing-remap
   "'" 'recursive-edit
   "c" 'conn-things-in-region)
