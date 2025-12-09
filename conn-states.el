@@ -1510,9 +1510,7 @@ chooses to handle a command."
                            &key
                            command-handler
                            (display-handler #'conn--read-args-display)
-                           (around (lambda (cont)
-                                     (save-window-excursion
-                                       (funcall cont))))
+                           around
                            overriding-map
                            prompt
                            prefix

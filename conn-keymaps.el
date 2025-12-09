@@ -41,7 +41,9 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "," conn-thing-remap
-  "c" 'conn-things-in-region)
+  "c" 'conn-things-in-region
+  "@" 'kmacro-start-macro
+  "#" 'kmacro-call-macro)
 
 ;;;; Keymaps
 

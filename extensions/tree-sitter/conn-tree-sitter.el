@@ -372,7 +372,7 @@
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
-                          cmd
+                          (conn-get-thing cmd)
                           (conn-ts-capture (min beg end) (max beg end)))
                 beg end)
           (if flat

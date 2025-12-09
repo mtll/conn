@@ -202,8 +202,9 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
   (let ((thing (conn-get-thing cmd)))
-    (conn--push-ephemeral-mark (point))
-    (conn-expand 1)
+    (unless (region-active-p)
+      (conn--push-ephemeral-mark (point))
+      (conn-expand 1))
     (conn-read-args
         (conn-expand-state
          :prompt "Expansion"

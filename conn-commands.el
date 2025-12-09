@@ -1390,7 +1390,7 @@ instances of from-string.")
                      bounds)
                 (or (conn-bounds-of 'conn-bounds-of nil)
                     (conn-bounds-of thing arg))))
-    (deactivate-mark t)
+    (deactivate-mark)
     (save-excursion
       (if-let* ((subregions (and subregions-p
                                  (conn-bounds-get bounds :subregions transform))))
@@ -1857,7 +1857,7 @@ Interactively `region-beginning' and `region-end'."
                                         at-point-and-mark)
   (pcase cmd
     ((guard at-point-and-mark)
-     (deactivate-mark t)
+     (deactivate-mark)
      (pcase-let* (((conn-bounds `(,beg1 . ,end1))
                    (conn-bounds-of cmd arg))
                   ((conn-bounds `(,beg2 . ,end2))
@@ -1866,7 +1866,7 @@ Interactively `region-beginning' and `region-end'."
                      (conn-bounds-of cmd arg))))
        (transpose-regions beg1 end1 beg2 end2)))
     ((guard (use-region-p))
-     (deactivate-mark t)
+     (deactivate-mark)
      (pcase-let ((beg1 (region-beginning))
                  (end1 (region-end))
                  ((conn-bounds `(,beg2 . ,end2))
@@ -1878,7 +1878,7 @@ Interactively `region-beginning' and `region-end'."
                      (get cmd 'forward-op)
                      cmd)))
           (let arg (prefix-numeric-value arg)))
-     (deactivate-mark t)
+     (deactivate-mark)
      (transpose-subr (lambda (N) (forward-thing thing N)) arg)
      (conn-transpose-setup-repeat-map
       (lambda (n)
@@ -1910,7 +1910,7 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing recursive-edit-thing))
                                         _arg
                                         _at-point-and-mark)
-  (deactivate-mark t)
+  (deactivate-mark)
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer))
         (conn--recursive-edit-transpose t))
@@ -1950,7 +1950,6 @@ Interactively `region-beginning' and `region-end'."
                                               (cons (region-beginning)
                                                     (region-end)))))
                                  (:method (_self _arg) bounds))))))
-    (deactivate-mark)
     (conn-read-args (conn-dispatch-transpose-state
                      :prompt "Transpose Dispatch"
                      :prefix arg)
@@ -1959,6 +1958,7 @@ Interactively `region-beginning' and `region-end'."
           (conn-boolean-argument 'restrict-windows
                                  conn-dispatch-restrict-windows-map
                                  "this-win")))
+      (deactivate-mark)
       (conn-dispatch-setup
        (oclosure-lambda (conn-action
                          (action-description "Transpose")
@@ -2152,7 +2152,7 @@ region after a `recursive-edit'."
   "." 'filename
   "P" 'project-filename
   ">" 'kill-matching-lines
-  "!" 'keep-lines)
+  "%" 'keep-lines)
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)

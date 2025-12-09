@@ -582,7 +582,7 @@ Possibilities: \\<query-replace-map>
                   `((,beg . ,end) . ,buffer))
              (unless (eq buffer (current-buffer))
                (switch-to-buffer buffer t)
-               (deactivate-mark t)
+               (deactivate-mark)
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
              (goto-char beg)

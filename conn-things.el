@@ -776,7 +776,7 @@ words."))
                       (pred identity))
               (conn-command-mark-handler thing)))
        (let (conn--last-bounds)
-         (deactivate-mark t)
+         (deactivate-mark)
          (pcase (prefix-numeric-value arg)
            (0 (setf (conn-bounds bounds) nil))
            (n
@@ -804,7 +804,7 @@ words."))
                       (pred identity))
               (conn-command-mark-handler thing)))
        (let (conn--last-bounds)
-         (deactivate-mark t)
+         (deactivate-mark)
          (cl-flet
              ((bounds-1 ()
                 (let ((pt (point))
@@ -848,18 +848,19 @@ words."))
 (cl-defmethod conn-bounds-of ((cmd (conn-thing t)) arg)
   (let ((pt (point))
         (buf (current-buffer)))
-    (conn-make-bounds
-     cmd arg
-     (lambda (bounds)
-       (with-current-buffer buf
-         (save-mark-and-excursion
-           (goto-char pt)
-           (conn--bounds-of-thing bounds))))
-     :subregions (lambda (bounds)
-                   (with-current-buffer buf
-                     (save-mark-and-excursion
-                       (goto-char pt)
-                       (conn--bounds-of-thing-subregions bounds)))))))
+    (when (conn--get-boundable-thing cmd)
+      (conn-make-bounds
+       cmd arg
+       (lambda (bounds)
+         (with-current-buffer buf
+           (save-mark-and-excursion
+             (goto-char pt)
+             (conn--bounds-of-thing bounds))))
+       :subregions (lambda (bounds)
+                     (with-current-buffer buf
+                       (save-mark-and-excursion
+                         (goto-char pt)
+                         (conn--bounds-of-thing-subregions bounds))))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region)) arg)
   (conn-make-bounds
@@ -889,28 +890,35 @@ words."))
 (defvar conn--bounds-last-kbd-macro nil)
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing kbd-macro))
-                              arg)
-  (save-mark-and-excursion
-    (pcase cmd
-      ((and (or 'start-kbd-macro
-                'kmacro-start-macro
-                'kmacro-start-macro-or-insert-counter)
-            (guard (not (and (fboundp 'repeat-is-really-this-command)
-                             (repeat-is-really-this-command)))))
-       (let ((buffer-read-only t)
-             (last-kbd-macro conn--bounds-last-kbd-macro))
-         (start-kbd-macro arg)
-         (unwind-protect
-             (conn-with-recursive-stack 'conn-command-state
-               (recursive-edit))
-           (if defining-kbd-macro
-               (end-kbd-macro)
-             (error "Not defining kbd macro"))
-           (setq conn--bounds-last-kbd-macro last-kbd-macro))))
-      (_
-       (conn-with-recursive-stack 'conn-command-state
-         (execute-kbd-macro conn--bounds-last-kbd-macro))))
-    (conn-bounds-of 'region nil)))
+                              _arg)
+  (let ((buf (current-buffer)))
+    (save-mark-and-excursion
+      (pcase cmd
+        ((and (or 'start-kbd-macro
+                  'kmacro-start-macro
+                  'kmacro-start-macro-or-insert-counter)
+              (guard (not (and (fboundp 'repeat-is-really-this-command)
+                               (repeat-is-really-this-command)))))
+         (let ((buffer-read-only t)
+               (last-kbd-macro conn--bounds-last-kbd-macro))
+           (start-kbd-macro nil)
+           (unwind-protect
+               (conn-with-recursive-stack 'conn-command-state
+                 (recursive-edit))
+             (if defining-kbd-macro
+                 (end-kbd-macro)
+               (error "Not defining kbd macro"))
+             (setq conn--bounds-last-kbd-macro last-kbd-macro))))
+        (_
+         (conn-with-recursive-stack 'conn-command-state
+           (execute-kbd-macro conn--bounds-last-kbd-macro))))
+      (if (eq buf (current-buffer))
+          (conn-make-bounds
+           cmd nil
+           (cons (region-beginning) (region-end))
+           :subregions (cl-loop for r in (region-bounds)
+                                collect (conn-make-bounds cmd nil r)))
+        (error "Buffer change during keyboard macro")))))
 
 ;;;;; Bounds Transformations
 
@@ -1074,7 +1082,12 @@ words."))
                    :prompt "Thing"
                    :prefix arg)
       ((`(,thing ,arg) (conn-thing-argument)))
-    (let* ((name (symbol-name cmd))
+    (let* ((name (pcase (conn-get-thing cmd)
+                   ((and sym (pred symbolp))
+                    (symbol-name sym))
+                   ((and thing (pred conn-anonymous-thing-p))
+                    (conn-thing-pretty-print thing))
+                   (_ "")))
            (start (point))
            (max nil)
            (bounds nil)

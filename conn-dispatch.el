@@ -1788,8 +1788,7 @@ the meaning of depth."
                    :reference (list conn-dispatch-thing-ref)
                    :around (lambda (cont)
                              (conn-with-dispatch-suspended
-                               (save-window-excursion
-                                 (funcall cont)))))
+                               (funcall cont))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
     (conn-target-finder-cleanup conn-dispatch-target-finder)
