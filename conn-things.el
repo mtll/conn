@@ -643,15 +643,16 @@ words."))
 (defun conn-make-bounds (thing arg whole &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
-              `(conn--make-bounds
-                :thing (or (conn-get-thing ,thing)
-                           (error "Not a valid thing"))
-                :arg ,arg
-                :whole ,whole
-                :properties (list ,@properties)))))
+              (macroexp-let2 nil thing thing
+                `(conn--make-bounds
+                  :thing (or (conn-get-thing ,thing)
+                             (error "Not a valid thing: %s" ,thing))
+                  :arg ,arg
+                  :whole ,whole
+                  :properties (list ,@properties))))))
   (conn--make-bounds
    :thing (or (conn-get-thing thing)
-              (error "Not a valid thing"))
+              (error "Not a valid thing: %s" thing))
    :arg arg
    :whole whole
    :properties properties))
