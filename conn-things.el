@@ -644,12 +644,14 @@ words."))
   (declare (compiler-macro
             (lambda (_exp)
               `(conn--make-bounds
-                :thing ,thing
+                :thing (or (conn-get-thing ,thing)
+                           (error "Not a valid thing"))
                 :arg ,arg
                 :whole ,whole
                 :properties (list ,@properties)))))
   (conn--make-bounds
-   :thing thing
+   :thing (or (conn-get-thing thing)
+              (error "Not a valid thing"))
    :arg arg
    :whole whole
    :properties properties))
@@ -842,11 +844,11 @@ words."))
                 (setf (conn-bounds-get bounds :subregions)
                       (nreverse subregions)))))))))))
 
-(cl-defmethod conn-bounds-of ((thing (conn-thing t)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing t)) arg)
   (let ((pt (point))
         (buf (current-buffer)))
     (conn-make-bounds
-     thing arg
+     cmd arg
      (lambda (bounds)
        (with-current-buffer buf
          (save-mark-and-excursion

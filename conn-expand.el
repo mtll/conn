@@ -201,44 +201,45 @@ Expansions and contractions are provided by functions in
      "\\[end] finish"))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
-  (conn--push-ephemeral-mark (point))
-  (call-interactively cmd)
-  (conn-read-args
-      (conn-expand-state
-       :prompt "Expansion"
-       :prefix arg
-       :display-handler #'conn--read-expand-display
-       :command-handler (lambda (command)
-                          (pcase command
-                            ('conn-expand-exchange
-                             (conn-expand-exchange)
-                             (conn-read-args-handle))
-                            ('conn-contract
-                             (ignore-error user-error
-                               (conn-contract
-                                (prefix-numeric-value
-                                 (conn-read-args-consume-prefix-arg))))
-                             (conn-read-args-handle))
-                            ('conn-expand
-                             (ignore-error user-error
-                               (conn-expand
-                                (prefix-numeric-value
-                                 (conn-read-args-consume-prefix-arg))))
-                             (conn-read-args-handle))
-                            ('conn-toggle-mark-command
-                             (if mark-active
-                                 (deactivate-mark)
-                               (activate-mark))
-                             (conn-read-args-handle)))))
-      ((bounds
-        (oclosure-lambda (conn-anonymous-argument
-                          (required t))
-            (_self command update-fn)
-          (pcase command
-            ((or 'end 'exit-recursive-edit)
-             (funcall update-fn
-                      (conn-argument (cons (region-beginning)
-                                           (region-end)))))))))
-    (conn-make-bounds cmd arg bounds)))
+  (let ((thing (conn-get-thing cmd)))
+    (conn--push-ephemeral-mark (point))
+    (conn-expand 1)
+    (conn-read-args
+        (conn-expand-state
+         :prompt "Expansion"
+         :prefix arg
+         :display-handler #'conn--read-expand-display
+         :command-handler (lambda (command)
+                            (pcase command
+                              ('conn-expand-exchange
+                               (conn-expand-exchange)
+                               (conn-read-args-handle))
+                              ('conn-contract
+                               (ignore-error user-error
+                                 (conn-contract
+                                  (prefix-numeric-value
+                                   (conn-read-args-consume-prefix-arg))))
+                               (conn-read-args-handle))
+                              ('conn-expand
+                               (ignore-error user-error
+                                 (conn-expand
+                                  (prefix-numeric-value
+                                   (conn-read-args-consume-prefix-arg))))
+                               (conn-read-args-handle))
+                              ('conn-toggle-mark-command
+                               (if mark-active
+                                   (deactivate-mark)
+                                 (activate-mark))
+                               (conn-read-args-handle)))))
+        ((bounds
+          (oclosure-lambda (conn-anonymous-argument
+                            (required t))
+              (_self command update-fn)
+            (pcase command
+              ((or 'end 'exit-recursive-edit)
+               (funcall update-fn
+                        (conn-argument (cons (region-beginning)
+                                             (region-end)))))))))
+      (conn-make-bounds thing arg bounds))))
 
 (provide 'conn-expand)

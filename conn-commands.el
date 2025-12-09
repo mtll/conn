@@ -1950,6 +1950,7 @@ Interactively `region-beginning' and `region-end'."
                                               (cons (region-beginning)
                                                     (region-end)))))
                                  (:method (_self _arg) bounds))))))
+    (deactivate-mark)
     (conn-read-args (conn-dispatch-transpose-state
                      :prompt "Transpose Dispatch"
                      :prefix arg)

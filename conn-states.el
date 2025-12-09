@@ -1501,9 +1501,6 @@ chooses to handle a command."
   (cl-callf not conn--read-args-prefix-sign)
   (conn-read-args-handle))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql quit)))
-  (keyboard-quit))
-
 (cl-defmethod conn-read-args-command-handler ((_cmd (eql keyboard-quit)))
   (keyboard-quit))
 
