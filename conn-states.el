@@ -1601,14 +1601,14 @@ chooses to handle a command."
                    (conn-reading-args t)
                    (inhibit-message t)
                    (emulation-mode-map-alists
-                    `(((,state . ,(conn-thread-last
+                    `(((,state . ,(thread-last
                                     (mapcar #'conn-argument-compose-keymap arguments)
                                     (cons conn-read-args-map)
                                     (cons overriding-map)
                                     (cons (define-keymap
                                             "C-h" 'execute-extended-command))
                                     (delq nil)
-                                    (<>- make-composed-keymap))))
+                                    make-composed-keymap)))
                       ,@emulation-mode-map-alists)))
                (while (continue-p)
                  (unless executing-kbd-macro

@@ -73,16 +73,16 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
            ,(macroexp-progn body)
          (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))))
 
-(defmacro conn-thread-first (&rest forms)
+(defmacro conn-thread<- (&rest forms)
   (declare (indent 0))
-  `(cl-macrolet ((-<> (arg1 fn &rest args)
-                   `(,fn ,@args ,arg1)))
+  `(cl-macrolet ((-> (an (fn &rest args))
+                   `(,fn ,@args ,an)))
      (thread-first ,@forms)))
 
-(defmacro conn-thread-last (&rest forms)
+(defmacro conn-thread-> (&rest forms)
   (declare (indent 0))
-  `(cl-macrolet ((<>- (fn &rest args)
-                   `(,fn ,@(last args) ,@(butlast args))))
+  `(cl-macrolet ((<- ((fn &rest args) a1)
+                   `(,fn ,a1 ,@args)))
      (thread-last ,@forms)))
 
 (defmacro conn--compat-callf (func place &rest args)
