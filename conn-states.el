@@ -942,7 +942,8 @@ If there is not recursive stack an error is signaled."
                 (cl-loop with kvs = properties
                          for (k v) on kvs by #'cddr
                          do (puthash k v table))
-                (cl-callf seq-union (gethash :no-inherit-keymaps table)
+                (cl-callf seq-union
+                    (gethash :no-inherit-keymaps table)
                   no-inherit-keymaps)))
     (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj)))

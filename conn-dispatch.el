@@ -1692,10 +1692,12 @@ the meaning of depth."
          (if-let* ((ev (conn-with-input-method
                          (read-event (unless inhibit-message
                                        (concat prompt
-                                               ": " prompt-suffix
+                                               ": "
+                                               prompt-suffix
                                                (when prompt-suffix " ")
                                                error-msg))
-                                     inherit-input-method seconds))))
+                                     inherit-input-method
+                                     seconds))))
              (when (characterp ev) (cl-return ev))
            (cl-return)))
       (cl-loop
@@ -1704,8 +1706,10 @@ the meaning of depth."
                   (unless inhibit-message
                     (concat prompt
                             (conn--dispatch-read-char-prefix keymap)
-                            ": " prompt-suffix
-                            (when prompt-suffix " ") error-msg))
+                            ": "
+                            prompt-suffix
+                            (when prompt-suffix " ")
+                            error-msg))
                   (read-key-sequence-vector)
                   (key-binding t)))
          ('restart (cl-return 8))
@@ -1718,7 +1722,8 @@ the meaning of depth."
                         (unless inhibit-message
                           (concat prompt
                                   (conn--dispatch-read-char-prefix keymap)
-                                  ": " prompt-suffix))
+                                  ": "
+                                  prompt-suffix))
                         inherit-input-method))))
          (cmd
           (setq conn--read-args-error-message nil)
@@ -1797,16 +1802,13 @@ the meaning of depth."
     (throw 'dispatch-change-target nil)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
-  (require 'conn-quick-ref)
-  (defvar conn-dispatch-select-ref)
   (conn-with-overriding-map conn-dispatch-read-char-map
     (conn-quick-reference (list conn-dispatch-select-ref)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
-  (require 'mwheel)
-  (mwheel-scroll last-input-event)
-  (goto-char (window-start (selected-window)))
+  (when (bound-and-true-p mouse-wheel-mode)
+    (mwheel-scroll last-input-event))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recursive-edit)))
@@ -3531,9 +3533,9 @@ contain targets."
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
   (conn-thread<-
-   (conn-dispatch-take-replace--action-opoint action)
-   (copy-marker t)
-   (-> (conn-dispatch-take-replace-copy action))))
+    (conn-dispatch-take-replace--action-opoint action)
+    (copy-marker t)
+    (:> (conn-dispatch-take-replace-copy action))))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (let ((cg (conn--action-buffer-change-group)))
@@ -3588,9 +3590,9 @@ contain targets."
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
   (conn-thread<-
-   (conn-dispatch-take--action-opoint action)
-   (copy-marker t)
-   (-> (conn-dispatch-take-copy action))))
+    (conn-dispatch-take--action-opoint action)
+    (copy-marker t)
+    (:> (conn-dispatch-take-copy action))))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take

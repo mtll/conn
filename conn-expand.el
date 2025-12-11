@@ -83,7 +83,7 @@ potential expansions.  Functions may return invalid expansions
     (setq conn--current-expansions-tick (buffer-chars-modified-tick)
           conn--current-expansions
           (compat-call sort
-                       (thread-last
+                       (thread-first
                          (mapcan #'funcall conn-expansion-functions)
                          (conn--expand-filter-regions))
                        :lessp (lambda (a b)
@@ -161,12 +161,14 @@ Expansions and contractions are provided by functions in
                                (< end (region-end)))
                       return (progn
                                (goto-char (if (= (point) (region-beginning)) beg end))
-                               (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
+                               (conn--push-ephemeral-mark
+                                (if (= (point) (region-end)) beg end)))
                       finally (user-error "No more contractions"))))))
   (unless (or (region-active-p)
               (not conn-expand-pulse-region)
               executing-kbd-macro)
-    (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
+    (pulse-momentary-highlight-region
+     (region-beginning) (region-end) 'region)))
 
 ;;;;; Bounds of expansion
 

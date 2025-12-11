@@ -306,6 +306,8 @@
   "v" 'dired-mark
   "V" 'dired-toggle-marks
   "C-d" 'dired-unmark
+  "M-DEL" 'dired-unmark-all-marks
+  "C-M-<backspace>" 'dired-unmark-all-files
   "u" 'dired-do-delete
   "M-w" 'dired-copy-filename-as-kill
   "RET" 'dired-find-file

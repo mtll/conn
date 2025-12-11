@@ -75,15 +75,24 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-thread<- (&rest forms)
   (declare (indent 0))
-  `(cl-macrolet ((-> (a form)
-                   `(,@form ,a)))
-     (thread-first ,@forms)))
+  (cl-with-gensyms (last)
+    (cl-flet ((expand-last (&rest args) `(,last ,@args)))
+      `(cl-macrolet ((,last (a form) `(,@form ,a)))
+         (thread-first
+           ,@(mapcar (lambda (form)
+                       (macroexpand form `((:> . ,#'expand-last))))
+                     forms))))))
 
 (defmacro conn-thread-> (&rest forms)
   (declare (indent 0))
-  `(cl-macrolet ((<- ((fn &rest args) a1)
-                   `(,fn ,a1 ,@args)))
-     (thread-last ,@forms)))
+  (cl-with-gensyms (first)
+    (cl-flet ((expand-first (&rest args) `(,first ,@args)))
+      `(cl-macrolet ((,first ((fn &rest args) a1)
+                       `(,fn ,a1 ,@args)))
+         (thread-last
+           ,@(mapcar (lambda (form)
+                       (macroexpand form `((:< . ,#'expand-first))))
+                     forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
   (declare (indent 2) (debug (cl-function place &rest form)))
@@ -230,7 +239,10 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (cl-callf thread-last (conn-ring-list ring) (delq item) (cons item))
+  (cl-callf thread-last
+      (conn-ring-list ring)
+    (delq item)
+    (cons item))
   (conn-ring--visit ring item)
   (when-let* ((old (drop (conn-ring-capacity ring) (conn-ring-history ring))))
     (cl-callf2 take (conn-ring-capacity ring) (conn-ring-history ring))
@@ -248,8 +260,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   "Rotate ring forward.
 
 Takes (1 2 3 4) to (2 3 4 1)."
-  (let ((head (car (cl-callf thread-last (conn-ring-list ring)
-                     car list (nconc (cdr (conn-ring-list ring)))))))
+  (let ((head (car (cl-callf thread-last
+                       (conn-ring-list ring)
+                     car
+                     list
+                     (nconc (cdr (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
     head))
 
@@ -257,8 +272,10 @@ Takes (1 2 3 4) to (2 3 4 1)."
   "Rotate ring backward.
 
 Takes (1 2 3 4) to (4 1 2 3)."
-  (let ((head (car (cl-callf thread-last (conn-ring-list ring)
-                     butlast (nconc (last (conn-ring-list ring)))))))
+  (let ((head (car (cl-callf thread-last
+                       (conn-ring-list ring)
+                     butlast
+                     (nconc (last (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
     head))
 
@@ -318,7 +335,8 @@ If ring is (1 2 3 4) 4 would be returned."
                                                   (thread-first
                                                     (conn--merge-overlapping-regions
                                                      ,regions t)
-                                                    flatten-tree sort)
+                                                    flatten-tree
+                                                    sort)
                                                   (list (point-max)))
                           by #'cddr
                           while beg
