@@ -75,8 +75,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-thread<- (&rest forms)
   (declare (indent 0))
-  `(cl-macrolet ((-> (an (fn &rest args))
-                   `(,fn ,@args ,an)))
+  `(cl-macrolet ((-> (a form)
+                   `(,@form ,a)))
      (thread-first ,@forms)))
 
 (defmacro conn-thread-> (&rest forms)

@@ -130,7 +130,7 @@ necessary state as well.")
   (declare (important-return-value t))
   (with-memoization (gethash state conn--state-all-parents-cache)
     (cons state (merge-ordered-lists
-                 (mapcar 'conn-state-all-parents
+                 (mapcar #'conn-state-all-parents
                          (conn-state--parents (conn--find-state state)))))))
 
 (defun conn-state-all-keymap-parents (state)

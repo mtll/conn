@@ -574,7 +574,7 @@ A zero means repeat until error."
                 (mapcan 'conn--isearch-matches
                         (nconc
                          (delq (current-buffer)
-                               (mapcar 'find-file-noselect
+                               (mapcar #'find-file-noselect
                                        multi-isearch-file-list))
                          (list (current-buffer)))))
                ((bound-and-true-p multi-isearch-buffer-list)
