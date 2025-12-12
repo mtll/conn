@@ -726,6 +726,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
+  "C-M-<backspace>" 'ibuffer-unmark-all
+  "M-DEL" 'ibuffer-unmark-all-marks
   "'" 'conn-kapply-prefix
   "f" 'conn-ibuffer-dispatch-state
   "C-q" 'conn-ibuffer-quick-ref

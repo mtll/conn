@@ -1208,7 +1208,7 @@ A zero means repeat until error."
     ("D" "Decompose" ibuffer-decompose-filter :transient t)
     ("t" "Exchange" ibuffer-exchange-filters :transient t)]
    ["Groups"
-    ("S" "Save" ibuffer-delete-saved-filter-groups :transient t)
+    ("S" "Save" ibuffer-save-filter-groups :transient t)
     ("X" "Delete Saved" ibuffer-delete-saved-filter-groups :transient t)
     ("g" "Group" ibuffer-filters-to-filter-group :transient t)
     ("P" "Pop" ibuffer-pop-filter-group :transient t)
