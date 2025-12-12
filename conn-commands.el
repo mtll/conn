@@ -341,13 +341,15 @@ of line proper."
 (cl-defstruct (conn-command-register)
   (command nil :read-only t))
 
-(cl-defmethod register-val-jump-to ((val conn-command-register) _arg)
+(cl-defmethod register-val-jump-to ((val conn-command-register)
+                                    _arg)
   (let ((cmd (conn-command-register-command val)))
     (apply #'funcall-interactively
            (car cmd)
            (mapcar (lambda (e) (eval e t)) (cdr cmd)))))
 
-(cl-defmethod register-val-describe ((val conn-command-register) _arg)
+(cl-defmethod register-val-describe ((val conn-command-register)
+                                     _arg)
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
 
@@ -392,7 +394,8 @@ of line proper."
                 (lambda (tab c)
                   (eq c (alist-get 'conn-tab-cookie tab)))))
 
-(cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
+(cl-defmethod register-val-jump-to ((val conn-tab-register)
+                                    _arg)
   (when-let* ((frame (conn-tab-register-frame val))
               (index (and (frame-live-p frame)
                           (with-selected-frame (conn-tab-register-frame val)
@@ -401,7 +404,8 @@ of line proper."
     (select-frame-set-input-focus frame)
     (tab-bar-select-tab (1+ index))))
 
-(cl-defmethod register-val-describe ((val conn-tab-register) _arg)
+(cl-defmethod register-val-describe ((val conn-tab-register)
+                                     _arg)
   (princ (format "Tab:  %s"
                  (if (eq (selected-frame) (conn-tab-register-frame val))
                      (when-let* ((index (conn--get-tab-index-by-cookie
@@ -606,7 +610,8 @@ With arg N, insert N newlines."
 (conn-define-state conn-narrow-state (conn-read-thing-state)
   :lighter "NARROW")
 
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
+                              _arg)
   (when conn-narrow-ring
     (let ((subregions nil)
           (beg most-positive-fixnum)
@@ -2355,7 +2360,8 @@ region after a `recursive-edit'."
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
 
-(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion)) &rest _)
+(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion))
+                                  &rest _)
   (cl-call-next-method))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (eql filename))
@@ -2644,7 +2650,8 @@ region after a `recursive-edit'."
        (when fixup-whitespace
          (funcall conn-kill-fixup-whitespace-function bounds))))))
 
-(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line)) &rest _)
+(cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line))
+                                  &rest _)
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
@@ -2885,7 +2892,8 @@ region after a `recursive-edit'."
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
-(cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion)) &rest _)
+(cl-defmethod conn-copy-thing-do ((_cmd (conn-thing expansion))
+                                  &rest _)
   (cl-call-next-method))
 
 (cl-defmethod conn-copy-thing-do ((_command (conn-thing dispatch))

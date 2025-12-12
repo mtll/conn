@@ -259,7 +259,8 @@
 
 (put 'conn-sp-pair :conn-thing t)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-sp-pair)) arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-sp-pair))
+                              arg)
   (save-mark-and-excursion
     (let* ((open (funcall conn-read-pair-function
                           (cl-loop for pair in sp-local-pairs

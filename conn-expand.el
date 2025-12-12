@@ -202,7 +202,8 @@ Expansions and contractions are provided by functions in
      "\\[conn-toggle-mark-command] toggle mark; "
      "\\[end] finish"))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing expansion)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
+                              arg)
   (let ((thing (conn-get-thing cmd)))
     (unless (region-active-p)
       (conn--push-ephemeral-mark (point))

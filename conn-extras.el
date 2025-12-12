@@ -120,7 +120,8 @@
  'outline-forward-same-level
  'outline-backward-same-level)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-prev-heading)) arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-prev-heading))
+                              arg)
   (conn-bounds-of 'outline-previous-visible-heading arg))
 
 ;;;###autoload

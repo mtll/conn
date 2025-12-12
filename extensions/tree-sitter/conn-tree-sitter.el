@@ -350,7 +350,8 @@
               things)))
     (conn-multi-thing-select things)))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing)) arg
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing))
+                              arg
                               &key flat)
   (setq arg (prefix-numeric-value arg))
   (unless (= 0 arg)
@@ -459,7 +460,8 @@
     conn-ts-scopename
     conn-ts-statement))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-parent-things)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-parent-things))
+                              _arg)
   (conn-ts-select-expansion
    (lambda ()
      (conn-ts-filter-captures
@@ -472,7 +474,8 @@
 (defvar-local conn-ts-all-query-things
   conn-ts-parent-things)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-all-query-things)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-ts-all-query-things))
+                              _arg)
   (conn-ts-select-expansion
    (lambda ()
      (conn-ts-filter-captures

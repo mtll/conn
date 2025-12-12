@@ -238,16 +238,18 @@
     (conn--push-ephemeral-mark (overlay-end ov) nil t)
     (cl-call-next-method)))
 
-(cl-defmethod conn-surround-do :before (_with _arg &key &allow-other-keys)
+(cl-defmethod conn-surround-do :before (&rest _)
   ;; Normalize point and mark
   (unless (= (point) (region-beginning))
     (exchange-point-and-mark)))
 
-(cl-defmethod conn-surround-do ((_with (eql surround-comment)) arg
+(cl-defmethod conn-surround-do ((_with (eql surround-comment))
+                                arg
                                 &key &allow-other-keys)
   (comment-or-uncomment-region (region-beginning) (region-end) arg))
 
-(cl-defmethod conn-surround-do ((_with (eql surround-uncomment)) arg
+(cl-defmethod conn-surround-do ((_with (eql surround-uncomment))
+                                arg
                                 &key &allow-other-keys)
   (uncomment-region (region-beginning) (region-end) arg))
 
@@ -267,7 +269,8 @@
          (ins-pair open close))))
     (when padding (ins-pair padding))))
 
-(cl-defmethod conn-surround-do ((with conn-self-insert-event) arg
+(cl-defmethod conn-surround-do ((with conn-self-insert-event)
+                                arg
                                 &key
                                 padding
                                 &allow-other-keys)

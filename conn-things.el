@@ -755,7 +755,8 @@ words."))
             (save-mark-and-excursion
               (cl-call-next-method))))))
 
-(cl-defmethod conn-bounds-of ((_thing (conn-thing point)) _arg)
+(cl-defmethod conn-bounds-of ((_thing (conn-thing point))
+                              _arg)
   (conn-make-bounds
    'point nil
    (cons (point) (point))))
@@ -841,7 +842,8 @@ words."))
                 (setf (conn-bounds-get bounds :subregions)
                       (nreverse subregions)))))))))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing t)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing t))
+                              arg)
   (let ((pt (point))
         (buf (current-buffer)))
     (when (conn--get-boundable-thing cmd)
@@ -858,20 +860,24 @@ words."))
                          (goto-char pt)
                          (conn--bounds-of-thing-subregions bounds))))))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing region)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing region))
+                              arg)
   (conn-make-bounds
    cmd arg
    (cons (region-beginning) (region-end))
    :subregions (cl-loop for r in (region-bounds)
                         collect (conn-make-bounds cmd arg r))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing buffer)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing buffer))
+                              arg)
   (conn-make-bounds cmd arg (cons (point-min) (point-max))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing visible)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing visible))
+                              arg)
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of)) _arg)
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-bounds-of))
+                              _arg)
   (alist-get (recursion-depth) conn--last-bounds))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
