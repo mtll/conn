@@ -488,7 +488,7 @@
    (window-predicate
     :initform (lambda (win)
                 (treesit-parser-list (window-buffer win)))))
-  ( :update-handler (state)
+  ( :default-update-handler (state)
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
           (things (oref state things)))
@@ -560,7 +560,7 @@
    (window-predicate
     :initform (lambda (win)
                 (treesit-parser-list (window-buffer win)))))
-  ( :update-handler (state)
+  ( :default-update-handler (state)
     (let* ((thing (oref state thing))
            (query (conn-ts--thing-node-query thing)))
       (cl-flet ((make-bounds (bounds parent-thing type)
