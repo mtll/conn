@@ -367,7 +367,7 @@
 
 (defun conn--dispatch-dired-lines (try-next)
   (if (derived-mode-p '(dired-mode))
-      (lambda (_state &rest _)
+      (lambda (_state)
         (save-excursion
           (goto-char (window-start))
           (vertical-motion (cons 1 0))

@@ -483,15 +483,15 @@
    'conn-ts-thing))
 
 (conn-define-target-finder conn-ts-query-targets ()
-  (:slots (things :initarg :things)
-          (region-predicate :initarg :region-predicate)
-          (window-predicate
-           :initform (lambda (win)
-                       (treesit-parser-list (window-buffer win)))))
-  ( :update-handler (state &rest _)
-    (let* ((region-pred (ignore-error unbound-slot
-                          (oref state region-predicate)))
-           (things (oref state things)))
+  ((things :initarg :things)
+   (region-predicate :initarg :region-predicate)
+   (window-predicate
+    :initform (lambda (win)
+                (treesit-parser-list (window-buffer win)))))
+  ( :update-handler (state)
+    (let ((region-pred (ignore-error unbound-slot
+                         (oref state region-predicate)))
+          (things (oref state things)))
       (cl-flet ((make-bounds (bounds things)
                   (conn-make-bounds
                    (conn-anonymous-thing
@@ -522,17 +522,16 @@
                                       (get type :conn-ts--member-of)
                                       things))
                         (_ (and (<= (window-start) beg (window-end))
-                                (if region-pred
-                                    (funcall region-pred beg end)
-                                  t))))
+                                (or (null region-pred)
+                                    (funcall region-pred beg end)))))
               (if-let* ((ov (car (conn--overlays-in-of-type
                                   beg (1+ beg) 'conn-target-overlay
                                   (selected-window)))))
                   (if-let* ((b (seq-find
-                                (lambda (b)
-                                  (let ((whole (conn-bounds--whole b)))
-                                    (and (eql beg (car whole))
-                                         (eql end (cdr whole)))))
+                                (lambda (bound)
+                                  (pcase bound
+                                    ((conn-bounds `(,b . ,e))
+                                     (and (eql beg b) (eql end e)))))
                                 (conn-anonymous-thing-property
                                  (overlay-get ov 'thing)
                                  :bounds))))
@@ -557,10 +556,10 @@
                                           conn-ts-multi-always-prompt)))))))))))))
 
 (conn-define-target-finder conn-ts-all-things ()
-  (:slots (thing :initarg :thing)
-          (window-predicate
-           :initform (lambda (win)
-                       (treesit-parser-list (window-buffer win)))))
+  ((thing :initarg :thing)
+   (window-predicate
+    :initform (lambda (win)
+                (treesit-parser-list (window-buffer win)))))
   ( :update-handler (state)
     (let* ((thing (oref state thing))
            (query (conn-ts--thing-node-query thing)))
@@ -599,13 +598,14 @@
             (if-let* ((ov (car (conn--overlays-in-of-type
                                 beg (1+ beg) 'conn-target-overlay
                                 (selected-window)))))
-                (if-let* ((b (seq-find (lambda (b)
-                                         (let ((whole (conn-bounds--whole b)))
-                                           (and (eql beg (car whole))
-                                                (eql end (cdr whole)))))
-                                       (conn-anonymous-thing-property
-                                        (overlay-get ov 'thing)
-                                        :bounds))))
+                (if-let* ((b (seq-find
+                              (lambda (bound)
+                                (pcase bound
+                                  ((conn-bounds `(,b . ,e))
+                                   (and (eql beg b) (eql end e)))))
+                              (conn-anonymous-thing-property
+                               (overlay-get ov 'thing)
+                               :bounds))))
                     (push type (conn-anonymous-thing-property
                                 (conn-bounds-thing b)
                                 :types))
