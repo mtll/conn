@@ -264,7 +264,8 @@ returned."
     (set-window-parameter window 'conn-label-string string)
     (set-window-parameter window 'conn-window-labeled-p nil)))
 
-(cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
+(cl-defmethod conn-label-narrow ((label conn-window-label)
+                                 prefix-char)
   (pcase-let* (((cl-struct conn-window-label window) label)
                (string (window-parameter window 'conn-label-string)))
     (unless (or (length= string 0)
@@ -1950,7 +1951,8 @@ the meaning of depth."
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
 
-(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label)
+                                 prefix-char)
   (if (thread-first
         (conn-dispatch-label-narrowed-string label)
         (aref 0) (eql prefix-char) not)
@@ -3101,7 +3103,9 @@ contain targets."
                   (point)))
                 (_ (user-error "Cannot find thing at point"))))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to)
+                                        &optional
+                                        short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-copy-to--separator action))))
       (format "Copy To <%s>" sep)
@@ -3242,7 +3246,9 @@ contain targets."
               (point)))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to)
+                                        &optional
+                                        short)
   (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
       (format "Yank To <%s>" (if (eq sep 'register)
                                  (get-register register-separator)
@@ -3292,7 +3298,9 @@ contain targets."
              (- (point) (length str))
              (point))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to)
+                                        &optional
+                                        short)
   (if-let* ((sep (and (not short)
                       (conn-dispatch-reading-yank-to--separator action))))
       (format "Yank To <%s>" sep)
@@ -3443,7 +3451,9 @@ contain targets."
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load)
+                                        &optional
+                                        short)
   (if short "Register"
     (format "Register <%c>" (conn-dispatch-register-load--register action))))
 
@@ -3468,7 +3478,9 @@ contain targets."
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load-replace) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load-replace)
+                                        &optional
+                                        short)
   (if short "Register Replace"
     (format "Register Replace <%c>" (conn-dispatch-register-load-replace--register action))))
 
@@ -3685,7 +3697,9 @@ contain targets."
                (eval command))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command) &optional short)
+(cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command)
+                                        &optional
+                                        short)
   (if short "Repeat Cmd"
     (format "Repeat <%s>" (car (oref action command)))))
 
@@ -4240,7 +4254,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
             (if subregions-p subregions (conn-bounds bounds)))
         (mapc #'delete-overlay ovs)))))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing dispatch)) arg)
+(cl-defmethod conn-bounds-of ((cmd (conn-thing dispatch))
+                              arg)
   (conn-make-bounds
    cmd arg
    (lambda (bounds) (conn--dispatch-bounds bounds))
@@ -4289,13 +4304,15 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                (:constructor conn--make-dispatch-register (dispatch)))
   (dispatch nil :type conn-previous-dispatch))
 
-(cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
+(cl-defmethod register-val-jump-to ((val conn-dispatch-register)
+                                    arg)
   (let ((prev (conn-dispatch-register-dispatch val)))
     (conn-dispatch-setup-previous
      prev
      :repeat (xor arg (conn-previous-dispatch-repeat prev)))))
 
-(cl-defmethod register-val-describe ((val conn-dispatch-register) _verbose)
+(cl-defmethod register-val-describe ((val conn-dispatch-register)
+                                     _verbose)
   (princ "Dispatch: ")
   (princ (conn-describe-dispatch (conn-dispatch-register-dispatch val))))
 
