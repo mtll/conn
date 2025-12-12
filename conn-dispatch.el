@@ -138,35 +138,38 @@ If FACE is non-nil set label string face to FACE.  Otherwise label
 strings have `conn-dispatch-label-face'."
   (declare (side-effect-free t)
            (important-return-value t))
-  (let ((buckets (make-vector 4 nil)))
-    (setf (aref buckets 0) (thread-last
+  (let* ((blen (ceiling (log count (length conn-simple-label-characters))))
+         (buckets (make-vector blen nil))
+         (i 0))
+    (setf (aref buckets i) (thread-last
                              (take count conn-simple-label-characters)
                              (copy-sequence)
                              (mapcar #'copy-sequence)))
-    (named-let loop ((curr 0))
-      (cl-callf nreverse (aref buckets curr))
-      (let* ((prefixes nil))
-        (while (and (aref buckets curr)
-                    (> count (+ (length (aref buckets curr))
-                                (* (length prefixes)
-                                   (length conn-simple-label-characters)))))
-          (push (pop (aref buckets curr)) prefixes))
-        (if (and (null (aref buckets curr)) (> count 0))
-            (progn
-              (dolist (a prefixes)
-                (dolist (b conn-simple-label-characters)
-                  (push (concat a b) (aref buckets (1+ curr)))))
-              (cl-callf nreverse (aref buckets curr))
-              (loop (1+ curr)))
-          (catch 'done
-            (let ((n (length (aref buckets curr))))
-              (dolist (prefix prefixes)
-                (dolist (c conn-simple-label-characters)
-                  (push (concat prefix c) (aref buckets (1+ curr)))
-                  (when (= (cl-incf n) count)
-                    (throw 'done nil))))))
-          (cl-callf nreverse (aref buckets curr))
-          (cl-loop for bucket across buckets nconc bucket))))))
+    (cl-loop
+     (cl-callf nreverse (aref buckets i))
+     (let ((prefixes nil))
+       (while (and (aref buckets i)
+                   (> count (+ (length (aref buckets i))
+                               (* (length prefixes)
+                                  (length conn-simple-label-characters)))))
+         (push (pop (aref buckets i)) prefixes))
+       (if (and (null (aref buckets i)) (> count 0))
+           (progn
+             (dolist (a prefixes)
+               (dolist (b conn-simple-label-characters)
+                 (push (concat a b) (aref buckets (1+ i)))))
+             (cl-callf nreverse (aref buckets i))
+             (cl-incf i))
+         (catch 'done
+           (let ((n (length (aref buckets i))))
+             (dolist (prefix prefixes)
+               (dolist (c conn-simple-label-characters)
+                 (push (concat prefix c) (aref buckets (1+ i)))
+                 (when (= (cl-incf n) count)
+                   (throw 'done nil))))))
+         (cl-callf nreverse (aref buckets i))
+         (cl-return (cl-loop for bucket across buckets
+                             nconc bucket)))))))
 
 ;;;;; Label Reading
 
@@ -296,7 +299,9 @@ themselves once the selection process has concluded."
                           always-prompt))
          (current candidates))
     (while-no-input
-      (mapc #'conn-label-redisplay candidates))
+      (mapc #'conn-label-redisplay candidates)
+      (let ((scroll-conservatively 100))
+        (redisplay)))
     (cl-loop
      (pcase current
        ('nil
@@ -307,12 +312,16 @@ themselves once the selection process has concluded."
         (conn-read-args-message "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
-          (mapc #'conn-label-redisplay candidates)))
+          (mapc #'conn-label-redisplay candidates)
+          (let ((scroll-conservatively 100))
+            (redisplay))))
        (`(,it . nil)
         (unless prompt-flag
           (cl-return (conn-label-payload it)))))
      (while-no-input
-       (mapc #'conn-label-redisplay candidates))
+       (mapc #'conn-label-redisplay candidates)
+       (let ((scroll-conservatively 100))
+         (redisplay)))
      (setq prompt-flag nil)
      (let ((next nil)
            (c (funcall char-reader prompt)))
@@ -1558,7 +1567,8 @@ depths will be sorted before greater depths.
                   (catch 'dispatch-undo
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
-                          (pt (point)))
+                          (pt (point))
+                          (label-state conn--dispatch-label-state))
                       (push nil conn--dispatch-change-groups)
                       (funcall action)
                       (cl-incf conn-dispatch-iteration-count)
@@ -1568,7 +1578,8 @@ depths will be sorted before greater depths.
                           (:undo
                            (select-frame frame)
                            (set-window-configuration wconf)
-                           (goto-char pt)))
+                           (goto-char pt)
+                           (setq conn--dispatch-label-state label-state)))
                         (conn-dispatch-undo-case 100
                           (:undo (redisplay))))))
                 (user-error
@@ -2243,13 +2254,14 @@ to the key binding for that target."
           (regex-p :initform nil
                    :initarg :regex-p))
   ( :update-handler (state &rest _)
-    (let ((string (oref state string))
-          (predicate (oref state predicate))
-          (len (oref state fixed-length))
-          (thing (oref state thing)))
-      (if (oref state regex-p)
-          (conn-make-re-target-overlays string predicate len thing)
-        (conn-make-string-target-overlays string predicate len thing)))))
+    (while-no-input
+      (let ((string (oref state string))
+            (predicate (oref state predicate))
+            (len (oref state fixed-length))
+            (thing (oref state thing)))
+        (if (oref state regex-p)
+            (conn-make-re-target-overlays string predicate len thing)
+          (conn-make-string-target-overlays string predicate len thing))))))
 
 (cl-defmethod conn-target-finder-save-state ((target-finder conn-dispatch-string-targets))
   (cons (let ((str (oref target-finder string)))
