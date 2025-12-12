@@ -299,9 +299,7 @@ themselves once the selection process has concluded."
                           always-prompt))
          (current candidates))
     (while-no-input
-      (mapc #'conn-label-redisplay candidates)
-      (let ((scroll-conservatively 100))
-        (redisplay)))
+      (mapc #'conn-label-redisplay candidates))
     (cl-loop
      (pcase current
        ('nil
@@ -312,16 +310,12 @@ themselves once the selection process has concluded."
         (conn-read-args-message "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
-          (mapc #'conn-label-redisplay candidates)
-          (let ((scroll-conservatively 100))
-            (redisplay))))
+          (mapc #'conn-label-redisplay candidates)))
        (`(,it . nil)
         (unless prompt-flag
           (cl-return (conn-label-payload it)))))
      (while-no-input
-       (mapc #'conn-label-redisplay candidates)
-       (let ((scroll-conservatively 100))
-         (redisplay)))
+       (mapc #'conn-label-redisplay candidates))
      (setq prompt-flag nil)
      (let ((next nil)
            (c (funcall char-reader prompt)))
@@ -1700,29 +1694,31 @@ the meaning of depth."
                                        conn-dispatch-read-char-map)))
     (if seconds
         (cl-loop
-         (if-let* ((ev (conn-with-input-method
-                         (read-event (unless inhibit-message
-                                       (concat prompt
-                                               ": "
-                                               prompt-suffix
-                                               (when prompt-suffix " ")
-                                               error-msg))
-                                     inherit-input-method
-                                     seconds))))
+         (if-let* ((ev (let ((scroll-conservatively 100))
+                         (conn-with-input-method
+                           (read-event (unless inhibit-message
+                                         (concat prompt
+                                                 ": "
+                                                 prompt-suffix
+                                                 (when prompt-suffix " ")
+                                                 error-msg))
+                                       inherit-input-method
+                                       seconds)))))
              (when (characterp ev) (cl-return ev))
            (cl-return)))
       (cl-loop
-       (pcase (conn-with-overriding-map keymap
-                (thread-first
-                  (unless inhibit-message
-                    (concat prompt
-                            (conn--dispatch-read-char-prefix keymap)
-                            ": "
-                            prompt-suffix
-                            (when prompt-suffix " ")
-                            error-msg))
-                  (read-key-sequence-vector)
-                  (key-binding t)))
+       (pcase (let ((scroll-conservatively 100))
+                (conn-with-overriding-map keymap
+                  (thread-first
+                    (unless inhibit-message
+                      (concat prompt
+                              (conn--dispatch-read-char-prefix keymap)
+                              ": "
+                              prompt-suffix
+                              (when prompt-suffix " ")
+                              error-msg))
+                    (read-key-sequence-vector)
+                    (key-binding t))))
          ('restart (cl-return 8))
          ('dispatch-character-event
           (setq conn--read-args-error-message nil
