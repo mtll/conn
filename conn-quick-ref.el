@@ -298,6 +298,6 @@
     (if hide-p
         (message nil)
       (with-current-buffer buffer
-        (message (buffer-string))))))
+        (message "%s" (buffer-string))))))
 
 (provide 'conn-quick-ref)
