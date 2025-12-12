@@ -812,9 +812,10 @@ themselves once the selection process has concluded."
       ((and (conn-bounds-get :origin nil
                              (and origin (pred identity)))
             (conn-bounds `(,beg . ,end)))
-       (conn-make-bounds 'point (conn-bounds-arg bounds)
-                         (cons (if conn-dispatch-other-end end beg)
-                               origin)))
+       (conn-make-bounds
+        'point (conn-bounds-arg bounds)
+        (cons (if conn-dispatch-other-end end beg)
+              origin)))
       (_ bounds))
     transforms)))
 
@@ -4258,8 +4259,12 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                               arg)
   (conn-make-bounds
    cmd arg
-   (lambda (bounds) (conn--dispatch-bounds bounds))
-   :subregions (lambda (bounds) (conn--dispatch-bounds bounds t))))
+   (oclosure-lambda (conn-bounds-delay)
+       (bounds)
+     (conn--dispatch-bounds bounds))
+   :subregions (oclosure-lambda (conn-bounds-delay)
+                   (bounds)
+                 (conn--dispatch-bounds bounds t))))
 
 (cl-defmethod conn-dispatch-bounds-between (bounds)
   (pcase bounds

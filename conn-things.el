@@ -39,6 +39,9 @@
   (whole nil :type cons)
   (properties nil :type list))
 
+(oclosure-define (conn-bounds-delay
+                  (:predicate conn-bounds-delay-p)))
+
 (defalias 'conn-bounds-thing 'conn-bounds--thing)
 (defalias 'conn-bounds-arg 'conn-bounds--arg)
 
@@ -686,7 +689,7 @@ words."))
   (when bounds
     (let ((p (plist-get (conn-bounds--properties bounds) prop)))
       (conn-transform-bounds
-       (if (functionp p) (funcall p bounds) p)
+       (if (conn-bounds-delay-p p) (funcall p bounds) p)
        transform))))
 
 (pcase-defmacro conn-bounds-get (property &optional transform pat)
@@ -849,12 +852,14 @@ words."))
     (when (conn--get-boundable-thing cmd)
       (conn-make-bounds
        cmd arg
-       (lambda (bounds)
+       (oclosure-lambda (conn-bounds-delay)
+           (bounds)
          (with-current-buffer buf
            (save-mark-and-excursion
              (goto-char pt)
              (conn--bounds-of-thing bounds))))
-       :subregions (lambda (bounds)
+       :subregions (oclosure-lambda (conn-bounds-delay)
+                       (bounds)
                      (with-current-buffer buf
                        (save-mark-and-excursion
                          (goto-char pt)
