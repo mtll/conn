@@ -213,7 +213,7 @@
   "r" 'sp-raise-sexp
   "s" 'sp-splice-sexp
   "c" 'sp-convolute-sexp
-  "f" 'conn-dispatch-state
+  "f" 'conn-dispatch
   "j" 'sp-forward-barf-sexp
   "l" 'sp-forward-slurp-sexp
   "L" 'sp-backward-barf-sexp
