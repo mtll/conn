@@ -46,6 +46,11 @@
   :group 'conn
   :type '(list integer))
 
+(defcustom conn-simple-label-input-method nil
+  "Input method for simple label chars."
+  :group 'conn
+  :type '(choice string (const nil)))
+
 (defface conn-dispatch-action-pulse-face
   '((t (:inherit pulse-highlight-start-face)))
   "Face for highlight pulses after dispatch actions."
@@ -94,6 +99,8 @@
 The function should accept a single argument, the list of windows to be
 labeled and it should return a list of structs for `conn-label-select',
 which see.")
+
+(defvar conn--dispatch-label-input-method nil)
 
 (defvar conn-target-window-predicate)
 
@@ -1312,6 +1319,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-simple-labels (&optional state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
+  (setq conn--dispatch-label-input-method conn-simple-label-input-method)
   (pcase-let ((`(,pool ,size ,in-use)
                (or state
                    (list nil 0 (make-hash-table :test 'equal))))
@@ -1481,7 +1489,7 @@ Target overlays may override this default by setting the
       (labels (conn-dispatch-get-labels))
     (conn-label-select
      labels
-     #'conn-dispatch-read-char
+     (lambda (prompt) (conn-dispatch-read-char prompt 'label))
      (cl-loop for (_ . c) in conn-target-count
               sum c into count
               finally return (format "Label [%s]" count))
@@ -1694,62 +1702,69 @@ the meaning of depth."
                                   'face 'error)))
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
                                        conn-dispatch-read-char-map)))
-    (if seconds
+    (cl-flet ((read-ev (prompt &optional seconds)
+                (let ((scroll-conservatively 100))
+                  (pcase inherit-input-method
+                    ('nil
+                     (read-event prompt nil seconds))
+                    ('label
+                     (conn-save-input-method
+                       (activate-input-method conn--dispatch-label-input-method)
+                       (read-event prompt t seconds)))
+                    (_
+                     (conn-with-input-method
+                       (read-event prompt t seconds)))))))
+      (if seconds
+          (cl-loop
+           (if-let* ((ev (read-ev (unless inhibit-message
+                                    (concat prompt
+                                            ": "
+                                            prompt-suffix
+                                            (when prompt-suffix " ")
+                                            error-msg))
+                                  seconds)))
+               (when (characterp ev) (cl-return ev))
+             (cl-return)))
         (cl-loop
-         (if-let* ((ev (let ((scroll-conservatively 100))
-                         (conn-with-input-method
-                           (read-event (unless inhibit-message
-                                         (concat prompt
-                                                 ": "
-                                                 prompt-suffix
-                                                 (when prompt-suffix " ")
-                                                 error-msg))
-                                       inherit-input-method
-                                       seconds)))))
-             (when (characterp ev) (cl-return ev))
-           (cl-return)))
-      (cl-loop
-       (pcase (let ((scroll-conservatively 100))
-                (conn-with-overriding-map keymap
-                  (thread-first
-                    (unless inhibit-message
-                      (concat prompt
-                              (conn--dispatch-read-char-prefix keymap)
-                              ": "
-                              prompt-suffix
-                              (when prompt-suffix " ")
-                              error-msg))
-                    (read-key-sequence-vector)
-                    (key-binding t))))
-         ('restart (cl-return 8))
-         ('dispatch-character-event
-          (setq conn--read-args-error-message nil
-                conn--dispatch-must-prompt nil)
-          (push `(no-record . ,last-input-event) unread-command-events)
-          (cl-return (conn-with-input-method
-                       (read-event
+         (pcase (let ((scroll-conservatively 100))
+                  (conn-with-overriding-map keymap
+                    (thread-first
+                      (unless inhibit-message
+                        (concat prompt
+                                (conn--dispatch-read-char-prefix keymap)
+                                ": "
+                                prompt-suffix
+                                (when prompt-suffix " ")
+                                error-msg))
+                      (read-key-sequence-vector)
+                      (key-binding t))))
+           ('restart (cl-return 8))
+           ('dispatch-character-event
+            (setq conn--read-args-error-message nil
+                  conn--dispatch-must-prompt nil)
+            (push `(no-record . ,last-input-event) unread-command-events)
+            (cl-return (read-ev
                         (unless inhibit-message
                           (concat prompt
                                   (conn--dispatch-read-char-prefix keymap)
                                   ": "
-                                  prompt-suffix))
-                        inherit-input-method))))
-         (cmd
-          (setq conn--read-args-error-message nil)
-          (let ((unhandled nil))
-            (unwind-protect
-                (catch 'dispatch-handle
-                  (cl-loop for handler in conn--dispatch-read-char-handlers
-                           do (funcall handler cmd))
-                  (setq unhandled t))
-              (if unhandled
-                  (setq error-msg (propertize
-                                   (format "Invalid command <%s>" cmd)
-                                   'face 'error))
-                (setf conn-read-args-last-command cmd)
-                (setq conn--read-args-error-message nil)))
-            (when (and unhandled (eq cmd 'keyboard-quit))
-              (keyboard-quit)))))))))
+                                  prompt-suffix)))))
+           (cmd
+            (setq conn--read-args-error-message nil)
+            (let ((unhandled nil))
+              (unwind-protect
+                  (catch 'dispatch-handle
+                    (cl-loop for handler in conn--dispatch-read-char-handlers
+                             do (funcall handler cmd))
+                    (setq unhandled t))
+                (if unhandled
+                    (setq error-msg (propertize
+                                     (format "Invalid command <%s>" cmd)
+                                     'face 'error))
+                  (setf conn-read-args-last-command cmd)
+                  (setq conn--read-args-error-message nil)))
+              (when (and unhandled (eq cmd 'keyboard-quit))
+                (keyboard-quit))))))))))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&optional (must-prompt t))
   (redisplay)
@@ -1956,7 +1971,9 @@ the meaning of depth."
                                  prefix-char)
   (if (thread-first
         (conn-dispatch-label-narrowed-string label)
-        (aref 0) (eql prefix-char) not)
+        (string-to-char)
+        (eql prefix-char)
+        not)
       (setf (conn-dispatch-label-narrowed-string label) nil)
     (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
     label))
@@ -3946,6 +3963,7 @@ contain targets."
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
+         (conn--dispatch-label-input-method nil)
          (conn--dispatch-current-thing (list thing arg thing-transform))
          (eldoc-display-functions nil)
          (recenter-last-op nil)

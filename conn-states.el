@@ -631,6 +631,19 @@ mouse-3: Describe current input method")
            (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
            (conn--activate-input-method))))))
 
+(defmacro conn-save-input-method (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (pim)
+    `(let ((,pim current-input-method))
+       (unwind-protect
+           (progn
+             (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+             (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
+             ,@body)
+         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
+         (activate-input-method ,pim)))))
+
 ;;;;; Macros
 
 ;; Adapted from map pattern, we can't just use the map pattern on the
