@@ -1734,12 +1734,16 @@ the meaning of depth."
                     ('nil
                      (read-event prompt nil seconds))
                     ('label
-                     (conn-save-input-method
-                       (activate-input-method conn-dispatch-label-input-method)
-                       (read-event prompt t seconds)))
+                     (let ((pim current-input-method)
+                           (default-input-method default-input-method)
+                           (input-method-history input-method-history))
+                       (unwind-protect
+                           (progn
+                             (activate-input-method conn-dispatch-label-input-method)
+                             (read-event prompt t seconds))
+                         (activate-input-method pim))))
                     (_
-                     (conn-with-input-method
-                       (read-event prompt t seconds)))))))
+                     (read-event prompt t seconds))))))
       (if seconds
           (cl-loop
            (if-let* ((ev (read-ev (unless inhibit-message
@@ -1873,14 +1877,26 @@ the meaning of depth."
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
-  (let ((inhibit-message nil))
-    (toggle-input-method))
-  (conn-dispatch-handle-and-redisplay nil))
+  (let ((inhibit-message nil)
+        (message-log-max 1000)
+        (default (or (car input-method-history) default-input-method)))
+    (activate-input-method
+     (if (or (conn-read-args-consume-prefix-arg)
+             (not default))
+	 (read-input-method-name
+	  (format-prompt "Input method" default)
+	  default t)
+       default)))
+  (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
-  (let ((inhibit-message nil))
-    (call-interactively 'set-input-method))
-  (conn-dispatch-handle-and-redisplay nil))
+  (let ((inhibit-message nil)
+        (message-log-max 1000))
+    (activate-input-method
+     (read-input-method-name
+      (format-prompt "Select input method" nil)
+      nil t)))
+  (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
   (conn-with-dispatch-suspended
@@ -4017,9 +4033,43 @@ contain targets."
               (eq target-other-end :no-other-end)))
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
-            (xor target-other-end (or other-end conn-dispatch-other-end)))))
+            (xor target-other-end (or other-end conn-dispatch-other-end))))
+         (pim current-input-method)
+         (default-input-method default-input-method)
+         (input-method-history input-method-history))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
+      ( :message -100 (_)
+        (concat
+         "arg: "
+         (propertize
+          (cond (conn--read-args-prefix-mag
+                 (number-to-string
+                  (* (if conn--read-args-prefix-sign -1 1)
+                     conn--read-args-prefix-mag)))
+                (conn--read-args-prefix-sign "[-1]")
+                (t "[1]"))
+          'face 'read-multiple-choice-face)))
+      ( :handler (cmd)
+        (pcase cmd
+          ('universal-argument
+           (if conn--read-args-prefix-mag
+               (cl-callf * conn--read-args-prefix-mag 4)
+             (setq conn--read-args-prefix-mag 4))
+           (conn-dispatch-handle))
+          ('digit-argument
+           (let* ((char (if (integerp last-input-event)
+                            last-input-event
+                          (get last-input-event 'ascii-character)))
+                  (digit (- (logand char ?\177) ?0)))
+             (setf conn--read-args-prefix-mag
+                   (if (integerp conn--read-args-prefix-mag)
+                       (+ (* 10 conn--read-args-prefix-mag) digit)
+                     digit)))
+           (conn-dispatch-handle))
+          ('negative-argument
+           (cl-callf not conn--read-args-prefix-sign)
+           (conn-dispatch-handle))))
       ( :message -99 (_)
         (propertize (conn-action-pretty-print action t)
                     'face 'eldoc-highlight-function-argument))
@@ -4065,15 +4115,17 @@ contain targets."
                                (oref conn-dispatch-target-finder
                                      window-predicate))))
         (add-function :after-while conn-target-window-predicate predicate))
-      (conn--unwind-protect-all
-        (progn
-          (when setup-function (funcall setup-function))
-          (conn-dispatch-perform-action action repeat)
-          (conn-dispatch-push-history (conn-make-dispatch action)))
-        (conn-cleanup-targets)
-        (conn-cleanup-labels)
-        (let ((inhibit-message conn-read-args-inhibit-message))
-          (message nil))))))
+      (conn-with-recursive-stack 'conn-emacs-state
+        (conn--unwind-protect-all
+          (progn
+            (when setup-function (funcall setup-function))
+            (conn-dispatch-perform-action action repeat)
+            (conn-dispatch-push-history (conn-make-dispatch action)))
+          (activate-input-method pim)
+          (conn-cleanup-targets)
+          (conn-cleanup-labels)
+          (let ((inhibit-message conn-read-args-inhibit-message))
+            (message nil)))))))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
