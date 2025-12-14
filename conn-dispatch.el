@@ -1729,21 +1729,22 @@ the meaning of depth."
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
                                        conn-dispatch-read-char-map)))
     (cl-flet ((read-ev (prompt &optional seconds)
-                (let ((scroll-conservatively 100))
-                  (pcase inherit-input-method
-                    ('nil
-                     (read-event prompt nil seconds))
-                    ('label
-                     (let ((pim current-input-method)
-                           (default-input-method default-input-method)
-                           (input-method-history input-method-history))
-                       (unwind-protect
-                           (progn
-                             (activate-input-method conn-dispatch-label-input-method)
-                             (read-event prompt t seconds))
-                         (activate-input-method pim))))
-                    (_
-                     (read-event prompt t seconds))))))
+                (with-current-buffer conn-dispatch-input-buffer
+                  (let ((scroll-conservatively 100))
+                    (pcase inherit-input-method
+                      ('nil
+                       (read-event prompt nil seconds))
+                      ('label
+                       (let ((pim current-input-method)
+                             (default-input-method default-input-method)
+                             (input-method-history input-method-history))
+                         (unwind-protect
+                             (progn
+                               (activate-input-method conn-dispatch-label-input-method)
+                               (read-event prompt t seconds))
+                           (activate-input-method pim))))
+                      (_
+                       (read-event prompt t seconds)))))))
       (if seconds
           (cl-loop
            (if-let* ((ev (read-ev (unless inhibit-message
@@ -1877,25 +1878,20 @@ the meaning of depth."
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
-  (let ((inhibit-message nil)
-        (message-log-max 1000)
-        (default (or (car input-method-history) default-input-method)))
-    (activate-input-method
-     (if (or (conn-read-args-consume-prefix-arg)
-             (not default))
-	 (read-input-method-name
-	  (format-prompt "Input method" default)
-	  default t)
-       default)))
+  (with-current-buffer conn-dispatch-input-buffer
+    (let ((inhibit-message nil)
+          (message-log-max 1000))
+      (toggle-input-method (conn-read-args-consume-prefix-arg))))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
-  (let ((inhibit-message nil)
-        (message-log-max 1000))
-    (activate-input-method
-     (read-input-method-name
-      (format-prompt "Select input method" nil)
-      nil t)))
+  (with-current-buffer conn-dispatch-input-buffer
+    (let ((inhibit-message nil)
+          (message-log-max 1000))
+      (activate-input-method
+       (read-input-method-name
+        (format-prompt "Select input method" nil)
+        nil t))))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
@@ -3987,6 +3983,8 @@ contain targets."
 
 ;;;;; Dispatch Commands
 
+(defvar conn-dispatch-input-buffer nil)
+
 (cl-defun conn-dispatch-setup (action
                                thing
                                arg
@@ -4034,6 +4032,7 @@ contain targets."
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
+         (conn-dispatch-input-buffer (current-buffer))
          (pim current-input-method)
          (default-input-method default-input-method)
          (input-method-history input-method-history))
@@ -4121,7 +4120,8 @@ contain targets."
             (when setup-function (funcall setup-function))
             (conn-dispatch-perform-action action repeat)
             (conn-dispatch-push-history (conn-make-dispatch action)))
-          (activate-input-method pim)
+          (with-current-buffer conn-dispatch-input-buffer
+            (activate-input-method pim))
           (conn-cleanup-targets)
           (conn-cleanup-labels)
           (let ((inhibit-message conn-read-args-inhibit-message))
