@@ -2268,19 +2268,16 @@ to the key binding for that target."
     (conn-dispatch-retargetable-mixin)
   ((string :initform nil
            :initarg :string)
-   (fixed-length :initform nil
-                 :initarg :fixed-length)
    (thing :initform nil
           :initarg :thing)
    (predicate :initform nil
               :initarg :predicate)
    (regex-p :initform nil
             :initarg :regex-p))
-  ( :default-update-handler (state)
+  ( :default-update-handler (state &optional len)
     (while-no-input
       (let ((string (oref state string))
             (predicate (oref state predicate))
-            (len (oref state fixed-length))
             (thing (oref state thing)))
         (if (oref state regex-p)
             (conn-make-re-target-overlays string predicate len thing)
@@ -2328,7 +2325,7 @@ to the key binding for that target."
                   (char-to-string)
                   (concat string))))
             (conn-cleanup-targets))
-          (conn-dispatch-call-update-handlers state))))))
+          (conn-dispatch-call-update-handlers state 0))))))
 
 (conn-define-target-finder conn-dispatch-read-with-timeout
     (conn-dispatch-string-targets)
@@ -2337,7 +2334,7 @@ to the key binding for that target."
     (cl-symbol-macrolet ((string (oref state string)))
       (let ((timeout (oref state timeout)))
         (if string
-            (conn-dispatch-call-update-handlers state)
+            (conn-dispatch-call-update-handlers state 0)
           (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
             (setf string (char-to-string (conn-dispatch-read-char prompt t)))
             (while-no-input
@@ -2346,7 +2343,9 @@ to the key binding for that target."
                                     prompt t timeout string)))
               (conn-cleanup-targets)
               (setf string (concat string (char-to-string next-char)))
-              (conn-dispatch-call-update-handlers state))))))))
+              (conn-dispatch-call-update-handlers state)))
+          (conn-cleanup-targets)
+          (conn-dispatch-call-update-handlers state 0))))))
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
@@ -2687,7 +2686,6 @@ contain targets."
   (declare (important-return-value t))
   (conn-dispatch-read-n-chars
    :string-length prefix-length
-   :fixed-length 0
    :predicate (lambda (beg _end)
                 (save-excursion
                   (goto-char beg)
