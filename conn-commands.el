@@ -2551,8 +2551,7 @@ region after a `recursive-edit'."
          (restrict-windows
           (conn-boolean-argument 'restrict-windows
                                  conn-dispatch-restrict-windows-map
-                                 "this-win"
-                                 t)))
+                                 "this-win")))
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'dispatch-other-end)
@@ -2917,8 +2916,7 @@ region after a `recursive-edit'."
        (restrict-windows
         (conn-boolean-argument 'restrict-windows
                                conn-dispatch-restrict-windows-map
-                               "this-win"
-                               t)))
+                               "this-win")))
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (eq cmd 'dispatch-other-end)
