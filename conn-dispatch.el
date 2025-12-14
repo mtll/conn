@@ -49,7 +49,7 @@
 (defcustom conn-simple-label-input-method nil
   "Input method for simple label chars."
   :group 'conn
-  :type '(choice string (const nil)))
+  :type '(choice string symbol))
 
 (defface conn-dispatch-action-pulse-face
   '((t (:inherit pulse-highlight-start-face)))
@@ -100,7 +100,7 @@ The function should accept a single argument, the list of windows to be
 labeled and it should return a list of structs for `conn-label-select',
 which see.")
 
-(defvar conn--dispatch-label-input-method nil)
+(defvar conn-dispatch-label-input-method nil)
 
 (defvar conn-target-window-predicate)
 
@@ -276,7 +276,7 @@ returned."
   (pcase-let* (((cl-struct conn-window-label window) label)
                (string (window-parameter window 'conn-label-string)))
     (unless (or (length= string 0)
-                (not (eql prefix-char (aref string 0))))
+                (not (eql prefix-char (string-to-char string))))
       (set-window-parameter window 'conn-label-string (substring string 1))
       label)))
 
@@ -1319,7 +1319,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-simple-labels (&optional state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
-  (setq conn--dispatch-label-input-method conn-simple-label-input-method)
+  (setq conn-dispatch-label-input-method conn-simple-label-input-method)
   (pcase-let ((`(,pool ,size ,in-use)
                (or state
                    (list nil 0 (make-hash-table :test 'equal))))
@@ -1464,7 +1464,8 @@ Target overlays may override this default by setting the
   (conn-target-finder-label-faces target-finder))
 
 (cl-defmethod conn-target-finder-select :around (_target-finder)
-  (let ((conn--dispatch-remap-cookies nil))
+  (let ((conn--dispatch-remap-cookies nil)
+        (conn-dispatch-label-input-method nil))
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (or (and (eq cmd 'act)
@@ -1709,7 +1710,7 @@ the meaning of depth."
                      (read-event prompt nil seconds))
                     ('label
                      (conn-save-input-method
-                       (activate-input-method conn--dispatch-label-input-method)
+                       (activate-input-method conn-dispatch-label-input-method)
                        (read-event prompt t seconds)))
                     (_
                      (conn-with-input-method
@@ -1969,11 +1970,10 @@ the meaning of depth."
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label)
                                  prefix-char)
-  (if (thread-first
-        (conn-dispatch-label-narrowed-string label)
-        (string-to-char)
-        (eql prefix-char)
-        not)
+  (if (not (thread-first
+             (conn-dispatch-label-narrowed-string label)
+             (string-to-char)
+             (eql prefix-char)))
       (setf (conn-dispatch-label-narrowed-string label) nil)
     (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
     label))
@@ -3577,9 +3577,10 @@ contain targets."
   (action-change-group))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
-  (thread-first
-    (conn-dispatch-take-replace--action-opoint action)
-    marker-buffer buffer-live-p not))
+  (not (thread-first
+         (conn-dispatch-take-replace--action-opoint action)
+         marker-buffer
+         buffer-live-p)))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
   (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
@@ -3634,9 +3635,10 @@ contain targets."
   (action-opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
-  (thread-first
-    (conn-dispatch-take--action-opoint action)
-    marker-buffer buffer-live-p not))
+  (not (thread-first
+         (conn-dispatch-take--action-opoint action)
+         marker-buffer
+         buffer-live-p)))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
   (set-marker (conn-dispatch-take--action-opoint action) nil))
@@ -3951,7 +3953,8 @@ contain targets."
                                thing
                                arg
                                thing-transform
-                               &rest keys
+                               &rest
+                               keys
                                &key
                                repeat
                                restrict-windows
@@ -3963,7 +3966,6 @@ contain targets."
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
-         (conn--dispatch-label-input-method nil)
          (conn--dispatch-current-thing (list thing arg thing-transform))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
