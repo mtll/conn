@@ -2560,7 +2560,7 @@ region after a `recursive-edit'."
                            ('append 'prepend)
                            ('prepend nil)))
             (conn-dispatch-handle)))
-        ( :message (keymap)
+        ( :message 10 (keymap)
           (when-let* ((binding
                        (where-is-internal 'dispatch-other-end keymap t)))
             (concat
@@ -2925,7 +2925,7 @@ region after a `recursive-edit'."
                          ('append 'prepend)
                          ('prepend nil)))
           (conn-dispatch-handle)))
-      ( :message (keymap)
+      ( :message 10 (keymap)
         (when-let* ((binding
                      (where-is-internal 'dispatch-other-end keymap t)))
           (concat

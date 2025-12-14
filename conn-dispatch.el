@@ -201,12 +201,16 @@ strings have `conn-dispatch-label-face'."
                                          macroexpand-all-environment))))
                             conn--dispatch-read-char-handlers))))
          (msg-expander
-          `(:message . ,(lambda (&rest rest)
-                          `(push
-                            ,(pcase rest
-                               (`(#',fn) `#',fn)
-                               (_ `(lambda ,@rest)))
-                            conn--dispatch-read-char-message-prefixes))))
+          `(:message . ,(lambda (depth &rest rest)
+                          `(progn
+                             (push
+                              (cons ,depth ,(pcase rest
+                                              (`(#',fn) `#',fn)
+                                              (_ `(lambda ,@rest))))
+                              conn--dispatch-read-char-message-prefixes)
+                             (conn--compat-callf sort
+                                 conn--dispatch-read-char-message-prefixes
+                               :key #'car)))))
          (keymap-expander
           `(:keymap . ,(lambda (keymap)
                          `(push ,keymap conn--dispatch-event-handler-maps))))
@@ -1379,7 +1383,7 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (and-let* ((prefix
               (flatten-tree
-               (cl-loop for pfx in conn--dispatch-read-char-message-prefixes
+               (cl-loop for (_ . pfx) in conn--dispatch-read-char-message-prefixes
                         for str = (pcase pfx
                                     ((pred functionp) (funcall pfx keymap))
                                     ((pred stringp) pfx))
@@ -1427,6 +1431,17 @@ Target overlays may override this default by setting the
                     (while-no-input
                       (mapc #'conn-label-redisplay ,var))
                     (conn-dispatch-handle)))
+                ( :message -50 (keymap)
+                  (when-let* ((binding
+                               (where-is-internal 'toggle-labels keymap t)))
+                    (concat
+                     (propertize (key-description binding)
+                                 'face 'help-key-binding)
+                     " "
+                     (propertize
+                      "hide labels"
+                      'face (when conn-dispatch-hide-labels
+                              'eldoc-highlight-function-argument)))))
                 (:keymap conn-label-toggle-map)
                 ,@body)
             (clrhash conn--pixelwise-window-cache)
@@ -4005,7 +4020,25 @@ contain targets."
             (xor target-other-end (or other-end conn-dispatch-other-end)))))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
-      ( :message (keymap)
+      ( :message -99 (_)
+        (propertize (conn-action-pretty-print action t)
+                    'face 'eldoc-highlight-function-argument))
+      ( :message 0 (_keymap)
+        (conn-target-finder-message-prefixes
+         conn-dispatch-target-finder))
+      (unless conn-dispatch-no-other-end
+        ( :message 10 (keymap)
+          (when-let* ((binding
+                       (where-is-internal 'dispatch-other-end keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "other end"
+              'face (when conn-dispatch-other-end
+                      'eldoc-highlight-function-argument))))))
+      ( :message 15 (keymap)
         (when-let* (((or (length> conn-targets 1)
                          (advice-function-member-p 'conn--dispatch-restrict-windows
                                                    conn-target-window-predicate)))
@@ -4021,24 +4054,6 @@ contain targets."
                          'conn--dispatch-restrict-windows
                          conn-target-window-predicate)
                     'eldoc-highlight-function-argument)))))
-      (unless conn-dispatch-no-other-end
-        ( :message (keymap)
-          (when-let* ((binding
-                       (where-is-internal 'dispatch-other-end keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (propertize
-              "other end"
-              'face (when conn-dispatch-other-end
-                      'eldoc-highlight-function-argument))))))
-      ( :message (_keymap)
-        (conn-target-finder-message-prefixes
-         conn-dispatch-target-finder))
-      ( :message (_)
-        (propertize (conn-action-pretty-print action t)
-                    'face 'eldoc-highlight-function-argument))
       (when-let* ((predicate (conn-action-window-predicate action)))
         (add-function :after-while conn-target-window-predicate predicate))
       (when-let* ((predicate (conn-action-target-predicate action)))
