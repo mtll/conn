@@ -282,6 +282,8 @@ returned."
 
 (defvar conn-label-select-always-prompt nil)
 
+(defvar conn-dispatch-hide-labels nil)
+
 (defun conn-label-select (candidates
                           char-reader
                           &optional
@@ -1406,23 +1408,38 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
+(defvar-keymap conn-label-toggle-map
+  "SPC" 'toggle-labels)
+
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
-  `(progn
-     (conn-cleanup-labels)
-     (let (,binder)
-       (unwind-protect
-           (progn ,@body)
-         (clrhash conn--pixelwise-window-cache)
-         (clrhash conn--dispatch-window-lines-cache)
-         (let ((fn (make-symbol "cleanup")))
-           (fset fn (lambda (&rest _)
-                      (unwind-protect
-                          (mapc #'conn-label-delete ,(car binder))
-                        (setq conn--previous-labels-cleanup nil)
-                        (remove-hook 'pre-redisplay-functions fn))))
-           (add-hook 'pre-redisplay-functions fn)
-           (setq conn--previous-labels-cleanup fn))))))
+  (pcase binder
+    (`(,var ,val)
+     `(progn
+        (conn-cleanup-labels)
+        (let ((,var ,val)
+              (conn-dispatch-hide-labels nil))
+          (unwind-protect
+              (conn-with-dispatch-event-handlers
+                ( :handler (cmd)
+                  (when (eq cmd 'toggle-labels)
+                    (cl-callf not conn-dispatch-hide-labels)
+                    (while-no-input
+                      (mapc #'conn-label-redisplay ,var))
+                    (conn-dispatch-handle)))
+                (:keymap conn-label-toggle-map)
+                ,@body)
+            (clrhash conn--pixelwise-window-cache)
+            (clrhash conn--dispatch-window-lines-cache)
+            (let ((fn (make-symbol "cleanup")))
+              (fset fn (lambda (&rest _)
+                         (unwind-protect
+                             (mapc #'conn-label-delete ,(car binder))
+                           (setq conn--previous-labels-cleanup nil)
+                           (remove-hook 'pre-redisplay-functions fn))))
+              (add-hook 'pre-redisplay-functions fn)
+              (setq conn--previous-labels-cleanup fn))))))
+    (_ (error "Unexpected binder form"))))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
@@ -1979,7 +1996,8 @@ the meaning of depth."
                           setup-function)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (if (length> narrowed-string 0)
+      (if (and (length> narrowed-string 0)
+               (not conn-dispatch-hide-labels))
           (progn
             (overlay-put overlay 'display nil)
             (overlay-put overlay 'before-string nil)
@@ -2293,7 +2311,7 @@ to the key binding for that target."
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (if string
-          (conn-dispatch-call-update-handlers state)
+          (conn-dispatch-call-update-handlers state 0)
         (let* ((string-length (oref state string-length))
                (prompt (if (> string-length 1)
                            (propertize (format "%d Chars" string-length)
