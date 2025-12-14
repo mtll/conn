@@ -2451,13 +2451,11 @@ contain targets."
                   ('middle (recenter nil))
                   ('top (recenter this-scroll-margin))
                   ('bottom (recenter (- -1 this-scroll-margin)))
-                  (_
-                   (setf (alist-get win (oref state cursor-location)) 'middle)
-                   (recenter nil)))))
+                  (_ (setf (alist-get win (oref state cursor-location)) 'middle)
+                     (recenter nil)))))
             (setf (alist-get win (oref state hidden))
-                  (cons (buffer-chars-modified-tick) hidden)
-                  redisplay
-                  (or redisplay (and hidden t)))))))
+                  (cons (buffer-chars-modified-tick) hidden))
+            (setf redisplay (or redisplay (and hidden t)))))))
     (when redisplay (redisplay))))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
@@ -3048,6 +3046,7 @@ contain targets."
                  (goto-char (if (and forward (not (eq thing 'point)))
                                 end
                               beg))
+               (push-mark nil t)
                (conn--push-ephemeral-mark end)
                (goto-char beg)))
             (_ (user-error "Cannot find thing at point"))))))))
