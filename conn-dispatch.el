@@ -1092,12 +1092,6 @@ Target overlays may override this default by setting the
            (display-width
             (conn--string-pixel-width full-string (window-buffer window)))
            (padding-width 0)
-           ;; display-line-numbers, line-prefix and wrap-prefix break
-           ;; width calculations, temporarily disable them.
-           (old-state (buffer-local-set-state
-                       display-line-numbers nil
-                       line-prefix nil
-                       wrap-prefix nil))
            (ov nil))
       (unwind-protect
           (progn
@@ -1198,8 +1192,7 @@ Target overlays may override this default by setting the
                          overlay
                          padding-width
                          (overlay-get target 'label-face))))))
-        (when ov (delete-overlay ov))
-        (buffer-local-restore-state old-state)))))
+        (when ov (delete-overlay ov))))))
 
 (defun conn--dispatch-setup-label-charwise (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -2068,12 +2061,12 @@ the meaning of depth."
 (cl-defmethod conn-target-finder-update ((state conn-target-finder-base))
   (conn-dispatch-call-update-handlers state))
 
-(defun conn-dispatch-call-update-handlers (target-finder)
+(defun conn-dispatch-call-update-handlers (target-finder &rest args)
   (let ((ufns (oref target-finder current-update-handlers))
         (handler-ctors nil))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
-        (funcall
+        (apply
          (with-memoization (alist-get (current-buffer) ufns)
            (cl-labels ((find-handler (ctors)
                          (if-let* ((fn (caar ctors)))
@@ -2082,7 +2075,8 @@ the meaning of depth."
              (or (find-handler (with-memoization handler-ctors
                                  (oref target-finder update-handlers)))
                  #'ignore)))
-         target-finder)))
+         target-finder
+         args)))
     (setf (oref target-finder current-update-handlers) ufns)))
 
 (defun conn-target-nearest-op (a b)
@@ -2097,9 +2091,7 @@ the meaning of depth."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
-  (conn-dispatch-read-n-chars
-   :string-length 2
-   :fixed-length 0))
+  (conn-dispatch-read-n-chars :string-length 2))
 
 (cl-defgeneric conn-target-finder-update (target-finder))
 
