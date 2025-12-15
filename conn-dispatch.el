@@ -468,8 +468,8 @@ themselves once the selection process has concluded."
              do (define-key map (vector i) 'dispatch-character-event))
     (keymap-set map "C-g" 'keyboard-quit)
     (keymap-set map "C-q" 'quoted-insert)
-    (keymap-set map "RET" 'quoted-insert)
-    (keymap-set map "<return>" 'quoted-insert)
+    (keymap-set map "RET" 'ignore)
+    (keymap-set map "<return>" 'ignore)
     (keymap-set map "<tab>" 'quoted-insert)
     (keymap-set map "TAB" 'quoted-insert)
     map))
@@ -1777,6 +1777,7 @@ the meaning of depth."
                       (read-key-sequence-vector)
                       (key-binding t))))
            ('restart (cl-return 8))
+           ('ignore)
            ('quoted-insert
             (let (translation-table-for-input
                   input-method-function)

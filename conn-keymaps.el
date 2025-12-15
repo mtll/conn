@@ -422,8 +422,8 @@
   "C-s" 'isearch-forward
   "C-M-s" 'isearch-regexp-forward
   "C-M-r" 'isearch-regexp-backward
-  "C-v" 'scroll-up
-  "M-v" 'scroll-down)
+  "C-v" 'scroll-up-command
+  "M-v" 'scroll-down-command)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
@@ -555,8 +555,8 @@
   :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
   "TAB" 'repeat-dispatch
   "C-w" 'restrict-windows
-  "SPC" 'scroll-up
-  "DEL" 'scroll-down
+  "SPC" 'scroll-up-command
+  "DEL" 'scroll-down-command
   "C-o" 'other-window)
 
 (provide 'conn-keymaps)

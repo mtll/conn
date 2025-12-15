@@ -926,8 +926,8 @@
   "e" 'end-of-buffer
   "j" 'backward-button
   "l" 'forward-button
-  "i" 'scroll-down
-  "k" 'scroll-up
+  "i" 'scroll-down-command
+  "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
@@ -943,8 +943,8 @@
   "e" 'end-of-buffer
   "j" 'backward-button
   "l" 'forward-button
-  "i" 'scroll-down
-  "k" 'scroll-up
+  "i" 'scroll-down-command
+  "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
@@ -1057,8 +1057,8 @@
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
   "`" 'conn-wincontrol-mru-window
-  "i" 'scroll-down
-  "k" 'scroll-up
+  "i" 'scroll-down-command
+  "k" 'scroll-up-command
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
   "." 'conn-register-load
@@ -1075,8 +1075,8 @@
   "`" 'conn-wincontrol-mru-window
   "i" 'backtrace-backward-frame
   "k" 'backtrace-forward-frame
-  "I" 'scroll-down
-  "K" 'scroll-up
+  "I" 'scroll-down-command
+  "K" 'scroll-up-command
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
   "." 'conn-register-load
