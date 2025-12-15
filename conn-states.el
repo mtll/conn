@@ -576,10 +576,10 @@ return it."
                    (conn--activate-input-method)
                    (add-hook 'input-method-activate-hook
                              #'conn--activate-input-method
-                             nil t)
+                             50 t)
                    (add-hook 'input-method-deactivate-hook
                              #'conn--deactivate-input-method
-                             nil t)
+                             50 t)
                    (remove-hook 'isearch-mode-end-hook hook)))
       (add-hook 'isearch-mode-end-hook hook))))
 (put 'conn--isearch-input-method 'permanent-local-hook t)
@@ -613,23 +613,42 @@ mouse-3: Describe current input method")
    (conn--prev-mode-line-mule-info
     (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
 
+(defvar-local conn--without-input-method-hooks nil)
+
+(defmacro conn-without-input-method-hooks (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (remove buffer)
+    `(let* ((,remove (not conn--without-input-method-hooks))
+            (,buffer (current-buffer)))
+       (unwind-protect
+           (progn
+             (when ,remove
+               (setq conn--without-input-method-hooks t)
+               (remove-hook 'input-method-activate-hook
+                            #'conn--activate-input-method
+                            t)
+               (remove-hook 'input-method-deactivate-hook
+                            #'conn--deactivate-input-method
+                            t))
+             ,@body)
+         (when ,remove
+           (with-current-buffer ,buffer
+             (setq conn--without-input-method-hooks nil)
+             (add-hook 'input-method-activate-hook
+                       #'conn--activate-input-method
+                       50 t)
+             (add-hook 'input-method-deactivate-hook
+                       #'conn--deactivate-input-method
+                       50 t)
+             (conn--activate-input-method)))))))
+
 (defmacro conn-with-input-method (&rest body)
   "Run BODY ensuring `conn--input-method' is active."
   (declare (debug (body))
            (indent 0))
-  (cl-with-gensyms (input-method-p)
-    `(let ((,input-method-p conn--input-method))
-       (unwind-protect
-           (progn
-             (when ,input-method-p
-               (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-               (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-               (activate-input-method conn--input-method))
-             ,@body)
-         (when ,input-method-p
-           (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-           (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-           (conn--activate-input-method))))))
+  `(conn-without-input-method-hooks
+     (activate-input-method conn--input-method)
+     ,@body))
 
 ;;;;; Macros
 

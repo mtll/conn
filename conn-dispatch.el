@@ -1558,13 +1558,16 @@ depths will be sorted before greater depths.
           (with-current-buffer ,buf
             (pcase ,signal ,@cases)))))))
 
+(defvar conn-select-mode-lighter " SELECT")
+
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
-  :lighter " SELECT"
+  :lighter conn-select-mode-lighter
   :group 'conn
   (if conn-dispatch-select-mode
       (progn
+        (conn-dispatch-select-input-method-lighter)
         (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
           (face-remap-add-relative
            'mode-line
@@ -1576,6 +1579,14 @@ depths will be sorted before greater depths.
       (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
         (with-current-buffer buf
           (face-remap-remove-relative cookie))))))
+
+(defun conn-dispatch-select-input-method-lighter ()
+  (setf conn-select-mode-lighter
+        (format " %sSELECT"
+                (or (buffer-local-value 'current-input-method-title
+                                        conn-dispatch-input-buffer)
+                    "")))
+  (force-mode-line-update t))
 
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
@@ -1881,7 +1892,8 @@ the meaning of depth."
   (with-current-buffer conn-dispatch-input-buffer
     (let ((inhibit-message nil)
           (message-log-max 1000))
-      (toggle-input-method (conn-read-args-consume-prefix-arg))))
+      (toggle-input-method (conn-read-args-consume-prefix-arg))
+      (conn-dispatch-select-input-method-lighter)))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
@@ -1891,7 +1903,8 @@ the meaning of depth."
       (activate-input-method
        (read-input-method-name
         (format-prompt "Select input method" nil)
-        nil t))))
+        nil t))
+      (conn-dispatch-select-input-method-lighter)))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
@@ -4033,7 +4046,7 @@ contain targets."
           (unless conn-dispatch-no-other-end
             (xor target-other-end (or other-end conn-dispatch-other-end))))
          (conn-dispatch-input-buffer (current-buffer))
-         (pim current-input-method)
+         (prev-input-method current-input-method)
          (default-input-method default-input-method)
          (input-method-history input-method-history))
     (conn-with-dispatch-event-handlers
@@ -4114,18 +4127,20 @@ contain targets."
                                (oref conn-dispatch-target-finder
                                      window-predicate))))
         (add-function :after-while conn-target-window-predicate predicate))
-      (conn-with-recursive-stack 'conn-emacs-state
-        (conn--unwind-protect-all
-          (progn
-            (when setup-function (funcall setup-function))
-            (conn-dispatch-perform-action action repeat)
-            (conn-dispatch-push-history (conn-make-dispatch action)))
-          (with-current-buffer conn-dispatch-input-buffer
-            (activate-input-method pim))
-          (conn-cleanup-targets)
-          (conn-cleanup-labels)
-          (let ((inhibit-message conn-read-args-inhibit-message))
-            (message nil)))))))
+      (conn-with-recursive-stack 'conn-dispatch-state
+        (conn-without-input-method-hooks
+          (conn--unwind-protect-all
+            (progn
+              (activate-input-method conn--input-method)
+              (when setup-function (funcall setup-function))
+              (conn-dispatch-perform-action action repeat)
+              (conn-dispatch-push-history (conn-make-dispatch action)))
+            (with-current-buffer conn-dispatch-input-buffer
+              (activate-input-method prev-input-method))
+            (conn-cleanup-targets)
+            (conn-cleanup-labels)
+            (let ((inhibit-message conn-read-args-inhibit-message))
+              (message nil))))))))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")

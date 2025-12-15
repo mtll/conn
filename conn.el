@@ -47,6 +47,7 @@
 (defun conn--toggle-input-method-ad (&rest app)
   (if (and conn-local-mode
            (not isearch-mode)
+           (not conn--without-input-method-hooks)
            (conn-state-get conn-current-state :suppress-input-method)
            conn--input-method)
       (unwind-protect
