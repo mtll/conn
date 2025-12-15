@@ -50,6 +50,8 @@
 (defvar conn--wincontrol-error-message nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
+(put 'keyboard-quit :conn-wincontrol-preserve-arg t)
+
 ;;;;; Wincontrol Internals
 
 (defvar-keymap conn-window-resize-map
@@ -294,9 +296,10 @@
       (progn
         (conn--wincontrol-wrap-this-command)
         (setq conn--wincontrol-error-message nil)
-        (when (eq this-command 'keyboard-quit)
-          (setq conn--wincontrol-preserve-arg t
-                conn--wincontrol-error-message
+        (when (get this-command :conn-wincontrol-preserve-arg)
+          (setq conn--wincontrol-preserve-arg t))
+        (when (eq 'keyboard-quit this-command)
+          (setq conn--wincontrol-error-message
                 (propertize "Quit" 'face 'error))))
     (setq conn--wincontrol-preserve-arg t
           conn--wincontrol-error-message
@@ -393,10 +396,11 @@
     (add-hook 'pre-command-hook hook 99))
   (conn-wincontrol))
 
+(put 'conn-wincontrol-ignore :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-ignore ()
   (interactive)
-  (setq conn--wincontrol-error-message (propertize "Invalid Command" 'face 'error)
-        conn--wincontrol-preserve-arg t))
+  (setq conn--wincontrol-error-message
+        (propertize "Invalid Command" 'face 'error)))
 
 ;;;;; Wincontrol Quick Ref
 
@@ -501,15 +505,15 @@
 
 ;;;;; Wincontrol Prefix Arg
 
+(put 'conn-wincontrol-universal-arg :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-universal-arg ()
   "Multiply wincontrol prefix arg by 4."
   (interactive)
-  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))
-        conn--wincontrol-preserve-arg t))
+  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
+(put 'conn-wincontrol-digit-argument :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-digit-argument ()
   (interactive)
-  (setq conn--wincontrol-preserve-arg t)
   (let* ((char (if (integerp last-command-event)
                    last-command-event
                  (get last-command-event 'ascii-character)))
@@ -521,27 +525,29 @@
       (setq conn--wincontrol-arg digit)))
   (setq this-command 'conn-wincontrol-digit-argument))
 
+(put 'conn-wincontrol-invert-argument :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-invert-argument ()
   "Invert sign of wincontrol prefix arg."
   (interactive)
-  (setq conn--wincontrol-preserve-arg t
-        conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
+  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
 (defun conn-wincontrol-digit-argument-reset ()
   "Reset wincontrol prefix arg to nil and sign to +."
-  (interactive)
-  (setq conn--wincontrol-arg-sign 1
-        conn--wincontrol-arg nil))
+  (interactive))
 
+(put 'conn-wincontrol-backward-delete-arg :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-backward-delete-arg ()
   "Delete least significant digit of prefix arg."
   (interactive)
-  (setq conn--wincontrol-preserve-arg t
-        conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
+  (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
 
-(defun conn-wincontrol-prefix-arg ()
+(defun conn-wincontrol-prefix-arg-and-keep ()
+  (setq conn--wincontrol-preserve-arg t)
   (when conn--wincontrol-arg
-    (setq conn--wincontrol-preserve-arg t)
+    (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
+
+(defun conn-wincontrol-consume-prefix-arg ()
+  (when conn--wincontrol-arg
     (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
 ;;;;; Wincontrol Quiting
@@ -686,8 +692,9 @@
   (interactive)
   (setq this-command 'conn-scroll-down)
   (with-selected-window (other-window-for-scrolling)
-    (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
-                                         next-screen-context-lines)))
+    (let ((next-screen-context-lines
+           (or (conn-wincontrol-prefix-arg-and-keep)
+               next-screen-context-lines)))
       (funcall (or (command-remapping #'scroll-down-command)
                    (command-remapping #'conn-scroll-down)
                    #'conn-scroll-down)))))
@@ -697,8 +704,9 @@
   (interactive)
   (setq this-command 'conn-scroll-up)
   (with-selected-window (other-window-for-scrolling)
-    (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
-                                         next-screen-context-lines)))
+    (let ((next-screen-context-lines
+           (or (conn-wincontrol-prefix-arg-and-keep)
+               next-screen-context-lines)))
       (funcall (or (command-remapping #'scroll-up-command)
                    (command-remapping #'conn-scroll-up)
                    #'conn-scroll-up)))))
@@ -707,35 +715,39 @@
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
   (setq this-command 'conn-scroll-down)
-  (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
-                                       next-screen-context-lines)))
+  (let ((next-screen-context-lines
+         (or (conn-wincontrol-prefix-arg-and-keep)
+             next-screen-context-lines)))
     (conn-scroll-down)))
 
 (defun conn-wincontrol-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
   (setq this-command 'conn-scroll-up)
-  (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
-                                       next-screen-context-lines)))
+  (let ((next-screen-context-lines
+         (or (conn-wincontrol-prefix-arg-and-keep)
+             next-screen-context-lines)))
     (conn-scroll-up)))
 
 ;;;;; Window Configuration Commands
 
 (defun conn-wincontrol-widen-window ()
   (interactive)
-  (enlarge-window-horizontally (or (conn-wincontrol-prefix-arg) 1)))
+  (enlarge-window-horizontally
+   (or (conn-wincontrol-prefix-arg-and-keep) 1)))
 
 (defun conn-wincontrol-narrow-window ()
   (interactive)
-  (shrink-window-horizontally (or (conn-wincontrol-prefix-arg) 1)))
+  (shrink-window-horizontally
+   (or (conn-wincontrol-prefix-arg-and-keep) 1)))
 
 (defun conn-wincontrol-heighten-window ()
   (interactive)
-  (enlarge-window (or (conn-wincontrol-prefix-arg) 1)))
+  (enlarge-window (or (conn-wincontrol-prefix-arg-and-keep) 1)))
 
 (defun conn-wincontrol-shorten-window ()
   (interactive)
-  (shrink-window (or (conn-wincontrol-prefix-arg) 1)))
+  (shrink-window (or (conn-wincontrol-prefix-arg-and-keep) 1)))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
