@@ -294,13 +294,13 @@
     (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (if this-command
       (progn
-        (conn--wincontrol-wrap-this-command)
         (setq conn--wincontrol-error-message nil)
         (when (get this-command :conn-wincontrol-preserve-arg)
           (setq conn--wincontrol-preserve-arg t))
         (when (eq 'keyboard-quit this-command)
           (setq conn--wincontrol-error-message
-                (propertize "Quit" 'face 'error))))
+                (propertize "Quit" 'face 'error)))
+        (conn--wincontrol-wrap-this-command))
     (setq conn--wincontrol-preserve-arg t
           conn--wincontrol-error-message
           (propertize

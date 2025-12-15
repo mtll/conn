@@ -25,6 +25,7 @@
 (require 'conn-dispatch)
 (require 'conn-mark)
 (require 'conn-expand)
+(require 'conn-commands)
 (eval-when-compile
   (require 'cl-lib))
 
