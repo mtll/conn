@@ -3531,7 +3531,6 @@ of `conn-recenter-positions'."
          (whitespace-cleanup-region (point) (mark t)))))))
 
 (defun conn-indent-thing (cmd arg transform &optional cleanup-whitespace)
-  "Change region defined by CMD and ARG."
   (interactive
    (conn-read-args (conn-indent-state
                     :prompt "Thing"

@@ -297,7 +297,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "M-h" 'conn-mark-heading
   "C-s" 'isearch-forward
   "s" 'isearch-forward
   "r" 'isearch-backward
@@ -312,6 +311,14 @@
   "," conn-thing-remap
   "p" conn-thing-inner-remap
   "e" 'end-of-buffer)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-read-thing-common-state 'outline-minor-mode)
+  "M-h" 'outline-up-heading)
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-read-thing-common-state 'outline-mode)
+  "M-h" 'outline-up-heading)
 
 ;;;;;; Command State
 

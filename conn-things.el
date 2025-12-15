@@ -778,19 +778,23 @@ words."))
        (let (conn--last-bounds)
          (deactivate-mark)
          (pcase (prefix-numeric-value arg)
-           (0 (setf (conn-bounds bounds) nil))
            (n
             (let ((current-prefix-arg n)
                   (conn-this-command-thing (conn-command-thing thing))
                   (conn-this-command-start (point-marker))
                   (this-command thing))
               (unwind-protect
-                  (progn
-                    (ignore-errors
-                      (call-interactively thing)
-                      (funcall conn-this-command-handler conn-this-command-start))
-                    (setf (conn-bounds bounds) (cons (region-beginning)
-                                                     (region-end))))
+                  (condition-case _
+                      (progn
+                        (call-interactively thing)
+                        (funcall conn-this-command-handler
+                                 conn-this-command-start)
+                        (setf (conn-bounds bounds)
+                              (cons (region-beginning)
+                                    (region-end))))
+                    (error
+                     (setf (conn-bounds bounds) nil
+                           (conn-bounds-get bounds :subregions) nil)))
                 (set-marker conn-this-command-start nil))))))))
     (conn-bounds bounds)))
 
@@ -815,10 +819,9 @@ words."))
                       (this-command thing))
                   (unwind-protect
                       (progn
-                        (ignore-errors
-                          (call-interactively thing)
-                          (funcall conn-this-command-handler
-                                   conn-this-command-start))
+                        (call-interactively thing)
+                        (funcall conn-this-command-handler
+                                 conn-this-command-start)
                         (unless (and (eql pt (point))
                                      (eql mk (mark)))
                           (conn-make-bounds
@@ -827,23 +830,30 @@ words."))
                                  (region-end)))))
                     (set-marker conn-this-command-start nil)))))
            (pcase (prefix-numeric-value arg)
-             (0 nil)
+             (0
+              (conn--bounds-of-thing bounds)
+              (setf (conn-bounds-get bounds :subregions)
+                    (conn-bounds bounds)))
              (n
-              (let (subregions)
-                (catch 'break
-                  (dotimes (_ (abs n))
-                    (if-let* ((bound (bounds-1)))
-                        (push bound subregions)
-                      (throw 'break nil))))
-                (unless (conn-bounds--whole bounds)
-                  (setf (conn-bounds bounds)
-                        (cl-loop for bound in subregions
-                                 for (b . e) = (conn-bounds bound)
-                                 minimize b into beg
-                                 maximize e into end
-                                 finally return (cons beg end))))
-                (setf (conn-bounds-get bounds :subregions)
-                      (nreverse subregions)))))))))))
+              (condition-case _
+                  (let (subregions)
+                    (catch 'break
+                      (dotimes (_ (abs n))
+                        (if-let* ((bound (bounds-1)))
+                            (push bound subregions)
+                          (throw 'break nil))))
+                    (when (conn-bounds-delay-p (conn-bounds bounds))
+                      (setf (conn-bounds bounds)
+                            (cl-loop for bound in subregions
+                                     for (b . e) = (conn-bounds bound)
+                                     minimize b into beg
+                                     maximize e into end
+                                     finally return (cons beg end))))
+                    (setf (conn-bounds-get bounds :subregions)
+                          (nreverse subregions)))
+                (error
+                 (setf (conn-bounds bounds) nil
+                       (conn-bounds-get bounds :subregions) nil)))))))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing t))
                               arg)

@@ -68,14 +68,15 @@
   (conn-push-state 'conn-org-state))
 
 ;;;###autoload
-(defun conn-org-state-prev-heading ()
+(defun conn-org-state-up-heading (arg)
   "A `conn-mode' state for structural editing of `org-mode' buffers."
-  (interactive)
-  (unless (progn
-            (goto-char (pos-bol))
-            (looking-at-p outline-regexp))
-    (org-previous-visible-heading 1))
+  (interactive "p")
+  (outline-up-heading (1- arg))
   (conn-push-state 'conn-org-state))
+
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-org-state-up-heading))
+                              arg)
+  (conn-bounds-of 'org-up-heading (1- arg)))
 
 (defun conn-org-insert-heading ()
   "Insert org heading."
@@ -238,7 +239,7 @@
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler
- 'conn-org-heading-state-prev-heading
+ 'conn-org-heading-state-up-heading
  'org-next-visible-heading
  'org-previous-visible-heading)
 

@@ -103,6 +103,14 @@
                 (cons (region-beginning) (region-end))))
  :forward-op 'outline-next-visible-heading)
 
+(cl-defmethod conn-bounds-of ((cmd (eql outline-up-heading))
+                              arg)
+  (cl-callf prefix-numeric-value arg)
+  (cl-call-next-method cmd
+                       (if (looking-at-p outline-regexp)
+                           arg
+                         (1- arg))))
+
 (conn-define-mark-command conn-mark-heading heading)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
@@ -111,7 +119,7 @@
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
- 'conn-outline-state-prev-heading
+ 'conn-outline-state-up-heading
  'outline-up-heading
  'outline-next-heading
  'outline-next-visible-heading
@@ -120,9 +128,13 @@
  'outline-forward-same-level
  'outline-backward-same-level)
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-prev-heading))
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-up-heading))
                               arg)
-  (conn-bounds-of 'outline-previous-visible-heading arg))
+  (cl-callf prefix-numeric-value arg)
+  (cl-call-next-method 'outline-up-heading
+                       (if (looking-at-p outline-regexp)
+                           arg
+                         (1- arg))))
 
 ;;;###autoload
 (define-minor-mode conntext-outline-mode
@@ -137,12 +149,9 @@
   (interactive)
   (conn-push-state 'conn-outline-state))
 
-(defun conn-outline-state-prev-heading ()
-  (interactive)
-  (unless (progn
-            (goto-char (pos-bol))
-            (looking-at-p outline-regexp))
-    (outline-previous-visible-heading 1))
+(defun conn-outline-state-up-heading (arg)
+  (interactive "p")
+  (outline-up-heading (1- arg))
   (conn-push-state 'conn-outline-state))
 
 (defun conntext-outline-state ()
