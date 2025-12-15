@@ -1558,16 +1558,15 @@ depths will be sorted before greater depths.
           (with-current-buffer ,buf
             (pcase ,signal ,@cases)))))))
 
-(defvar conn-select-mode-lighter " SELECT")
+(defvar conn-dispatch-select-mode-input-method-title nil)
 
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
-  :lighter conn-select-mode-lighter
+  :lighter " SELECT"
   :group 'conn
   (if conn-dispatch-select-mode
       (progn
-        (conn-dispatch-select-input-method-lighter)
         (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
           (face-remap-add-relative
            'mode-line
@@ -1579,14 +1578,6 @@ depths will be sorted before greater depths.
       (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
         (with-current-buffer buf
           (face-remap-remove-relative cookie))))))
-
-(defun conn-dispatch-select-input-method-lighter ()
-  (setf conn-select-mode-lighter
-        (format " %sSELECT"
-                (or (buffer-local-value 'current-input-method-title
-                                        conn-dispatch-input-buffer)
-                    "")))
-  (force-mode-line-update t))
 
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
@@ -1892,8 +1883,7 @@ the meaning of depth."
   (with-current-buffer conn-dispatch-input-buffer
     (let ((inhibit-message nil)
           (message-log-max 1000))
-      (toggle-input-method (conn-read-args-consume-prefix-arg))
-      (conn-dispatch-select-input-method-lighter)))
+      (toggle-input-method (conn-read-args-consume-prefix-arg))))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
@@ -1903,8 +1893,7 @@ the meaning of depth."
       (activate-input-method
        (read-input-method-name
         (format-prompt "Select input method" nil)
-        nil t))
-      (conn-dispatch-select-input-method-lighter)))
+        nil t))))
   (conn-dispatch-handle))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
@@ -4051,40 +4040,22 @@ contain targets."
          (input-method-history input-method-history))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
-      ( :message -100 (_)
-        (concat
-         "arg: "
-         (propertize
-          (cond (conn--read-args-prefix-mag
-                 (number-to-string
-                  (* (if conn--read-args-prefix-sign -1 1)
-                     conn--read-args-prefix-mag)))
-                (conn--read-args-prefix-sign "[-1]")
-                (t "[1]"))
-          'face 'read-multiple-choice-face)))
-      ( :handler (cmd)
-        (pcase cmd
-          ('universal-argument
-           (if conn--read-args-prefix-mag
-               (cl-callf * conn--read-args-prefix-mag 4)
-             (setq conn--read-args-prefix-mag 4))
-           (conn-dispatch-handle))
-          ('digit-argument
-           (let* ((char (if (integerp last-input-event)
-                            last-input-event
-                          (get last-input-event 'ascii-character)))
-                  (digit (- (logand char ?\177) ?0)))
-             (setf conn--read-args-prefix-mag
-                   (if (integerp conn--read-args-prefix-mag)
-                       (+ (* 10 conn--read-args-prefix-mag) digit)
-                     digit)))
-           (conn-dispatch-handle))
-          ('negative-argument
-           (cl-callf not conn--read-args-prefix-sign)
-           (conn-dispatch-handle))))
       ( :message -99 (_)
+        (when-let* ((im (buffer-local-value 'current-input-method-title
+                                            conn-dispatch-input-buffer)))
+          (propertize im 'face 'read-multiple-choice-face)))
+      ( :message -100 (_)
+        (propertize
+         (cond (conn--read-args-prefix-mag
+                (number-to-string
+                 (* (if conn--read-args-prefix-sign -1 1)
+                    conn--read-args-prefix-mag)))
+               (conn--read-args-prefix-sign "[-1]")
+               (t "[1]"))
+         'face 'read-multiple-choice-face))
+      ( :message -95 (_)
         (propertize (conn-action-pretty-print action t)
-                    'face 'eldoc-highlight-function-argument))
+                    'face 'conn-argument-active-face))
       ( :message 0 (_keymap)
         (conn-target-finder-message-prefixes
          conn-dispatch-target-finder))
@@ -4099,7 +4070,7 @@ contain targets."
              (propertize
               "other end"
               'face (when conn-dispatch-other-end
-                      'eldoc-highlight-function-argument))))))
+                      'conn-argument-active-face))))))
       ( :message 15 (keymap)
         (when-let* (((or (length> conn-targets 1)
                          (advice-function-member-p 'conn--dispatch-restrict-windows
@@ -4116,6 +4087,30 @@ contain targets."
                          'conn--dispatch-restrict-windows
                          conn-target-window-predicate)
                     'eldoc-highlight-function-argument)))))
+      ( :handler (cmd)
+        (pcase cmd
+          ('universal-argument
+           (if conn--read-args-prefix-mag
+               (cl-callf * conn--read-args-prefix-mag 4)
+             (setq conn--read-args-prefix-mag 4))
+           (conn-dispatch-handle))
+          ('reset-arg
+           (setq conn--read-args-prefix-mag nil
+                 conn--read-args-prefix-sign nil)
+           (conn-dispatch-handle))
+          ('digit-argument
+           (let* ((char (if (integerp last-input-event)
+                            last-input-event
+                          (get last-input-event 'ascii-character)))
+                  (digit (- (logand char ?\177) ?0)))
+             (setf conn--read-args-prefix-mag
+                   (if (integerp conn--read-args-prefix-mag)
+                       (+ (* 10 conn--read-args-prefix-mag) digit)
+                     digit)))
+           (conn-dispatch-handle))
+          ('negative-argument
+           (cl-callf not conn--read-args-prefix-sign)
+           (conn-dispatch-handle))))
       (when-let* ((predicate (conn-action-window-predicate action)))
         (add-function :after-while conn-target-window-predicate predicate))
       (when-let* ((predicate (conn-action-target-predicate action)))
