@@ -1927,13 +1927,13 @@ the meaning of depth."
     (isearch-backward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up-command)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-up))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down-command)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-down))

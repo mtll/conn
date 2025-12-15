@@ -1202,8 +1202,8 @@ the state stays active if the previous command was a prefix command."
                        (conn-enter-state (conn-peek-state)))))))
     (conn-state-defer
       (setq conn--state-stack
-            (append (remq state (take-while #'identity conn--state-stack))
-                    (drop-while #'identity conn--state-stack)))
+            (append (remq state (seq-take-while #'identity conn--state-stack))
+                    (seq-drop-while #'identity conn--state-stack)))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
