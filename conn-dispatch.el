@@ -93,7 +93,7 @@
 
 (defvar conn-dispatch-action-pulse-color nil)
 
-(defvar conn-window-labeling-function 'conn-header-line-label
+(defvar conn-window-label-function 'conn-header-line-labels
   "Function to label windows for `conn-prompt-for-window'.
 
 The function should accept a single argument, the list of windows to be
@@ -359,7 +359,8 @@ themselves once the selection process has concluded."
             (propertize str 'face 'conn-window-label-face))
           (conn-simple-labels 30)))
 
-(defun conn--ensure-window-labels ()
+(defun conn--simple-window-labels ()
+  (setq conn-dispatch-label-input-method conn-simple-label-input-method)
   (let* ((windows (conn--get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (length< conn--window-label-pool window-count)
@@ -377,7 +378,7 @@ themselves once the selection process has concluded."
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
-(defun conn-header-line-label (window string)
+(defun conn--setup-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
          '(conn-mode (:eval (conn--centered-header-label)))))
@@ -390,6 +391,12 @@ themselves once the selection process has concluded."
           (conn-window-label (propertize string 'face 'conn-window-label-face)
                              window)
         (goto-char (window-start))))))
+
+(defun conn-header-line-labels (windows)
+  (conn--simple-window-labels)
+  (cl-loop for win in windows
+           collect (conn--setup-header-line-label
+                    win (window-parameter win 'conn-label-string))))
 
 ;; From ace-window
 (defun conn--get-windows (&optional window
@@ -409,32 +416,39 @@ themselves once the selection process has concluded."
                    (and predicate (not (funcall predicate win))))
            collect win))
 
+(defmacro conn-with-window-labels (binder &rest body)
+  (declare (indent 1))
+  (pcase binder
+    (`(,var ,val)
+     `(let ((,var ,val))
+        (unwind-protect
+            ,(macroexp-progn body)
+          (mapc #'conn-label-delete ,var))))
+    (_ (error "Unexpected binding form %s" binder))))
+
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
   (cond
    ((null windows) nil)
-   (t
-    (conn--ensure-window-labels)
-    (let ((labels
-           (cl-loop for win in windows
-                    collect (funcall conn-window-labeling-function
-                                     win (window-parameter win 'conn-label-string))))
-          (conn-label-select-always-prompt always-prompt))
-      (unwind-protect
-          (conn-with-dispatch-event-handlers
-            ( :handler (cmd)
-              (when (or (and (eq cmd 'act)
-                             (mouse-event-p last-input-event))
-                        (eq 'dispatch-mouse-repeat
-                            (event-basic-type last-input-event)))
-                (let* ((posn (event-start last-input-event))
-                       (win (posn-window posn)))
-                  (when (and (not (posn-area posn))
-                             (funcall conn-target-window-predicate win))
-                    (:return win)))))
-            (conn-label-select labels #'conn-dispatch-read-char))
-        (mapc #'conn-label-delete labels))))))
+   (t (conn-with-window-labels
+          (labels (funcall conn-window-label-function windows))
+        (conn-with-dispatch-event-handlers
+          ( :handler (cmd)
+            (when (or (and (eq cmd 'act)
+                           (mouse-event-p last-input-event))
+                      (eq 'dispatch-mouse-repeat
+                          (event-basic-type last-input-event)))
+              (let* ((posn (event-start last-input-event))
+                     (win (posn-window posn)))
+                (when (not (posn-area posn))
+                  (:return win)))))
+          (conn-label-select
+           labels
+           (lambda (prompt)
+             (conn-dispatch-read-char prompt 'label))
+           nil
+           always-prompt))))))
 
 ;;;; Dispatch State
 
@@ -1535,6 +1549,8 @@ Target overlays may override this default by setting the
 
 (defvar conn-dispatch-amalgamate-undo nil)
 
+(defvar conn-dispatch-input-buffer nil)
+
 (defmacro conn-dispatch-undo-case (depth &rest cases)
   "Add an undo case to the current iterations undo list.
 
@@ -1790,12 +1806,12 @@ the meaning of depth."
             (setq conn--read-args-error-message nil
                   conn--dispatch-must-prompt nil)
             (push `(no-record . ,last-input-event) unread-command-events)
-            (cl-return (read-ev
-                        (unless inhibit-message
-                          (concat prompt
-                                  (conn--dispatch-read-char-prefix keymap)
-                                  ": "
-                                  prompt-suffix)))))
+            (cl-return
+             (read-ev (unless inhibit-message
+                        (concat prompt
+                                (conn--dispatch-read-char-prefix keymap)
+                                ": "
+                                prompt-suffix)))))
            (cmd
             (setq conn--read-args-error-message nil)
             (let ((unhandled nil))
@@ -3996,8 +4012,6 @@ contain targets."
               :setup-function ,setup-function))))
 
 ;;;;; Dispatch Commands
-
-(defvar conn-dispatch-input-buffer nil)
 
 (cl-defun conn-dispatch-setup (action
                                thing

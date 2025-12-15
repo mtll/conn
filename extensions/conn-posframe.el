@@ -145,7 +145,6 @@
             (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
-
       (unless window-side
         (dolist (buffer (buffer-list frame))
           (when (and (buffer-live-p buffer)
@@ -162,7 +161,6 @@
               (cl-pushnew new-buffer found-buffers)
               (when (length= found-buffers conn-posframe-buffer-context-lines)
                 (throw 'found t))))))
-
       (dolist (entry (reverse (window-prev-buffers window)))
         (when (and (not (eq new-buffer (car entry)))
                    (not (eq old-buffer (car entry)))
@@ -176,11 +174,9 @@
             (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
-
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
-
     (mapconcat
      (lambda (buf)
        (with-current-buffer buf
@@ -208,7 +204,6 @@
                 (switch-to-prev-buffer-skip
                  frame)))
          found-buffers new-buffer killed-buffers skipped)
-
     (catch 'found
       (dolist (entry (window-prev-buffers window))
         (when (and (not (eq (car entry) old-buffer))
@@ -223,7 +218,6 @@
             (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
-
       (unless window-side
         (dolist (buffer (nreverse (buffer-list frame)))
           (when (and (buffer-live-p buffer)
@@ -238,7 +232,6 @@
               (cl-pushnew new-buffer found-buffers)
               (when (length= found-buffers conn-posframe-buffer-context-lines)
                 (throw 'found t))))))
-
       (dolist (buffer (reverse next-buffers))
         (when (and (or (buffer-live-p buffer)
                        (not (setq killed-buffers
@@ -252,11 +245,9 @@
             (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
-
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
-
     (mapconcat
      (lambda (buf)
        (with-current-buffer buf
@@ -539,8 +530,7 @@
       (remove-text-properties 0 (1- (length result)) '(face) result)
       result)))
 
-;;;###autoload
-(defun conn-posframe-window-label (window string)
+(defun conn--setup-posframe-window-label (window string)
   (let ((bufname (format " *conn-label-posfame-%s*" string)))
     (with-selected-window window
       (posframe-show
@@ -553,6 +543,13 @@
         (overlay-put overlay 'window window)
         (overlay-put overlay 'face 'shadow)
         (conn--make-posframe-window-label string window bufname overlay)))))
+
+;;;###autoload
+(defun conn-posframe-window-labels (windows)
+  (conn--simple-window-labels)
+  (cl-loop for win in windows
+           collect (conn--setup-posframe-window-label
+                    win (window-parameter win 'conn-label-string))))
 
 (cl-defmethod conn-label-delete ((label conn-posframe-window-label))
   (delete-overlay (conn-posframe-window-label-overlay label))
