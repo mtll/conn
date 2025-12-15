@@ -1736,7 +1736,8 @@ the meaning of depth."
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
                                        conn-dispatch-read-char-map)))
     (cl-flet ((read-ev (prompt &optional seconds)
-                (with-current-buffer conn-dispatch-input-buffer
+                (with-current-buffer (or conn-dispatch-input-buffer
+                                         (current-buffer))
                   (let ((scroll-conservatively 100))
                     (pcase inherit-input-method
                       ('nil
@@ -1745,11 +1746,13 @@ the meaning of depth."
                        (let ((pim current-input-method)
                              (default-input-method default-input-method)
                              (input-method-history input-method-history))
-                         (unwind-protect
-                             (progn
-                               (activate-input-method conn-dispatch-label-input-method)
-                               (read-event prompt t seconds))
-                           (activate-input-method pim))))
+                         (conn-without-input-method-hooks
+                           (unwind-protect
+                               (progn
+                                 (activate-input-method
+                                  conn-dispatch-label-input-method)
+                                 (read-event prompt t seconds))
+                             (activate-input-method pim)))))
                       (_
                        (read-event prompt t seconds)))))))
       (if seconds
