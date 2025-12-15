@@ -467,6 +467,11 @@ themselves once the selection process has concluded."
     (cl-loop for i from ?\s below 256
              do (define-key map (vector i) 'dispatch-character-event))
     (keymap-set map "C-g" 'keyboard-quit)
+    (keymap-set map "C-q" 'quoted-insert)
+    (keymap-set map "RET" 'quoted-insert)
+    (keymap-set map "<return>" 'quoted-insert)
+    (keymap-set map "<tab>" 'quoted-insert)
+    (keymap-set map "TAB" 'quoted-insert)
     map))
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
@@ -1772,6 +1777,12 @@ the meaning of depth."
                       (read-key-sequence-vector)
                       (key-binding t))))
            ('restart (cl-return 8))
+           ('quoted-insert
+            (let (translation-table-for-input
+                  input-method-function)
+              (cl-return
+               (read-char (propertize "Quoted Char: "
+                                      'face 'minibuffer-prompt)))))
            ('dispatch-character-event
             (setq conn--read-args-error-message nil
                   conn--dispatch-must-prompt nil)
