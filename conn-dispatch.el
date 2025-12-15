@@ -2246,7 +2246,7 @@ to the key binding for that target."
     (conn-with-dispatch-event-handlers
       ( :handler (obj)
         (when (conn-dispatch-label-p obj)
-          (:return obj)))
+          (:return (conn-label-payload obj))))
       ( :keymap
         (let ((map (make-sparse-keymap)))
           (cl-loop for label in labels
@@ -2254,14 +2254,12 @@ to the key binding for that target."
                    do (keymap-set map key label))
           (mapc #'conn-label-redisplay labels)
           map))
-      (conn-label-payload
-       (progn
-         (ignore (conn-dispatch-read-char "Register"))
-         (while t
-           (ignore
-            (conn-dispatch-read-char
-             "Register" nil nil
-             (propertize "Invalid key" 'face 'error)))))))))
+      (ignore (conn-dispatch-read-char "Register"))
+      (while t
+        (ignore
+         (conn-dispatch-read-char
+          "Register" nil nil
+          (propertize "Invalid key" 'face 'error)))))))
 
 (defclass conn-dispatch-retargetable-mixin ()
   ()
