@@ -3473,4 +3473,76 @@ of `conn-recenter-positions'."
      (list thing arg transform)))
   (conn-change-thing-do cmd arg transform))
 
+;;;;; Indent
+
+(defvar conn-indent-special-ref nil)
+
+(defvar conn-indent-reference
+  (list (conn-reference-page "Indent"
+          "Indent some thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-change-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
+(conn-define-state conn-indent-state (conn-read-thing-state)
+  :lighter "INDENT")
+
+(defvar-keymap conn-indent-cleanup-whitespace-map
+  "RET" 'cleanup-whitespace
+  "<return>" 'cleanup-whitespace)
+
+(defvar-keymap conn-indent-thing-argument-map)
+
+(cl-defstruct (conn-indent-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-indent-thing-argument
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (keymap conn-indent-thing-argument-map)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
+(cl-defgeneric conn-indent-thing-do (cmd arg transform)
+  (declare (conn-anonymous-thing-property :indent-op)))
+
+(cl-defmethod conn-indent-thing-do (cmd arg transform)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (indent-region beg end))))
+
+(cl-defmethod conn-indent-thing-do (cmd
+                                    arg
+                                    transform
+                                    &optional
+                                    cleanup-whitespace)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (save-mark-and-excursion
+       (goto-char beg)
+       (conn--push-ephemeral-mark end)
+       (indent-region (point) (mark t))
+       (when cleanup-whitespace
+         (whitespace-cleanup-region (point) (mark t)))))))
+
+(defun conn-indent-thing (cmd arg transform &optional cleanup-whitespace)
+  "Change region defined by CMD and ARG."
+  (interactive
+   (conn-read-args (conn-indent-state
+                    :prompt "Thing"
+                    :reference conn-indent-reference)
+       ((`(,thing ,arg) (conn-indent-thing-argument))
+        (transform (conn-transform-argument))
+        (cleanup-whitespace
+         (conn-boolean-argument 'cleanup-whitespace
+                                conn-indent-cleanup-whitespace-map
+                                "cleanup-whitespace")))
+     (list thing arg transform cleanup-whitespace)))
+  (conn-indent-thing-do cmd arg transform cleanup-whitespace))
+
 (provide 'conn-commands)

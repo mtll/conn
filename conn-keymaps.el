@@ -318,6 +318,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "T" 'conn-indent-thing
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
