@@ -290,8 +290,20 @@
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
     (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
-  (conn--wincontrol-wrap-this-command)
-  (setq conn--wincontrol-error-message nil)
+  (if this-command
+      (progn
+        (conn--wincontrol-wrap-this-command)
+        (setq conn--wincontrol-error-message nil)
+        (when (eq this-command 'keyboard-quit)
+          (setq conn--wincontrol-preserve-arg t
+                conn--wincontrol-error-message
+                (propertize "Quit" 'face 'error))))
+    (setq conn--wincontrol-preserve-arg t
+          conn--wincontrol-error-message
+          (propertize
+           (format "%s is undefined"
+                   (key-description (this-command-keys)))
+           'face 'error)))
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message nil)))
