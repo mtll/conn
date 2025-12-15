@@ -1782,8 +1782,7 @@ the meaning of depth."
            ('restart (cl-return 8))
            ('ignore)
            ('quoted-insert
-            (let (translation-table-for-input
-                  input-method-function)
+            (let (input-method-function)
               (cl-return
                (read-char (propertize "Quoted Char: "
                                       'face 'minibuffer-prompt)))))
