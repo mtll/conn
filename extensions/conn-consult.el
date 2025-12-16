@@ -163,7 +163,7 @@
                   (set-marker marker nil))))
             cands)))
       (conn-regions-kapply-prefix
-       (conn-kapply-point-iterator regions))))
+       (conn-kapply-region-iterator regions))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
