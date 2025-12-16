@@ -106,12 +106,7 @@
   "Padding for posframe.")
 
 (defun conn-posframe--hide-pre ()
-  (unless (or (advice-member-p 'conn-posframe--switch-kmacro-display
-                               this-command)
-              (advice-member-p 'conn-posframe--switch-tab-display
-                               this-command)
-              (advice-member-p 'conn-posframe--switch-buffer-display
-                               this-command))
+  (unless (advice-member-p 'conn-list-posframe this-command)
     (posframe-hide " *conn-list-posframe*")
     (remove-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
@@ -130,7 +125,6 @@
                 (switch-to-prev-buffer-skip
                  frame)))
          found-buffers new-buffer killed-buffers skipped)
-
     (catch 'found
       (dolist (buffer next-buffers)
         (when (and (or (buffer-live-p buffer)
@@ -179,13 +173,13 @@
         (cl-pushnew new-buffer found-buffers)))
     (mapconcat
      (lambda (buf)
-       (with-current-buffer buf
-         (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                     (concat conn-posframe--padding
-                             (nerd-icons-icon-for-buffer)
-                             conn-posframe--padding)
-                   conn-posframe--padding)
-                 (buffer-name buf))))
+       (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                   (concat conn-posframe--padding
+                           (with-current-buffer buf
+                             (nerd-icons-icon-for-buffer))
+                           conn-posframe--padding)
+                 conn-posframe--padding)
+               (buffer-name buf)))
      found-buffers
      "\n")))
 
@@ -250,13 +244,13 @@
         (cl-pushnew new-buffer found-buffers)))
     (mapconcat
      (lambda (buf)
-       (with-current-buffer buf
-         (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                     (concat conn-posframe--padding
-                             (nerd-icons-icon-for-buffer)
-                             conn-posframe--padding)
-                   conn-posframe--padding)
-                 (buffer-name buf))))
+       (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                   (concat conn-posframe--padding
+                           (with-current-buffer buf
+                             (nerd-icons-icon-for-buffer))
+                           conn-posframe--padding)
+                 conn-posframe--padding)
+               (buffer-name buf)))
      (nreverse found-buffers)
      "\n")))
 
@@ -264,7 +258,7 @@
   (when (and (not executing-kbd-macro)
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
-                        thereis (advice-member-p 'conn-posframe--switch-buffer-display fn))))
+                        thereis (advice-member-p 'conn-list-posframe fn))))
     (let* ((header (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
                                (concat conn-posframe--padding
@@ -303,7 +297,7 @@
 (defun conn-posframe--switch-tab-display (&rest _)
   (when (and (not executing-kbd-macro)
              (cl-loop for fn in (cons this-command (function-alias-p this-command))
-                      thereis (advice-member-p 'conn-posframe--switch-tab-display fn)))
+                      thereis (advice-member-p 'conn-list-posframe fn)))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
@@ -339,7 +333,7 @@
   (when (and (not executing-kbd-macro)
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
-                        thereis (advice-member-p 'conn-posframe--switch-kmacro-display fn))))
+                        thereis (advice-member-p 'conn-list-posframe fn))))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
@@ -405,7 +399,7 @@
   (when (and (not executing-kbd-macro)
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
-                        thereis (advice-member-p 'conn-posframe--dispatch-ring-display fn)))
+                        thereis (advice-member-p 'conn-list-posframe fn)))
              conn-dispatch-ring)
     (conn-posframe--dispatch-ring-display-subr)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
@@ -418,45 +412,58 @@
   (if conn-posframe-mode
       (progn
         (advice-add 'kmacro-cycle-ring-next :after
-                    'conn-posframe--switch-kmacro-display)
+                    'conn-posframe--switch-kmacro-display
+                    '((name . conn-list-posframe)))
         (advice-add 'kmacro-cycle-ring-previous :after
-                    'conn-posframe--switch-kmacro-display)
+                    'conn-posframe--switch-kmacro-display
+                    '((name . conn-list-posframe)))
         (advice-add 'previous-buffer :after
-                    'conn-posframe--switch-buffer-display)
+                    'conn-posframe--switch-buffer-display
+                    '((name . conn-list-posframe)))
         (advice-add 'next-buffer :after
-                    'conn-posframe--switch-buffer-display)
+                    'conn-posframe--switch-buffer-display
+                    '((name . conn-list-posframe)))
         (advice-add 'bury-buffer :after
-                    'conn-posframe--switch-buffer-display)
+                    'conn-posframe--switch-buffer-display
+                    '((name . conn-list-posframe)))
         (advice-add 'unbury-buffer :after
-                    'conn-posframe--switch-buffer-display)
+                    'conn-posframe--switch-buffer-display
+                    '((name . conn-list-posframe)))
         (advice-add 'conn-kill-this-buffer :after
-                    'conn-posframe--switch-buffer-display)
+                    'conn-posframe--switch-buffer-display
+                    '((name . conn-list-posframe)))
         (advice-add 'tab-bar-new-tab :after
-                    'conn-posframe--switch-tab-display)
+                    'conn-posframe--switch-tab-display
+                    '((name . conn-list-posframe)))
         (advice-add 'tab-bar-switch-to-next-tab :after
-                    'conn-posframe--switch-tab-display)
+                    'conn-posframe--switch-tab-display
+                    '((name . conn-list-posframe)))
         (advice-add 'tab-bar-switch-to-prev-tab :after
-                    'conn-posframe--switch-tab-display)
+                    'conn-posframe--switch-tab-display
+                    '((name . conn-list-posframe)))
         (advice-add 'tab-bar-close-tab :after
-                    'conn-posframe--switch-tab-display)
+                    'conn-posframe--switch-tab-display
+                    '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-previous :after
-                    'conn-posframe--dispatch-ring-display)
+                    'conn-posframe--dispatch-ring-display
+                    '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-next :after
-                    'conn-posframe--dispatch-ring-display)
+                    'conn-posframe--dispatch-ring-display
+                    '((name . conn-list-posframe)))
         (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
         (defvar conn-quick-ref-display-function)
         (setq conn-quick-ref-display-function 'conn--quick-ref-posframe))
-    (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
-    (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
-    (advice-remove 'previous-buffer 'conn-posframe--switch-buffer-display)
-    (advice-remove 'next-buffer 'conn-posframe--switch-buffer-display)
-    (advice-remove 'bury-buffer 'conn-posframe--switch-buffer-display)
-    (advice-remove 'unbury-buffer 'conn-posframe--switch-buffer-display)
-    (advice-remove 'conn-kill-this-buffer 'conn-posframe--switch-buffer-display)
-    (advice-remove 'tab-bar-new-tab 'conn-posframe--switch-tab-display)
-    (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
-    (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
-    (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)
+    (advice-remove 'kmacro-cycle-ring-next 'conn-list-posframe)
+    (advice-remove 'kmacro-cycle-ring-previous 'conn-list-posframe)
+    (advice-remove 'previous-buffer 'conn-list-posframe)
+    (advice-remove 'next-buffer 'conn-list-posframe)
+    (advice-remove 'bury-buffer 'conn-list-posframe)
+    (advice-remove 'unbury-buffer 'conn-list-posframe)
+    (advice-remove 'conn-kill-this-buffer 'conn-list-posframe)
+    (advice-remove 'tab-bar-new-tab 'conn-list-posframe)
+    (advice-remove 'tab-bar-switch-to-next-tab 'conn-list-posframe)
+    (advice-remove 'tab-bar-switch-to-prev-tab 'conn-list-posframe)
+    (advice-remove 'tab-bar-close-tab 'conn-list-posframe)
     (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
     (defvar conn-quick-ref-display-function)
     (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
