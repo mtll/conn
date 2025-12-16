@@ -895,15 +895,6 @@ words."))
                               _arg)
   (alist-get (recursion-depth) conn--last-bounds))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
-                              _arg)
-  (save-mark-and-excursion
-    (goto-char (nth 0 conn-previous-mark-state))
-    (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state) nil t)
-    (when (nth 2 conn-previous-mark-state)
-      (rectangle-mark-mode 1))
-    (cl-call-next-method)))
-
 (defvar conn--bounds-last-kbd-macro nil)
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing kbd-macro))
@@ -1091,7 +1082,7 @@ words."))
          (goto-char (mark))
          (rectangle--col-pos mc 'mark))
        (rectangle--col-pos pc 'point)))
-    (conn-bounds-of 'region nil)))
+    (cl-call-next-method)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
                               arg)
