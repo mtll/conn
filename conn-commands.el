@@ -1345,7 +1345,7 @@ instances of from-string.")
   (unless noerror
     (barf-if-buffer-read-only))
   (deactivate-mark)
-  (conn--with-region-emphasis regions
+  (conn-with-region-emphasis regions
     (let* ((conn-query-flag conn-query-flag)
            (from (conn--replace-read-from prompt
                                           regions

@@ -29,15 +29,7 @@
 
 (defconst conn--key-missing (gensym "key-missing"))
 
-(defmacro conn-protected-let* (varlist &rest body)
-  "Bind variables according to VARLIST then eval body as in `let*'.
-
-In addition to what `let*' accepts, each element of VARLIST may also be
-of the form (SYMBOL VALUEFORM . CLEANUP-FORMS), which binds SYMBOL to
-VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
-
-CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
-  (declare (indent 1))
+(defun conn--protected-let* (varlist body)
   (cl-with-gensyms (success)
     (named-let protect ((binding (car (last varlist)))
                         (rest (reverse (cons success (butlast varlist))))
@@ -54,6 +46,17 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                        (unless ,success ,@cleanup)))))
         (_ (protect (car rest) (cdr rest)
                     (macroexp-let* (list binding) body)))))))
+
+(defmacro conn-protected-let* (varlist &rest body)
+  "Bind variables according to VARLIST then eval body as in `let*'.
+
+In addition to what `let*' accepts, each element of VARLIST may also be
+of the form (SYMBOL VALUEFORM . CLEANUP-FORMS), which binds SYMBOL to
+VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
+
+CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
+  (declare (indent 1))
+  (conn--protected-let* varlist body))
 
 (defmacro conn--unwind-protect-all (&rest body)
   (declare (indent 0))
@@ -190,7 +193,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                   ,property)
        ,default)))
 
-(gv-define-setter conn-get-buffer-property (value property &optional buffer _default)
+(gv-define-setter conn-get-buffer-property (value
+                                            property
+                                            &optional
+                                            buffer
+                                            _default)
   `(conn-set-buffer-property ,property ,value ,buffer))
 
 (defun conn-set-buffer-property (property value &optional buffer)
@@ -207,7 +214,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 ;;;;; Rings
 
 (cl-defstruct (conn-ring
-               (:constructor conn-make-ring (capacity &key cleanup copier))
+               ( :constructor conn-make-ring
+                 (capacity &key cleanup copier))
                (:copier conn--copy-ring))
   "A ring that removes elements in least recently visited order."
   (list nil :type list)
@@ -321,10 +329,7 @@ If ring is (1 2 3 4) 4 would be returned."
 
 ;;;;; Region Utils
 
-(defmacro conn--with-region-emphasis (regions &rest body)
-  "Run BODY with the text in the complement of REGIONS shadowed."
-  (declare (debug (form form body))
-           (indent 1))
+(defun conn--with-region-emphasis (regions body)
   (cl-with-gensyms (overlays)
     (cl-once-only (regions)
       `(let (,overlays)
@@ -346,6 +351,12 @@ If ring is (1 2 3 4) 4 would be returned."
                                (push ov ,overlays))))
                ,@body)
            (mapc #'delete-overlay ,overlays))))))
+
+(defmacro conn-with-region-emphasis (regions &rest body)
+  "Run BODY with the text in the complement of REGIONS shadowed."
+  (declare (debug (form form body))
+           (indent 1))
+  (conn--with-region-emphasis regions body))
 
 ;; From expand-region
 (defun conn--point-in-comment-p ()
@@ -431,7 +442,7 @@ the same form and contains disjoint (BEG . END) pairs."
     (nreverse merged)))
 
 (defun conn-read-regexp (prompt &rest regions)
-  (conn--with-region-emphasis regions
+  (conn-with-region-emphasis regions
     (minibuffer-with-setup-hook
         (minibuffer-lazy-highlight-setup
          :case-fold case-fold-search

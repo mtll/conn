@@ -184,9 +184,8 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-char-handlers nil)
 (defvar conn--dispatch-read-char-message-prefixes nil)
 
-(defmacro conn-with-dispatch-event-handlers (&rest body)
-  (declare (indent 0))
-  (let* ((tag (make-symbol "handle"))
+(defun conn--with-dispatch-event-handlers (body)
+  (let* ((tag (gensym "tag"))
          (return-expander
           `(:return . ,(lambda (&optional result)
                          `(throw ',tag ,result))))
@@ -226,6 +225,10 @@ strings have `conn-dispatch-label-face'."
            (conn--dispatch-read-char-handlers
             conn--dispatch-read-char-handlers))
        (catch ',tag ,@(macroexp-unprogn body)))))
+
+(defmacro conn-with-dispatch-event-handlers (&rest body)
+  (declare (indent 0))
+  (conn--with-dispatch-event-handlers body))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -1112,112 +1115,112 @@ Target overlays may override this default by setting the
                            target
                            padding-function)
                 label)
-               (full-string (concat prefix string suffix)))
-    (let* ((window (overlay-get overlay 'window))
-           (display-width
-            (conn--string-pixel-width full-string (window-buffer window)))
-           (padding-width 0)
-           (ov nil))
-      (unwind-protect
-          (progn
-            ;; display-line-numbers, line-prefix and wrap-prefix break
-            ;; width calculations, temporarily disable them.
-            (setq ov (make-overlay (point-min) (point-max)))
-            (overlay-put ov 'priority most-positive-fixnum)
-            (overlay-put ov 'display-line-numbers-disable t)
-            (overlay-put ov 'line-prefix "")
-            (overlay-put ov 'wrap-prefix "")
-            (unless (= (overlay-start overlay) (point-max))
-              (let* ((win (overlay-get target 'window))
-                     (beg (overlay-end target))
-                     (beg-width nil)
-                     (end nil)
-                     (line-end
-                      (or (conn--dispatch-eol beg win)
-                          (save-excursion
-                            (goto-char beg)
-                            (pos-eol))))
-                     (pt beg))
-                ;; Find the end of the label overlay.  Barring
-                ;; exceptional conditions, which see the test clauses of
-                ;; the following cond form, we want the label overlay to
-                ;; be wider than the label string.
-                (while (not end)
-                  (cond
-                   ;; If we are at the end of a line than end the label overlay.
-                   ((= line-end pt)
-                    (if (and (not (invisible-p pt))
-                             (/= pt beg))
-                        (setq end pt)
-                      ;; If we are at the end of the line and the label
-                      ;; overlay has width 0 then we need to expand the
-                      ;; label overlay to include the EOL and append it
-                      ;; as an after overlay.  Ensure we preserve the
-                      ;; invisibility property when we do so.
-                      (setq end (1+ pt))
-                      (let ((str (buffer-substring pt end)))
-                        (add-text-properties
-                         0 (length str)
-                         `(invisible ,(get-char-property pt 'invisible win))
-                         str)
-                        (overlay-put overlay 'after-string str))))
-                   ;; If the label overlay is wider than the label
-                   ;; string we are done.
-                   ((let ((width
-                           (save-excursion
-                             (with-restriction beg pt
-                               (- (car (window-text-pixel-size window beg pt))
-                                  ;; Subtract the width of any
-                                  ;; before strings
-                                  (with-memoization beg-width
-                                    (car (window-text-pixel-size window beg beg))))))))
-                      ;; FIXME: This doesn't handle zero length
-                      ;;        overlays with after strings.
-                      (when (or (= pt (point-max))
-                                (>= width display-width))
-                        (setq padding-width (max (- width display-width) 0)
-                              end pt))))
-                   ((and (/= beg pt)
-                         (conn--overlays-in-of-type pt (1+ pt)
-                                                    'conn-target-overlay
-                                                    window))
-                    (setq end pt))
-                   ((and (get-char-property pt 'after-string)
-                         (= pt (next-single-char-property-change
-                                (1- pt) 'after-string nil (1+ pt))))
-                    (setq end (1+ pt)))
-                   ;; If we are abutting another target overlay then end
-                   ;; the label overlay here so that we don't hide it.
-                   ((dolist (ov (overlays-in pt (1+ pt)) end)
-                      (when (and (eq 'conn-target-overlay
-                                     (overlay-get ov 'category))
-                                 (or (/= (overlay-start target)
-                                         (overlay-start ov))
-                                     (/= (overlay-end target)
-                                         (overlay-end ov))))
-                        (setq end pt))))
-                   ((get-text-property pt 'composition)
-                    (setq pt (next-single-property-change
-                              pt 'composition nil line-end)))
-                   (t (cl-incf pt))))
-                (move-overlay overlay (overlay-start overlay) end)))
-            (cond
-             ((= (overlay-start overlay) (overlay-end overlay))
-              (overlay-put overlay 'before-string full-string))
-             ((overlay-get overlay 'after-string)
-              (overlay-put overlay 'display full-string))
-             (t
-              (overlay-put overlay 'display full-string)
-              (if padding-function
-                  (funcall padding-function
-                           overlay
-                           padding-width
-                           (overlay-get target 'label-face))
-                (funcall conn-default-label-padding-function
+               (full-string (concat prefix string suffix))
+               (window (overlay-get overlay 'window))
+               (display-width
+                (conn--string-pixel-width full-string (window-buffer window)))
+               (padding-width 0)
+               (ov nil))
+    (unwind-protect
+        (progn
+          ;; display-line-numbers, line-prefix and wrap-prefix break
+          ;; width calculations, temporarily disable them.
+          (setq ov (make-overlay (point-min) (point-max)))
+          (overlay-put ov 'priority most-positive-fixnum)
+          (overlay-put ov 'display-line-numbers-disable t)
+          (overlay-put ov 'line-prefix "")
+          (overlay-put ov 'wrap-prefix "")
+          (unless (= (overlay-start overlay) (point-max))
+            (let* ((win (overlay-get target 'window))
+                   (beg (overlay-end target))
+                   (beg-width nil)
+                   (end nil)
+                   (line-end
+                    (or (conn--dispatch-eol beg win)
+                        (save-excursion
+                          (goto-char beg)
+                          (pos-eol))))
+                   (pt beg))
+              ;; Find the end of the label overlay.  Barring
+              ;; exceptional conditions, which see the test clauses of
+              ;; the following cond form, we want the label overlay to
+              ;; be wider than the label string.
+              (while (not end)
+                (cond
+                 ;; If we are at the end of a line than end the label overlay.
+                 ((= line-end pt)
+                  (if (and (not (invisible-p pt))
+                           (/= pt beg))
+                      (setq end pt)
+                    ;; If we are at the end of the line and the label
+                    ;; overlay has width 0 then we need to expand the
+                    ;; label overlay to include the EOL and append it
+                    ;; as an after overlay.  Ensure we preserve the
+                    ;; invisibility property when we do so.
+                    (setq end (1+ pt))
+                    (let ((str (buffer-substring pt end)))
+                      (add-text-properties
+                       0 (length str)
+                       `(invisible ,(get-char-property pt 'invisible win))
+                       str)
+                      (overlay-put overlay 'after-string str))))
+                 ;; If the label overlay is wider than the label
+                 ;; string we are done.
+                 ((let ((width
+                         (save-excursion
+                           (with-restriction beg pt
+                             (- (car (window-text-pixel-size window beg pt))
+                                ;; Subtract the width of any
+                                ;; before strings
+                                (with-memoization beg-width
+                                  (car (window-text-pixel-size window beg beg))))))))
+                    ;; FIXME: This doesn't handle zero length
+                    ;;        overlays with after strings.
+                    (when (or (= pt (point-max))
+                              (>= width display-width))
+                      (setq padding-width (max (- width display-width) 0)
+                            end pt))))
+                 ((and (/= beg pt)
+                       (conn--overlays-in-of-type pt (1+ pt)
+                                                  'conn-target-overlay
+                                                  window))
+                  (setq end pt))
+                 ((and (get-char-property pt 'after-string)
+                       (= pt (next-single-char-property-change
+                              (1- pt) 'after-string nil (1+ pt))))
+                  (setq end (1+ pt)))
+                 ;; If we are abutting another target overlay then end
+                 ;; the label overlay here so that we don't hide it.
+                 ((dolist (ov (overlays-in pt (1+ pt)) end)
+                    (when (and (eq 'conn-target-overlay
+                                   (overlay-get ov 'category))
+                               (or (/= (overlay-start target)
+                                       (overlay-start ov))
+                                   (/= (overlay-end target)
+                                       (overlay-end ov))))
+                      (setq end pt))))
+                 ((get-text-property pt 'composition)
+                  (setq pt (next-single-property-change
+                            pt 'composition nil line-end)))
+                 (t (cl-incf pt))))
+              (move-overlay overlay (overlay-start overlay) end)))
+          (cond
+           ((= (overlay-start overlay) (overlay-end overlay))
+            (overlay-put overlay 'before-string full-string))
+           ((overlay-get overlay 'after-string)
+            (overlay-put overlay 'display full-string))
+           (t
+            (overlay-put overlay 'display full-string)
+            (if padding-function
+                (funcall padding-function
                          overlay
                          padding-width
-                         (overlay-get target 'label-face))))))
-        (when ov (delete-overlay ov))))))
+                         (overlay-get target 'label-face))
+              (funcall conn-default-label-padding-function
+                       overlay
+                       padding-width
+                       (overlay-get target 'label-face))))))
+      (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -1653,24 +1656,23 @@ depths will be sorted before greater depths.
 
 (defun conn-select-target ()
   (cl-loop
-   (catch 'dispatch-change-target
-     (catch 'dispatch-redisplay
-       (pcase-let* ((emulation-mode-map-alists
-                     `(((conn-dispatch-select-mode
-                         . ,(make-composed-keymap
-                             (conn-target-finder-keymaps
-                              conn-dispatch-target-finder))))
-                       ,@emulation-mode-map-alists))
-                    (`(,pt ,win ,thing-override)
-                     (conn-target-finder-select
-                      conn-dispatch-target-finder))
-                    (`(,thing ,arg ,transform)
-                     conn--dispatch-current-thing))
-         (cl-return (list pt
-                          win
-                          (or thing-override thing)
-                          arg
-                          transform)))))))
+   (catch 'dispatch-redisplay
+     (pcase-let* ((emulation-mode-map-alists
+                   `(((conn-dispatch-select-mode
+                       . ,(make-composed-keymap
+                           (conn-target-finder-keymaps
+                            conn-dispatch-target-finder))))
+                     ,@emulation-mode-map-alists))
+                  (`(,pt ,win ,thing-override)
+                   (conn-target-finder-select
+                    conn-dispatch-target-finder))
+                  (`(,thing ,arg ,transform)
+                   conn--dispatch-current-thing))
+       (cl-return (list pt
+                        win
+                        (or thing-override thing)
+                        arg
+                        transform))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   (require 'pulse)
@@ -1886,7 +1888,7 @@ the meaning of depth."
     (conn-target-finder-cleanup conn-dispatch-target-finder)
     (setq conn-dispatch-target-finder (conn-get-target-finder thing arg)
           conn--dispatch-current-thing (list thing arg transform))
-    (throw 'dispatch-change-target nil)))
+    (conn-dispatch-handle-and-redisplay)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (conn-with-overriding-map conn-dispatch-read-char-map
@@ -2089,41 +2091,48 @@ the meaning of depth."
 (defvar conn-dispatch-post-update-functions nil)
 (defvar conn-dispatch-pre-update-functions nil)
 
+(defun conn--define-target-finder (name
+                                   superclasses
+                                   slots
+                                   docstring
+                                   properties)
+  (pcase properties
+    ((map :update-method :default-update-handler)
+     `(progn
+        (defclass ,name ,(append superclasses '(conn-target-finder-base))
+          ,(append slots
+                   (list
+                    (pcase default-update-handler
+                      (`#',function
+                       `(default-update-handler
+                         :allocation :class
+                         :initform #',function))
+                      (`(,arglist . ,body)
+                       `(default-update-handler
+                         :allocation :class
+                         :initform (lambda ,arglist ,@body)))
+                      ('nil)
+                      (_ (error "Malformed default handler definition")))))
+          ,@(when docstring (list docstring)))
+        ,(pcase update-method
+           (`((,state-var) . ,body)
+            `(cl-defmethod conn-target-finder-update ((,state-var ,name))
+               ,@body))
+           (`#',function
+            `(cl-defmethod conn-target-finder-update ((state ,name))
+               (,function state)))
+           ('nil)
+           (_ (error "Malformed update method definition")))))))
+
 (defmacro conn-define-target-finder (name superclasses slots &rest rest)
   "Define a target finder.
 
 \(fn NAME SUPERCLASSES SLOTS [DOC-STRING] [UPDATE-METHOD DEFAULT-UPDATE-HANDLER])"
   (declare (doc-string 4) (indent 2))
-  (let (doc-string)
+  (let (docstring)
     (when (stringp (car rest))
-      (setq doc-string (pop rest)))
-    (pcase rest
-      ((map :update-method :default-update-handler)
-       `(progn
-          (defclass ,name ,(append superclasses '(conn-target-finder-base))
-            ,(append slots
-                     (list
-                      (pcase default-update-handler
-                        (`#',function
-                         `(default-update-handler
-                           :allocation :class
-                           :initform #',function))
-                        (`(,arglist . ,body)
-                         `(default-update-handler
-                           :allocation :class
-                           :initform (lambda ,arglist ,@body)))
-                        ('nil)
-                        (_ (error "Malformed default handler definition")))))
-            ,@(when doc-string (list doc-string)))
-          ,(pcase update-method
-             (`((,state-var) . ,body)
-              `(cl-defmethod conn-target-finder-update ((,state-var ,name))
-                 ,@body))
-             (`#',function
-              `(cl-defmethod conn-target-finder-update ((state ,name))
-                 (,function state)))
-             ('nil)
-             (_ (error "Malformed update method definition"))))))))
+      (setq docstring (pop rest)))
+    (conn--define-target-finder name superclasses slots docstring rest)))
 
 (defun conn-add-update-handler (target-finder function &optional depth)
   (unless depth (setq depth 0))
@@ -3451,11 +3460,13 @@ contain targets."
                (point)))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
-  (conn--action-accept-change-group (conn-dispatch-send--action-change-group action))
+  (conn--action-accept-change-group
+   (conn-dispatch-send--action-change-group action))
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send))
-  (conn--action-cancel-change-group (conn-dispatch-send--action-change-group action)))
+  (conn--action-cancel-change-group
+   (conn-dispatch-send--action-change-group action)))
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
@@ -3506,11 +3517,13 @@ contain targets."
               (_ (user-error "Cannot find thing at point")))))))))
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
-  (conn--action-accept-change-group (conn-dispatch-send-replace--action-change-group action))
+  (conn--action-accept-change-group
+   (conn-dispatch-send-replace--action-change-group action))
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send-replace))
-  (conn--action-cancel-change-group (conn-dispatch-send-replace--action-change-group action)))
+  (conn--action-cancel-change-group
+   (conn-dispatch-send-replace--action-change-group action)))
 
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
@@ -3564,7 +3577,8 @@ contain targets."
                                         &optional
                                         short)
   (if short "Register Replace"
-    (format "Register Replace <%c>" (conn-dispatch-register-load-replace--register action))))
+    (format "Register Replace <%c>"
+            (conn-dispatch-register-load-replace--register action))))
 
 (oclosure-define (conn-dispatch-copy-from
                   (:parent conn-action)
@@ -3898,7 +3912,8 @@ contain targets."
                                conn-dispatch-other-end))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup-function
-                   (let ((fns (conn-target-finder-save-state conn-dispatch-target-finder)))
+                   (let ((fns (conn-target-finder-save-state
+                               conn-dispatch-target-finder)))
                      (lambda ()
                        (dolist (fn fns)
                          (funcall fn conn-dispatch-target-finder)))))))
@@ -3943,8 +3958,10 @@ contain targets."
 (defun conn-describe-dispatch (dispatch)
   (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
-          (conn-action-pretty-print (conn-previous-dispatch-action dispatch))
-          (conn-thing-pretty-print (car (conn-previous-dispatch-thing-state dispatch)))
+          (conn-action-pretty-print
+           (conn-previous-dispatch-action dispatch))
+          (conn-thing-pretty-print
+           (car (conn-previous-dispatch-thing-state dispatch)))
           (nth 1 (conn-previous-dispatch-thing-state dispatch))
           (if-let* ((ts (nth 2 (conn-previous-dispatch-thing-state dispatch))))
               (concat

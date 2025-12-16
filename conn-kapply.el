@@ -225,7 +225,7 @@ limits of the highlighting.
 REGEXP-FLAG means to treat the from string as a regexp for the purpose
 of highlighting."
   (let ((default (conn-replace-read-default)))
-    (conn--with-region-emphasis bounds
+    (conn-with-region-emphasis bounds
       (minibuffer-with-setup-hook
           (minibuffer-lazy-highlight-setup
            :case-fold case-fold-search
