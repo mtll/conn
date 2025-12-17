@@ -3482,7 +3482,7 @@ of `conn-recenter-positions'."
           "Indent some thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
-                  conn-change-special-ref 3))
+                  conn-indent-special-ref 3))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -3499,9 +3499,8 @@ of `conn-recenter-positions'."
 (cl-defstruct (conn-indent-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-indent-thing-argument
-                 (&optional
-                  recursive-edit
-                  &aux
+                 (&aux
+                  (recursive-edit t)
                   (keymap conn-indent-thing-argument-map)
                   (required t)
                   (value (when (use-region-p)
