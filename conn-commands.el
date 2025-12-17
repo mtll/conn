@@ -2197,6 +2197,14 @@ region after a `recursive-edit'."
                   (fixup-whitespace (conn-fixup-whitespace-argument
                                      (unless (region-active-p)
                                        conn-kill-fixup-whitespace-default)))
+                  (value (list transform fixup-whitespace))))
+               ( :constructor conn-dispatch-transform-and-fixup-argument
+                 (&optional
+                  initial-fixup-whitespace
+                  &aux
+                  (fixup-whitespace (conn-fixup-whitespace-argument
+                                     initial-fixup-whitespace))
+                  (transform (conn-dispatch-transform-argument))
                   (value (list transform fixup-whitespace)))))
   transform
   fixup-whitespace
@@ -2487,7 +2495,7 @@ region after a `recursive-edit'."
 
 (defvar-keymap conn-separator-argument-map
   "+" 'register-separator
-  "TAB" 'separator)
+  "_" 'separator)
 
 (cl-defstruct (conn-separator-argument
                (:include conn-argument)
@@ -2553,7 +2561,7 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing dispatch))
                                   arg
-                                  transform
+                                  _transform
                                   &optional
                                   append
                                   delete
@@ -2573,7 +2581,9 @@ region after a `recursive-edit'."
                      append)
            :delete delete
            :register register))
-         (transform (conn-dispatch-transform-argument transform))
+         (`(,transform ,fixup-whitespace)
+          (conn-dispatch-transform-and-fixup-argument
+           fixup-whitespace))
          (repeat
           (conn-boolean-argument 'repeat-dispatch
                                  conn-dispatch-repeat-arg-map
