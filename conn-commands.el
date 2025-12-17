@@ -2206,9 +2206,9 @@ region after a `recursive-edit'."
                                      initial-fixup-whitespace))
                   (transform (conn-dispatch-transform-argument))
                   (value (list transform fixup-whitespace)))))
-  transform
-  fixup-whitespace
-  explicit)
+  (transform nil :type list)
+  (fixup-whitespace nil :type boolean)
+  (explicit nil :type boolean))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)
                                     cmd
@@ -2221,7 +2221,7 @@ region after a `recursive-edit'."
                                                           valid t)))
                   valid)
              (unless (conn-transform-and-fixup-argument-explicit arg)
-               (setf (conn-fixup-whitespace-argument-value fws) 
+               (setf (conn-fixup-whitespace-argument-value fws)
                      (not (conn-transform-argument-value tform))))
              (funcall update-fn arg))
             ((and (conn-argument-update fws cmd (lambda (newval)

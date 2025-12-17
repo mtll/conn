@@ -1679,7 +1679,8 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 (oclosure-define (conn-anonymous-argument
                   ;; (:predicate conn-anonymous-argument-p)
                   (:copier conn-set-argument (value &optional (set-flag t)))
-                  (:copier conn-unset-argument (value &aux (set-flag nil))))
+                  (:copier conn-unset-argument ( &optional value
+                                                 &aux (set-flag nil))))
   (predicate :type (or nil function))
   (value :type t)
   (set-flag :type boolean)
