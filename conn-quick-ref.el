@@ -39,10 +39,11 @@
   :group 'conn-quick-ref)
 
 (defface conn-quick-ref-page-header
-  '((t ( :inverse-video nil :extend t
-         :box nil :underline (:style line :position t)
-         :inherit header-line)))
-  "Face for selection in Conn posframes."
+  '((t ( :extend t
+         :box nil
+         :inherit header-line
+         :underline (:style line :position t :color "black"))))
+  "Face for quick ref header."
   :group 'conn-quick-ref)
 
 (cl-defstruct (conn--reference-page
@@ -217,7 +218,8 @@
               (`(:splice . ,fn)
                (cl-callf2 append (funcall fn) definition))
               ((and row (pred consp))
-               (let ((objs (transpose (process-row row))))
+               (let ((objs (or (transpose (process-row row))
+                               (list "-"))))
                  (with-current-buffer ref-buffer
                    (make-vtable
                     :face `( :inherit default
@@ -238,10 +240,11 @@
       (let (buffer-read-only
             header-pos)
         (delete-region (point-min) (point-max))
-        (insert (substitute-command-keys
-                 (concat "\\<conn-quick-ref-map> "
-                         (propertize title 'face 'bold)
-                         " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
+        (insert
+         (substitute-command-keys
+          (concat "\\<conn-quick-ref-map> "
+                  (propertize title 'face 'bold)
+                  " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (indent-region header-pos (point-max) 1)
