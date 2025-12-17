@@ -359,6 +359,9 @@ The composed keymap is of the form:
               (make-composed-keymap (parent-maps state))))))
 
 (defun conn-set-major-mode-map (state mode map)
+  (cl-assert (keymapp map))
+  (cl-check-type (conn--find-state state) conn-state)
+  (cl-check-type mode symbol)
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--composed-major-mode-maps-cache))
                 (get-composed-map (state)
@@ -368,9 +371,6 @@ The composed keymap is of the form:
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                             for pmap = (get-map parent)
                             when pmap collect pmap)))
-    (cl-assert (keymapp map))
-    (cl-check-type (conn--find-state state) conn-state)
-    (cl-check-type mode symbol)
     (setf (get-map state) map)
     (setf (get-composed-map state)
           (make-composed-keymap (parent-maps state)))
@@ -467,6 +467,9 @@ return it."
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
 (defun conn-set-minor-mode-map (state mode map)
+  (cl-assert (keymapp map))
+  (cl-check-type (conn--find-state state) conn-state)
+  (cl-check-type mode symbol)
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
                 (get-composed-map (state)
@@ -475,9 +478,6 @@ return it."
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                             for pmap = (get-map parent)
                             when pmap collect pmap)))
-    (cl-assert (keymapp map))
-    (cl-check-type (conn--find-state state) conn-state)
-    (cl-check-type mode symbol)
     (setf (get-map state) map)
     (setf (get-composed-map state)
           (make-composed-keymap (parent-maps state)))
@@ -618,8 +618,8 @@ mouse-3: Describe current input method")
 (defmacro conn-without-input-method-hooks (&rest body)
   (declare (indent 0))
   (cl-with-gensyms (remove buffer)
-    `(let* ((,remove (not conn--without-input-method-hooks))
-            (,buffer (current-buffer)))
+    `(let ((,remove (not conn--without-input-method-hooks))
+           (,buffer (current-buffer)))
        (unwind-protect
            (progn
              (when ,remove
@@ -852,17 +852,19 @@ If BUFFER is nil then use the current buffer."
                                  conn-current-state))))
 
 (defun conn--setup-state-properties ()
-  (setf conn--disable-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
-                                                         :disable-mark-cursor)))
-                                        (if (eq hide t) t
-                                          (alist-get conn-current-state hide)))
-                                      (when-let* ((hide (conn-get-mode-property
-                                                         major-mode :disable-mark-cursor)))
-                                        (if (eq hide t) t
-                                          (alist-get conn-current-state hide)))
-                                      (conn-state-get conn-current-state :disable-mark-cursor))
-        cursor-type (let ((c (conn-state-get conn-current-state :cursor nil t)))
-                      (if (functionp c) (funcall c) c))))
+  (setf conn--disable-mark-cursor
+        (or (when-let* ((hide (conn-get-buffer-property
+                               :disable-mark-cursor)))
+              (if (eq hide t) t
+                (alist-get conn-current-state hide)))
+            (when-let* ((hide (conn-get-mode-property
+                               major-mode :disable-mark-cursor)))
+              (if (eq hide t) t
+                (alist-get conn-current-state hide)))
+            (conn-state-get conn-current-state :disable-mark-cursor)))
+  (setf cursor-type
+        (let ((c (conn-state-get conn-current-state :cursor nil t)))
+          (if (functionp c) (funcall c) c))))
 
 (cl-defgeneric conn-enter-state (state)
   "Enter STATE.
@@ -986,7 +988,7 @@ If there is not recursive stack an error is signaled."
               (dolist (mode new-mode-maps)
                 (conn--ensure-minor-mode-map child mode))
               (conn--rebuild-state-keymaps child))))
-      (let* ((state-obj (conn--make-state name docstring parents)))
+      (let ((state-obj (conn--make-state name docstring parents)))
         (setf (conn--find-state name) state-obj)
         (setup-properties (conn-state--properties state-obj))
         (dolist (parent parents)
@@ -1660,6 +1662,20 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
 
 ;;;;; Loop Arguments
 
+(cl-defstruct (conn-argument
+               ( :constructor conn-argument
+                 (value &aux (required nil) (set-flag nil))))
+  (value nil)
+  (set-flag nil :type boolean)
+  (required nil :type boolean :read-only t)
+  (name nil :type (or string function nil) :read-only t)
+  (annotation nil :type (or nil string function) :read-only t)
+  (keymap nil :type keymap :read-only t))
+
+(cl-defstruct (conn-composite-argument
+               (:include conn-argument)
+               (:constructor conn-composite-argument (value))))
+
 (oclosure-define (conn-anonymous-argument
                   ;; (:predicate conn-anonymous-argument-p)
                   (:copier conn-set-argument (value &optional (set-flag t)))
@@ -1671,16 +1687,6 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (name :type (or nil string function))
   (annotation :type (or nil string function))
   (keymap :type keymap))
-
-(cl-defstruct (conn-argument
-               ( :constructor conn-argument
-                 (value &aux (required nil) (set-flag nil))))
-  (value nil)
-  (set-flag nil :type boolean)
-  (required nil :type boolean :read-only t)
-  (name nil :type (or string function nil) :read-only t)
-  (annotation nil :type (or nil string function) :read-only t)
-  (keymap nil :type keymap :read-only t))
 
 (defalias 'conn-anonymous-argument-name
   'conn-anonymous-argument--name)
@@ -1709,7 +1715,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
          (not (conn-anonymous-argument-set-flag arg))))
   ( :method ((arg conn-argument))
     (and (conn-argument-required arg)
-         (not (conn-argument-set-flag arg)))))
+         (not (conn-argument-set-flag arg))))
+  ( :method ((arg conn-composite-argument))
+    (cl-loop for a in (conn-composite-argument-value arg)
+             always (conn-argument-required-p a))))
 
 (cl-defgeneric conn-argument-update (argument form update-fn)
   ( :method (_arg _form _update-fn) nil)
@@ -1722,7 +1731,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg conn-anonymous-argument))
     (conn-anonymous-argument-value arg))
   ( :method ((arg conn-argument))
-    (conn-argument-value arg)))
+    (conn-argument-value arg))
+  ( :method ((arg conn-composite-argument))
+    (cl-loop for a in (conn-composite-argument-value arg)
+             collect (conn-argument-extract-value a))))
 
 (cl-defgeneric conn-argument-display (argument)
   (declare (important-return-value t)
@@ -1743,7 +1755,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
       ((and fn (pred functionp)
             (let (and str (pred stringp))
               (funcall fn arg)))
-       str))))
+       str)))
+  ( :method ((arg conn-composite-argument))
+    (cl-loop for a in (conn-composite-argument-value arg)
+             collect (conn-argument-display a))))
 
 (cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
@@ -1751,7 +1766,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method (_arg _val) nil)
   ( :method ((arg conn-anonymous-argument) cmd)
     (when-let* ((pred (conn-anonymous-argument--predicate arg)))
-      (funcall pred cmd))))
+      (funcall pred cmd)))
+  ( :method ((arg conn-composite-argument))
+    (cl-loop for a in (conn-composite-argument-value arg)
+             thereis (conn-argument-predicate a))))
 
 (cl-defmethod conn-argument-predicate ((_arg (eql conn-read-args-command-handler))
                                        cmd)
@@ -1789,7 +1807,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
         ((and fn (pred functionp)
               (let (and str (pred stringp))
                 (funcall fn arg)))
-         (concat " (" str ")"))))))
+         (concat " (" str ")")))))
+  ( :method ((arg conn-composite-argument))
+    (cl-loop for a in (conn-composite-argument-value arg)
+             thereis (conn-argument-completion-annotation a))))
 
 (cl-defgeneric conn-argument-compose-keymap (argument)
   (declare (important-return-value t)
@@ -1798,7 +1819,11 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg conn-anonymous-argument))
     (conn-anonymous-argument-keymap arg))
   ( :method ((arg conn-argument))
-    (conn-argument-keymap arg)))
+    (conn-argument-keymap arg))
+  ( :method ((arg conn-composite-argument))
+    (make-composed-keymap
+     (cl-loop for a in (conn-composite-argument-value arg)
+              collect (conn-argument-compose-keymap a)))))
 
 ;;;;; Boolean Argument
 

@@ -2091,7 +2091,7 @@ region after a `recursive-edit'."
     (pcase cmd
       ('append-next-kill
        (setf delete (if (eq delete 'delete) nil delete)
-             append (pcase append
+             append (pcase-exhaustive append
                       ('nil 'append)
                       ('append 'prepend)
                       ('prepend nil)))
@@ -2189,6 +2189,40 @@ region after a `recursive-edit'."
                                        (_cmd (eql kill-matching-lines)))
   t)
 
+(cl-defstruct (conn-transform-and-fixup-argument
+               (:include conn-composite-argument)
+               ( :constructor conn-transform-and-fixup-argument
+                 (&aux
+                  (transform (conn-transform-argument))
+                  (fixup-whitespace (conn-fixup-whitespace-argument
+                                     (unless (region-active-p)
+                                       conn-kill-fixup-whitespace-default)))
+                  (value (list transform fixup-whitespace)))))
+  transform
+  fixup-whitespace
+  explicit)
+
+(cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)
+                                    cmd
+                                    update-fn)
+  (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
+                       (fws (conn-transform-and-fixup-argument-fixup-whitespace arg)))
+    (let ((valid nil))
+      (cond ((and (conn-argument-update tform cmd (lambda (newval)
+                                                    (setq tform newval
+                                                          valid t)))
+                  valid)
+             (unless (conn-transform-and-fixup-argument-explicit arg)
+               (setf (conn-fixup-whitespace-argument-value fws) 
+                     (not (conn-transform-argument-value tform))))
+             (funcall update-fn arg))
+            ((and (conn-argument-update fws cmd (lambda (newval)
+                                                  (setq fws newval
+                                                        valid t)))
+                  valid)
+             (setf (conn-transform-and-fixup-argument-explicit arg) t)
+             (funcall update-fn arg))))))
+
 (defun conn-kill-thing (cmd
                         arg
                         transform
@@ -2208,16 +2242,11 @@ region after a `recursive-edit'."
                         (call-interactively #'conn-set-register-separator)
                         (conn-read-args-handle))))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
-        (transform (conn-transform-argument))
+        (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register)
          (conn-kill-how-argument
-          :append (and (eq last-command 'conn-kill-thing)
-                       'prepend)
           :register (when current-prefix-arg
                       (register-read-with-preview "Register:"))))
-        (fixup (conn-fixup-whitespace-argument
-                (unless (region-active-p)
-                  conn-kill-fixup-whitespace-default)))
         (check-bounds
          (conn-boolean-argument 'check-bounds
                                 conn-check-bounds-argument-map
@@ -2226,12 +2255,14 @@ region after a `recursive-edit'."
      (list thing arg transform append
            delete register fixup check-bounds)))
   (when (and (null append)
-             (and (fboundp 'repeat-is-really-this-command)
-                  (repeat-is-really-this-command))
+             (fboundp 'repeat-is-really-this-command)
+             (repeat-is-really-this-command)
              (eq last-command 'conn-kill-thing))
-    (setq append 'append))
+    (setq append 'repeat))
   (cl-callf and fixup-whitespace (null transform))
-  (conn-kill-thing-do cmd arg transform append delete register fixup-whitespace check-bounds)
+  (conn-kill-thing-do cmd arg transform
+                      append delete register
+                      fixup-whitespace check-bounds)
   (setq this-command 'conn-kill-thing))
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
@@ -2307,27 +2338,25 @@ region after a `recursive-edit'."
                           append
                           register
                           separator)
+  (when (eq append 'repeat)
+    (setq append (if (>= beg (point)) 'append 'prepend)))
   (if register
-      (pcase append
+      (pcase-exhaustive append
         ('nil
-         (copy-to-register register beg end delete-flag t))
+         (copy-to-register register beg end delete-flag))
         ('prepend
          (prepend-to-register register beg end delete-flag))
-        (_
+        ('append
          (append-to-register register beg end delete-flag)))
-    (when (and append
-               (xor (eq append 'prepend)
-                    (< (point) (mark t))))
-      (let ((omark (mark t)))
-        (set-mark (point))
-        (goto-char omark)))
+    (when (eq append 'prepend)
+      (cl-rotatef beg end))
     (let ((last-command (if append 'kill-region last-command)))
       (when (and append separator)
         (kill-append (conn-kill-separator-for-region separator)
-                     (< (point) (mark t))))
+                     (eq append 'prepend)))
       (if delete-flag
-          (kill-region (mark t) (point) t)
-        (copy-region-as-kill (mark t) (point) t)))))
+          (kill-region beg end)
+        (copy-region-as-kill beg end)))))
 
 (defun conn--kill-string (string &optional append register separator)
   (if register
@@ -2538,9 +2567,12 @@ region after a `recursive-edit'."
                      :reference (list conn-dispatch-thing-ref))
         ((`(,thing ,arg) (conn-thing-argument t))
          (`(,delete ,append ,register)
-          (conn-kill-how-argument :append append
-                                  :delete delete
-                                  :register register))
+          (conn-kill-how-argument
+           :append (if (eq append 'repeat)
+                       'append
+                     append)
+           :delete delete
+           :register register))
          (transform (conn-dispatch-transform-argument transform))
          (repeat
           (conn-boolean-argument 'repeat-dispatch
@@ -2555,7 +2587,7 @@ region after a `recursive-edit'."
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'dispatch-other-end)
-            (setq append (pcase append
+            (setq append (pcase-exhaustive append
                            ('nil 'append)
                            ('append 'prepend)
                            ('prepend nil)))
@@ -2567,7 +2599,7 @@ region after a `recursive-edit'."
              (propertize (key-description binding)
                          'face 'help-key-binding)
              " "
-             (pcase append
+             (pcase-exhaustive append
                ('nil "append")
                ('prepend
                 (propertize
@@ -2640,13 +2672,11 @@ region after a `recursive-edit'."
                            ,@(when check-bounds
                                (list 'conn-check-bounds))))
             bounds)
-       (goto-char beg)
-       (save-mark-and-excursion
-         (conn--push-ephemeral-mark end)
-         (if delete
-             (delete-region beg end)
-           (conn--kill-region beg end t append register)))
+       (if delete
+           (delete-region beg end)
+         (conn--kill-region beg end t append register))
        (when fixup-whitespace
+         (goto-char beg)
          (funcall conn-kill-fixup-whitespace-function bounds))))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line))
@@ -2717,7 +2747,7 @@ region after a `recursive-edit'."
   (pcase cmd
     ('append-next-kill
      (setf (conn-copy-how-argument-append arg)
-           (pcase (conn-copy-how-argument-append arg)
+           (pcase-exhaustive (conn-copy-how-argument-append arg)
              ('nil 'append)
              ('append 'prepend)
              ('prepend nil)))
@@ -2920,7 +2950,7 @@ region after a `recursive-edit'."
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (eq cmd 'dispatch-other-end)
-          (setq append (pcase append
+          (setq append (pcase-exhaustive append
                          ('nil 'append)
                          ('append 'prepend)
                          ('prepend nil)))
@@ -2932,7 +2962,7 @@ region after a `recursive-edit'."
            (propertize (key-description binding)
                        'face 'help-key-binding)
            " "
-           (pcase append
+           (pcase-exhaustive append
              ('nil "append")
              ('prepend
               (propertize
