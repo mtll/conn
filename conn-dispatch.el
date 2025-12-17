@@ -2057,20 +2057,26 @@ the meaning of depth."
                           setup-function)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (if (and (length> narrowed-string 0)
-               (not conn-dispatch-hide-labels))
-          (progn
-            (overlay-put overlay 'display nil)
-            (overlay-put overlay 'before-string nil)
-            (overlay-put overlay 'after-string nil)
-            (funcall setup-function label)
-            (overlay-put target 'face 'conn-target-overlay-face))
-        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-        (overlay-put overlay 'display nil)
-        (overlay-put overlay 'after-string nil)
-        (overlay-put overlay 'before-string nil)
-        (overlay-put target 'after-string nil)
-        (overlay-put target 'face nil)))))
+      (cond (conn-dispatch-hide-labels
+             (overlay-put overlay 'display nil)
+             (overlay-put overlay 'after-string nil)
+             (overlay-put overlay 'before-string nil)
+             (overlay-put overlay 'face
+                          `(:background ,(face-background
+                                          (overlay-get target 'label-face)))))
+            ((length> narrowed-string 0)
+             (overlay-put overlay 'display nil)
+             (overlay-put overlay 'before-string nil)
+             (overlay-put overlay 'after-string nil)
+             (funcall setup-function label)
+             (overlay-put target 'face 'conn-target-overlay-face))
+            (t
+             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+             (overlay-put overlay 'display nil)
+             (overlay-put overlay 'after-string nil)
+             (overlay-put overlay 'before-string nil)
+             (overlay-put target 'after-string nil)
+             (overlay-put target 'face nil))))))
 
 ;;;;; Dispatch Target Finders
 
