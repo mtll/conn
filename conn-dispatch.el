@@ -1344,7 +1344,6 @@ Target overlays may override this default by setting the
   (pcase-let ((`(,pool ,size ,in-use)
                (or state
                    (list nil 0 (make-hash-table :test 'equal))))
-              (sel-win (selected-window))
               (count (cl-loop for (_ . c) in conn-target-count sum c))
               (unlabeled nil)
               (labels nil))
@@ -1382,11 +1381,7 @@ Target overlays may override this default by setting the
                 (setf str (concat str (car conn-simple-label-characters))
                       (overlay-get tar 'label-string) str))
               (puthash str t in-use)
-              (unless (and (eq win sel-win)
-                           (<= (overlay-start tar)
-                               (point)
-                               (overlay-end tar)))
-                (push (conn-dispatch-create-label tar str) labels)))
+              (push (conn-dispatch-create-label tar str) labels))
           (push tar unlabeled))))
     (cl-callf nreverse unlabeled)
     (cl-loop for str in pool
@@ -1394,11 +1389,7 @@ Target overlays may override this default by setting the
              unless (gethash str in-use)
              do (let ((tar (pop unlabeled)))
                   (overlay-put tar 'label-string str)
-                  (unless (and (eq (overlay-get tar 'window) sel-win)
-                               (<= (overlay-start tar)
-                                   (point)
-                                   (overlay-end tar)))
-                    (push (conn-dispatch-create-label tar str) labels))))
+                  (push (conn-dispatch-create-label tar str) labels)))
     `(:state ,(list pool size in-use) ,@labels)))
 
 (defun conn--dispatch-read-char-prefix (keymap)
@@ -2484,12 +2475,13 @@ contain targets."
                    (alist-get win (oref state hidden))))
         (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
           (mapc #'delete old-hidden)
-          (conn-protected-let* ((hidden (list (make-overlay (point-min) (point-min)))
-                                        (mapc #'delete-overlay hidden))
-                                (context-lines (oref state context-lines))
-                                (separator-p (if (slot-boundp state 'separator-p)
-                                                 (oref state separator-p)
-                                               (> context-lines 0))))
+          (conn-protected-let*
+              ((hidden (list (make-overlay (point-min) (point-min)))
+                       (mapc #'delete-overlay hidden))
+               (context-lines (oref state context-lines))
+               (separator-p (if (slot-boundp state 'separator-p)
+                                (oref state separator-p)
+                              (> context-lines 0))))
             (with-selected-window win
               (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
                 (save-excursion
