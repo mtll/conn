@@ -281,7 +281,7 @@
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace
   "*" 'calc-grab-region
-  "C-j" 'conn-join-lines-in-region
+  "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
   "V" 'undefined
   "g" 'conn-surround
@@ -375,7 +375,7 @@
   "e" 'conn-pop-state
   "E" 'conn-emacs-state-at-mark
   "`" 'conn-wincontrol-mru-window
-  "|" 'conn-shell-command-on-region
+  "|" 'conn-shell-command-on-thing
   "\\" 'conntext-state
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol

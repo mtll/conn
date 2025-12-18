@@ -201,6 +201,7 @@ strings have `conn-dispatch-label-face'."
                             conn--dispatch-read-char-handlers))))
          (msg-expander
           `(:message . ,(lambda (depth &rest rest)
+                          (cl-assert (<= -100 depth 100))
                           `(progn
                              (push
                               (cons ,depth ,(pcase rest

@@ -336,6 +336,60 @@ of line proper."
             (goto-char pt)
             (conn--push-ephemeral-mark mk))))))
 
+;;;;; Recenter
+
+(defcustom conn-recenter-pulse t
+  "Momentarily highlight region after `conn-recenter-on-region'."
+  :group 'conn
+  :type 'boolean)
+
+(defvar conn-recenter-positions
+  (list 'center 'top 'bottom)
+  "Cycle order for `conn-recenter-on-region'.")
+
+(defun conn-recenter-on-region ()
+  "Recenter the screen on the current region.
+
+Repeated invocations scroll the window according to the ordering
+of `conn-recenter-positions'."
+  (interactive)
+  (if (eq this-command last-command)
+      (put this-command :conn-positions
+           (let ((ps (conn--command-property :conn-positions)))
+             (append (cdr ps) (list (car ps)))))
+    (put this-command :conn-positions conn-recenter-positions))
+  (let ((beg (region-beginning))
+        (end (region-end)))
+    (pcase (car (conn--command-property :conn-positions))
+      ('center
+       (save-excursion
+         (forward-line
+          (if (> (point) (mark t))
+              (- (/ (count-lines beg end) 2))
+            (/ (count-lines beg end) 2)))
+         (recenter))
+       (when (not (pos-visible-in-window-p (point)))
+         (if (> (point) (mark t))
+             (recenter -1)
+           (recenter 0))))
+      ('top
+       (save-excursion
+         (goto-char beg)
+         (recenter 0)))
+      ('bottom
+       (save-excursion
+         (goto-char end)
+         (recenter -1))))
+    (when (and conn-recenter-pulse
+               (not (region-active-p)))
+      (pulse-momentary-highlight-region beg end))))
+
+(defun conn-recenter-on-region-other-window ()
+  "Recenter the current region in `other-window-for-scrolling'."
+  (interactive)
+  (with-selected-window (other-window-for-scrolling)
+    (conn-recenter-on-region)))
+
 ;;;;; Command Registers
 
 (cl-defstruct (conn-command-register)
@@ -565,240 +619,6 @@ With arg N, insert N newlines."
       (forward-line 1)
       (indent-according-to-mode))))
 
-(defun conn-join-lines-in-region (beg end)
-  "`delete-indentation' in region from BEG and END."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (delete-indentation nil beg end)
-  (indent-according-to-mode))
-
-(conn-define-state conn-join-lines-state (conn-read-thing-state)
-  :lighter "JOIN")
-
-(defun conn-join-lines (thing arg transform &optional subregions-p)
-  "`delete-indentation' in region from START and END."
-  (interactive
-   (conn-read-args (conn-join-lines-state
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument))
-        (subregions (conn-subregions-argument (use-region-p))))
-     (list thing arg transform subregions)))
-  (save-mark-and-excursion
-    (pcase (conn-bounds-of thing arg)
-      ((and (guard subregions-p)
-            (conn-bounds-get :subregions transform))
-       (pcase-dolist ((conn-bounds `(,beg . ,end))
-                      (compat-call
-                       sort subregions
-                       :lessp (lambda (a b)
-                                (> (car (conn-bounds a))
-                                   (car (conn-bounds b))))))
-         (delete-indentation nil beg end)
-         (indent-according-to-mode)))
-      ((conn-bounds `(,beg . ,end) transform)
-       (delete-indentation nil beg end)
-       (indent-according-to-mode)))))
-
-;;;;; Narrowing Commands
-
-(defvar-local conn-narrow-ring nil
-  "Ring of recent narrowed regions.")
-
-(defvar conn-narrow-ring-max 14)
-
-(conn-define-state conn-narrow-state (conn-read-thing-state)
-  :lighter "NARROW")
-
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
-                              _arg)
-  (when conn-narrow-ring
-    (let ((subregions nil)
-          (beg most-positive-fixnum)
-          (end most-negative-fixnum))
-      (pcase-dolist ((and bound `(,b . ,e))
-                     (conn-ring-list conn-narrow-ring))
-        (cl-callf max end e)
-        (cl-callf min beg b)
-        (push (conn-make-bounds 'region nil bound)
-              subregions))
-      (when subregions
-        (conn-make-bounds
-         'narrow-ring nil
-         (cons beg end)
-         :subregions subregions)))))
-
-(defun conn-thing-to-narrow-ring (thing
-                                  arg
-                                  transform
-                                  &optional
-                                  subregions-p)
-  "Push thing regions to narrow ring."
-  (interactive
-   (conn-read-args (conn-narrow-state
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument))
-        (subregions (conn-subregions-argument (use-region-p))))
-     (list thing arg transform subregions)))
-  (pcase (conn-bounds-of thing arg)
-    ((and (guard subregions-p)
-          (conn-bounds-get :subregions
-                           transform
-                           (and subregions (pred identity))))
-     (cl-loop for bound in (reverse subregions)
-              for (b . e) = (conn-bounds bound)
-              do (conn--narrow-ring-record b e)))
-    ((conn-bounds `(,beg . ,end) transform)
-     (conn--narrow-ring-record beg end))))
-
-(defun conn--narrow-ring-record (beg end)
-  (unless (conn-ring-p conn-narrow-ring)
-    (setq conn-narrow-ring
-          (conn-make-ring conn-narrow-ring-max
-                          :cleanup (pcase-lambda (`(,b . ,e))
-                                     (set-marker b nil)
-                                     (set-marker e nil))
-                          :copier (pcase-lambda (`(,b . ,e))
-                                    (cons (conn--copy-mark b)
-                                          (conn--copy-mark e))))))
-  (pcase-let ((`(,bf . ,ef) (conn-ring-head conn-narrow-ring))
-              (`(,bb . ,eb) (conn-ring-tail conn-narrow-ring)))
-    (cond
-     ((and bf (= beg bf) (= end ef)))
-     ((and bb (= beg bb) (= end eb))
-      (conn-ring-rotate-forward conn-narrow-ring))
-     (t (conn-ring-insert-front conn-narrow-ring
-                                (cons (conn--create-marker beg)
-                                      (conn--create-marker end)))))))
-
-(defun conn-cycle-narrowings (arg)
-  "Cycle to the ARGth region in `conn-narrow-ring'."
-  (interactive "p")
-  (cond ((= arg 0)
-         (conn-merge-narrow-ring))
-        ((> arg 0)
-         (pcase-let ((`(,beg . ,end)
-                      (conn-ring-head conn-narrow-ring)))
-           (unless (and (= (point-min) beg)
-                        (= (point-max) end))
-             (cl-decf arg)))
-         (dotimes (_ arg)
-           (conn-ring-rotate-forward conn-narrow-ring)))
-        ((< arg 0)
-         (dotimes (_ (abs arg))
-           (conn-ring-rotate-backward conn-narrow-ring))))
-  (pcase (conn-ring-head conn-narrow-ring)
-    (`(,beg . ,end)
-     (unless (<= beg (point) end)
-       (push-mark (point) t)
-       (goto-char beg))
-     (narrow-to-region beg end))
-    (_ (user-error "Narrow ring empty"))))
-
-(defun conn-merge-narrow-ring (&optional interactive)
-  "Merge overlapping narrowings in `conn-narrow-ring'."
-  (interactive (list t))
-  (let ((new (conn--merge-overlapping-regions
-              (conn-ring-list conn-narrow-ring))))
-    (setf (conn-ring-list conn-narrow-ring) new
-          (conn-ring-history conn-narrow-ring) (copy-sequence new)))
-  (when (and interactive (not executing-kbd-macro))
-    (message "Narrow ring merged into %s region"
-             (length (conn-ring-list conn-narrow-ring)))))
-
-(defun conn-clear-narrow-ring ()
-  "Remove all narrowings from the `conn-narrow-ring'."
-  (interactive)
-  (cl-loop for (beg . end) in (conn-ring-list conn-narrow-ring)
-           do
-           (set-marker beg nil)
-           (set-marker end nil))
-  (setf (conn-ring-list conn-narrow-ring) nil
-        (conn-ring-history conn-narrow-ring) nil))
-
-(defun conn-pop-narrow-ring ()
-  "Pop `conn-narrow-ring'."
-  (interactive)
-  (pcase (conn-ring-head conn-narrow-ring)
-    ('nil (widen))
-    ((and `(,beg . ,end)
-          (guard (= (point-min) beg))
-          (guard (= (point-max) end))
-          narrowing)
-     (conn-ring-delq narrowing conn-narrow-ring)
-     (pcase (conn-ring-head conn-narrow-ring)
-       (`(,beg . ,end)
-        (narrow-to-region beg end))
-       (_ (widen))))))
-
-(defun conn--narrow-to-region (beg end &optional record)
-  (narrow-to-region beg end)
-  (when record (conn--narrow-ring-record beg end)))
-
-(defun conn--narrow-indirect-to-region (beg end &optional record)
-  "Narrow from BEG to END in an indirect buffer."
-  (let* ((line-beg (line-number-at-pos beg))
-         (linenum (- (line-number-at-pos end) line-beg))
-         (name (format "%s@%s+%s"
-                       (buffer-name (current-buffer)) line-beg linenum)))
-    (clone-indirect-buffer-other-window name t)
-    (conn--narrow-to-region beg end record)
-    (deactivate-mark)))
-
-(defvar-keymap conn-indirect-map
-  "d" 'indirect)
-
-(defun conn-narrow-to-thing (thing arg transform &optional indirect)
-  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive
-   (conn-read-args (conn-narrow-state
-                    :prompt "Thing"
-                    :prefix current-prefix-arg)
-       ((`(,thing ,arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument))
-        (indirect (conn-boolean-argument 'indirect
-                                         conn-indirect-map
-                                         "indirect")))
-     (list thing arg transform indirect)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (unless (and (<= beg (point) end)
-                  (<= beg (mark t) end))
-       (deactivate-mark))
-     (if indirect
-         (progn
-           (conn--narrow-indirect-to-region beg end t)
-           (when (called-interactively-p 'interactive)
-             (message "Buffer narrowed indirect")))
-       (conn--narrow-to-region beg end t)
-       (when (called-interactively-p 'interactive)
-         (message "Buffer narrowed"))))))
-
-;;;;;; Bounds of Narrow Ring
-
-(conn-register-thing 'narrowing)
-
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrowing))
-                              _arg)
-  (cl-loop for (beg . end) in conn-narrow-ring
-           minimize beg into narrow-beg
-           maximize end into narrow-end
-           collect (conn-make-bounds
-                    'narrowing nil
-                    (cons beg end))
-           into narrowings
-           finally return (conn-make-bounds
-                           'narrowing nil
-                           (cons narrow-beg narrow-end)
-                           :subregions narrowings)))
-
-(conn-register-thing-commands
- 'narrowing nil
- 'narrow-to-region 'widen
- 'conn-narrow-to-thing
- 'conn-narrow-ring-prefix)
-
 ;;;;; Register Setting and Loading
 
 (defvar conn--separator-history nil
@@ -970,12 +790,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (save-current-buffer
         (outline-insert-heading)
         (recursive-edit)))))
-
-(defun conn-shell-command-on-region (&optional arg)
-  "Like `shell-command-on-region' but inverts the meaning of ARG."
-  (interactive "P")
-  (let ((current-prefix-arg (not arg)))
-    (call-interactively 'shell-command-on-region)))
 
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
@@ -2067,9 +1881,9 @@ region after a `recursive-edit'."
 
 (cl-defstruct (conn-kill-how-argument
                (:include conn-argument))
-  (delete nil)
-  (append nil)
-  (register nil))
+  (delete nil :type boolean)
+  (append nil :type symbol)
+  (register nil :type (or char nil)))
 
 (cl-defsubst conn-kill-how-argument (&key delete append register)
   (declare (important-return-value t)
@@ -2251,10 +2065,7 @@ region after a `recursive-edit'."
                         (conn-read-args-handle))))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
-        (`(,delete ,append ,register)
-         (conn-kill-how-argument
-          :register (when current-prefix-arg
-                      (register-read-with-preview "Register:"))))
+        (`(,delete ,append ,register) (conn-kill-how-argument))
         (check-bounds
          (conn-boolean-argument 'check-bounds
                                 conn-check-bounds-argument-map
@@ -2264,8 +2075,7 @@ region after a `recursive-edit'."
            delete register fixup check-bounds)))
   (when (and (null append)
              (fboundp 'repeat-is-really-this-command)
-             (repeat-is-really-this-command)
-             (eq last-command 'conn-kill-thing))
+             (repeat-is-really-this-command))
     (setq append 'repeat))
   (cl-callf and fixup-whitespace (null transform))
   (conn-kill-thing-do cmd arg transform
@@ -2568,12 +2378,17 @@ region after a `recursive-edit'."
                                   register
                                   fixup-whitespace
                                   check-bounds)
-  (let ((conn-dispatch-amalgamate-undo t))
+  (let ((conn-dispatch-amalgamate-undo t)
+        (result nil)
+        (strings nil))
     (conn-read-args (conn-dispatch-bounds-state
                      :prefix arg
                      :prompt "Kill"
                      :reference (list conn-dispatch-thing-ref))
         ((`(,thing ,arg) (conn-thing-argument t))
+         (`(,transform ,fixup-whitespace)
+          (conn-dispatch-transform-and-fixup-argument
+           fixup-whitespace))
          (`(,delete ,append ,register)
           (conn-kill-how-argument
            :append (if (eq append 'repeat)
@@ -2581,9 +2396,6 @@ region after a `recursive-edit'."
                      append)
            :delete delete
            :register register))
-         (`(,transform ,fixup-whitespace)
-          (conn-dispatch-transform-and-fixup-argument
-           fixup-whitespace))
          (repeat
           (conn-boolean-argument 'repeat-dispatch
                                  conn-dispatch-repeat-arg-map
@@ -2619,51 +2431,40 @@ region after a `recursive-edit'."
                 (propertize
                  "append"
                  'face 'eldoc-highlight-function-argument))))))
-        (let ((result nil)
-              (strings nil))
-          (conn-dispatch-setup
-           (oclosure-lambda (conn-kill-action
-                             (action-description "Kill"))
-               ()
-             (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                           (conn-select-target)))
-               (with-selected-window window
-                 (conn-dispatch-change-group)
-                 (save-mark-and-excursion
-                   (pcase (conn-bounds-of-dispatch thing arg pt)
-                     ((and bounds
-                           (conn-dispatch-bounds `(,beg . ,end)
-                                                 `(,@transform
-                                                   ,@(when check-bounds
-                                                       (list 'conn-check-bounds)))))
-                      (goto-char beg)
-                      (conn--push-ephemeral-mark end)
-                      (if delete
-                          (delete-region beg end)
-                        (push (cons append (funcall region-extract-function t))
-                              strings)
-                        (conn-dispatch-undo-case 90
-                          (:undo
-                           (pop strings)
-                           (conn-dispatch-undo-pulse beg end))
-                          (:cancel
-                           (pop strings))))
-                      (when fixup-whitespace
-                        (funcall conn-kill-fixup-whitespace-function bounds)))
-                     (_ (user-error "No %s found" thing)))))))
-           thing arg transform
-           :repeat repeat
-           :other-end :no-other-end
-           :restrict-windows restrict-windows)
-          (when strings
-            (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
-                                                        separator)))
-              (pcase-dolist (`(,append . ,string) (nreverse strings))
-                (setq result
-                      (if append
-                          (concat result (and result sep) string)
-                        (concat string (and result sep) result))))
-              (conn--kill-string result append register sep))))))))
+        (conn-dispatch-setup
+         (oclosure-lambda (conn-kill-action
+                           (action-description "Kill"))
+             ()
+           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                         (conn-select-target)))
+             (with-selected-window window
+               (conn-dispatch-change-group)
+               (save-mark-and-excursion
+                 (pcase (conn-bounds-of-dispatch thing arg pt)
+                   ((and bounds
+                         (conn-dispatch-bounds `(,beg . ,end)
+                                               `(,@transform
+                                                 ,@(when check-bounds
+                                                     (list 'conn-check-bounds)))))
+                    (goto-char beg)
+                    (conn--push-ephemeral-mark end)
+                    (if delete
+                        (delete-region beg end)
+                      (push (cons append (funcall region-extract-function t))
+                            strings)
+                      (conn-dispatch-undo-case 90
+                        (:undo
+                         (pop strings)
+                         (conn-dispatch-undo-pulse beg end))
+                        (:cancel
+                         (pop strings))))
+                    (when fixup-whitespace
+                      (funcall conn-kill-fixup-whitespace-function bounds)))
+                   (_ (user-error "No %s found" thing)))))))
+         thing arg transform
+         :repeat repeat
+         :other-end :no-other-end
+         :restrict-windows restrict-windows)))))
 
 (cl-defmethod conn-kill-thing-do (cmd
                                   arg
@@ -3357,60 +3158,6 @@ With prefix arg N duplicate region N times."
            (prefix-numeric-value current-prefix-arg))))
   (conn-duplicate-thing-do thing arg transform repeat))
 
-;;;;; Recenter
-
-(defcustom conn-recenter-pulse t
-  "Momentarily highlight region after `conn-recenter-on-region'."
-  :group 'conn
-  :type 'boolean)
-
-(defvar conn-recenter-positions
-  (list 'center 'top 'bottom)
-  "Cycle order for `conn-recenter-on-region'.")
-
-(defun conn-recenter-on-region ()
-  "Recenter the screen on the current region.
-
-Repeated invocations scroll the window according to the ordering
-of `conn-recenter-positions'."
-  (interactive)
-  (if (eq this-command last-command)
-      (put this-command :conn-positions
-           (let ((ps (conn--command-property :conn-positions)))
-             (append (cdr ps) (list (car ps)))))
-    (put this-command :conn-positions conn-recenter-positions))
-  (let ((beg (region-beginning))
-        (end (region-end)))
-    (pcase (car (conn--command-property :conn-positions))
-      ('center
-       (save-excursion
-         (forward-line
-          (if (> (point) (mark t))
-              (- (/ (count-lines beg end) 2))
-            (/ (count-lines beg end) 2)))
-         (recenter))
-       (when (not (pos-visible-in-window-p (point)))
-         (if (> (point) (mark t))
-             (recenter -1)
-           (recenter 0))))
-      ('top
-       (save-excursion
-         (goto-char beg)
-         (recenter 0)))
-      ('bottom
-       (save-excursion
-         (goto-char end)
-         (recenter -1))))
-    (when (and conn-recenter-pulse
-               (not (region-active-p)))
-      (pulse-momentary-highlight-region beg end))))
-
-(defun conn-recenter-on-region-other-window ()
-  "Recenter the current region in `other-window-for-scrolling'."
-  (interactive)
-  (with-selected-window (other-window-for-scrolling)
-    (conn-recenter-on-region)))
-
 ;;;;; Change
 
 (defvar conn-change-special-ref
@@ -3581,5 +3328,286 @@ of `conn-recenter-positions'."
                                 "cleanup-whitespace")))
      (list thing arg transform cleanup-whitespace)))
   (conn-indent-thing-do cmd arg transform cleanup-whitespace))
+
+;;;;; Narrowing Commands
+
+(defvar-local conn-narrow-ring nil
+  "Ring of recent narrowed regions.")
+
+(defvar conn-narrow-ring-max 14)
+
+(conn-define-state conn-narrow-state (conn-read-thing-state)
+  :lighter "NARROW")
+
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
+                              _arg)
+  (when conn-narrow-ring
+    (let ((subregions nil)
+          (beg most-positive-fixnum)
+          (end most-negative-fixnum))
+      (pcase-dolist ((and bound `(,b . ,e))
+                     (conn-ring-list conn-narrow-ring))
+        (cl-callf max end e)
+        (cl-callf min beg b)
+        (push (conn-make-bounds 'region nil bound)
+              subregions))
+      (when subregions
+        (conn-make-bounds
+         'narrow-ring nil
+         (cons beg end)
+         :subregions subregions)))))
+
+(defun conn-thing-to-narrow-ring (thing
+                                  arg
+                                  transform
+                                  &optional
+                                  subregions-p)
+  "Push thing regions to narrow ring."
+  (interactive
+   (conn-read-args (conn-narrow-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
+        (transform (conn-transform-argument))
+        (subregions (conn-subregions-argument (use-region-p))))
+     (list thing arg transform subregions)))
+  (pcase (conn-bounds-of thing arg)
+    ((and (guard subregions-p)
+          (conn-bounds-get :subregions
+                           transform
+                           (and subregions (pred identity))))
+     (cl-loop for bound in (reverse subregions)
+              for (b . e) = (conn-bounds bound)
+              do (conn--narrow-ring-record b e)))
+    ((conn-bounds `(,beg . ,end) transform)
+     (conn--narrow-ring-record beg end))))
+
+(defun conn--narrow-ring-record (beg end)
+  (unless (conn-ring-p conn-narrow-ring)
+    (setq conn-narrow-ring
+          (conn-make-ring conn-narrow-ring-max
+                          :cleanup (pcase-lambda (`(,b . ,e))
+                                     (set-marker b nil)
+                                     (set-marker e nil))
+                          :copier (pcase-lambda (`(,b . ,e))
+                                    (cons (conn--copy-mark b)
+                                          (conn--copy-mark e))))))
+  (pcase-let ((`(,bf . ,ef) (conn-ring-head conn-narrow-ring))
+              (`(,bb . ,eb) (conn-ring-tail conn-narrow-ring)))
+    (cond
+     ((and bf (= beg bf) (= end ef)))
+     ((and bb (= beg bb) (= end eb))
+      (conn-ring-rotate-forward conn-narrow-ring))
+     (t (conn-ring-insert-front conn-narrow-ring
+                                (cons (conn--create-marker beg)
+                                      (conn--create-marker end)))))))
+
+(defun conn-cycle-narrowings (arg)
+  "Cycle to the ARGth region in `conn-narrow-ring'."
+  (interactive "p")
+  (cond ((= arg 0)
+         (conn-merge-narrow-ring))
+        ((> arg 0)
+         (pcase-let ((`(,beg . ,end)
+                      (conn-ring-head conn-narrow-ring)))
+           (unless (and (= (point-min) beg)
+                        (= (point-max) end))
+             (cl-decf arg)))
+         (dotimes (_ arg)
+           (conn-ring-rotate-forward conn-narrow-ring)))
+        ((< arg 0)
+         (dotimes (_ (abs arg))
+           (conn-ring-rotate-backward conn-narrow-ring))))
+  (pcase (conn-ring-head conn-narrow-ring)
+    (`(,beg . ,end)
+     (unless (<= beg (point) end)
+       (push-mark (point) t)
+       (goto-char beg))
+     (narrow-to-region beg end))
+    (_ (user-error "Narrow ring empty"))))
+
+(defun conn-merge-narrow-ring (&optional interactive)
+  "Merge overlapping narrowings in `conn-narrow-ring'."
+  (interactive (list t))
+  (let ((new (conn--merge-overlapping-regions
+              (conn-ring-list conn-narrow-ring))))
+    (setf (conn-ring-list conn-narrow-ring) new
+          (conn-ring-history conn-narrow-ring) (copy-sequence new)))
+  (when (and interactive (not executing-kbd-macro))
+    (message "Narrow ring merged into %s region"
+             (length (conn-ring-list conn-narrow-ring)))))
+
+(defun conn-clear-narrow-ring ()
+  "Remove all narrowings from the `conn-narrow-ring'."
+  (interactive)
+  (cl-loop for (beg . end) in (conn-ring-list conn-narrow-ring)
+           do
+           (set-marker beg nil)
+           (set-marker end nil))
+  (setf (conn-ring-list conn-narrow-ring) nil
+        (conn-ring-history conn-narrow-ring) nil))
+
+(defun conn-pop-narrow-ring ()
+  "Pop `conn-narrow-ring'."
+  (interactive)
+  (pcase (conn-ring-head conn-narrow-ring)
+    ('nil (widen))
+    ((and `(,beg . ,end)
+          (guard (= (point-min) beg))
+          (guard (= (point-max) end))
+          narrowing)
+     (conn-ring-delq narrowing conn-narrow-ring)
+     (pcase (conn-ring-head conn-narrow-ring)
+       (`(,beg . ,end)
+        (narrow-to-region beg end))
+       (_ (widen))))))
+
+(defun conn--narrow-to-region (beg end &optional record)
+  (narrow-to-region beg end)
+  (when record (conn--narrow-ring-record beg end)))
+
+(defun conn--narrow-indirect-to-region (beg end &optional record)
+  "Narrow from BEG to END in an indirect buffer."
+  (let* ((line-beg (line-number-at-pos beg))
+         (linenum (- (line-number-at-pos end) line-beg))
+         (name (format "%s@%s+%s"
+                       (buffer-name (current-buffer)) line-beg linenum)))
+    (clone-indirect-buffer-other-window name t)
+    (conn--narrow-to-region beg end record)
+    (deactivate-mark)))
+
+(defvar-keymap conn-indirect-map
+  "d" 'indirect)
+
+(defun conn-narrow-to-thing (thing arg transform &optional indirect)
+  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
+  (interactive
+   (conn-read-args (conn-narrow-state
+                    :prompt "Thing"
+                    :prefix current-prefix-arg)
+       ((`(,thing ,arg) (conn-thing-argument-dwim t))
+        (transform (conn-transform-argument))
+        (indirect (conn-boolean-argument 'indirect
+                                         conn-indirect-map
+                                         "indirect")))
+     (list thing arg transform indirect)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (unless (and (<= beg (point) end)
+                  (<= beg (mark t) end))
+       (deactivate-mark))
+     (if indirect
+         (progn
+           (conn--narrow-indirect-to-region beg end t)
+           (when (called-interactively-p 'interactive)
+             (message "Buffer narrowed indirect")))
+       (conn--narrow-to-region beg end t)
+       (when (called-interactively-p 'interactive)
+         (message "Buffer narrowed"))))))
+
+;;;;;; Bounds of Narrow Ring
+
+(conn-register-thing 'narrowing)
+
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrowing))
+                              _arg)
+  (cl-loop for (beg . end) in conn-narrow-ring
+           minimize beg into narrow-beg
+           maximize end into narrow-end
+           collect (conn-make-bounds
+                    'narrowing nil
+                    (cons beg end))
+           into narrowings
+           finally return (conn-make-bounds
+                           'narrowing nil
+                           (cons narrow-beg narrow-end)
+                           :subregions narrowings)))
+
+(conn-register-thing-commands
+ 'narrowing nil
+ 'narrow-to-region 'widen
+ 'conn-narrow-to-thing
+ 'conn-narrow-ring-prefix)
+
+;;;;; Join Lines
+
+(conn-define-state conn-join-lines-state (conn-read-thing-state)
+  :lighter "JOIN")
+
+(defun conn-join-lines (thing arg transform &optional subregions-p)
+  "`delete-indentation' in region from START and END."
+  (interactive
+   (conn-read-args (conn-join-lines-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim t))
+        (transform (conn-transform-argument))
+        (subregions (conn-subregions-argument (use-region-p))))
+     (list thing arg transform subregions)))
+  (save-mark-and-excursion
+    (pcase (conn-bounds-of thing arg)
+      ((and (guard subregions-p)
+            (conn-bounds-get :subregions transform))
+       (pcase-dolist ((conn-bounds `(,beg . ,end))
+                      (compat-call
+                       sort subregions
+                       :lessp (lambda (a b)
+                                (> (car (conn-bounds a))
+                                   (car (conn-bounds b))))))
+         (delete-indentation nil beg end)
+         (indent-according-to-mode)))
+      ((conn-bounds `(,beg . ,end) transform)
+       (delete-indentation nil beg end)
+       (indent-according-to-mode)))))
+
+;;;;; Shell Command
+
+(defvar-keymap conn-shell-command-replace-map
+  "w" 'replace)
+
+(conn-define-state conn-join-lines-state (conn-read-thing-state)
+  :lighter "SHELL")
+
+(defun conn-shell-command-on-thing (thing arg transform &optional replace subregions)
+  "Like `shell-command-on-region' but inverts the meaning of ARG."
+  (interactive
+   (conn-read-args (conn-join-lines-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim t))
+        (transform (conn-transform-argument))
+        (subregions (conn-subregions-argument
+                     (and (use-region-p)
+                          (region-noncontiguous-p))))
+        (replace (conn-boolean-argument 'replace
+                                        conn-shell-command-replace-map
+                                        "replace")))
+     (list thing arg transform replace subregions)))
+  (conn-shell-command-on-thing-do thing arg transform replace subregions))
+
+(cl-defgeneric conn-shell-command-on-thing-do (thing
+                                               arg
+                                               transform
+                                               &optional
+                                               replace
+                                               subregions)
+  (declare (conn-anonymous-thing-property :shell-command-op)))
+
+(cl-defmethod conn-shell-command-on-thing-do (thing
+                                              arg
+                                              transform
+                                              &optional
+                                              replace
+                                              _subregions)
+  (pcase (conn-bounds-of thing arg)
+    ;; TODO: handle subregions
+    ;; ((and (guard subregions)
+    ;;       (conn-bounds-get :subregions transform)
+    ;;       (conn-bounds `(,beg . ,end))))
+    ((conn-bounds `(,beg . ,end))
+     (shell-command-on-region
+      beg end
+      (read-shell-command "Shell command on region: ")
+      replace
+      replace
+      shell-command-default-error-buffer
+      t nil))))
 
 (provide 'conn-commands)
