@@ -676,23 +676,25 @@ themselves once the selection process has concluded."
     ((guard (conn-argument-predicate arg cmd))
      (conn-cancel-action (conn-argument-value arg))
      (condition-case err
-         (when-let* ((_(not (cl-typep (conn-argument-value arg) cmd)))
-                     (action (conn-make-action cmd)))
-           (setf conn--dispatch-thing-predicate
-                 (or (conn-action--action-thing-predicate action)
-                     #'always))
-           (setf (conn-argument-value arg) action)
-           (setf (conn-dispatch-action-argument-repeat arg)
-                 (pcase (conn-dispatch-action-argument-repeat arg)
-                   ((or 'auto 'nil)
-                    (and (conn-action--action-auto-repeat action)
-                         'auto))
-                   (_ (conn-dispatch-action-argument-repeat arg))))
-           (funcall update-fn arg))
+         (if-let* ((_(not (cl-typep (conn-argument-value arg) cmd)))
+                   (action (conn-make-action cmd)))
+             (progn
+               (setf conn--dispatch-thing-predicate
+                     (or (conn-action--action-thing-predicate action)
+                         #'always))
+               (setf (conn-argument-value arg) action)
+               (setf (conn-dispatch-action-argument-repeat arg)
+                     (pcase (conn-dispatch-action-argument-repeat arg)
+                       ((or 'auto 'nil)
+                        (and (conn-action--action-auto-repeat action)
+                             'auto))
+                       (_ (conn-dispatch-action-argument-repeat arg)))))
+           (setf conn--dispatch-thing-predicate #'always
+                 (conn-argument-value arg) nil))
        (error
         (conn-read-args-error (error-message-string err))
-        (setf (conn-argument-value arg) nil)
-        (funcall update-fn arg))))))
+        (setf (conn-argument-value arg) nil)))
+     (funcall update-fn arg))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-argument-value arg)))
