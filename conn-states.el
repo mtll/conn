@@ -720,7 +720,12 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (,buffer (current-buffer)))
        (unwind-protect
            (progn
-             (conn-exit-recursive-stack)
+             (if-let* ((tail (memq nil conn--state-stack)))
+                 (progn
+                   (setq conn--state-stack (cdr tail))
+                   (conn-enter-state (cadr tail))
+                   (conn-update-lighter))
+               (error "Not in a recursive state"))
              ,@body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
@@ -936,21 +941,23 @@ Returns the next state in the state stack."
 
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive state stack."
-  (push nil conn--state-stack)
-  (push state conn--state-stack)
-  (conn-enter-state state)
-  ;; Ensure the lighter gets updates even if we haven't changed state
-  (conn-update-lighter))
+  (prog1 conn--state-stack
+    (push nil conn--state-stack)
+    (push state conn--state-stack)
+    (conn-enter-state state)
+    ;; Ensure the lighter gets updates even if we haven't changed state
+    (conn-update-lighter)))
 
-(defun conn-exit-recursive-stack ()
+(defun conn-exit-recursive-stack (cookie)
   "Exit the current recursive state stack.
 
 If there is not recursive stack an error is signaled."
   (interactive)
-  (if-let* ((tail (memq nil conn--state-stack)))
+  (if (cl-loop for cons on conn--state-stack
+               thereis (eq cons cookie))
       (progn
-        (setq conn--state-stack (cdr tail))
-        (conn-enter-state (cadr tail))
+        (setq conn--state-stack cookie)
+        (conn-enter-state (car cookie))
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
         (conn-update-lighter))
