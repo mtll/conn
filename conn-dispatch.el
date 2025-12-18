@@ -2054,9 +2054,11 @@ the meaning of depth."
              (overlay-put overlay 'display nil)
              (overlay-put overlay 'after-string nil)
              (overlay-put overlay 'before-string nil)
-             (overlay-put overlay 'face
-                          `(:background ,(face-background
-                                          (overlay-get target 'label-face)))))
+             (overlay-put overlay 'face nil
+                          ;; `(:background ,(face-background
+                          ;;                 (or (overlay-get target 'label-face)
+                          ;;                     'conn-dispatch-label-face)))
+                          ))
             ((length> narrowed-string 0)
              (overlay-put overlay 'display nil)
              (overlay-put overlay 'before-string nil)
