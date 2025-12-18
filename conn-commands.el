@@ -3531,8 +3531,7 @@ of `conn-recenter-positions'."
   :lighter "INDENT")
 
 (defvar-keymap conn-indent-cleanup-whitespace-map
-  "RET" 'cleanup-whitespace
-  "<return>" 'cleanup-whitespace)
+  "w" 'cleanup-whitespace)
 
 (defvar-keymap conn-indent-thing-argument-map)
 
