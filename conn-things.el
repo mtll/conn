@@ -402,12 +402,12 @@ order to mark the region that should be defined by any of COMMANDS."
     (conn-thing-argument-keymap arg)))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list cmd (conn-read-args-consume-prefix-arg)))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -448,11 +448,11 @@ order to mark the region that should be defined by any of COMMANDS."
                   (keymap conn-subregions-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-subregions-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (if (eq cmd 'toggle-subregions)
       (progn
         (cl-callf not (conn-argument-value arg))
-        (funcall update-fn arg))
+        (funcall updater arg))
     (conn-subregions-default-value cmd arg)))
 
 (cl-defgeneric conn-subregions-default-value (cmd arg)
@@ -503,10 +503,10 @@ words."))
                   (keymap conn-fixup-whitespace-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (eq cmd 'fixup-whitespace)
     (cl-callf null (conn-argument-value arg))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
                                        (_sym (eql fixup-whitespace)))
@@ -561,7 +561,7 @@ words."))
                   (annotation "transform")))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
     (cl-labels ((update ()
                   (if (and (symbolp cmd)
@@ -573,11 +573,11 @@ words."))
       (pcase cmd
         ('conn-transform-reset
          (setf transforms nil)
-         (funcall update-fn arg))
+         (funcall updater arg))
         ((and (let ts (update))
               (guard (not (eq ts transforms))))
          (setf transforms ts)
-         (funcall update-fn arg))))))
+         (funcall updater arg))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
@@ -1334,10 +1334,10 @@ Only the background color is used."
              ((bound
                (oclosure-lambda (conn-anonymous-argument
                                  (required t))
-                   (_self command update-fn)
+                   (_self command updater)
                  (pcase command
                    ('select
-                    (funcall update-fn (conn-argument (nth curr bounds))))))))
+                    (funcall updater (conn-argument (nth curr bounds))))))))
            bound))))))
 
 ;;;; Thing Definitions

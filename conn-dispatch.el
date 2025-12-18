@@ -668,11 +668,11 @@ themselves once the selection process has concluded."
    :keymap conn-dispatch-action-map))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (pcase cmd
     ('repeat-dispatch
      (cl-callf not (conn-dispatch-action-argument-repeat arg))
-     (funcall update-fn arg))
+     (funcall updater arg))
     ((guard (conn-argument-predicate arg cmd))
      (conn-cancel-action (conn-argument-value arg))
      (condition-case err
@@ -694,7 +694,7 @@ themselves once the selection process has concluded."
        (error
         (conn-read-args-error (error-message-string err))
         (setf (conn-argument-value arg) nil)))
-     (funcall update-fn arg))))
+     (funcall updater arg))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-argument-value arg)))

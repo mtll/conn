@@ -59,10 +59,10 @@
                             "e" :inner))))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (memq cmd '(:whole :inner))
     (setf (conn-argument-value arg) cmd)
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-property-argument)
                                        sym)
@@ -186,13 +186,13 @@
 
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
                                     cmd
-                                    update-fn)
+                                    updater)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list (conn-handle-surround-with-argument cmd)
                 (conn-read-args-consume-prefix-arg)))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defgeneric conn-handle-surround-with-argument (cmd)
   ( :method (cmd) cmd))
@@ -568,13 +568,13 @@
                   (annotation "change surround")))))
 
 (cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list (conn--self-insert last-input-event)
                 (conn-read-args-consume-prefix-arg)))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
                                        (_sym (eql surround-self-insert)))

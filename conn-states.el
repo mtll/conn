@@ -1728,10 +1728,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
     (cl-loop for a in (conn-composite-argument-value arg)
              always (conn-argument-required-p a))))
 
-(cl-defgeneric conn-argument-update (argument form update-fn)
+(cl-defgeneric conn-argument-update (argument form updater)
   ( :method (_arg _form _update-fn) nil)
-  ( :method ((arg conn-anonymous-argument) form update-fn)
-    (funcall arg arg form update-fn)))
+  ( :method ((arg conn-anonymous-argument) form updater)
+    (funcall arg arg form updater)))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   (declare (important-return-value t))
@@ -1852,10 +1852,10 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (eq cmd (conn-boolean-argument-toggle-command arg))
     (cl-callf not (conn-boolean-argument-value arg))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -1893,16 +1893,16 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (format-function #'identity :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
-                                    _cmd update-fn)
+                                    _cmd updater)
   (pcase (memq (conn-cycling-argument-value arg)
                (conn-cycling-argument-choices arg))
     (`(,_ ,next . ,_)
      (setf (conn-cycling-argument-value arg) next)
-     (funcall update-fn arg))
+     (funcall updater arg))
     (`(,_ . nil)
      (setf (conn-cycling-argument-value arg)
            (car (conn-cycling-argument-choices arg)))
-     (funcall update-fn arg))))
+     (funcall updater arg))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
                                        sym)
@@ -1944,12 +1944,12 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   (toggle-command nil :type symbol :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (when (eq cmd (conn-read-argument-toggle-command arg))
     (setf (conn-argument-value arg)
           (funcall (conn-read-argument-reader-function arg)
                    (conn-argument-value arg)))
-    (funcall update-fn arg)))
+    (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-read-argument)
                                        sym)

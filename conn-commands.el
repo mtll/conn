@@ -2084,7 +2084,7 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
                                     cmd
-                                    update-fn)
+                                    updater)
   (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
                        (register (conn-kill-how-argument-register arg))
                        (append (conn-kill-how-argument-append arg)))
@@ -2095,21 +2095,21 @@ region after a `recursive-edit'."
                       ('nil 'append)
                       ('append 'prepend)
                       ('prepend nil)))
-       (funcall update-fn arg))
+       (funcall updater arg))
       ('delete
        (setf delete (if (eq delete 'delete) nil 'delete)
              register nil
              append nil)
-       (funcall update-fn arg))
+       (funcall updater arg))
       ('copy
        (setf delete (unless (eq delete 'copy) 'copy))
-       (funcall update-fn arg))
+       (funcall updater arg))
       ('register
        (setf delete (if (eq delete 'delete) nil delete)
              register (if register
                           nil
                         (register-read-with-preview "Register:")))
-       (funcall update-fn arg)))))
+       (funcall updater arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
                                        sym)
@@ -2212,7 +2212,7 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)
                                     cmd
-                                    update-fn)
+                                    updater)
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
                        (fws (conn-transform-and-fixup-argument-fixup-whitespace arg)))
     (let ((valid nil))
@@ -2223,13 +2223,13 @@ region after a `recursive-edit'."
              (unless (conn-transform-and-fixup-argument-explicit arg)
                (setf (conn-fixup-whitespace-argument-value fws)
                      (not (conn-transform-argument-value tform))))
-             (funcall update-fn arg))
+             (funcall updater arg))
             ((and (conn-argument-update fws cmd (lambda (newval)
                                                   (setq fws newval
                                                         valid t)))
                   valid)
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
-             (funcall update-fn arg))))))
+             (funcall updater arg))))))
 
 (defun conn-kill-thing (cmd
                         arg
@@ -2506,7 +2506,7 @@ region after a `recursive-edit'."
 
 (cl-defmethod conn-argument-update ((arg conn-separator-argument)
                                     cmd
-                                    update-fn)
+                                    updater)
   (cl-symbol-macrolet ((value (conn-argument-value arg)))
     (pcase cmd
       ('separator
@@ -2516,12 +2516,12 @@ region after a `recursive-edit'."
          (setf value (if (conn-read-args-consume-prefix-arg)
                          (read-string "Separator: " nil nil nil t)
                        'default)))
-       (funcall update-fn arg))
+       (funcall updater arg))
       ('register-separator
        (if (eq value 'register)
            (setf value nil)
          (setf value (get-register register-separator)))
-       (funcall update-fn arg)))))
+       (funcall updater arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-separator-argument)
                                        sym)
@@ -2753,7 +2753,7 @@ region after a `recursive-edit'."
   (register nil))
 
 (cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
-                                    cmd update-fn)
+                                    cmd updater)
   (pcase cmd
     ('append-next-kill
      (setf (conn-copy-how-argument-append arg)
@@ -2761,13 +2761,13 @@ region after a `recursive-edit'."
              ('nil 'append)
              ('append 'prepend)
              ('prepend nil)))
-     (funcall update-fn arg))
+     (funcall updater arg))
     ('register
      (setf (conn-copy-how-argument-register arg)
            (if (conn-copy-how-argument-register arg)
                nil
              (register-read-with-preview "Register:")))
-     (funcall update-fn arg))))
+     (funcall updater arg))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-how-argument)
                                        sym)

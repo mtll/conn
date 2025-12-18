@@ -238,10 +238,10 @@ Expansions and contractions are provided by functions in
         ((bounds
           (oclosure-lambda (conn-anonymous-argument
                             (required t))
-              (_self command update-fn)
+              (_self command updater)
             (pcase command
               ((or 'end 'exit-recursive-edit)
-               (funcall update-fn
+               (funcall updater
                         (conn-argument (cons (region-beginning)
                                              (region-end)))))))))
       (conn-make-bounds thing arg bounds))))
