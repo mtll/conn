@@ -1966,10 +1966,10 @@ region after a `recursive-edit'."
                   (keymap conn-kill-thing-argument-map)
                   (required t)
                   (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                                    conn-thing-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))))
+                                 conn-thing-argument-region-dwim))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
@@ -2609,10 +2609,10 @@ region after a `recursive-edit'."
                   (keymap conn-copy-thing-argument-map)
                   (required t)
                   (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                                    conn-thing-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))))
+                                 conn-thing-argument-region-dwim))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
                                        (_cmd (eql filename)))
@@ -3133,10 +3133,10 @@ region after a `recursive-edit'."
                   (keymap conn-duplicate-thing-argument-map)
                   (required t)
                   (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                                    conn-thing-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))))
+                                 conn-thing-argument-region-dwim))))))
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by a thing command.
@@ -3559,8 +3559,12 @@ With prefix arg N duplicate region N times."
 (conn-define-state conn-join-lines-state (conn-read-thing-state)
   :lighter "SHELL")
 
-(defun conn-shell-command-on-thing (thing arg transform &optional replace subregions)
-  "Like `shell-command-on-region' but inverts the meaning of ARG."
+(defun conn-shell-command-on-thing (thing
+                                    arg
+                                    transform
+                                    &optional
+                                    replace
+                                    subregions)
   (interactive
    (conn-read-args (conn-join-lines-state
                     :prompt "Thing")

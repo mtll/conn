@@ -359,10 +359,17 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;;; Thing Args
 
-(defvar conn-argument-region-dwim t)
+(defcustom conn-thing-argument-region-dwim t
+  "When non-nil makes thing commands always use the region when active.
+
+This causes all thing commands to skip reading any arguments when the
+region is active. If you would prefer to thing commands to read
+arguments even when the region is active then set this variable to nil."
+  :group 'conn
+  :type 'boolean)
 
 (defvar-keymap conn-recursive-edit-thing-map
-  "`" 'recursive-edit)
+  "'" 'recursive-edit)
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
@@ -377,10 +384,10 @@ order to mark the region that should be defined by any of COMMANDS."
                   &aux
                   (required t)
                   (value (when (and (use-region-p)
-                                    conn-argument-region-dwim)
+                                    conn-thing-argument-region-dwim)
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
-                                 conn-argument-region-dwim))))
+                                 conn-thing-argument-region-dwim))))
                ( :constructor conn-thing-argument-dwim-rectangle
                  (&optional
                   recursive-edit
@@ -393,6 +400,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (set-flag
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode))))))
+  "Thing argument for thing commands."
   (recursive-edit nil))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
@@ -612,7 +620,7 @@ words."))
   "C-q" 'reference
   "C-h" 'help
   "," conn-thing-remap
-  "'" 'recursive-edit
+  ;; "'" 'recursive-edit
   "c" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
