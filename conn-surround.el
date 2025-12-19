@@ -656,7 +656,7 @@
   "z" 'other-end)
 
 (defun conn-adjust-surround ()
-  (interactive "P")
+  (interactive)
   (conn-read-args (conn-change-surround-state
                    :prompt "Adjust Surrounding")
       ((`(,thing ,arg) (conn-change-surround-argument))
