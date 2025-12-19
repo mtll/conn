@@ -599,7 +599,7 @@
 
 (cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
                                     arg
-                                    _transform
+                                    transform
                                     &optional
                                     _kill)
   (with-undo-amalgamate
@@ -609,7 +609,7 @@
                          :prompt "Change Surrounding"
                          :prefix arg)
             ((`(,thing ,arg) (conn-change-surround-argument))
-             (transform (conn-transform-argument)))
+             (transform (conn-transform-argument transform)))
           (pcase-let* ((`(,ov . ,prep-keys)
                         (conn-prepare-change-surround thing arg transform))
                        (cleanup (plist-get prep-keys :cleanup))
