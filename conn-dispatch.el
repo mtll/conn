@@ -514,6 +514,7 @@ themselves once the selection process has concluded."
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (defvar-keymap conn-dispatch-transform-map
+  "a" 'conn-dispatch-bounds-anchored
   "b" 'conn-dispatch-bounds-between
   "x" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
@@ -563,15 +564,12 @@ themselves once the selection process has concluded."
   (conn-reference-quote
     (("symbol" forward-symbol)
      ("line" forward-line)
-     ("column" next-line)
-     ("defun"
-      (:eval (conn-quick-ref-find-remap
-              conn-end-of-defun-remap
-              (conn-get-state-map 'conn-dispatch-targets-state)))))))
+     ("column" next-line))))
 
 (defvar conn-dispatch-thing-transforms-ref-list
   (conn-reference-quote
-    (("between" conn-dispatch-bounds-between)
+    (("anchored" conn-dispatch-bounds-anchored)
+     ("between" conn-dispatch-bounds-between)
      ("trim" conn-bounds-trim)
      ("over" conn-dispatch-bounds-over)
      ("reset" conn-transform-reset))))
@@ -609,7 +607,8 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
-    ((:splice (conn-quick-ref-to-cols conn-dispatch-action-ref-list 3)))))
+    ((:splice (conn-quick-ref-to-cols
+               conn-dispatch-action-ref-list 3)))))
 
 (defvar conn-dispatch-command-ref
   (conn-reference-page "Misc Commands"
@@ -810,6 +809,37 @@ themselves once the selection process has concluded."
              (cons (min obeg beg) (max oend end)))))
          (_ bounds))))
     (_ bounds)))
+
+(put 'conn-dispatch-bounds-anchored :conn-bounds-transformation t)
+(put 'conn-dispatch-bounds-anchored :conn-transform-description "anchored")
+
+(cl-defgeneric conn-dispatch-bounds-anchored (bounds)
+  (declare (important-return-value t)
+           (conn-anonymous-thing-property :dispatch-anchored)))
+
+(cl-defmethod conn-dispatch-bounds-anchored (bounds)
+  (pcase bounds
+    ((and (conn-bounds-get :origin nil
+                           (and origin (pred identity)))
+          (conn-bounds `(,beg . ,end)))
+     (conn-make-transformed-bounds
+      'conn-dispatch-bounds-anchored
+      bounds
+      (if (< beg origin)
+          (if conn-dispatch-other-end
+              (cons (min origin end)
+                    (max origin end))
+            (cons beg origin))
+        (if conn-dispatch-other-end
+            (cons origin beg)
+          (cons origin end)))))
+    (_ bounds)))
+
+(cl-defmethod conn-dispatch-bounds-anchored ((bounds (conn-thing point)))
+  bounds)
+
+(cl-defmethod conn-dispatch-bounds-anchored ((bounds (conn-thing char)))
+  bounds)
 
 (put 'conn-dispatch-bounds-between :conn-bounds-transformation t)
 (put 'conn-dispatch-bounds-between :conn-transform-description "between")
