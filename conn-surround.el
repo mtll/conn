@@ -15,8 +15,6 @@
 
 ;;; Commentary
 
-;; A system similar to vim's surround
-
 ;;; Code
 
 (require 'compat)

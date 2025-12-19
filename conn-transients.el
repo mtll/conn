@@ -456,7 +456,7 @@ before each iteration."
           (conn-kapply-with-state iterator 'conn-command-state))))))
 
 (transient-define-suffix conn-kapply-match-suffix (args)
-  "Apply keyboard macro to every occurrence of a string within a region."
+  "Apply keyboard macro to every occurrence of a string within a thing."
   :transient 'transient--do-exit
   :key "m"
   :description "Match"

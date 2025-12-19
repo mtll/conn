@@ -1568,14 +1568,28 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Loop
 
-(defvar conn-dispatch-in-progress nil)
+(defvar conn-dispatch-in-progress nil
+  "Non-nil inside while execution of `conn-dispatch-perform-action'.
+
+`conn-with-dispatch-suspended' binds this variable to nil.")
+
 (defvar conn--dispatch-change-groups nil)
 
 (defvar conn--dispatch-current-thing nil)
 
-(defvar conn-dispatch-amalgamate-undo nil)
+(defvar conn-dispatch-amalgamate-undo nil
+  "Controls undo amalgamation of multiple dispatch loop iterations.
 
-(defvar conn-dispatch-input-buffer nil)
+When this variable is non-nil all iterations of a dispatch loop will be
+amalgamated into a single undo that will be undone all at once. When
+this variable is nil each iteration of a dispatch loop will be undone
+separately.")
+
+(defvar conn-dispatch-input-buffer nil
+  "Buffer that was current when dispatch began.
+
+All events read by `conn-dispatch-read-char' are read with this buffer
+current.")
 
 (defmacro conn-dispatch-undo-case (depth &rest cases)
   "Add an undo case to the current iterations undo list.
@@ -1605,10 +1619,8 @@ depths will be sorted before greater depths.
           (with-current-buffer ,buf
             (pcase ,signal ,@cases)))))))
 
-(defvar conn-dispatch-select-mode-input-method-title nil)
-
 (define-minor-mode conn-dispatch-select-mode
-  "Mode for dispatch event reading"
+  "Mode for selecting targets during dispatch."
   :global t
   :lighter " SELECT"
   :group 'conn
@@ -1678,6 +1690,9 @@ depths will be sorted before greater depths.
     (when dispatch-quit-flag (keyboard-quit))))
 
 (defun conn-select-target ()
+  "Prompt the user to select a target during dispatch.
+
+Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
   (cl-loop
    (catch 'dispatch-redisplay
      (pcase-let* ((emulation-mode-map-alists
@@ -1698,6 +1713,7 @@ depths will be sorted before greater depths.
                         transform))))))
 
 (defun conn-dispatch-action-pulse (beg end)
+  "Momentarily highlight the region between BEG and END."
   (require 'pulse)
   (unless executing-kbd-macro
     (set-face-background
@@ -1762,10 +1778,11 @@ the meaning of depth."
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
 
-(defun conn-dispatch-read-char (&optional prompt
-                                          inherit-input-method
-                                          seconds
-                                          prompt-suffix)
+(defun conn-dispatch-read-char (&optional
+                                prompt
+                                inherit-input-method
+                                seconds
+                                prompt-suffix)
   (declare (important-return-value t))
   (let* ((inhibit-message conn-read-args-inhibit-message)
          (message-log-max nil)
@@ -1863,6 +1880,7 @@ the meaning of depth."
   (throw 'dispatch-handle t))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
+  "Execute BODY with dispatch suspended."
   (declare (indent 0))
   (cl-with-gensyms (select-mode)
     `(progn
