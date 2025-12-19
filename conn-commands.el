@@ -2464,7 +2464,16 @@ region after a `recursive-edit'."
          thing arg transform
          :repeat repeat
          :other-end :no-other-end
-         :restrict-windows restrict-windows)))))
+         :restrict-windows restrict-windows))
+      (when strings
+        (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
+                                                    separator)))
+          (pcase-dolist (`(,append . ,string) (nreverse strings))
+            (setq result
+                  (if append
+                      (concat result (and result sep) string)
+                    (concat string (and result sep) result))))
+          (conn--kill-string result append register sep))))))
 
 (cl-defmethod conn-kill-thing-do (cmd
                                   arg
@@ -3601,7 +3610,7 @@ With prefix arg N duplicate region N times."
     ;; ((and (guard subregions)
     ;;       (conn-bounds-get :subregions transform)
     ;;       (conn-bounds `(,beg . ,end))))
-    ((conn-bounds `(,beg . ,end))
+    ((conn-bounds `(,beg . ,end) transform)
      (shell-command-on-region
       beg end
       (read-shell-command "Shell command on region: ")
