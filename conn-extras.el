@@ -304,6 +304,7 @@
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   ;; "A" 'dired-find-alternate-file
+  "D" 'dired-do-flagged-delete
   "b" 'dired-up-directory
   "k" 'dired-next-line
   "i" 'dired-previous-line
