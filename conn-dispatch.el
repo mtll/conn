@@ -514,7 +514,7 @@ themselves once the selection process has concluded."
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (defvar-keymap conn-dispatch-transform-map
-  "V" 'conn-dispatch-bounds-between
+  "b" 'conn-dispatch-bounds-between
   "x" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
   "X" 'conn-transform-reset)

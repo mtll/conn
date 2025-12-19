@@ -478,8 +478,7 @@
         'symbol
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'symbol)))
-  "b" 'conn-dispatch-buttons)
+                         (conn-all-things-targets :thing 'symbol))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
