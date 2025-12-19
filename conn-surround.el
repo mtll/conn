@@ -112,18 +112,19 @@
 
 ;;;;; Delete
 
-(cl-defgeneric conn-delete-surround (cmd arg))
+(cl-defgeneric conn-delete-surround (cmd arg transform))
 
-(cl-defmethod conn-delete-surround (cmd arg)
+(cl-defmethod conn-delete-surround (cmd arg transform)
   (pcase-exhaustive (conn-bounds-of cmd arg)
-    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
-          (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend))))
-     (delete-region cbeg cend)
-     (delete-region obeg oend))))
+    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,_oend)))
+          (conn-bounds-get :close nil (conn-bounds `(,_cbeg . ,cend)))
+          (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend) transform)))
+     (delete-region iend cend)
+     (delete-region obeg ibeg))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (eql conn-surround))
                                   arg
-                                  _transform
+                                  transform
                                   &optional
                                   _append
                                   _delete
@@ -133,8 +134,9 @@
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"
                    :prefix arg)
-      ((`(,thing ,arg) (conn-surround-with-argument)))
-    (conn-delete-surround thing arg)))
+      ((`(,thing ,arg) (conn-surround-with-argument))
+       (transform (conn-transform-argument transform)))
+    (conn-delete-surround thing arg transform)))
 
 ;;;;; Surround
 
@@ -580,20 +582,20 @@
                                        (_sym (eql surround-self-insert)))
   t)
 
-(cl-defgeneric conn-prepare-change-surround (cmd arg)
+(cl-defgeneric conn-prepare-change-surround (cmd arg transform)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
            (important-return-value t)))
 
-(cl-defmethod conn-prepare-change-surround (cmd arg)
+(cl-defmethod conn-prepare-change-surround (cmd arg transform)
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
           (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend)))
-          (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend))))
+          (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend) transform)))
      (prog1 (list (conn--make-surround-region ibeg iend)
                   :open (buffer-substring-no-properties obeg oend)
                   :close (buffer-substring-no-properties cbeg cend))
-       (delete-region cbeg cend)
-       (delete-region obeg oend)))))
+       (delete-region iend cend)
+       (delete-region obeg ibeg)))))
 
 (cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
                                     arg
@@ -606,9 +608,10 @@
         (conn-read-args (conn-change-surround-state
                          :prompt "Change Surrounding"
                          :prefix arg)
-            ((`(,thing ,arg) (conn-change-surround-argument)))
+            ((`(,thing ,arg) (conn-change-surround-argument))
+             (transform (conn-transform-argument)))
           (pcase-let* ((`(,ov . ,prep-keys)
-                        (conn-prepare-change-surround thing arg))
+                        (conn-prepare-change-surround thing arg transform))
                        (cleanup (plist-get prep-keys :cleanup))
                        (success nil))
             (unwind-protect
@@ -660,6 +663,7 @@
   (conn-read-args (conn-change-surround-state
                    :prompt "Adjust Surrounding")
       ((`(,thing ,arg) (conn-change-surround-argument))
+       (transform (conn-transform-argument))
        (at-end (conn-boolean-argument 'other-end
                                       conn-adjust-other-end-map
                                       "At End"
@@ -667,7 +671,7 @@
     (with-undo-amalgamate
       (atomic-change-group
         (pcase-let* ((`(,ov . ,prep-keys)
-                      (conn-prepare-change-surround thing arg))
+                      (conn-prepare-change-surround thing arg transform))
                      (cleanup (plist-get prep-keys :cleanup))
                      (success nil))
           (unwind-protect
