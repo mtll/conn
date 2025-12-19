@@ -1073,14 +1073,14 @@ Target overlays may override this default by setting the
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
-(defun conn--right-justify-padding (overlay width face)
+(defun conn--flush-left-padding (overlay width face)
   (when (> width 0)
     (overlay-put overlay 'after-string
                  (propertize " "
                              'display `(space :width (,width))
                              'face face))))
 
-(defun conn--left-justify-padding (overlay width face)
+(defun conn--flush-right-padding (overlay width face)
   (when (> width 0)
     (overlay-put overlay 'before-string
                  (propertize " "
@@ -1145,8 +1145,7 @@ Target overlays may override this default by setting the
                           (pos-eol))))
                    (pt beg))
               ;; Find the end of the label overlay.  Barring
-              ;; exceptional conditions, which see the test clauses of
-              ;; the following cond form, we want the label overlay to
+              ;; exceptional conditions we want the label overlay to
               ;; be wider than the label string.
               (while (not end)
                 (cond
@@ -2862,7 +2861,10 @@ contain targets."
         (while (/= (point) (point-max))
           (vertical-motion (cons col-width 0))
           (unless (and (eolp) (= (point) (point-min)))
-            (conn-make-target-overlay (point) 0 :thing 'point))
+            (conn-make-target-overlay
+             (point) 0
+             :thing 'point
+             :padding-function #'conn--flush-left-padding))
           (forward-line 1))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-column-targets))
@@ -2878,13 +2880,13 @@ contain targets."
         (when (< (point) (window-end))
           (conn-make-target-overlay
            (point) 0
-           :padding-function #'conn--right-justify-padding))
+           :padding-function #'conn--flush-left-padding))
         (while (progn
                  (vertical-motion (cons col 1))
                  (< (point) (window-end)))
           (conn-make-target-overlay
            (point) 0
-           :padding-function #'conn--right-justify-padding))))))
+           :padding-function #'conn--flush-left-padding))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-line-targets))
   nil)
@@ -2968,7 +2970,7 @@ contain targets."
        (point) 0
        :thing 'point
        :padding-function (lambda (ov width _face)
-                           (conn--right-justify-padding ov width nil)))
+                           (conn--flush-left-padding ov width nil)))
       (vertical-motion 1)
       (while (<= (point) (window-end))
         (if (= (point) (point-max))
@@ -2982,7 +2984,7 @@ contain targets."
            (point) 0
            :thing 'point
            :padding-function (lambda (ov width _face)
-                               (conn--right-justify-padding ov width nil))))
+                               (conn--flush-left-padding ov width nil))))
         (vertical-motion 1)))))
 
 ;;;;; Dispatch Actions

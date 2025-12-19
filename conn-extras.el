@@ -403,13 +403,13 @@
           (when (< (point) (window-end))
             (conn-make-target-overlay
              (point) 0
-             :padding-function #'conn--right-justify-padding))
+             :padding-function #'conn--flush-left-padding))
           (while (progn
                    (vertical-motion (cons 1 1))
                    (< (point) (window-end)))
             (conn-make-target-overlay
              (point) 0
-             :padding-function #'conn--right-justify-padding))))
+             :padding-function #'conn--flush-left-padding))))
     (funcall try-next)))
 
 (conn-add-update-handler 'conn-dispatch-line-targets
