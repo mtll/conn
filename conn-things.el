@@ -437,7 +437,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Subregions
 
 (defvar-keymap conn-subregions-map
-  "z" 'toggle-subregions)
+  "/" 'toggle-subregions)
 
 (cl-defstruct (conn-subregions-argument
                (:include conn-argument)

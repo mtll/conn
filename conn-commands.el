@@ -1057,6 +1057,9 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-delimited-argument-map
   "d" 'delimited)
 
+(defvar-keymap conn-backward-argument-map
+  "z" 'backward)
+
 (defvar conn-query-flag t
   "Default value for conn-query-flag.
 
@@ -1064,22 +1067,8 @@ If flag is t then `conn-replace' and `conn-regexp-replace'
 will query before replacing from-string, otherwise just replace all
 instances of from-string.")
 
-(defvar-keymap conn-replace-query-map
-  "C-RET" 'conn-replace-query-invert
-  "C-<return>" 'conn-replace-query-invert)
-
 (defvar-keymap conn-replace-from-map
-  :parent conn-replace-query-map
   "C-M-;" 'conn-replace-insert-separator)
-
-(defvar-keymap conn-replace-to-map
-  :parent conn-replace-query-map)
-
-(defun conn-replace-query-invert ()
-  "Invert value of `conn-query-flag' and exit minibuffer."
-  (interactive)
-  (setq conn-query-flag (not conn-query-flag))
-  (exit-minibuffer))
 
 (defun conn-replace-insert-separator ()
   "Insert `query-replace-from-to-separator'."
@@ -1160,27 +1149,14 @@ instances of from-string.")
     (barf-if-buffer-read-only))
   (deactivate-mark)
   (conn-with-region-emphasis regions
-    (let* ((conn-query-flag conn-query-flag)
-           (from (conn--replace-read-from prompt
+    (let* ((from (conn--replace-read-from prompt
                                           regions
                                           regexp-flag
                                           delimited-flag))
            (to (if (consp from)
                    (prog1 (cdr from) (setq from (car from)))
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-to-map)
-                         (use-local-map)))
-                   (query-replace-read-to from prompt regexp-flag)))))
-      (list from to
-            (or delimited-flag
-                (and (plist-member (text-properties-at 0 from)
-                                   'isearch-regexp-function)
-                     (get-text-property 0 'isearch-regexp-function from)))
-            (and current-prefix-arg (eq current-prefix-arg '-))
-            conn-query-flag))))
+                 (query-replace-read-to from prompt regexp-flag))))
+      (list from to))))
 
 (cl-defgeneric conn-replace-do (thing
                                 arg
@@ -1190,7 +1166,6 @@ instances of from-string.")
                                 &optional
                                 delimited
                                 backward
-                                query-flag
                                 regexp-flag
                                 subregions-p))
 
@@ -1202,7 +1177,6 @@ instances of from-string.")
                                &optional
                                delimited
                                backward
-                               query-flag
                                regexp-flag
                                subregions-p)
   (pcase-let* (((and (conn-bounds `(,beg . ,end) transform)
@@ -1234,9 +1208,9 @@ instances of from-string.")
                                     collect (filter-buffer-substring beg end method))
                          (cl-loop for (beg . end) in regions
                                   do (delete-region beg end))))))))
-            (perform-replace from-string to-string query-flag regexp-flag
+            (perform-replace from-string to-string t regexp-flag
                              delimited nil nil beg end backward t))
-        (perform-replace from-string to-string query-flag regexp-flag
+        (perform-replace from-string to-string t regexp-flag
                          delimited nil nil beg end backward)))))
 
 (cl-defmethod conn-replace-do ((_thing (eql project))
@@ -1247,7 +1221,6 @@ instances of from-string.")
                                &optional
                                delimited
                                _backward
-                               _query-flag
                                regexp-flag
                                _subregions-p)
   (let ((mstart (make-hash-table :test 'eq)))
@@ -1271,7 +1244,6 @@ instances of from-string.")
                      &optional
                      delimited
                      backward
-                     query-flag
                      regexp-flag
                      subregions-p)
   "Perform a `replace-string' within the bounds of a thing."
@@ -1281,33 +1253,46 @@ instances of from-string.")
        ((`(,thing ,arg) (conn-replace-thing-argument))
         (transform (conn-transform-argument))
         (subregions-p (conn-subregions-argument (use-region-p)))
-        (regexp-flag (conn-boolean-argument 'regexp
-                                            conn-regexp-argument-map
-                                            "regexp"))
-        (delimited-flag (conn-boolean-argument 'delimited
-                                               conn-delimited-argument-map
-                                               "word delimited")))
-     (let* ((bounds
-             (ignore-errors
-               (conn-transform-bounds (conn-bounds-of thing arg)
-                                      transform)))
-            (subregions (and subregions-p bounds
-                             (conn-bounds-get bounds :subregions)))
-            (common
-             (conn--replace-read-args
-              (concat "Replace"
-                      (if current-prefix-arg
-                          (if (eq current-prefix-arg '-) " backward" " word")
-                        ""))
-              regexp-flag
-              (if (and subregions-p subregions)
-                  (cl-loop for bound in subregions
-                           collect (conn-bounds bound))
-                (and bounds (list (conn-bounds bounds))))
-              nil delimited-flag)))
-       (append (list thing arg transform) common
-               (list regexp-flag
-                     (and subregions-p subregions t))))))
+        (regexp-flag
+         (conn-boolean-argument 'regexp
+                                conn-regexp-argument-map
+                                "regexp"))
+        (delimited-flag
+         (conn-boolean-argument 'delimited
+                                conn-delimited-argument-map
+                                "word delimited"))
+        (backward
+         (conn-boolean-argument 'backward
+                                conn-backward-argument-map
+                                "backward")))
+     (pcase-let* ((bounds
+                   (ignore-errors
+                     (conn-transform-bounds (conn-bounds-of thing arg)
+                                            transform)))
+                  (subregions (and subregions-p bounds
+                                   (conn-bounds-get bounds :subregions)))
+                  (`(,from ,to)
+                   (conn--replace-read-args
+                    (concat "Replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    regexp-flag
+                    (if (and subregions-p subregions)
+                        (cl-loop for bound in subregions
+                                 collect (conn-bounds bound))
+                      (and bounds (list (conn-bounds bounds))))
+                    nil
+                    delimited-flag)))
+       (list thing
+             arg
+             transform
+             from
+             to
+             delimited-flag
+             backward
+             regexp-flag
+             (and subregions-p subregions t)))))
   (conn-replace-do thing
                    arg
                    transform
@@ -1315,7 +1300,6 @@ instances of from-string.")
                    to-string
                    delimited
                    backward
-                   query-flag
                    regexp-flag
                    subregions-p))
 

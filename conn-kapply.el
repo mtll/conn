@@ -282,16 +282,10 @@ of highlighting."
   (require 'project)
   (let ((files (or (project-files (project-current t))
                    (user-error "No files for kapply.")))
-        (string (minibuffer-with-setup-hook
-                    (lambda ()
-                      (thread-last
-                        (current-local-map)
-                        (make-composed-keymap conn-replace-to-map)
-                        (use-local-map)))
-                  (conn--kapply-read-from-with-preview
-                   (if regexp-flag "Regexp" "String")
-                   (list (cons (point-min) (point-max)))
-                   regexp-flag)))
+        (string (conn--kapply-read-from-with-preview
+                 (if regexp-flag "Regexp" "String")
+                 (list (cons (point-min) (point-max)))
+                 regexp-flag))
         matches)
     (cl-labels
         ((collect-matches (buffer)
@@ -360,16 +354,10 @@ of highlighting."
                 ((conn-bounds whole transform)
                  (list whole)))
             (deactivate-mark)))
-         (string (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-to-map)
-                         (use-local-map)))
-                   (conn--kapply-read-from-with-preview
-                    (if regexp-flag "Regexp" "String")
-                    regions
-                    regexp-flag)))
+         (string (conn--kapply-read-from-with-preview
+                  (if regexp-flag "Regexp" "String")
+                  regions
+                  regexp-flag))
          matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end) regions)
