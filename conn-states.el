@@ -1775,9 +1775,9 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
   ( :method ((arg conn-anonymous-argument) cmd)
     (when-let* ((pred (conn-anonymous-argument--predicate arg)))
       (funcall pred cmd)))
-  ( :method ((arg conn-composite-argument))
+  ( :method ((arg conn-composite-argument) cmd)
     (cl-loop for a in (conn-composite-argument-value arg)
-             thereis (conn-argument-predicate a))))
+             thereis (conn-argument-predicate a cmd))))
 
 (cl-defmethod conn-argument-predicate ((_arg (eql conn-read-args-command-handler))
                                        cmd)
@@ -1816,9 +1816,9 @@ VARLIST bindings should be patterns accepted by `pcase-let'.'
               (let (and str (pred stringp))
                 (funcall fn arg)))
          (concat " (" str ")")))))
-  ( :method ((arg conn-composite-argument))
+  ( :method ((arg conn-composite-argument) value)
     (cl-loop for a in (conn-composite-argument-value arg)
-             thereis (conn-argument-completion-annotation a))))
+             thereis (conn-argument-completion-annotation a value))))
 
 (cl-defgeneric conn-argument-compose-keymap (argument)
   (declare (important-return-value t)
