@@ -2452,25 +2452,41 @@ to the key binding for that target."
             (conn-cleanup-targets))
           (conn-dispatch-call-update-handlers state 0))))))
 
+(defvar conn-read-string-target-history nil)
+
+(defvar-keymap conn-dispatch-read-string-target-keymap
+  "M-e" 'read-string)
+
 (conn-define-target-finder conn-dispatch-read-with-timeout
     (conn-dispatch-string-targets)
   ((timeout :initform 0.5 :initarg :timeout))
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (let ((timeout (oref state timeout)))
-        (if string
-            (conn-dispatch-call-update-handlers state 0)
-          (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
-            (setf string (char-to-string (conn-dispatch-read-char prompt t)))
-            (while-no-input
-              (conn-dispatch-call-update-handlers state))
-            (while-let ((next-char (conn-dispatch-read-char
-                                    prompt t timeout string)))
-              (conn-cleanup-targets)
-              (setf string (concat string (char-to-string next-char)))
-              (conn-dispatch-call-update-handlers state)))
-          (conn-cleanup-targets)
-          (conn-dispatch-call-update-handlers state 0))))))
+        (unless string
+          (conn-with-dispatch-event-handlers
+            (:keymap conn-dispatch-read-string-target-keymap)
+            ( :handler (cmd)
+              (when (eq cmd 'read-string)
+                (let ((str (conn-with-dispatch-suspended
+                             (read-string
+                              "String: " string
+                              'conn-read-string-target-history
+                              nil t))))
+                  (unless (equal str "")
+                    (setq string str)
+                    (:return)))))
+            (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
+              (setf string (char-to-string (conn-dispatch-read-char prompt t)))
+              (while-no-input
+                (conn-dispatch-call-update-handlers state))
+              (while-let ((next-char (conn-dispatch-read-char
+                                      prompt t timeout string)))
+                (conn-cleanup-targets)
+                (setf string (concat string (char-to-string next-char)))
+                (conn-dispatch-call-update-handlers state))))
+          (conn-cleanup-targets)))
+      (conn-dispatch-call-update-handlers state 0))))
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
