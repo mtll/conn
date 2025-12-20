@@ -1405,10 +1405,13 @@ Only the background color is used."
 
 (conn-register-thing
  'visual-line
- :forward-op (lambda (&optional N)
-               (let ((line-move-visual t))
-                 (vertical-motion 0)
-                 (line-move N t))))
+ :forward-op 'conn-forward-visual-line
+ :properties '(:linewise t))
+
+(conn-register-thing-commands
+ 'visual-line 'conn-continuous-thing-handler
+ 'conn-forward-visual-line
+ 'conn-backward-visual-line)
 
 (conn-define-mark-command conn-mark-visual-line visual-line)
 

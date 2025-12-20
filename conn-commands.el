@@ -100,6 +100,16 @@ execution."
 
 ;;;;; Movement
 
+(defun conn-forward-visual-line (arg)
+  (interactive "p")
+  (let ((line-move-visual t))
+    (vertical-motion 0)
+    (line-move arg t)))
+
+(defun conn-backward-visual-line (arg)
+  (interactive "p")
+  (conn-forward-visual-line (- arg)))
+
 (defun conn-goto-line (line)
   "Goto absolute line, 1 origin.
 

@@ -246,8 +246,8 @@
   ">" 'forward-line
   "<" 'conn-backward-line
   ";" 'conn-mark-comment
-  "v" 'conn-mark-visual-line
-  "V" 'conn-mark-visible
+  "v" 'conn-forward-visual-line
+  "V" 'conn-backward-visible
   "g" 'conn-goto-line
   "/" 'conn-mark-filename
   "U" 'conn-mark-uuid
