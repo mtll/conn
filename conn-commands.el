@@ -1032,6 +1032,20 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Replace
 
+(defvar conn-replace-special-ref
+  (conn-reference-quote
+    nil))
+
+(defvar conn-replace-reference
+  (list (conn-reference-page "Replace"
+          "Replace instances of a pattern in a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-replace-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (conn-define-state conn-replace-state (conn-read-thing-state)
   :lighter "REPLACE")
 
@@ -1110,6 +1124,8 @@ instances of from-string.")
   (when-let* ((default (conn-replace-read-default)))
     (regexp-quote default)))
 
+(defvar conn--replace-reading nil)
+
 (defun conn--replace-read-from ( prompt
                                  regions
                                  &optional
@@ -1137,6 +1153,7 @@ instances of from-string.")
                       from-string)))
     (minibuffer-with-setup-hook
         (lambda ()
+          (setq-local conn--replace-reading t)
           (thread-last
             (current-local-map)
             (make-composed-keymap conn-replace-from-map)
@@ -1259,6 +1276,7 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (conn-read-args (conn-replace-state
+                    :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg) (conn-replace-thing-argument))
         (transform (conn-transform-argument))
@@ -1314,6 +1332,20 @@ instances of from-string.")
                    subregions-p))
 
 ;;;;; Isearch
+
+(defvar conn-isearch-special-ref
+  (conn-reference-quote
+    nil))
+
+(defvar conn-isearch-reference
+  (list (conn-reference-page "Isearch"
+          "Isearch within a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-isearch-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
 
 (conn-define-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
@@ -1481,7 +1513,8 @@ Exiting the recursive edit will resume the isearch."
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Isearch in Thing")
+                    :prompt "Isearch in Thing"
+                    :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument))
@@ -1505,7 +1538,8 @@ Exiting the recursive edit will resume the isearch."
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Isearch in Thing")
+                    :prompt "Isearch in Thing"
+                    :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument))
@@ -1531,7 +1565,8 @@ Exiting the recursive edit will resume the isearch."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Thing")
+                    :prompt "Thing"
+                    :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument))
         (transform (conn-transform-argument))
@@ -1563,7 +1598,8 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Thing")
+                    :prompt "Thing"
+                    :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument))
         (transform (conn-transform-argument))
@@ -1600,6 +1636,20 @@ Interactively `region-beginning' and `region-end'."
 ;;;;; Transpose
 
 (defvar conn--recursive-edit-transpose nil)
+
+(defvar conn-transpose-special-ref
+  (conn-reference-quote
+    (("line" conn-backward-line forward-line)
+     ("symbol" forward-symbol)
+     ("recursive-edit" recursive-edit))))
+
+(defvar conn-transpose-reference
+  (list
+   (conn-reference-page "Transpose"
+     "Transpose two things."
+     (:heading "Special Bindings")
+     (:eval (conn-quick-ref-to-cols
+             conn-transpose-special-ref 3)))))
 
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
@@ -1790,18 +1840,34 @@ Interactively `region-beginning' and `region-end'."
        :other-end :no-other-end
        :restrict-windows restrict-windows))))
 
-(defvar conn-transpose-reference
-  (list
-   (conn-reference-page "Transpose"
-     "Transpose reads a THING command and transposes two of those THINGs. If
-THING is `recursive-edit' then the current region and a region defined
-within a recursive edit will be transposed.
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-transpose-state 'conn--replace-reading)
+  ";" (conn-anonymous-thing
+        'sexp
+        :transpose-op ( :method (_self _arg _at-point-and-mark)
+                        (conn--query-replace-read-transpose-from-to))))
 
-Transpose defines some addition thing bindings:
-"
-     ((("line" conn-backward-line forward-line))
-      (("symbol" forward-symbol))
-      (("recursive-edit" recursive-edit))))))
+;; Coming in emacs 31
+(defun conn--query-replace-read-transpose-from-to ()
+  (let* ((from-beg (minibuffer-prompt-end))
+         (from-end (next-single-property-change from-beg 'separator))
+         (to-beg   (and from-end
+                        (next-single-property-change from-end 'separator)))
+         (to-end   (point-max))
+         (beg      (use-region-beginning))
+         (end      (use-region-end)))
+    (cond
+     ((or (not from-end) (not to-beg))
+      (user-error "No query-replace separator to transpose around"))
+     ((or (not beg) (not end))
+      (transpose-regions from-beg from-end to-beg to-end))
+     (t
+      ;; Calculate intersection of FROM and TO with active region.
+      (when (< from-beg beg from-end) (setq from-beg beg))
+      (when (< from-beg end from-end) (setq from-end end))
+      (when (< to-beg beg to-end)     (setq to-beg beg))
+      (when (< to-beg end to-end)     (setq to-end end))
+      (transpose-regions from-beg from-end to-beg to-end)))))
 
 (defvar-keymap conn-transpose-thing-argument-map)
 
@@ -2160,7 +2226,10 @@ region after a `recursive-edit'."
          (prepend-to-register register beg end delete-flag))
         ('append
          (append-to-register register beg end delete-flag)))
-    (when (eq append 'prepend)
+    (when (or (and (eq append 'append)
+                   (< end beg))
+              (and (eq append 'prepend)
+                   (< beg end)))
       (cl-rotatef beg end))
     (let ((last-command (if append 'kill-region last-command)))
       (when (and append separator)
@@ -2827,6 +2896,20 @@ region after a `recursive-edit'."
 
 ;;;;; How Many
 
+(defvar conn-how-many-special-ref
+  (conn-reference-quote
+    nil))
+
+(defvar conn-how-many-reference
+  (list (conn-reference-page "How Many"
+          "Count the number of matches within a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-how-many-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (conn-define-state conn-how-many-state (conn-read-thing-state)
   :lighter "HOW-MANY")
 
@@ -2847,6 +2930,7 @@ region after a `recursive-edit'."
 (defun conn-how-many-in-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-how-many-state
+                    :reference conn-how-many-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
         (transform (conn-transform-argument)))
@@ -2866,6 +2950,20 @@ region after a `recursive-edit'."
       beg end t))))
 
 ;;;;; Comment
+
+(defvar conn-comment-special-ref
+  (conn-reference-quote
+    nil))
+
+(defvar conn-comment-reference
+  (list (conn-reference-page "Comment"
+          "Comment a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-comment-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
 
 (conn-define-state conn-comment-state (conn-read-thing-state)
   :lighter "COMMENT")
@@ -2895,6 +2993,7 @@ region after a `recursive-edit'."
 (defun conn-comment-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-comment-state
+                    :reference conn-comment-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-comment-thing-argument t))
         (transform (conn-transform-argument)))
@@ -2902,6 +3001,20 @@ region after a `recursive-edit'."
   (conn-comment-thing-do thing arg transform))
 
 ;;;;; Duplicate
+
+(defvar conn-duplicate-special-ref
+  (conn-reference-quote
+    nil))
+
+(defvar conn-duplicate-reference
+  (list (conn-reference-page "Duplicate"
+          "Duplicate a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-duplicate-special-ref 3))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
 
 (conn-define-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
