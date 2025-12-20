@@ -123,10 +123,11 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "TAB" 'conn-indent-thing
+  "s" 'conn-sort-things
   "v" 'diff-buffer-with-file
   "SPC" 'whitespace-cleanup
   "f" 'conn-fill-prefix
-  "TAB" 'indent-for-tab-command
   "#" 'conn-how-many-in-thing
   "L" 'clone-indirect-buffer
   "i" 'conn-emacs-state-open-line-above
@@ -325,7 +326,6 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "T" 'conn-indent-thing
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
@@ -365,7 +365,6 @@
   "C-5" (conn-remap-key "C-x 5" t)
   "G" 'conn-surround
   "<escape>" 'conn-pop-state
-  "S" 'conn-sort-things
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
