@@ -1082,11 +1082,17 @@ For use in buffers that should not have any other state."
   :suppress-input-method t
   :cursor 'box)
 
+(setf (conn-get-state-map 'conn-command-state)
+      (define-keymap :full t :suppress t))
+
 (conn-define-state conn-outline-state ()
   "State for editing outline sections."
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t)
+
+(setf (conn-get-state-map 'conn-outline-state)
+      (define-keymap :full t :suppress t))
 
 (conn-define-state conn-org-state (conn-outline-state)
   "A `conn-mode' state for structural editing of `org-mode' buffers.")
