@@ -388,7 +388,7 @@
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "C" 'conn-copy-region
-  "t" 'conn-copy-thing
+  "q" 'conn-copy-thing
   "w" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
@@ -396,7 +396,7 @@
   "." 'conn-register-load
   ">" 'conn-register-load-and-replace
   "<" 'conn-register-prefix
-  "q" 'conn-transpose-things
+  "t" 'conn-transpose-things
   "r" conn-region-remap
   "v" 'conn-toggle-mark-command
   "V" 'conn-previous-mark-command
@@ -501,8 +501,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "'" 'conn-dispatch-kapply
-  "t" 'conn-dispatch-copy-to
-  "T" 'conn-dispatch-copy-to-replace
+  "q" 'conn-dispatch-copy-to
+  "Q" 'conn-dispatch-copy-to-replace
   "C-y" 'conn-dispatch-yank-to-replace
   "M-y" 'conn-dispatch-reading-yank-to-replace
   "y" 'conn-dispatch-yank-to
@@ -513,7 +513,7 @@
   "S" 'conn-dispatch-send-replace
   "d" 'conn-dispatch-take
   "D" 'conn-dispatch-take-replace
-  "q" 'conn-dispatch-transpose
+  "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
   "=" 'conn-dispatch-repeat-command
