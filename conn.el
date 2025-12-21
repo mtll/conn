@@ -47,7 +47,7 @@
 (defun conn--toggle-input-method-ad (&rest app)
   (if (and conn-local-mode
            (not isearch-mode)
-           (not conn--without-input-method-hooks)
+           (not conn-disable-input-method-hooks)
            (conn-state-get conn-current-state :suppress-input-method)
            conn--input-method)
       (unwind-protect
@@ -130,11 +130,11 @@
         conn-mark-ring (conn-copy-ring conn-mark-ring)
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
         conn--state-stack (copy-sequence conn--state-stack))
-  (cl-loop for e in conn-previous-mark-state
+  (cl-loop for e in conn--previous-mark-state
            if (markerp e)
            collect (copy-marker (marker-position e)) into mstate
            else collect e into mstate
-           finally do (setq conn-previous-mark-state mstate)))
+           finally do (setq conn--previous-mark-state mstate)))
 
 (defun conn--setup-keymaps ()
   (if conn-mode

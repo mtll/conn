@@ -534,12 +534,12 @@ Immediately repeating this command pushes a mark."
 
 (defun conn-previous-mark-command ()
   (interactive)
-  (unless conn-previous-mark-state
+  (unless conn--previous-mark-state
     (user-error "No previous mark state"))
-  (goto-char (nth 0 conn-previous-mark-state))
-  (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state)
+  (goto-char (nth 0 conn--previous-mark-state))
+  (conn--push-ephemeral-mark (nth 1 conn--previous-mark-state)
                              nil t)
-  (pcase (nth 2 conn-previous-mark-state)
+  (pcase (nth 2 conn--previous-mark-state)
     (`(,pc . ,mc)
      (rectangle-mark-mode 1)
      (rectangle--reset-crutches)

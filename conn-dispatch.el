@@ -1803,14 +1803,14 @@ the meaning of depth."
                       ('label
                        (let ((pim current-input-method)
                              (default-input-method default-input-method)
-                             (input-method-history input-method-history))
-                         (conn-without-input-method-hooks
-                           (unwind-protect
-                               (progn
-                                 (activate-input-method
-                                  conn-dispatch-label-input-method)
-                                 (read-event prompt t seconds))
-                             (activate-input-method pim)))))
+                             (input-method-history input-method-history)
+                             (conn-disable-input-method-hooks t))
+                         (unwind-protect
+                             (progn
+                               (activate-input-method
+                                conn-dispatch-label-input-method)
+                               (read-event prompt t seconds))
+                           (activate-input-method pim))))
                       (_
                        (read-event prompt t seconds)))))))
       (if seconds
@@ -4235,7 +4235,7 @@ contain targets."
                                      window-predicate))))
         (add-function :after-while conn-target-window-predicate predicate))
       (conn-with-recursive-stack 'conn-dispatch-state
-        (conn-without-input-method-hooks
+        (let ((conn-disable-input-method-hooks t))
           (conn--unwind-protect-all
             (progn
               (activate-input-method conn--input-method)

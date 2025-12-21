@@ -1076,13 +1076,13 @@ words."))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
                               _arg)
-  (unless conn-previous-mark-state
+  (unless conn--previous-mark-state
     (user-error "No previous mark state"))
   (save-mark-and-excursion
-    (goto-char (nth 0 conn-previous-mark-state))
-    (conn--push-ephemeral-mark (nth 1 conn-previous-mark-state)
+    (goto-char (nth 0 conn--previous-mark-state))
+    (conn--push-ephemeral-mark (nth 1 conn--previous-mark-state)
                                nil t)
-    (pcase (nth 2 conn-previous-mark-state)
+    (pcase (nth 2 conn--previous-mark-state)
       (`(,pc . ,mc)
        (rectangle-mark-mode 1)
        (rectangle--reset-crutches)

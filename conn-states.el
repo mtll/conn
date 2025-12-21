@@ -534,7 +534,8 @@ return it."
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
-  (when conn-local-mode
+  (when (and conn-local-mode
+             (not conn-disable-input-method-hooks))
     (let (input-method-activate-hook
           input-method-deactivate-hook)
       (pcase (conn-state-get conn-current-state :suppress-input-method)
@@ -557,8 +558,9 @@ return it."
 (put 'conn--activate-input-method 'permanent-local-hook t)
 
 (defun conn--deactivate-input-method ()
-  (setq conn--input-method nil
-        conn--input-method-title nil))
+  (unless conn-disable-input-method-hooks
+    (setq conn--input-method nil
+          conn--input-method-title nil)))
 (put 'conn--deactivate-input-method 'permanent-local-hook t)
 
 (defun conn--isearch-input-method ()
@@ -613,40 +615,14 @@ mouse-3: Describe current input method")
    (conn--prev-mode-line-mule-info
     (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
 
-(defvar-local conn--without-input-method-hooks nil)
-
-(defmacro conn-without-input-method-hooks (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (remove buffer)
-    `(let ((,remove (not conn--without-input-method-hooks))
-           (,buffer (current-buffer)))
-       (unwind-protect
-           (progn
-             (when ,remove
-               (setq conn--without-input-method-hooks t)
-               (remove-hook 'input-method-activate-hook
-                            #'conn--activate-input-method
-                            t)
-               (remove-hook 'input-method-deactivate-hook
-                            #'conn--deactivate-input-method
-                            t))
-             ,@body)
-         (when ,remove
-           (with-current-buffer ,buffer
-             (setq conn--without-input-method-hooks nil)
-             (add-hook 'input-method-activate-hook
-                       #'conn--activate-input-method
-                       50 t)
-             (add-hook 'input-method-deactivate-hook
-                       #'conn--deactivate-input-method
-                       50 t)
-             (conn--activate-input-method)))))))
+(defvar-local conn-disable-input-method-hooks nil
+  "When non-nil conn input method hooks and advice do not run.")
 
 (defmacro conn-with-input-method (&rest body)
   "Run BODY ensuring `conn--input-method' is active."
   (declare (debug (body))
            (indent 0))
-  `(conn-without-input-method-hooks
+  `(let ((conn-disable-input-method-hooks t))
      (activate-input-method conn--input-method)
      ,@body))
 
@@ -1272,11 +1248,11 @@ the state stays active if the previous command was a prefix command."
   (conn-state-defer
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit))
-      (unless conn-previous-mark-state
-        (setq conn-previous-mark-state (list (make-marker) (make-marker) nil)))
-      (set-marker (nth 0 conn-previous-mark-state) (point))
-      (set-marker (nth 1 conn-previous-mark-state) (mark t))
-      (setf (nth 2 conn-previous-mark-state) conn--mark-state-rmm))
+      (unless conn--previous-mark-state
+        (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
+      (set-marker (nth 0 conn--previous-mark-state) (point))
+      (set-marker (nth 1 conn--previous-mark-state) (mark t))
+      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm))
     (unless (conn-mark-state-keep-mark-active-p)
       (deactivate-mark)))
   (cl-call-next-method))
@@ -1344,8 +1320,6 @@ the state stays active if the previous command was a prefix command."
 
 (defvar conn--read-args-message nil)
 (defvar conn--read-args-message-timeout nil)
-
-(defvar conn--read-args-exiting nil)
 
 (defvar-keymap conn-read-args-map
   "C-q" 'reference
@@ -1632,7 +1606,6 @@ chooses to handle a command."
                    (conn--read-args-error-flag nil)
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
-                   (conn--read-args-exiting nil)
                    (conn-reading-args t)
                    (inhibit-message t)
                    (emulation-mode-map-alists
