@@ -39,7 +39,8 @@
         'calc-trail-mode
         'calc-keypad-mode
         'image-mode
-        'doc-view-mode)
+        'doc-view-mode
+        'vterm-mode)
   "Major modes in which `conn-null-state' should be active."
   :group 'conn
   :type '(list symbol))
@@ -65,8 +66,11 @@ necessary state as well.")
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
-(defvar-local conn-next-state nil)
-(defvar-local conn-previous-state nil)
+(defvar-local conn-next-state nil
+  "Bound during `conn-state-defer' forms to the next state to be entered.")
+
+(defvar-local conn-previous-state nil
+  "Bound during `conn-enter-state' to the state being exited.")
 
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
@@ -172,7 +176,9 @@ are not inherited."
     (setf (get property :conn-static-property) t))
 
   (define-inline conn-property-static-p (property)
-    "Return non-nil if PROPERTY is static."
+    "Return non-nil if PROPERTY is static.
+
+See also `conn-declare-property-static'."
     (declare (side-effect-free t)
              (important-return-value t))
     (inline-quote
@@ -242,7 +248,7 @@ property from its parents."
                 ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
-  "Return t if PROPERTY is set for STATE."
+  "Return t if STATE has an explicit value set for PROPERTY."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (property)
@@ -313,6 +319,7 @@ The composed keymap is of the form:
               when pmap collect pmap))))
 
 (defun conn-set-state-map (state map)
+  "Set STATE's keymap to MAP."
   (cl-assert (keymapp map))
   (setf (conn-state--keymap (conn--find-state state)) map)
   (dolist (child (cons state (conn-state-all-children state)) map)
@@ -359,6 +366,7 @@ The composed keymap is of the form:
               (make-composed-keymap (parent-maps state))))))
 
 (defun conn-set-major-mode-map (state mode map)
+  "Set the major MODE map for STATE to MAP."
   (cl-assert (keymapp map))
   (cl-check-type (conn--find-state state) conn-state)
   (cl-check-type mode symbol)
@@ -441,6 +449,13 @@ return it."
       (setf (conn--mode-maps-sorted-p state) t))))
 
 (defun conn-set-mode-map-depth (mode depth &optional state)
+  "Set the DEPTH of minor MODE's map in STATE.
+
+The map depth controls the sorting order for minor mode maps.  Minor
+mode maps with a lesser depth value are sorted before minor mode maps
+with a greater depth value.  This means that minor mode maps with a
+lesser depth value take precedence over minor mode maps with a greater
+depth value.  Depth should be an integer between -100 and 100."
   (cl-check-type mode symbol)
   (cl-assert (<= -100 depth 100) nil "Depth must be between -100 and 100")
   (if (null state)
@@ -467,6 +482,7 @@ return it."
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
 (defun conn-set-minor-mode-map (state mode map)
+  "Set minor MODE map to MAP in STATE."
   (cl-assert (keymapp map))
   (cl-check-type (conn--find-state state) conn-state)
   (cl-check-type mode symbol)
@@ -494,7 +510,8 @@ return it."
   "Return keymap for MODE in STATE.
 
 If one does not exists create a new sparse keymap for MODE in STATE and
-return it."
+return it.  If DONT-CREATE is non-nil and a map does not already exist
+then an error is signaled."
   (declare (important-return-value t))
   (if (conn-state-get state :no-keymap)
       (unless dont-create
@@ -672,7 +689,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                  `(conn-substate-p _ ',parent)))))
 
 (defmacro conn-with-recursive-stack (state &rest body)
-  "Call TRANSITION-FN and run BODY preserving state variables."
+  "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
   (cl-with-gensyms (buffer stack)
@@ -688,7 +705,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (conn-update-lighter))))))
 
 (defmacro conn-without-recursive-stack (&rest body)
-  "Call TRANSITION-FN and run BODY preserving state variables."
+  "Execute BODY with the most recent recursive stack temporarily exited."
   (declare (debug (body))
            (indent 0))
   (cl-with-gensyms (stack buffer)
@@ -802,6 +819,7 @@ If BUFFER is nil then use the current buffer."
   (force-mode-line-update))
 
 (defun conn-set-major-mode-maps (maps)
+  "Set buffers activate conn major mode maps to MAPS."
   (setf conn--active-major-mode-maps maps
         conn--major-mode-map `((conn-local-mode
                                 . ,(make-composed-keymap
@@ -812,8 +830,9 @@ If BUFFER is nil then use the current buffer."
                                             conn--active-major-mode-maps))))))
 
 (defun conn-get-major-mode-maps ()
+  "Return a list of the currently active conn major mode maps."
   (declare (gv-setter conn-set-major-mode-maps))
-  conn--active-major-mode-maps)
+  (copy-sequence conn--active-major-mode-maps))
 
 (defun conn--setup-state-keymaps ()
   (if (conn-state-get conn-current-state :no-keymap)
@@ -850,10 +869,9 @@ If BUFFER is nil then use the current buffer."
 (cl-defgeneric conn-enter-state (state)
   "Enter STATE.
 
-Code that should be run when a state is entered should be added as
-methods to this function.  The (conn-substate STATE) method specializer is
-provided so that code can be run for every state inheriting from some
-state.
+Code that is run when a state is entered should be added as methods to
+this function.  The (conn-substate STATE) specializer is provided so
+that code can be run for every state inheriting from some parent state.
 
 To execute code when a state is exiting use `conn-state-defer'."
   (:method ((_state (eql 'nil))) "Noop" nil)
@@ -891,13 +909,18 @@ To execute code when a state is exiting use `conn-state-defer'."
             (message "Error in conn-state-entry-functions: %s" (car err)))))))))
 
 (defun conn-push-state (state)
-  "Push STATE to the state stack."
+  "Enter STATE and push it to the state stack."
   (unless (symbol-value state)
     (push state conn--state-stack)
     (conn-enter-state state)))
 
 (defun conn-pop-state ()
-  "Pop to the previous state in the state stack."
+  "Pop to the previous state in the state stack.
+
+If the current state is the base state for the stack then push the
+state given by the current state's :pop-alternate property.  If the
+current state does not have a :pop-alternate property then push
+`conn-command-state'."
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (progn
@@ -908,15 +931,13 @@ To execute code when a state is exiting use `conn-state-defer'."
                      t 'conn-command-state))))
 
 (defun conn-peek-state ()
-  "Peek the state stack.
-
-Returns the next state in the state stack."
+  "Returns the next state in the state stack."
   (declare (side-effect-free t)
            (important-return-value t))
   (cadr conn--state-stack))
 
 (defun conn-enter-recursive-stack (state)
-  "Enter a recursive state stack."
+  "Enter a recursive stack with STATE as the base state."
   (prog1 conn--state-stack
     (push nil conn--state-stack)
     (push state conn--state-stack)
@@ -984,27 +1005,25 @@ If there is not recursive stack an error is signaled."
               (conn--ensure-minor-mode-map name mode))))))))
 
 (defmacro conn-define-state (name parents &rest properties)
-  "Define a conn state NAME.
+  "Define a conn state named NAME.
 
-Defines a transition function and variable NAME.  NAME is non-nil when
-the state is active.
+Defines a variable NAME which is non-nil when the state is active.
 
 PARENTS is a list of states from which NAME should inherit properties
 and keymaps.
 
 PROPERTIES is a property list defining the state properties for NAME.  A
-state may have any number of properties and a state will inherit the
-value for a property from its parents if it does not set the value
-explicitly.
+state may have any number of properties.  A state will inherit the
+value for unspecified properties from its parents.
 
 The following properties have a special meaning:
 
-:LIGHTER is the mode-line lighter text for NAME.
+:LIGHTER is the mode-line lighter for NAME.
 
 :DISABLE-MARK-CURSOR if non-nil will hide the mark cursor in NAME.
 
-:SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
-NAME.
+:SUPPRESS-INPUT-METHOD if non-nil suppresses the current input method
+while NAME is active.
 
 :CURSOR is the `cursor-type' in NAME.
 
@@ -1052,7 +1071,7 @@ For use in buffers that should not have any other state."
   :cursor '(bar . 4))
 
 (conn-define-state conn-command-state ()
-  "A `conn-mode' state for editing test."
+  "A state for editing commands."
   :pop-alternate 'conn-emacs-state
   :lighter "C"
   :suppress-input-method t
@@ -1062,7 +1081,7 @@ For use in buffers that should not have any other state."
       (define-keymap :full t :suppress t))
 
 (conn-define-state conn-outline-state ()
-  "State for editing outline sections."
+  "A state for editing outline sections."
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t)
@@ -1071,12 +1090,13 @@ For use in buffers that should not have any other state."
       (define-keymap :full t :suppress t))
 
 (conn-define-state conn-org-state (conn-outline-state)
-  "A `conn-mode' state for structural editing of `org-mode' buffers.")
+  "A state for structural editing of `org-mode' buffers.")
 
 (conn-define-state conn-emacs-state ()
-  "A `conn-mode' state for inserting text.
+  "A state for inserting text.
 
-By default `conn-emacs-state' does not bind anything."
+By default `conn-emacs-state' does not bind anything except
+`conn-pop-state'."
   :lighter "E"
   :cursor '(bar . 4))
 
@@ -1103,6 +1123,7 @@ Causes the mode-line face to be remapped to the face specified by the
   :group 'conn-faces)
 
 (defun conn-read-thing-cursor ()
+  "Returns the cursor to be used in `conn-read-thing-common-state'."
   `(hbar . ,(floor (default-line-height) 2.5)))
 
 (conn-define-state conn-read-thing-common-state (conn-command-state
@@ -1112,11 +1133,6 @@ Causes the mode-line face to be remapped to the face specified by the
   :suppress-input-method t
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
-
-(defvar conn-read-thing-reference
-  (list (conn-reference-page "Thing"
-          "The region to operate on will be defined by a thing command. A prefix
-argument may be supplied for the thing command.")))
 
 ;;;;; Emacs State
 
@@ -1211,7 +1227,7 @@ the state stays active if the previous command was a prefix command."
 
 ;;;;; Mark State
 
-(defvar-local conn-previous-mark-state nil)
+(defvar-local conn--previous-mark-state nil)
 
 (defvar conn--mark-state-rmm nil)
 
@@ -1231,10 +1247,12 @@ the state stays active if the previous command was a prefix command."
                          nil))))
 
 (defun conn-pop-mark-state ()
+  "Pop `conn-mark-state'."
   (interactive)
   (setq deactivate-mark t))
 
 (defun conn-mark-state-keep-mark-active-p ()
+  "When non-nil keep the mark active when exiting `conn-mark-state'."
   (or (conn-substate-p conn-next-state 'conn-emacs-state)
       (and (null (nth 1 conn--state-stack))
            (eq (nth 2 conn--state-stack)
@@ -1310,7 +1328,8 @@ the state stays active if the previous command was a prefix command."
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
-(defvar conn-reading-args nil)
+(defvar conn-reading-args nil
+  "Non-nil during `conn-read-args'.")
 
 (defvar conn--read-args-prefix-mag nil)
 (defvar conn--read-args-prefix-sign nil)
@@ -1357,12 +1376,17 @@ chooses to handle a command."
     (throw 'conn-read-args-handle nil)))
 
 (defun conn-read-args-message (format-string &rest args)
+  "Print FORMAT-STRING with ARGS during `conn-read-args'.
+
+The duration of the message display is controlled by
+`minibuffer-message-timeout'."
   (let ((inhibit-message conn-read-args-inhibit-message)
         (message-log-max nil))
     (setq conn--read-args-message (apply #'format format-string args)
           conn--read-args-message-timeout (time-add nil minibuffer-message-timeout))))
 
 (defun conn-read-args-error (format-string &rest args)
+  "Print an error message of FORMAT-STRING with ARGS."
   (setq conn--read-args-error-message (apply #'format format-string args)
         conn--read-args-error-flag t)
   (throw 'conn-read-args-handle nil))
@@ -1473,6 +1497,9 @@ chooses to handle a command."
         (quit nil)))))
 
 (defmacro conn-read-args-return (&rest body)
+  "Evaluate body and return the result from the current `conn-read-args'.
+
+This skips executing the body of the `conn-read-args' form entirely."
   (declare (indent 0))
   `(throw 'conn-read-args-return
           (list (lambda () ,@body))))
@@ -1636,9 +1663,45 @@ chooses to handle a command."
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.
 
-VARLIST bindings should be patterns accepted by `pcase-let'.'
+VARLIST is a list of the form ((PATTERN ARGUMENT) ...) where PATTERN is
+a pattern accepted by `pcase-let'.
 
-\(fn (STATE KEYS) &rest BODY)"
+The execution of a `conn-read-args' form proceeds as follows:
+
+First each ARGUMENT is evaluated and if an :AROUND function has been
+specified it is called with a continuation so that the around function
+can do whatever setup and teardown is needed.  The arg reading
+loop is then entered.
+
+The arg reading loop continues while `conn-argument-required-p' returns
+non-nil for at least one argument.
+
+The loop then prompts the user for a command via `read-key-sequence'.
+If a :PRE function was given then it is called with the command that has
+been read.
+
+Then the default command handler and the :COMMAND-HANDLER function, if
+provided, are called with the current command.  If the command handler
+chooses to handle the command and call `conn-read-args-handle' then
+:POST is called with the current command, and the current iteration of
+the loop ends.
+
+If the current command is not handled by a command handler then
+`conn-argument-update' is called for each ARGUMENT with ARGUMENT, the
+command, and an updater function.  The updater function is a function of
+one argument which when called updates the value of ARGUMENT to the
+supplied value.  Once updater has been called `conn-argument-update' is
+not called with any more ARGUMENTs, :POST is called with the current
+command and the current iteration of the loop end.
+
+If no command handler handles the current command and no argument
+calls an updater then an invalid command message is printed.
+
+Once the loop ends `conn-argument-extract-value' is called on each
+argument and the result is bound to the corresponding pattern form by
+`pcase-let' and BODY then runs.
+
+\(fn (STATE &key COMMAND-HANDLER DISPLAY-HANDLER AROUND OVERRIDING-MAP PROMPT PREFIX PRE POST REFERENCE) VARLIST &rest BODY)"
   (declare (indent 2))
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     `(conn--read-args ',state
