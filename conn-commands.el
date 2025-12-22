@@ -1335,14 +1335,16 @@ instances of from-string.")
 
 (defvar conn-isearch-special-ref
   (conn-reference-quote
-    nil))
+    (("In multiple file" multi-file)
+     ("In multiple buffers" multi-buffer)
+     ("In current project" project))))
 
 (defvar conn-isearch-reference
   (list (conn-reference-page "Isearch"
           "Isearch within a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
-                  conn-isearch-special-ref 3))
+                  conn-isearch-special-ref 2))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -1381,13 +1383,8 @@ instances of from-string.")
         "\\[multi-file] multi-file"
         "\\[project] project"))
 
-(defun conn-isearch-dispatch-region ()
-  (interactive)
-  (isearch-done)
-  (conn-dispatch))
-
 (defun conn-isearch-yank-region ()
-  "Yank the current region to isearch."
+  "Yank the current region to the isearch search string."
   (interactive)
   (isearch-yank-internal (lambda () (mark t))))
 
@@ -1626,6 +1623,7 @@ Interactively `region-beginning' and `region-end'."
   (conn--push-ephemeral-mark isearch-other-end))
 
 (defun conn-isearch-exit-other-end ()
+  "`isearch-exit' at the other end of the current match."
   (interactive)
   (if isearch-forward
       (isearch-repeat-backward)
@@ -1643,12 +1641,11 @@ Interactively `region-beginning' and `region-end'."
      ("recursive-edit" recursive-edit))))
 
 (defvar conn-transpose-reference
-  (list
-   (conn-reference-page "Transpose"
-     "Transpose two things."
-     (:heading "Special Bindings")
-     (:eval (conn-quick-ref-to-cols
-             conn-transpose-special-ref 3)))))
+  (list (conn-reference-page "Transpose"
+          "Transpose two things."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transpose-special-ref 3)))))
 
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
@@ -1661,6 +1658,24 @@ Interactively `region-beginning' and `region-end'."
   (buffer :type buffer)
   (point :type marker)
   (thing1 :type function))
+
+(defvar conn-transpose-repeat-commands-ref
+  (conn-reference-quote
+    (("Repeat transposition" conn-transpose-repeat)
+     ("Repeat transposition in opposite direction" conn-transpose-repeat-inverse)
+     ("Recenter" recenter-top-bottom))))
+
+(defvar conn-transpose-repeat-reference
+  (list (conn-reference-page "Commands"
+          (:eval (conn-quick-ref-to-cols
+                  conn-transpose-repeat-commands-ref 1))
+          ""
+          "Any other non-prefix command ends repeating.")))
+
+(defun conn-transpose-repeat-help ()
+  "Display `conn-duplicate-repeat-reference' help during dispatch repeat."
+  (interactive)
+  (conn-quick-reference conn-transpose-repeat-reference))
 
 (defun conn-transpose-repeat ()
   (interactive)
@@ -1682,6 +1697,7 @@ Interactively `region-beginning' and `region-end'."
   "8" 'digit-argument
   "9" 'digit-argument
   "-" 'negative-argument
+  "C-q" 'conn-transpose-repeat-help
   "C-l" 'recenter-top-bottom
   "q" 'conn-transpose-repeat
   "Q" 'conn-transpose-repeat-inverse)
@@ -1883,7 +1899,13 @@ Interactively `region-beginning' and `region-end'."
   "z" 'transpose-at-point-and-mark)
 
 (defun conn-transpose-things (thing arg at-point-and-mark)
-  "Exchange regions defined by a thing command.
+  "Exchange the current THING and the previous, leaving point after both.
+
+When ARG is non-nil, takes the previous THING and moves if past ARG
+following things.
+
+When AT-POINT-AND-MARK is non-nil exchange the regions defined by THING
+and ARG at point and mark.
 
 If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
@@ -3098,7 +3120,7 @@ If the next command is one in `conn-duplicate-repeat-map' then the
 map stays active.  The commands are only usable while the map is active.
 \\<conn-duplicate-repeat-map>
 
-`digit-argument' and \\[negative-argument] `negative-argument'.
+`digit-argument' and `negative-argument'.
 
 \\[conn-duplicate-indent-repeat] `conn-duplicate-indent-repeat':
  Indent the region containing all duplicates.
@@ -3483,7 +3505,10 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
        (conn-push-state 'conn-emacs-state)))))
 
 (defun conn-change-thing (cmd arg transform)
-  "Change region defined by CMD and ARG."
+  "Change region defined by CMD, ARG, and TRANSFORM.
+
+For how the region is determined using CMD, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-change-state
                     :prompt "Thing"
@@ -3549,6 +3574,13 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
          (whitespace-cleanup-region (point) (mark t)))))))
 
 (defun conn-indent-thing (cmd arg transform &optional cleanup-whitespace)
+  "Indent the region defined by CMD, ARG, and TRANSFORM.
+
+For how the region is determined using CMD, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If CLEANUP-WHITESPACE is non-nil then also run
+`whitespace-cleanup-region' on the region."
   (interactive
    (conn-read-args (conn-indent-state
                     :prompt "Thing"
@@ -3712,7 +3744,14 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
   "d" 'indirect)
 
 (defun conn-narrow-to-thing (thing arg transform &optional indirect)
-  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
+  "Narrow to the region defined by THING, ARG, and TRANSFORM.
+
+For how the region is determined using THING, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If INDIRECT is non-nil then narrow to the region in an indirect buffer.
+
+The region is added to `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
                     :prompt "Thing"
@@ -3767,7 +3806,13 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
   :lighter "JOIN")
 
 (defun conn-join-lines (thing arg transform &optional subregions-p)
-  "`delete-indentation' in region from START and END."
+  "Join the lines in region defined by THING, ARG, and TRANSFORM.
+
+For how the region is determined using THING, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If SUBREGIONS-P is non-nil then join the lines in each individual
+subregion."
   (interactive
    (conn-read-args (conn-join-lines-state
                     :prompt "Thing")
