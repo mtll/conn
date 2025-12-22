@@ -24,16 +24,16 @@
 
 (defvar conn-sort-special-bindings-ref
   (conn-reference-quote
-    (("columns" sort-columns)
-     ("regexp fields" sort-regexp-fields)
-     ("numeric fields" sort-numeric-fields)
-     ("fields" sort-fields))))
+    (("Columns" sort-columns)
+     ("Regexp fields" sort-regexp-fields)
+     ("Numeric fields" sort-numeric-fields)
+     ("Fields" sort-fields))))
 
 (defvar conn-sort-bindings-ref
   (list (conn-reference-page "Sort"
           "Special bindings"
           (:eval (conn-quick-ref-to-cols
-                  conn-sort-special-bindings-ref 4)))))
+                  conn-sort-special-bindings-ref 2)))))
 
 (conn-define-state conn-sort-state (conn-read-thing-state)
   :lighter "SORT")
@@ -197,6 +197,12 @@
                          &optional
                          reverse
                          fold-case)
+  "Sort alphabetically subregions defined by THING, ARG, and TRANSFORM.
+
+If REVERSE is non-nil then sort subregions in reverse order.
+
+FOLD-CASE is the value of `sort-fold-case' to use for the sorting.
+Interactively defaults to the current value of `sort-fold-case'."
   (interactive
    (conn-read-args (conn-sort-state
                     :prompt "Things"

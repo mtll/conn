@@ -529,6 +529,7 @@ Immediately repeating this command pushes a mark."
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-previous-mark-command ()
+  "Push, and mark the region from the previous, `conn-mark-state'."
   (interactive)
   (unless conn--previous-mark-state
     (user-error "No previous mark state"))
@@ -546,6 +547,7 @@ Immediately repeating this command pushes a mark."
   (conn-push-state 'conn-mark-state))
 
 (defun conn-mark-thing (thing arg transform)
+  "Mark the region defined by THING, ARG, and TRANSFORM"
   (interactive
    (conn-read-args (conn-read-thing-state
                     :prompt "Thing")
