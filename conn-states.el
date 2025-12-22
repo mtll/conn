@@ -1354,7 +1354,8 @@ the state stays active if the previous command was a prefix command."
   (declare (important-return-value t)
            (side-effect-free t))
   (cond (conn--read-args-prefix-mag
-         (* (if conn--read-args-prefix-sign -1 1) conn--read-args-prefix-mag))
+         (* (if conn--read-args-prefix-sign -1 1)
+            conn--read-args-prefix-mag))
         (conn--read-args-prefix-sign -1)))
 
 (defun conn-read-args-consume-prefix-arg ()
@@ -1776,6 +1777,7 @@ argument and the result is bound to the corresponding pattern form by
     (funcall arg arg form updater)))
 
 (cl-defgeneric conn-argument-extract-value (argument)
+  "Extract ARGUMENT's value."
   (declare (important-return-value t))
   ( :method (arg) arg)
   ( :method ((arg conn-anonymous-argument))
@@ -1787,6 +1789,10 @@ argument and the result is bound to the corresponding pattern form by
              collect (conn-argument-extract-value a))))
 
 (cl-defgeneric conn-argument-display (argument)
+  "Display string in `conn-read-args-message' for ARGUMENT.
+
+Return value should be a string or a list of strings, each of which will
+be displayed in the echo area during `conn-read-args'."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
@@ -1809,6 +1815,19 @@ argument and the result is bound to the corresponding pattern form by
   ( :method ((arg conn-composite-argument))
     (cl-loop for a in (conn-composite-argument-value arg)
              collect (conn-argument-display a))))
+
+(cl-defgeneric conn-argument-compose-keymap (argument)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (_arg) nil)
+  ( :method ((arg conn-anonymous-argument))
+    (conn-anonymous-argument-keymap arg))
+  ( :method ((arg conn-argument))
+    (conn-argument-keymap arg))
+  ( :method ((arg conn-composite-argument))
+    (make-composed-keymap
+     (cl-loop for a in (conn-composite-argument-value arg)
+              collect (conn-argument-compose-keymap a)))))
 
 (cl-defgeneric conn-argument-predicate (argument value)
   (declare (important-return-value t)
@@ -1861,19 +1880,6 @@ argument and the result is bound to the corresponding pattern form by
   ( :method ((arg conn-composite-argument) value)
     (cl-loop for a in (conn-composite-argument-value arg)
              thereis (conn-argument-completion-annotation a value))))
-
-(cl-defgeneric conn-argument-compose-keymap (argument)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((arg conn-anonymous-argument))
-    (conn-anonymous-argument-keymap arg))
-  ( :method ((arg conn-argument))
-    (conn-argument-keymap arg))
-  ( :method ((arg conn-composite-argument))
-    (make-composed-keymap
-     (cl-loop for a in (conn-composite-argument-value arg)
-              collect (conn-argument-compose-keymap a)))))
 
 ;;;;; Boolean Argument
 

@@ -721,6 +721,13 @@ words."))
              ,pattern)))
 
 (defun conn-transform-bounds (bounds transforms)
+  "Transform BOUNDS with TRANSFORMS.
+
+TRANSFORMS must be a list of transforms or nil.
+
+BOUNDS may be a single `conn-bounds' struct or a list of `conn-bounds'
+structs.  If BOUNDS is a list then each element is transformed using
+TRANSFORM."
   (catch 'break
     (cond ((null transforms)
            bounds)
@@ -755,6 +762,9 @@ words."))
               (setq thing (conn-bounds-thing thing)))))))
 
 (cl-defgeneric conn-bounds-of (cmd arg &key &allow-other-keys)
+  "Return the bounds of CMD as if called with prefix arg ARG.
+
+Returns a `conn-bounds' struct."
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t)))
 
@@ -938,12 +948,42 @@ words."))
 
 ;;;;; Bounds Transformations
 
+(defun conn--make-transform-bounds-docstring ()
+  (let* ((main (documentation (symbol-function 'conn-transform-bounds) 'raw))
+         (ud (help-split-fundoc main 'conn-transform-bounds)))
+    (require 'help-fns)
+    (with-temp-buffer
+      (insert (or (cdr ud) main ""))
+      (insert "\n\n\tCurrently defined transformations for bounds:\n\n")
+      (pcase-dolist (`(,fn . ,tform-doc)
+                     (reverse (get 'conn-transform-bounds :known-transformations)))
+        (insert (format "`%s':\n %s" fn tform-doc))
+        (insert "\n\n"))
+      (let ((combined-doc (buffer-string)))
+        (if ud
+            (help-add-fundoc-usage combined-doc (car ud))
+          combined-doc)))))
+
+(put 'conn-transform-bounds 'function-documentation
+     '(conn--make-transform-bounds-docstring))
+
+(eval-and-compile
+  (defun conn--set-bounds-transform-property (f _args short-name doc-string)
+    `(eval-and-compile
+       (setf (alist-get ',f (get 'conn-transform-bounds :known-transformations))
+             ,doc-string)
+       :autoload-end
+       (put ',f :conn-bounds-transformation t)
+       (put ',f :conn-transform-description ,short-name)))
+  (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
+        (list #'conn--set-bounds-transform-property)))
+
 ;;;;;; Last Bounds
 
-(put 'conn-bounds-last :conn-bounds-transformation t)
-(put 'conn-bounds-last :conn-transform-description "last")
-
 (cl-defgeneric conn-bounds-last (bounds)
+  (declare (conn-bounds-transformation
+            "last"
+            "Only return the bounds of the last thing."))
   ( :method (bounds)
     (or (car (last (conn-bounds-get bounds :subregions)))
         bounds)))
@@ -952,10 +992,10 @@ words."))
 
 (defvar conn-bounds-trim-chars " \t\r\n")
 
-(put 'conn-bounds-trim :conn-bounds-transformation t)
-(put 'conn-bounds-trim :conn-transform-description "trim")
-
-(cl-defgeneric conn-bounds-trim (bounds))
+(cl-defgeneric conn-bounds-trim (bounds)
+  (declare (conn-bounds-transformation
+            "trim"
+            "Trim `conn-bounds-trim-chars' from either end of bounds.")))
 
 (cl-defmethod conn-bounds-trim (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
@@ -974,10 +1014,10 @@ words."))
 
 ;;;;;; Bounds Before/After
 
-(put 'conn-bounds-after-point :conn-bounds-transformation t)
-(put 'conn-bounds-after-point :conn-transform-description "after")
-
-(cl-defgeneric conn-bounds-after-point (bounds &optional exclusive))
+(cl-defgeneric conn-bounds-after-point (bounds &optional exclusive)
+  (declare (conn-bounds-transformation
+            "after"
+            "Make bounds begin at point.")))
 
 (cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -987,16 +1027,16 @@ words."))
          bounds (cons (point) (if exclusive beg end)))
       (error "Invalid bounds"))))
 
-(put 'conn-bounds-after-point-exclusive :conn-bounds-transformation t)
-(put 'conn-bounds-after-point-exclusive :conn-transform-description "after exclusive")
-
 (defun conn-bounds-after-point-exclusive (bounds)
+  (declare (conn-bounds-transformation
+            "after exclusive"
+            "Make bounds begin at point and end at the start of bounds."))
   (conn-bounds-after-point bounds t))
 
-(put 'conn-bounds-before-point :conn-bounds-transformation t)
-(put 'conn-bounds-before-point :conn-transform-description "before")
-
-(cl-defgeneric conn-bounds-before-point (bounds &optional exclusive))
+(cl-defgeneric conn-bounds-before-point (bounds &optional exclusive)
+  (declare (conn-bounds-transformation
+            "before"
+            "Make bounds end at point")))
 
 (cl-defmethod conn-bounds-before-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -1006,17 +1046,23 @@ words."))
          bounds (cons (if exclusive end beg) (point)))
       (error "Invalid bounds"))))
 
-(put 'conn-bounds-before-point-exclusive :conn-bounds-transformation t)
-(put 'conn-bounds-before-point-exclusive :conn-transform-description "before exclusive")
-
 (defun conn-bounds-before-point-exclusive (bounds)
+  (declare (conn-bounds-transformation
+            "before exclusive"
+            "Make bounds end at point and begin at end of bounds."))
   (conn-bounds-before-point bounds t))
 
 ;;;;;; Check Bounds
 
-(defvar-local conn-check-bounds-functions nil)
+(defvar-local conn-check-bounds-functions nil
+  "Abnormal hook to check the bounds of a region before deleting it.
+
+Each function in the hook is called with a single argument, a
+`conn-bounds' struct, and should signal an error if the region should
+not be delete.  The the value returned by each function is ignored.")
 
 (defun conn-check-bounds (bounds)
+  "Run `conn-check-bounds-functions' with BOUNDS."
   (cl-loop for fn in conn-check-bounds-functions
            do (funcall fn bounds))
   bounds)

@@ -1407,7 +1407,8 @@ Exiting the recursive edit will resume the isearch."
                                          &key
                                          backward
                                          regexp
-                                         subregions-p))
+                                         subregions-p)
+  (declare (conn-anonymous-thing-property :isearch-in-op)))
 
 (cl-defmethod conn-isearch-in-thing-do ((thing (conn-thing t))
                                         arg
@@ -1560,9 +1561,7 @@ Exiting the recursive edit will resume the isearch."
                                     &optional
                                     regexp
                                     subregions)
-  "Isearch forward for region from BEG to END.
-
-Interactively `region-beginning' and `region-end'."
+  "Isearch forward for region from BEG to END."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Thing"
@@ -1912,7 +1911,8 @@ region after a `recursive-edit'."
     (("copy filename" filename)
      ("kill matching lines" kill-matching-lines)
      ("keep matching lines" keep-lines)
-     ("surround" conn-surround))))
+     ("surround" conn-surround)
+     ("outer line" move-end-of-line))))
 
 (defvar conn-kill-reference
   (list (conn-reference-page "Kill"
@@ -1949,6 +1949,7 @@ region after a `recursive-edit'."
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq delete '(nil delete copy)))
+  (cl-assert (memq append '(nil append prepend)))
   (cl-assert (not (and (eq delete 'delete)
                        (or append register))))
   (make-conn-kill-how-argument :delete delete
@@ -1965,10 +1966,10 @@ region after a `recursive-edit'."
     (pcase cmd
       ('append-next-kill
        (setf delete (if (eq delete 'delete) nil delete)
-             append (pcase-exhaustive append
+             append (pcase append
                       ('nil 'append)
-                      ('append 'prepend)
-                      ('prepend nil)))
+                      ('prepend nil)
+                      (_ 'prepend)))
        (funcall updater arg))
       ('delete
        (setf delete (if (eq delete 'delete) nil 'delete)
@@ -2114,6 +2115,29 @@ region after a `recursive-edit'."
                         register
                         fixup-whitespace
                         check-bounds)
+  "Kill a region defined by CMD, ARG, and TRANSFORM.
+
+For how the region is determined using CMD, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If REGISTER is non-nil then kill the region into REGISTER instead of the
+kill ring.
+
+If APPEND is non-nil then append the killed region to the previous kill.
+If killing to a registers then append to the register.  If APPEND is
+\\='prepend then prepend to the previous kill or register instead.
+
+If DELETE is non-nil then delete the region without modifying the kill
+ring.  If DELETE is non-nil then an error is signaled if either APPEND
+or REGISTER is non-nil.
+
+If FIXUP-WHITESPACE is non-nil then attempt to fix up the whitespace
+around the kill by calling `conn-kill-fixup-whitespace-function'.
+Interactively FIXUP-WHITESPACE defaults to the value of
+`conn-kill-fixup-whitespace-default'.
+
+If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
+hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
@@ -2133,6 +2157,7 @@ region after a `recursive-edit'."
                                 conn-check-bounds-default)))
      (list thing arg transform append
            delete register fixup check-bounds)))
+  (cl-assert (not (and delete (or register append))))
   (when (and (null append)
              (fboundp 'repeat-is-really-this-command)
              (repeat-is-really-this-command))
@@ -2219,12 +2244,12 @@ region after a `recursive-edit'."
   (when (eq append 'repeat)
     (setq append (if (>= beg (point)) 'append 'prepend)))
   (if register
-      (pcase-exhaustive append
+      (pcase append
         ('nil
          (copy-to-register register beg end delete-flag))
         ('prepend
          (prepend-to-register register beg end delete-flag))
-        ('append
+        (_
          (append-to-register register beg end delete-flag)))
     (when (or (and (eq append 'append)
                    (< end beg))
@@ -2472,10 +2497,10 @@ region after a `recursive-edit'."
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'dispatch-other-end)
-            (setq append (pcase-exhaustive append
+            (setq append (pcase append
                            ('nil 'append)
-                           ('append 'prepend)
-                           ('prepend nil)))
+                           ('prepend nil)
+                           (_ 'prepend)))
             (conn-dispatch-handle)))
         ( :message 10 (keymap)
           (when-let* ((binding
@@ -2484,13 +2509,13 @@ region after a `recursive-edit'."
              (propertize (key-description binding)
                          'face 'help-key-binding)
              " "
-             (pcase-exhaustive append
+             (pcase append
                ('nil "append")
                ('prepend
                 (propertize
                  "prepend"
                  'face 'eldoc-highlight-function-argument))
-               ('append
+               (_
                 (propertize
                  "append"
                  'face 'eldoc-highlight-function-argument))))))
@@ -2630,10 +2655,10 @@ region after a `recursive-edit'."
   (pcase cmd
     ('append-next-kill
      (setf (conn-copy-how-argument-append arg)
-           (pcase-exhaustive (conn-copy-how-argument-append arg)
+           (pcase (conn-copy-how-argument-append arg)
              ('nil 'append)
-             ('append 'prepend)
-             ('prepend nil)))
+             ('prepend nil)
+             (_ 'prepend)))
      (funcall updater arg))
     ('register
      (setf (conn-copy-how-argument-register arg)
@@ -2706,7 +2731,17 @@ region after a `recursive-edit'."
   t)
 
 (defun conn-copy-thing (thing arg &optional transform append register)
-  "Copy THING at point."
+  "Copy a region defined by CMD, ARG, and TRANSFORM.
+
+For how the region is determined using CMD, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If REGISTER is non-nil then copy the region into REGISTER instead of the
+kill ring.
+
+If APPEND is non-nil then append the copied region to the previous kill.
+If copying to a registers then append to the register.  If APPEND is
+\\='prepend then prepend to the previous kill or register instead."
   (interactive
    (conn-read-args (conn-copy-state
                     :prompt "Thing"
@@ -2833,10 +2868,10 @@ region after a `recursive-edit'."
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (eq cmd 'dispatch-other-end)
-          (setq append (pcase-exhaustive append
+          (setq append (pcase append
                          ('nil 'append)
-                         ('append 'prepend)
-                         ('prepend nil)))
+                         ('prepend nil)
+                         (_ 'prepend)))
           (conn-dispatch-handle)))
       ( :message 10 (keymap)
         (when-let* ((binding
@@ -2845,13 +2880,13 @@ region after a `recursive-edit'."
            (propertize (key-description binding)
                        'face 'help-key-binding)
            " "
-           (pcase-exhaustive append
+           (pcase append
              ('nil "append")
              ('prepend
               (propertize
                "prepend"
                'face 'eldoc-highlight-function-argument))
-             ('append
+             (_
               (propertize
                "append"
                'face 'eldoc-highlight-function-argument))))))

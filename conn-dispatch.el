@@ -786,12 +786,14 @@ themselves once the selection process has concluded."
     (setf (conn-bounds-get bounds :origin) (point))
     bounds))
 
-(put 'conn-dispatch-bounds-over :conn-bounds-transformation t)
-(put 'conn-dispatch-bounds-over :conn-transform-description "over")
-
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
   (declare (important-return-value t)
-           (conn-anonymous-thing-property :over)))
+           (conn-anonymous-thing-property :over)
+           (conn-bounds-transformation
+            "over"
+            "Transform bounds to begin at the start of the thing at point and end at
+the end of the thing dispatched on.  Can only be used during
+`conn-dispatch'.")))
 
 (cl-defmethod conn-dispatch-bounds-over (bounds)
   (pcase bounds
@@ -810,12 +812,14 @@ themselves once the selection process has concluded."
          (_ bounds))))
     (_ bounds)))
 
-(put 'conn-dispatch-bounds-anchored :conn-bounds-transformation t)
-(put 'conn-dispatch-bounds-anchored :conn-transform-description "anchored")
-
 (cl-defgeneric conn-dispatch-bounds-anchored (bounds)
   (declare (important-return-value t)
-           (conn-anonymous-thing-property :dispatch-anchored)))
+           (conn-anonymous-thing-property :dispatch-anchored)
+           (conn-bounds-transformation
+            "anchored"
+            "Transform bounds to begin at point and end the bound most distant from
+point.  If `conn-dispatch-other-end' is non-nil then end at the bound
+nearest to point.  Can only be used during `conn-dispatch'.")))
 
 (cl-defmethod conn-dispatch-bounds-anchored (bounds)
   (pcase bounds
@@ -841,12 +845,15 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-dispatch-bounds-anchored ((bounds (conn-thing char)))
   bounds)
 
-(put 'conn-dispatch-bounds-between :conn-bounds-transformation t)
-(put 'conn-dispatch-bounds-between :conn-transform-description "between")
-
 (cl-defgeneric conn-dispatch-bounds-between (bounds)
   (declare (important-return-value t)
-           (conn-anonymous-thing-property :dispatch-between)))
+           (conn-anonymous-thing-property :dispatch-between)
+           (conn-bounds-transformation
+            "between"
+            "Dispatch on a second thing and transform bounds to be the largest region
+created from the bounds of the two things.  The new beg and end are
+taken to be the points where point would be after dispatching on each
+thing.  Can only be used during `conn-dispatch'.")))
 
 (cl-defgeneric conn-dispatch-bounds (bounds &optional transforms))
 
