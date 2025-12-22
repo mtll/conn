@@ -78,19 +78,11 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-(defun conn-make-command-repeatable (&optional command)
-  (let ((map (make-sparse-keymap)))
-    (define-key map (vector last-command-event)
-                (or command
-                    (when (eq this-command (caar command-history))
-                      'conn-repeat-last-complex-command)
-                    'repeat))
-    (setq repeat-map map)))
-
-(defun conn-disable-repeating ()
-  (setq repeat-map nil))
-
 (defun conn-repeat-last-complex-command ()
+  "Repeat the last complex command.
+
+Complex commands are those that read arguments from terminal.  See
+`command-history' for more."
   (interactive)
   (if-let* ((last-repeatable-command (caar command-history))
             (repeat-message-function 'ignore))
@@ -101,12 +93,14 @@ execution."
 ;;;;; Movement
 
 (defun conn-forward-visual-line (arg)
+  "Move forward ARG visual lines."
   (interactive "p")
   (let ((line-move-visual t))
     (vertical-motion 0)
     (line-move arg t)))
 
 (defun conn-backward-visual-line (arg)
+  "Move backward ARG visual lines."
   (interactive "p")
   (conn-forward-visual-line (- arg)))
 
@@ -418,7 +412,9 @@ of `conn-recenter-positions'."
                  (car (conn-command-register-command val)))))
 
 (defun conn-command-to-register (register)
-  "Store command in REGISTER."
+  "Store a previous command in REGISTER.
+
+The command to be stored is read from `command-history'."
   (interactive
    (list (register-read-with-preview "Command to register: ")))
   (set-register
@@ -481,7 +477,7 @@ of `conn-recenter-positions'."
                    "on another frame"))))
 
 (defun conn-tab-to-register (register)
-  "Store tab in REGISTER."
+  "Store the current tab in REGISTER."
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-tab-register)))
 
@@ -574,6 +570,7 @@ With a prefix ARG `push-mark' without activating it."
          (exchange-point-and-mark (not mark-active)))))
 
 (defun conn-push-mark-command ()
+  "Set mark at point and push old mark on mark ring."
   (interactive)
   (push-mark))
 
@@ -1034,14 +1031,14 @@ Currently selected window remains selected afterwards."
 
 (defvar conn-replace-special-ref
   (conn-reference-quote
-    nil))
+    (("In project" project))))
 
 (defvar conn-replace-reference
   (list (conn-reference-page "Replace"
           "Replace instances of a pattern in a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
-                  conn-replace-special-ref 3))
+                  conn-replace-special-ref 2))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -1266,14 +1263,31 @@ instances of from-string.")
 (defun conn-replace (thing
                      arg
                      transform
-                     from-string
-                     to-string
+                     from
+                     to
                      &optional
                      delimited
                      backward
                      regexp-flag
                      subregions-p)
-  "Perform a `replace-string' within the bounds of a thing."
+  "Replace FROM with TO in a region defined by THING, ARG, and TRANSFORM.
+
+For how the region is determined using THING, ARG, and TRANSFORM see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+If DELIMITED is non-nil then replace only matches surrounded by word
+boundaries.
+
+If BACKWARD is non-nil then replace matches from last to first.
+
+If REGEXP-FLAG is non-nil then treat FROM as a regexp and TO as a regexp
+replacement.
+
+If SUBREGIONS-P is non-nil then perform the replacement within each
+subregion of the region in turn.
+
+For more information about how the replacement is carried out see
+`query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
                     :reference conn-replace-reference
@@ -1324,8 +1338,8 @@ instances of from-string.")
   (conn-replace-do thing
                    arg
                    transform
-                   from-string
-                   to-string
+                   from
+                   to
                    delimited
                    backward
                    regexp-flag
@@ -1817,7 +1831,6 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing dispatch))
                                         arg
                                         _at-point-and-mark)
-  (conn-disable-repeating)
   (let ((pt1 (point))
         (buf1 (current-buffer))
         (thing1 (when (use-region-p)
@@ -3090,7 +3103,7 @@ For how they are used to define the region see `conn-bounds-of' and
      ("Delete previous duplicate" conn-duplicate-delete-repeat)
      ("Indent each duplicate" conn-duplicate-indent-repeat)
      ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
-     ("Toggle comment each duplicate" conn-duplicate-repeat-comment)
+     ("Comment or uncomment each duplicate" conn-duplicate-repeat-comment)
      ("Recenter" recenter-top-bottom))))
 
 (defvar conn-duplicate-repeat-reference
@@ -3137,12 +3150,13 @@ additional duplicates.
  Toggles the insertion of an extra newline before each duplicate.
 
 \\[conn-duplicate-repeat-comment] `conn-duplicate-repeat-comment':
- Toggle commenting each duplicated region.
+ Comment or uncomment each duplicated region.
 
 \\[recenter-top-bottom] `recenter-top-bottom':
  Recenter the window."
   :global t
-  :lighter nil)
+  :lighter nil
+  :group 'conn)
 
 (defvar-keymap conn-duplicate-repeat-map
   "0" 'digit-argument
@@ -3168,22 +3182,37 @@ additional duplicates.
   "C-l" 'recenter-top-bottom)
 
 (defun conn-duplicate-repeat ()
+  "Repeat the previous duplicate.
+
+Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-repeat-toggle-padding ()
+  "Toggle newline padding between duplicates.
+
+Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-repeat-comment ()
+  "Comment or uncomment each duplicate
+
+Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
-(defun conn-duplicate-delete-repeat ()
-  (interactive)
+(defun conn-duplicate-delete-repeat (arg)
+  "Delete the previous ARG duplicates.
+
+Only available during repeating duplicate."
+  (interactive "p")
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-indent-repeat ()
+  "Indent each duplicate.
+
+Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
@@ -3220,6 +3249,7 @@ additional duplicates.
                 ov beg (min end (save-excursion
                                   (goto-char (overlay-end ov))
                                   (pos-eol))))
+               (conn--push-ephemeral-mark (overlay-end ov))
                (set-marker beg nil)
                (set-marker end nil))))
          (cleanup ()
@@ -3301,8 +3331,8 @@ additional duplicates.
            (setq extra-newline (not extra-newline)
                  padding (if extra-newline "\n" " ")
                  regexp (if extra-newline "\n" "[\t ]"))))
+      (goto-char end)
       (save-excursion
-        (goto-char end)
         (dotimes (_ repeat) (dup)))
       (if (not conn-duplicate-repeat-mode)
           (cleanup)
