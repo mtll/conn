@@ -2963,6 +2963,13 @@ If copying to a registers then append to the register.  If APPEND is
                   (set-flag (use-region-p))))))
 
 (defun conn-how-many-in-thing (thing arg transform)
+  "Print and return the number of matches of a regexp.
+
+The matches are restricted to the region defined by THING, ARG, and
+TRANSFORM.  For how they are used to define the region see
+`conn-bounds-of' and `conn-transform-bounds'.
+
+The regexp is read interactively."
   (interactive
    (conn-read-args (conn-how-many-state
                     :reference conn-how-many-reference
@@ -3026,6 +3033,10 @@ If copying to a registers then append to the register.  If APPEND is
                   (set-flag (use-region-p))))))
 
 (defun conn-comment-thing (thing arg transform)
+  "Comment the region defined by THING, ARG, and TRANSFORM.
+
+For how they are used to define the region see `conn-bounds-of' and
+`conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-comment-state
                     :reference conn-comment-reference
@@ -3051,12 +3062,65 @@ If copying to a registers then append to the register.  If APPEND is
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
 
+(defvar conn-duplicate-repeat-commands-ref
+  (conn-reference-quote
+    (("Repeat duplicate" conn-duplicate-repeat)
+     ("Delete previous duplicate" conn-duplicate-delete-repeat)
+     ("Indent each duplicate" conn-duplicate-indent-repeat)
+     ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
+     ("Toggle comment each duplicate" conn-duplicate-repeat-comment)
+     ("Recenter" recenter-top-bottom))))
+
+(defvar conn-duplicate-repeat-reference
+  (list (conn-reference-page "Commands"
+          (:eval (conn-quick-ref-to-cols
+                  conn-duplicate-repeat-commands-ref 1))
+          ""
+          "Any other non-prefix command ends repeating.")))
+
+(defun conn-duplicate-repeat-help ()
+  "Display `conn-duplicate-repeat-reference' help during dispatch repeat."
+  (interactive)
+  (conn-quick-reference conn-duplicate-repeat-reference))
+
 (conn-define-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-duplicate-state)
   "c" 'copy-from-above-command)
+
+(define-minor-mode conn-duplicate-repeat-mode
+  "After duplicating provide a set of keybindings for repeating.
+
+The following commands are bound in `conn-duplicate-repeat-map'.
+If the next command is one in `conn-duplicate-repeat-map' then the
+map stays active.  The commands are only usable while the map is active.
+\\<conn-duplicate-repeat-map>
+
+`digit-argument' and \\[negative-argument] `negative-argument'.
+
+\\[conn-duplicate-indent-repeat] `conn-duplicate-indent-repeat':
+ Indent the region containing all duplicates.
+
+\\[conn-duplicate-delete-repeat] `conn-duplicate-delete-repeat':
+ Delete the most recently inserted duplicate.  With a prefix argument
+delete that many duplicates.
+
+\\[conn-duplicate-repeat] `conn-duplicate-repeat':
+ Insert another duplicate.  With a prefix argument insert that many
+additional duplicates.
+
+\\[conn-duplicate-repeat-toggle-padding] `conn-duplicate-repeat-toggle-padding':
+ Toggles the insertion of an extra newline before each duplicate.
+
+\\[conn-duplicate-repeat-comment] `conn-duplicate-repeat-comment':
+ Toggle commenting each duplicated region.
+
+\\[recenter-top-bottom] `recenter-top-bottom':
+ Recenter the window."
+  :global t
+  :lighter nil)
 
 (defvar-keymap conn-duplicate-repeat-map
   "0" 'digit-argument
@@ -3070,6 +3134,7 @@ If copying to a registers then append to the register.  If APPEND is
   "8" 'digit-argument
   "9" 'digit-argument
   "-" 'negative-argument
+  "C-q" 'conn-duplicate-repeat-help
   "TAB" 'conn-duplicate-indent-repeat
   "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
@@ -3100,15 +3165,17 @@ If copying to a registers then append to the register.  If APPEND is
   (interactive)
   (user-error "Not repeating duplicate"))
 
-(defun conn--duplicate-subr (beg end &optional repeat)
+(defun conn-duplicate-subr (beg end &optional repeat)
   (deactivate-mark)
-  (let* ((regions (list (make-overlay beg end nil t)))
-         (str (buffer-substring-no-properties beg end))
-         (block (seq-contains-p str ?\n))
-         (extra-newline nil)
-         (padding (if block "\n" " "))
-         (regexp (if block "\n" "[\t ]"))
-         (commented nil))
+  (conn-protected-let*
+      ((regions (list (make-overlay beg end nil t))
+                (mapc #'delete-overlay regions))
+       (str (buffer-substring-no-properties beg end))
+       (block (seq-contains-p str ?\n))
+       (extra-newline nil)
+       (padding (if block "\n" " "))
+       (regexp (if block "\n" "[\t ]"))
+       (commented nil))
     (cl-labels
         ((dup ()
            (unless (looking-back regexp 1)
@@ -3215,47 +3282,55 @@ If copying to a registers then append to the register.  If APPEND is
       (save-excursion
         (goto-char end)
         (dotimes (_ repeat) (dup)))
-      (advice-add 'conn-duplicate-indent-repeat :override #'indent)
-      (advice-add 'conn-duplicate-repeat :override #'repeat)
-      (advice-add 'conn-duplicate-delete-repeat :override #'delete)
-      (advice-add 'conn-duplicate-repeat-comment :override #'comment)
-      (advice-add 'conn-duplicate-repeat-toggle-padding :override
-                  (if block #'block-padding #'non-block-padding))
-      (set-transient-map
-       conn-duplicate-repeat-map
-       t
-       #'cleanup
-       (format "%s repeat; %s newline; %s indent; %s comment; %s delete"
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat-toggle-padding
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-indent-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat-comment
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-delete-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding))))))
+      (if (not conn-duplicate-repeat-mode)
+          (cleanup)
+        (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+        (advice-add 'conn-duplicate-repeat :override #'repeat)
+        (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+        (advice-add 'conn-duplicate-repeat-comment :override #'comment)
+        (advice-add 'conn-duplicate-repeat-toggle-padding :override
+                    (if block #'block-padding #'non-block-padding))
+        (set-transient-map
+         conn-duplicate-repeat-map
+         t
+         #'cleanup
+         (format "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat-toggle-padding
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-indent-repeat
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat-comment
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-delete-repeat
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)
+                 (propertize
+                  (key-description
+                   (where-is-internal 'conn-duplicate-repeat-help
+                                      (list conn-duplicate-repeat-map)
+                                      t))
+                  'face 'help-key-binding)))))))
 
 (cl-defgeneric conn-duplicate-thing-do (cmd
                                         arg
@@ -3271,7 +3346,7 @@ If copying to a registers then append to the register.  If APPEND is
                                        repeat)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (conn--duplicate-subr beg end repeat))))
+     (conn-duplicate-subr beg end repeat))))
 
 (cl-defmethod conn-duplicate-thing-do ((_cmd (eql copy-from-above-command))
                                        arg
@@ -3297,13 +3372,20 @@ If copying to a registers then append to the register.  If APPEND is
                                  conn-thing-argument-region-dwim))))))
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
-  "Duplicate the region defined by a thing command.
+  "Duplicate the region defined by THING, ARG, and TRANSFORM.
 
-With prefix arg N duplicate region N times."
+For how they are used to define the region see `conn-bounds-of' and
+`conn-transform-bounds'.
+
+If REPEAT is non-nil then duplicate the region REPEAT times.
+Interactively REPEAT is given by the prefix argument.
+
+When `conn-duplicate-repeat-mode', which see, is active the transient map
+`conn-duplicate-repeat-map' is setup after duplicating."
   (interactive
    (conn-read-args (conn-duplicate-state
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-duplicate-thing-argument t))
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
         (transform (conn-transform-argument)))
      (list thing arg transform
            (prefix-numeric-value current-prefix-arg))))

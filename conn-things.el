@@ -388,6 +388,14 @@ arguments even when the region is active then set this variable to nil."
                            (list 'region nil)))
                   (set-flag (and (use-region-p)
                                  conn-thing-argument-region-dwim))))
+               ( :constructor conn-thing-argument-dwim-always
+                 (&optional
+                  recursive-edit
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))
                ( :constructor conn-thing-argument-dwim-rectangle
                  (&optional
                   recursive-edit
@@ -972,7 +980,6 @@ Returns a `conn-bounds' struct."
     `(eval-and-compile
        (setf (alist-get ',f (get 'conn-transform-bounds :known-transformations))
              ,doc-string)
-       :autoload-end
        (put ',f :conn-bounds-transformation t)
        (put ',f :conn-transform-description ,short-name)))
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
