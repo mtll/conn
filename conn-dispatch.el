@@ -1854,7 +1854,10 @@ the meaning of depth."
            ('dispatch-character-event
             (setq conn--read-args-error-message nil
                   conn--dispatch-must-prompt nil)
-            (push `(no-record . ,last-input-event) unread-command-events)
+            (cl-callf2 append
+                (cl-loop for key across (this-single-command-raw-keys)
+                         collect `(no-record . ,key))
+                unread-command-events)
             (cl-return
              (read-ev (unless inhibit-message
                         (concat prompt
