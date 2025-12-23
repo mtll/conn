@@ -342,7 +342,7 @@
   ")" conn-forward-list-remap
   "[" conn-backward-up-list-remap
   "]" conn-down-list-remap
-  "R" 'conn-adjust-surround
+  "S" 'conn-adjust-surround
   ;; "{" conn-backward-sentence-remap
   ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap

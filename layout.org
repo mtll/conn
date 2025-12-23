@@ -16,16 +16,16 @@ state enters command state.
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E emacs  │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │   state  │  adjust  │  indent  │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│ shell cmd┃
-┃              │          │          │  at mark │ surround │          │   read   │          │          │          │          │          │          │ on region┃
+┃              │          │  widen   │   state  │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│   shell  ┃
+┃              │          │          │  at mark │          │          │   read   │          │          │          │          │          │          │   cmd    ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
-┃              │ transpose│  change  │  emacs   │  region  │   copy   │   yank   │  ←word   │  ↑column │  →word   │   window │  ↑list   │  ↓list   │ conntext ┃
+┃              │   copy   │  change  │  emacs   │  region  │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ↑list   │  ↓list   │ conntext ┃
 ┃              │          │          │  state   │   map    │          │          │          │          │          │   prefix │          │          │  state   ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F bind   │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │   sort   │ duplicate│   last   │ surround │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │          │          │ dispatch │          │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │   M-X    │  adjust  │ duplicate│   last   │   add    │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │ surround │          │ dispatch │ surround │  region  │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
 ┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃

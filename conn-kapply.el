@@ -127,9 +127,19 @@ Possibilities: \\<query-replace-map>
 ;;;;; Iterators
 
 (defun conn-kapply-make-region (beg end &optional buffer)
+  "Create a region from BEG to END in BUFFER for a kapply iterator.
+
+See also `conn-kapply-consume-region'."
   (make-overlay beg end buffer t))
 
 (defun conn-kapply-consume-region (ov)
+  "Consume overlay OV and return a region for kapply pipeline functions.
+
+The return value is of the form ((BEG . END) . BUFFER).
+
+This deletes the overlay OV.
+
+See also `conn-kapply-make-region'."
   (when ov
     (prog1 (cons (cons (overlay-start ov)
                        (overlay-end ov))
@@ -137,6 +147,20 @@ Possibilities: \\<query-replace-map>
       (delete-overlay ov))))
 
 (defun conn-kapply-macro (applier iterator pipeline)
+  "Apply a keyboard macro on a set of regions.
+
+APPLIER is a function that will be called with one argument, an
+iterator, and should apply a keyboard on regions returned by the
+iterator.  See also `conn-define-kapplier'.
+
+ITERATOR is a function that will be called with one argument, the state
+of the current iteration.  If the state is :cleanup then ITERATOR should
+cleanup any remaining regions and the return value will be discarded.
+If the state is anything else ITERATOR should return the next region as
+a pair ((BEG . END) . BUFFER) or nil if there is no next region.
+
+PIPELINE is a list of pipeline functions.  Each function should take one
+argument, an iterator, and return another iterator."
   (funcall applier
            (seq-reduce (lambda (it ctor) (funcall ctor it))
                        (remq nil pipeline)
@@ -149,7 +173,19 @@ Possibilities: \\<query-replace-map>
     (cons (cons (point) (point))
           (current-buffer))))
 
-(defun conn-kapply-highlight-iterator (beg end &optional sort-function read-patterns)
+(defun conn-kapply-highlight-iterator (beg
+                                       end
+                                       &optional
+                                       sort-function
+                                       read-patterns)
+  "Create an iterator over all highlights in the region from BEG to END.
+
+SORT-FUNCTION if non-nil is a function to sort the regions before
+iterating over them.  SORT-FUNCTION should take a list of overlays.
+
+READ-PATTERNS if non-nil prompts the user for the specific highlight
+patterns to iterate over instead of iterating over all highlights in the
+region."
   (declare (important-return-value t)
            (side-effect-free t))
   (let ((patterns
@@ -190,6 +226,12 @@ Possibilities: \\<query-replace-map>
          (conn-kapply-consume-region (pop matches)))))))
 
 (defun conn-kapply-region-iterator (regions &optional sort-function)
+  "Create an iterator over REGIONS.
+
+REGIONS must be a list of overlays.  See `conn-kapply-make-region'.
+
+SORT-FUNCTION if non-nil is a function to sort the regions before
+iterating over them.  SORT-FUNCTION should take a list of overlays."
   (declare (important-return-value t))
   (unless regions
     (user-error "No regions for kapply."))
@@ -203,6 +245,12 @@ Possibilities: \\<query-replace-map>
        (conn-kapply-consume-region (pop regions))))))
 
 (defun conn-kapply-point-iterator (points &optional sort-function)
+  "Create an iterator over a list of POINTS.
+
+POINTS are taken to be in the current buffer.
+
+SORT-FUNCTION if non-nil is a function to sort the regions before
+iterating over them.  SORT-FUNCTION should take a list of overlays."
   (declare (important-return-value t))
   (unless points
     (user-error "No points for kapply."))
@@ -269,7 +317,25 @@ of highlighting."
                                            subregions
                                            regexp-flag
                                            delimited-flag
-                                           sort-function))
+                                           sort-function)
+  "Create an iterator over matches for a string in a region.
+
+The region is defined by THING, ARG, and TRANSFORM.  For how they are
+used to define the region see `conn-bounds-of' and
+`conn-transform-bounds'.
+
+If SUBREGIONS is non-nil then restrict matching to the subregions of the
+region.
+
+The string to match is read interactively.
+
+If REGEXP-FLAG is non-nil then the string is taken to be a regexp.
+
+If DELIMITED-FLAG is non-nil then only match regions surrounded by word
+boundaries.
+
+SORT-FUNCTION if non-nil is a function to sort the regions before
+iterating over them.  SORT-FUNCTION should take a list of overlays.")
 
 (cl-defmethod conn-kapply-match-iterator ((_thing (eql project))
                                           _arg
@@ -395,9 +461,22 @@ of highlighting."
     (kapply-region . -20)
     (kapply-state . -50)
     (kapply-wconf . -70)
-    (kapply-pulse . -90)))
+    (kapply-pulse . -90))
+  "Alist of depth values for kapply pipeline functions.
+
+The alist should not be modified.")
 
 (defun conn-kapply-query (iterator)
+  "Query user before each iteration of the keyboard macro.
+
+The options provided are: \\<query-replace-map>
+
+\\[act]	Proceed with this iteration normally and continue to the next.
+\\[skip]	Skip this iteration and got to the next.
+\\[exit]	End this kapply normally.
+\\[quit]	End this kapply by signaling a quit.
+\\[recenter]	Redisplay the screen, then ask again.
+\\[automatic]	Apply keyboard macro to rest."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -455,12 +534,12 @@ of highlighting."
                          (substitute-command-keys
                           "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
-\\[act]	Finish this iteration normally and continue with the next.
-\\[skip]	Skip the rest of this iteration, and start the next.
-\\[exit]	Stop the macro entirely right now.
+\\[act]	Proceed with this iteration normally and continue to the next.
+\\[skip]	Skip this iteration and got to the next.
+\\[exit]	End this kapply normally.
+\\[quit]	End this kapply by signaling a quit.
 \\[recenter]	Redisplay the screen, then ask again.
-\\[edit]	Enter recursive edit; ask again when you exit from that.
-\\[automatic]   Apply keyboard macro to rest."))
+\\[automatic]	Apply keyboard macro to rest."))
                         (with-current-buffer standard-output
                           (help-mode))))
                      (_ (ding t))))))))
@@ -472,6 +551,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-query))))
 
 (defun conn-kapply-skip-empty (iterator)
+  "Skip empty regions returned by ITERATOR.
+
+Empty regions are those with a length of zero."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -492,6 +574,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-skip-empty))))
 
 (defun conn-kapply-every-nth (iterator N)
+  "Only apply keyboard macro to every Nth region returned by ITERATOR."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -507,6 +590,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-nth))))
 
 (defun conn-kapply-skip-invisible-points (iterator)
+  "Skip regions with a non-nil invisibility spec at region beginning."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -523,6 +607,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-invisible))))
 
 (defun conn-kapply-skip-invisible-regions (iterator)
+  "Skip regions with a non-nil invisibility spec.
+
+Regions are only skipped if the entire region is not visible."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -539,6 +626,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-invisible))))
 
 (defun conn-kapply-open-invisible (iterator)
+  "Open invisible regions returned by ITERATOR.
+
+If the region is invisible and cannot be opened then skip it."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -549,7 +639,8 @@ Possibilities: \\<query-replace-map>
          ((or :next :record)
           (cl-loop for next = (funcall iterator state)
                    for res = (or (null next)
-                                 (conn--open-invisible (caar next) (cdar next)))
+                                 (conn--open-invisible (caar next)
+                                                       (cdar next)))
                    until res
                    finally return (prog1 next
                                     (when (consp res)
@@ -562,6 +653,10 @@ Possibilities: \\<query-replace-map>
      (name . kapply-invisible))))
 
 (defun conn-kapply-relocate-to-region (iterator)
+  "Relocate point and mark the bounds of region return by ITERATOR.
+
+This also handles switching to the regions buffer if it is not the
+current buffer."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -587,6 +682,10 @@ Possibilities: \\<query-replace-map>
      (name . kapply-relocate))))
 
 (defun conn-kapply-per-buffer-undo (iterator)
+  "Amalgamate undo in each buffer returned by ITERATOR.
+
+Changes will not be undone if an error is signaled during macro
+application."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -612,6 +711,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-undo))))
 
 (defun conn-kapply-per-buffer-atomic-undo (iterator)
+  "Amalgamate undo in each buffer returned by ITERATOR.
+
+Changes will be undone if an error is signaled during macro application."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -639,6 +741,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-undo))))
 
 (defun conn-kapply-per-iteration-undo (iterator)
+  "Amalgamate undo after each iteration."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -673,6 +776,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-undo))))
 
 (defun conn-kapply-ibuffer-overview (iterator)
+  "Display an ibuffer window if multiple buffers are visited by ITERATOR."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -734,6 +838,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-ibuffer))))
 
 (defun conn-kapply-save-excursion (iterator)
+  "Save excursion in each buffer visited by ITERATOR.
+
+When kapply finishes restore the previous point in each buffer."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -768,6 +875,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-excursions))))
 
 (defun conn-kapply-save-restriction (iterator)
+  "Save restrictions in each buffer visited by ITERATOR.
+
+When kapply finishes restore the restrictions in each buffer."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -803,6 +913,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-restrictions))))
 
 (defun conn-kapply-change-region (iterator)
+  "Delete the region returned by ITERATOR before each macro iteration."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -818,6 +929,7 @@ Possibilities: \\<query-replace-map>
   (conn-kapply-with-state iterator 'conn-emacs-state))
 
 (defun conn-kapply-at-end (iterator)
+  "Exchange point and mark before each macro iteration."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -829,6 +941,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-region))))
 
 (defun conn-kapply-with-state (iterator conn-state)
+  "Begin each macro iteration in a recursive stack containing CONN-STATE."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -857,6 +970,7 @@ Possibilities: \\<query-replace-map>
      (name . kapply-state))))
 
 (defun conn-kapply-pulse-region (iterator)
+  "Pulse the region returned by ITERATOR when recording a macro."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -870,6 +984,9 @@ Possibilities: \\<query-replace-map>
      (name . kapply-pulse))))
 
 (defun conn-kapply-save-windows (iterator)
+  "Save the window configuration during kapply.
+
+After kapply has finished restore the previous window configuration."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -889,7 +1006,8 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Applier Definitions
 
-(defvar conn-kapply-suppress-message nil)
+(defvar conn-kapply-suppress-message nil
+  "Suppress message displayed after finishing a kapply.")
 
 (defun conn--perform-kapply (iterator body)
   (let* ((undo-outer-limit nil)
@@ -1050,6 +1168,8 @@ The iterator must be the first argument in ARGLIST.
   (if short "Kapply"
     (concat "Kapply"
             (when-let* ((macro (oref action macro)))
-              (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
+              (concat " <"
+                      (conn--kmacro-display (kmacro--keys macro))
+                      ">")))))
 
 (provide 'conn-kapply)
