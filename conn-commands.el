@@ -3209,6 +3209,7 @@ Only available during repeating duplicate."
 
 Only available during repeating duplicate."
   (interactive "p")
+  (ignore arg)
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-indent-repeat ()
@@ -3219,6 +3220,10 @@ Only available during repeating duplicate."
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-subr (beg end &optional repeat)
+  "Duplicate the region from BEG to END REPEAT times.
+
+When `conn-duplicate-repeat-mode' is non-nil activate
+`conn-duplicate-repeat-map' after duplicating."
   (deactivate-mark)
   (conn-protected-let*
       ((regions (list (make-overlay beg end nil t))

@@ -4112,7 +4112,7 @@ contain targets."
 (cl-defun conn-dispatch-setup (action
                                thing
                                arg
-                               thing-transform
+                               transform
                                &rest
                                keys
                                &key
@@ -4126,7 +4126,7 @@ contain targets."
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
-         (conn--dispatch-current-thing (list thing arg thing-transform))
+         (conn--dispatch-current-thing (list thing arg transform))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-read-args-last-command nil)
@@ -4260,6 +4260,13 @@ contain targets."
               (message nil))))))))
 
 (defun conn-dispatch (&optional initial-arg)
+  "Perform a dispatch.
+
+Interactively read the arguments for `conn-setup-dispatch' with
+`conn-read-args'.
+
+INITIAL-ARG is the initial value of the prefix argument during
+`conn-read-args'.  Interactively the current prefix argument."
   (interactive "P")
   (conn-read-args (conn-dispatch-state
                    :command-handler #'conn-dispatch-command-handler
@@ -4287,6 +4294,15 @@ contain targets."
      :restrict-windows restrict-windows)))
 
 (defun conn-dispatch-thing-at-point (&optional initial-arg)
+  "Dispatch on matches for a thing at point.
+
+Interactively reads the argument `conn-dispatch-setup'.  After reading
+the arguments the THING, ARG, and TRANSFORM argument are first used to
+find the region they define at point and then dispatch proceeds on
+regions matching the contents of the region at point.
+
+INITIAL-ARG is the initial value of the prefix argument during
+`conn-read-args'.  Interactively the current prefix argument."
   (interactive "P")
   (cl-letf ((conn--dispatch-action-always-prompt t)
             ((symbol-function 'conn-get-target-finder)))
@@ -4337,6 +4353,14 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
      :repeat (xor invert-repeat (conn-previous-dispatch-repeat prev)))))
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
+  "Perform the previous dispatch at a mouse click.
+
+If REPEAT is non-nil then invert the value of repeat for the last
+dispatch.  Interactively repeat is the prefix argument.
+
+EVENT must be a mouse event.
+
+This command must be bound to a mouse key."
   (interactive "e\nP")
   (unless (mouse-event-p event)
     (error "conn-last-dispatch-at-mouse must be bound to a mouse event"))
@@ -4353,9 +4377,10 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
         repeat)))
 
 (defun conn-bind-last-dispatch-to-key ()
-  "Bind last dispatch command to a key.
+  "Bind previous dispatch to a key.
 
-Prefix arg REPEAT inverts the value of repeat in the last dispatch."
+Calling a bound dispatch with a prefix arg inverts the value of repeat
+for the dispatch."
   (interactive)
   (let* ((key-seq (read-key-sequence
                    (format "Bind last dispatch to key in %s: "

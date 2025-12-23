@@ -103,6 +103,7 @@ necessary state as well.")
   (major-mode-maps nil :type hash-table :read-only t))
 
 (defmacro conn--find-state (state)
+  (declare (debug (form)))
   `(get ,state :conn--state))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
@@ -774,7 +775,8 @@ when the current state exits then use `conn-state-defer-once'.
 
 When BODY is evaluated `conn-next-state' will be bound to the state
 that is being entered after the current state has exited."
-  (declare (indent 0))
+  (declare (indent 0)
+           (debug (def-body)))
   (cl-with-gensyms (rest)
     `(push (lambda (,rest)
              (unwind-protect
@@ -786,7 +788,8 @@ that is being entered after the current state has exited."
   "Like `conn-state-defer' but BODY will be evaluated only once per state.
 
 For more information see `conn-state-defer'."
-  (declare (indent 0))
+  (declare (indent 0)
+           (debug (def-body)))
   (cl-with-gensyms (rest id)
     `(unless (memq ',id conn--state-deferred-ids)
        (push ',id conn--state-deferred-ids)
@@ -1420,7 +1423,7 @@ The duration of the message display is controlled by
                        (mapcar #'conn-argument-display arguments))))
       (concat "\n" (string-join args "; "))))))
 
-(defun conn--read-args-display (prompt arguments)
+(defun conn--read-args-display-prompt (prompt arguments)
   (message (conn--read-args-prompt prompt arguments)))
 
 ;; From embark
@@ -1501,7 +1504,8 @@ The duration of the message display is controlled by
   "Evaluate body and return the result from the current `conn-read-args'.
 
 This skips executing the body of the `conn-read-args' form entirely."
-  (declare (indent 0))
+  (declare (indent 0)
+           (debug (def-body)))
   `(throw 'conn-read-args-return
           (list (lambda () ,@body))))
 
@@ -1546,7 +1550,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            callback
                            &key
                            command-handler
-                           (display-handler #'conn--read-args-display)
+                           (display-handler #'conn--read-args-display-prompt)
                            around
                            overriding-map
                            prompt
@@ -1703,7 +1707,10 @@ argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
 \(fn (STATE &key COMMAND-HANDLER DISPLAY-HANDLER AROUND OVERRIDING-MAP PROMPT PREFIX PRE POST REFERENCE) VARLIST &rest BODY)"
-  (declare (indent 2))
+  (declare (indent 2)
+           (debug (([sexp &rest keywordp form])
+                   ([&rest symbolp form])
+                   def-body)))
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     `(conn--read-args ',state
                       (list ,@(mapcar #'cadr varlist))

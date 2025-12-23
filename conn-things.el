@@ -124,7 +124,15 @@
                               conn--key-missing)
            unless (eq conn--key-missing val) return val))
 
-(cl-defun conn-register-thing (thing &key parent properties forward-op beg-op end-op bounds-op)
+(cl-defun conn-register-thing (thing
+                               &key
+                               parent
+                               properties
+                               forward-op
+                               beg-op
+                               end-op
+                               bounds-op)
+  "Register a THING."
   (put thing :conn-thing t)
   (when parent
     (setf (conn-get-thing-parent thing) parent))
@@ -188,7 +196,7 @@
                         (cons 'list props))))
 
 (defmacro conn-anonymous-thing (parent &rest properties)
-  "Make an anonymous thing."
+  "Make an anonymous thing inheriting from PARENT."
   (declare (indent 0))
   (cl-assert (plistp properties))
   (pcase-let ((`(,methods . ,props)
@@ -369,7 +377,7 @@ arguments even when the region is active then set this variable to nil."
   :type 'boolean)
 
 (defvar-keymap conn-recursive-edit-thing-map
-  "'" 'recursive-edit)
+  "`" 'recursive-edit)
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
