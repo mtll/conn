@@ -652,7 +652,8 @@ themselves once the selection process has concluded."
     (((:heading "Targeting Commands")
       ("retarget" retarget)
       ("always retarget" always-retarget)
-      ("change target finder" change-target-finder))
+      ("change target finder" change-target-finder)
+      ("recursive edit" recursive-edit))
      ((:heading "Window Commands")
       ("goto window" conn-goto-window)
       ("scroll up" scroll-up-command)
@@ -3121,9 +3122,10 @@ contain targets."
 (defalias 'conn-action-doc-string 'conn-action--action-doc-string)
 
 (defun conn-action-get-reference (action)
-  (conn-reference-page (conn-action-pretty-print action)
-    :depth -50
-    (:eval (conn-action-doc-string action))))
+  (when-let* ((doc-string (conn-action-doc-string action)))
+    (conn-reference-page (conn-action-pretty-print action)
+      :depth -50
+      (:eval doc-string))))
 
 (eval-and-compile
   (defun conn--set-action-property (f _args val)
