@@ -1617,8 +1617,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (apply #'conn-quick-reference
                            reference
                            (mapcar #'conn-argument-get-reference arguments))))
-                 ((or 'execute-extended-command
-                      'help)
+                 ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
                                     state
                                     (if command-handler
@@ -1647,8 +1646,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                                     (mapcar #'conn-argument-compose-keymap arguments)
                                     (cons conn-read-args-map)
                                     (cons overriding-map)
-                                    (cons (define-keymap
-                                            "C-h" 'execute-extended-command))
                                     (delq nil)
                                     make-composed-keymap)))
                       ,@emulation-mode-map-alists)))
@@ -1675,22 +1672,22 @@ a pattern accepted by `pcase-let'.
 
 The execution of a `conn-read-args' form proceeds as follows:
 
-First each ARGUMENT is evaluated and if an :AROUND function has been
-specified it is called with a continuation so that the around function
-can do whatever setup and teardown is needed.  The arg reading
-loop is then entered.
+First each ARGUMENT is evaluated.  Then if an AROUND function has been
+specified it is called with a continuation which the AROUND function
+should call to continue to the read args loop after doing whatever setup
+is desired.
 
 The arg reading loop continues while `conn-argument-required-p' returns
 non-nil for at least one argument.
 
 The loop then prompts the user for a command via `read-key-sequence'.
-If a :PRE function was given then it is called with the command that has
+If a PRE function was given then it is called with the command that has
 been read.
 
-Then the default command handler and the :COMMAND-HANDLER function, if
+Then the default command handler and the COMMAND-HANDLER function, if
 provided, are called with the current command.  If the command handler
 chooses to handle the command and call `conn-read-args-handle' then
-:POST is called with the current command, and the current iteration of
+POST is called with the current command, and the current iteration of
 the loop ends.
 
 If the current command is not handled by a command handler then
@@ -1698,7 +1695,7 @@ If the current command is not handled by a command handler then
 command, and an updater function.  The updater function is a function of
 one argument which when called updates the value of ARGUMENT to the
 supplied value.  Once updater has been called `conn-argument-update' is
-not called with any more ARGUMENTs, :POST is called with the current
+not called with any more ARGUMENTs, POST is called with the current
 command and the current iteration of the loop end.
 
 If no command handler handles the current command and no argument
@@ -1708,10 +1705,24 @@ Once the loop ends `conn-argument-extract-value' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
+OVERRIDING-MAP if non-nil should be a keymap which will be active during
+the read args loop and take precedence over the ARGUMENT keymaps.  Note
+that `conn-read-args-map' will still take precedence over
+OVERRIDING-MAP.
+
+REFERENCE if non-nil is a `conn-reference-page's or a list of pages to be
+displayed as interactive help.
+
+PREFIX is the initial value of the prefix argument.
+
+DISPLAY-HANLDER if non-nil should be a function which will be called
+each iteration with a prompt and a list of all ARGUMENTs and display the
+echo area help message.
+
 \(fn (STATE &key COMMAND-HANDLER DISPLAY-HANDLER AROUND OVERRIDING-MAP PROMPT PREFIX PRE POST REFERENCE) VARLIST &rest BODY)"
   (declare (indent 2)
            (debug (([sexp &rest keywordp form])
-                   ([&rest symbolp form])
+                   ([&rest sexp form])
                    def-body)))
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     `(conn--read-args ',state
