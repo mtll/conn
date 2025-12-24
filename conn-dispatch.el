@@ -581,7 +581,7 @@ themselves once the selection process has concluded."
 
 ;;;;;; Dispatch Quick Ref
 
-(defvar conn-dispatch-thing-ref-list
+(defvar conn-dispatch-thing-reference-list
   (conn-reference-quote
     (("symbol" forward-symbol)
      ("line" forward-line)
@@ -595,11 +595,11 @@ themselves once the selection process has concluded."
      ("over" conn-dispatch-bounds-over)
      ("reset" conn-transform-reset))))
 
-(defvar conn-dispatch-thing-ref
+(defvar conn-dispatch-thing-reference
   (conn-reference-page "Things"
     (:heading "Extra Thing Bindings")
     ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
-     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-ref-list)))
+     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-reference-list)))
     (:heading "Transforms")
     ((:splice (conn-quick-ref-to-cols conn-dispatch-thing-transforms-ref-list)))))
 
@@ -626,12 +626,7 @@ themselves once the selection process has concluded."
       conn-dispatch-take
       conn-dispatch-take-replace))))
 
-(defvar conn-dispatch-action-ref
-  (conn-reference-page "Actions"
-    ((:splice (conn-quick-ref-to-cols
-               conn-dispatch-action-ref-list 3)))))
-
-(defvar conn-dispatch-command-ref
+(defvar conn-dispatch-command-reference
   (conn-reference-page "Misc Commands"
     (((:heading "History:")
       ("next/prev"
@@ -647,8 +642,13 @@ themselves once the selection process has concluded."
       ("restrict matches to the selected window"
        restrict-windows)))))
 
-(defvar conn-dispatch-select-ref
+(defvar conn-dispatch-reference
+  (list conn-dispatch-command-reference
+        conn-dispatch-thing-reference))
+
+(defun conn-dispatch-select-reference ()
   (conn-reference-page "Selection Commands"
+    (:splice conn-dispatch-action-reference)
     (((:heading "Targeting Commands")
       ("retarget" retarget)
       ("always retarget" always-retarget)
@@ -666,11 +666,6 @@ themselves once the selection process has concluded."
       ("isearch forward" isearch-forward)
       ("isearch forward regexp" isearch-forward-regexp)))))
 
-(defvar conn-dispatch-reference
-  (list conn-dispatch-action-ref
-        conn-dispatch-command-ref
-        conn-dispatch-thing-ref))
-
 ;;;;;; Action
 
 (defvar-keymap conn-dispatch-action-map
@@ -687,8 +682,14 @@ themselves once the selection process has concluded."
    :keymap conn-dispatch-action-map))
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-dispatch-action-argument-value arg)))
-    (conn-action-get-reference action)))
+  (let* ((action (conn-dispatch-action-argument-value arg))
+         (ref (conn-action-get-reference action)))
+    (conn-reference-page "Actions"
+      :depth -50
+      (:splice ref)
+      (:heading (when ref "Action Bindings"))
+      ((:splice (conn-quick-ref-to-cols
+                 conn-dispatch-action-ref-list 3))))))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd updater)
@@ -753,21 +754,6 @@ themselves once the selection process has concluded."
    (when-let* ((action (conn-argument-value arg)))
      (propertize (conn-action-pretty-print action)
                  'face 'eldoc-highlight-function-argument))))
-
-;;;;;; Other End
-
-(defvar-keymap conn-dispatch-other-end-map
-  "z" 'dispatch-other-end)
-
-;;;;;; Repeat
-
-(defvar-keymap conn-dispatch-repeat-arg-map
-  "TAB" 'repeat-dispatch)
-
-;;;;;; Restrict Windows
-
-(defvar-keymap conn-dispatch-restrict-windows-map
-  "C-w" 'restrict-windows)
 
 ;;;;;; Command Handler
 
@@ -1933,6 +1919,7 @@ the meaning of depth."
                       ,conn-target-predicate
                       ,conn-target-sort-function)
                     conn--dispatch-prev-state)
+                   (conn-dispatch-action-reference nil)
                    (conn-targets nil)
                    (conn--dispatch-label-state nil)
                    (conn-dispatch-target-finder nil)
@@ -1963,7 +1950,7 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
   (conn-read-args (conn-dispatch-targets-state
                    :prompt "New Targets"
-                   :reference (list conn-dispatch-thing-ref)
+                   :reference (list conn-dispatch-thing-reference)
                    :around (lambda (cont)
                              (conn-with-dispatch-suspended
                                (funcall cont))))
@@ -1976,8 +1963,7 @@ the meaning of depth."
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (conn-with-overriding-map conn-dispatch-read-char-map
-    (conn-quick-reference conn-dispatch-action-reference
-                          conn-dispatch-select-ref))
+    (conn-quick-reference (conn-dispatch-select-reference)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
@@ -2147,11 +2133,7 @@ the meaning of depth."
              (overlay-put overlay 'display nil)
              (overlay-put overlay 'after-string nil)
              (overlay-put overlay 'before-string nil)
-             (overlay-put overlay 'face nil
-                          ;; `(:background ,(face-background
-                          ;;                 (or (overlay-get target 'label-face)
-                          ;;                     'conn-dispatch-label-face)))
-                          ))
+             (overlay-put overlay 'face nil))
             ((length> narrowed-string 0)
              (overlay-put overlay 'display nil)
              (overlay-put overlay 'before-string nil)
@@ -2182,8 +2164,17 @@ the meaning of depth."
                      :initarg :window-predicate))
   :abstract t)
 
-(defvar conn-dispatch-post-update-functions nil)
-(defvar conn-dispatch-pre-update-functions nil)
+(defvar conn-dispatch-post-update-functions nil
+  "Abnormal hook run after a target finder updates in each window.
+
+Each function in the hook is called with the window that has been
+updated.")
+
+(defvar conn-dispatch-pre-update-functions nil
+  "Abnormal hook run before a target finder updates in each window.
+
+Each function in the hook is called with the window that is about to be
+updated.")
 
 (defun conn--define-target-finder (name
                                    superclasses
@@ -3122,10 +3113,12 @@ contain targets."
 (defalias 'conn-action-doc-string 'conn-action--action-doc-string)
 
 (defun conn-action-get-reference (action)
-  (when-let* ((doc-string (conn-action-doc-string action)))
-    (conn-reference-page (conn-action-pretty-print action)
-      :depth -50
-      (:eval doc-string))))
+  (when-let* ((doc-string (and action
+                               (conn-action-doc-string action))))
+    (conn-reference-quote
+      ((:heading (concat "Current Action: "
+                         (conn-action-pretty-print action)))
+       (:eval doc-string)))))
 
 (eval-and-compile
   (defun conn--set-action-property (f _args val)
@@ -4347,6 +4340,12 @@ it."))
             (let ((inhibit-message conn-read-args-inhibit-message))
               (message nil))))))))
 
+(defvar-keymap conn-dispatch-other-end-map
+  "z" 'dispatch-other-end)
+
+(defvar-keymap conn-dispatch-restrict-windows-map
+  "C-w" 'restrict-windows)
+
 (defun conn-dispatch (&optional initial-arg)
   "Perform a dispatch.
 
@@ -4541,12 +4540,15 @@ for the dispatch."
 
 ;;;;; Dispatch Bounds
 
+(defvar-keymap conn-dispatch-repeat-arg-map
+  "TAB" 'repeat-dispatch)
+
 (defun conn--dispatch-bounds (bounds &optional subregions-p)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
                    :prompt "Bounds of Dispatch"
-                   :reference (list conn-dispatch-command-ref
-                                    conn-dispatch-thing-ref))
+                   :reference (list conn-dispatch-command-reference
+                                    conn-dispatch-thing-reference))
       ((`(,thing ,arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat

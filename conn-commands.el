@@ -2509,7 +2509,7 @@ hook, which see."
     (conn-read-args (conn-dispatch-bounds-state
                      :prefix arg
                      :prompt "Kill"
-                     :reference (list conn-dispatch-thing-ref))
+                     :reference (list conn-dispatch-thing-reference))
         ((`(,thing ,arg) (conn-thing-argument t))
          (`(,transform ,fixup-whitespace)
           (conn-dispatch-transform-and-fixup-argument
@@ -2889,7 +2889,7 @@ If copying to a registers then append to the register.  If APPEND is
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
                    :prompt "Copy"
-                   :reference (list conn-dispatch-thing-ref))
+                   :reference (list conn-dispatch-thing-reference))
       ((`(,thing ,arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat
