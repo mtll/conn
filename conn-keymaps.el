@@ -23,6 +23,7 @@
 (require 'conn-states)
 (require 'conn-things)
 (require 'conn-commands)
+(require 'conn-dispatch)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
@@ -411,28 +412,6 @@
 ;;;;;; Dispatch State
 
 (define-keymap
-  :keymap conn-dispatch-read-char-map
-  "C-\\" 'toggle-input-method
-  "C-M-\\" 'set-input-method
-  "C-z" 'dispatch-other-end
-  "DEL" 'restart
-  "<backspace>" 'restart
-  "C-/" 'undo
-  "C-'" 'recursive-edit
-  "<mouse-1>" 'act
-  "<mouse-3>" 'undo
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "C-t" 'change-target-finder
-  "<escape>" 'finish
-  "C-o" 'conn-goto-window
-  "C-s" 'isearch-forward
-  "C-M-s" 'isearch-regexp-forward
-  "C-M-r" 'isearch-regexp-backward
-  "C-v" 'scroll-up-command
-  "M-v" 'scroll-down-command)
-
-(define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   "TAB" 'repeat-dispatch
   "u" 'forward-symbol
@@ -526,7 +505,7 @@
         'point
         :pretty-print ( :method (_) "prev-emacs-state")
         :default-action ( :method (_self)
-                          (let ((goto (conn-make-action 'conn-dispatch-goto)))
+                          (let ((goto (conn-dispatch-goto)))
                             (oclosure-lambda (conn-action
                                               (action-description "Previous Emacs State")
                                               (action-no-history t))

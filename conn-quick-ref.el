@@ -47,8 +47,10 @@
   :group 'conn-quick-ref)
 
 (cl-defstruct (conn--reference-page
-               (:constructor conn--make-reference-page (title definition)))
+               ( :constructor conn--make-reference-page
+                 (title depth definition)))
   (title nil :type string :read-only t)
+  (depth 0 :type integer :read-only t)
   (definition nil :type list :read-only t))
 
 (defmacro conn-reference-quote (form)
@@ -68,20 +70,25 @@
 
 (defmacro conn-reference-page (title &rest definition)
   (declare (indent 1))
-  (cl-labels ((process-definition (def)
-                (pcase def
-                  (`(,(and (or :eval :splice :keymap) type) . ,form)
-                   (cons type (list '\, (cons 'lambda (cons nil form)))))
-                  ((pred consp)
-                   (mapcar #'process-definition def))
-                  (_ def))))
-    `(conn--make-reference-page
-      ,title
-      (list ,@(cl-loop for row in definition
-                       if (listp row)
-                       collect (list '\` (process-definition row))
-                       else
-                       collect row)))))
+  (let ((depth (or (when (eq :depth (car definition))
+                     (pop definition)
+                     (pop definition))
+                   0)))
+    (cl-labels ((process-definition (def)
+                  (pcase def
+                    (`(,(and (or :eval :splice :keymap) type) . ,form)
+                     (cons type (list '\, (cons 'lambda (cons nil form)))))
+                    ((pred consp)
+                     (mapcar #'process-definition def))
+                    (_ def))))
+      `(conn--make-reference-page
+        ,title
+        ,depth
+        (list ,@(cl-loop for row in definition
+                         if (listp row)
+                         collect (list '\` (process-definition row))
+                         else
+                         collect row))))))
 
 (defvar-keymap conn-quick-ref-map
   "C-q" 'next
@@ -256,11 +263,21 @@
          (point-min) header-pos
          'conn-quick-ref-page-header t)))))
 
-(defun conn-quick-reference (pages)
-  (when pages
+(defun conn--quick-ref-parse-pages (pages)
+  (cl-loop for p in pages
+           append (pcase p
+                    ((pred listp) p)
+                    ((pred conn--reference-page-p) (list p))
+                    ((pred functionp) (ensure-list (funcall p))))
+           into result
+           finally return (compat-call
+                           sort result
+                           :key #'conn--reference-page-depth)))
+
+(defun conn-quick-reference (&rest pages)
+  (when-let* ((pages (conn--quick-ref-parse-pages pages)))
     (let ((buf (get-buffer-create " *conn-quick-ref*"))
           (display-function conn-quick-ref-display-function)
-          (pages (copy-sequence pages))
           (inhibit-message t))
       (conn-quick-ref-insert-page (car pages) buf)
       (funcall display-function buf nil)

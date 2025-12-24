@@ -484,12 +484,33 @@ themselves once the selection process has concluded."
                           'dispatch-character-event)
     (cl-loop for i from ?\s below 256
              do (define-key map (vector i) 'dispatch-character-event))
-    (keymap-set map "C-g" 'keyboard-quit)
-    (keymap-set map "C-q" 'quoted-insert)
-    (keymap-set map "RET" 'ignore)
-    (keymap-set map "<return>" 'ignore)
-    (keymap-set map "<tab>" 'quoted-insert)
-    (keymap-set map "TAB" 'quoted-insert)
+    (define-keymap
+      :keymap map
+      "C-\\" 'toggle-input-method
+      "C-M-\\" 'set-input-method
+      "C-z" 'dispatch-other-end
+      "DEL" 'restart
+      "<backspace>" 'restart
+      "C-'" 'recursive-edit
+      "<mouse-1>" 'act
+      "<mouse-3>" 'undo
+      "C-/" 'undo
+      "M-DEL" 'reset-arg
+      "M-<backspace>" 'reset-arg
+      "C-t" 'change-target-finder
+      "<escape>" 'finish
+      "C-o" 'conn-goto-window
+      "C-s" 'isearch-forward
+      "C-M-s" 'isearch-regexp-forward
+      "C-v" 'scroll-up-command
+      "M-v" 'scroll-down-command
+      "C-q" 'help
+      "C-g" 'keyboard-quit
+      "C-w" 'restrict-windows
+      "RET" 'ignore
+      "<return>" 'ignore
+      "<tab>" 'quoted-insert
+      "TAB" 'quoted-insert)
     map))
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
@@ -634,24 +655,20 @@ themselves once the selection process has concluded."
       ("change target finder" change-target-finder))
      ((:heading "Window Commands")
       ("goto window" conn-goto-window)
-      ("scroll up" scroll-up)
-      ("scroll down" scroll-down)
+      ("scroll up" scroll-up-command)
+      ("scroll down" scroll-down-command)
       ("restrict" restrict-windows)))
     (((:heading "Misc")
-      ("dispatch at click" act)
-      ("undo" undo)
-      ("recursive edit" recursive-edit))
+      ("at mouse click" act)
+      ("undo" undo))
      (""
-      ("isearch forward" isearch-regexp-forward)
-      ("isearch backward" isearch-regexp-backward)))))
+      ("isearch forward" isearch-forward)
+      ("isearch forward regexp" isearch-forward-regexp)))))
 
 (defvar conn-dispatch-reference
   (list conn-dispatch-action-ref
         conn-dispatch-command-ref
         conn-dispatch-thing-ref))
-
-(defvar conn-dispatch-target-reference
-  (list conn-dispatch-thing-ref))
 
 ;;;;;; Action
 
@@ -660,41 +677,52 @@ themselves once the selection process has concluded."
 
 (cl-defstruct (conn-dispatch-action-argument
                (:include conn-argument))
-  (repeat nil))
+  (repeat nil)
+  (curr nil))
 
 (defun conn-dispatch-action-argument ()
   (setq conn--dispatch-thing-predicate #'always)
   (make-conn-dispatch-action-argument
    :keymap conn-dispatch-action-map))
 
+(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
+  (when-let* ((action (conn-dispatch-action-argument-value arg)))
+    (conn-action-get-reference action)))
+
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd updater)
-  (pcase cmd
-    ('repeat-dispatch
-     (cl-callf not (conn-dispatch-action-argument-repeat arg))
-     (funcall updater arg))
-    ((guard (conn-argument-predicate arg cmd))
-     (conn-cancel-action (conn-argument-value arg))
-     (condition-case err
-         (if-let* ((_(not (cl-typep (conn-argument-value arg) cmd)))
-                   (action (conn-make-action cmd)))
-             (progn
-               (setf conn--dispatch-thing-predicate
-                     (or (conn-action--action-thing-predicate action)
-                         #'always))
-               (setf (conn-argument-value arg) action)
-               (setf (conn-dispatch-action-argument-repeat arg)
-                     (pcase (conn-dispatch-action-argument-repeat arg)
-                       ((or 'auto 'nil)
-                        (and (conn-action--action-auto-repeat action)
-                             'auto))
-                       (_ (conn-dispatch-action-argument-repeat arg)))))
-           (setf conn--dispatch-thing-predicate #'always
-                 (conn-argument-value arg) nil))
-       (error
-        (conn-read-args-error (error-message-string err))
-        (setf (conn-argument-value arg) nil)))
-     (funcall updater arg))))
+  (cl-symbol-macrolet ((curr (conn-dispatch-action-argument-curr arg)))
+    (pcase cmd
+      ('repeat-dispatch
+       (cl-callf not (conn-dispatch-action-argument-repeat arg))
+       (funcall updater arg))
+      ((guard (conn-argument-predicate arg cmd))
+       (conn-cancel-action (conn-argument-value arg))
+       (condition-case err
+           (if-let* ((_(not (eq curr cmd)))
+                     (action (or (atomic-change-group
+                                   (save-window-excursion
+                                     (funcall cmd)))
+                                 (error "Failed to construct %s" cmd))))
+               (progn
+                 (setf curr cmd)
+                 (setf conn--dispatch-thing-predicate
+                       (or (conn-action--action-thing-predicate action)
+                           #'always))
+                 (setf (conn-argument-value arg) action)
+                 (setf (conn-dispatch-action-argument-repeat arg)
+                       (pcase (conn-dispatch-action-argument-repeat arg)
+                         ((or 'auto 'nil)
+                          (and (conn-action--action-auto-repeat action)
+                               'auto))
+                         (_ (conn-dispatch-action-argument-repeat arg)))))
+             (setf conn--dispatch-thing-predicate #'always
+                   (conn-argument-value arg) nil
+                   curr nil))
+         (error
+          (conn-read-args-error (error-message-string err))
+          (setf (conn-argument-value arg) nil)))
+       (funcall updater arg)))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-argument-value arg)))
@@ -707,11 +735,11 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-dispatch-action-argument)
                                        sym)
-  (conn--action-type-p sym))
+  (function-get sym :conn-dispatch-action t))
 
 (cl-defmethod conn-argument-completion-annotation ((_arg conn-dispatch-action-argument)
                                                    sym)
-  (when (conn--action-type-p sym)
+  (when (function-get sym :conn-dispatch-action)
     " (action)"))
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
@@ -1495,17 +1523,19 @@ Target overlays may override this default by setting the
                       'face (when conn-dispatch-hide-labels
                               'eldoc-highlight-function-argument)))))
                 (:keymap conn-label-toggle-map)
+                (let ((fn (make-symbol "cleanup")))
+                  (fset fn (lambda (&rest _)
+                             (unwind-protect
+                                 (mapc #'conn-label-delete ,(car binder))
+                               (setq conn--previous-labels-cleanup nil)
+                               (remove-hook 'pre-redisplay-functions fn))))
+                  (setq conn--previous-labels-cleanup fn))
                 ,@body)
             (clrhash conn--pixelwise-window-cache)
             (clrhash conn--dispatch-window-lines-cache)
-            (let ((fn (make-symbol "cleanup")))
-              (fset fn (lambda (&rest _)
-                         (unwind-protect
-                             (mapc #'conn-label-delete ,(car binder))
-                           (setq conn--previous-labels-cleanup nil)
-                           (remove-hook 'pre-redisplay-functions fn))))
-              (add-hook 'pre-redisplay-functions fn)
-              (setq conn--previous-labels-cleanup fn))))))
+            (when conn--previous-labels-cleanup
+              (add-hook 'pre-redisplay-functions
+                        conn--previous-labels-cleanup))))))
     (_ (error "Unexpected binder form"))))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
@@ -1579,6 +1609,8 @@ Target overlays may override this default by setting the
   "Non-nil inside while execution of `conn-dispatch-perform-action'.
 
 `conn-with-dispatch-suspended' binds this variable to nil.")
+
+(defvar conn-dispatch-action-reference nil)
 
 (defvar conn--dispatch-change-groups nil)
 
@@ -1943,7 +1975,8 @@ the meaning of depth."
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (conn-with-overriding-map conn-dispatch-read-char-map
-    (conn-quick-reference (list conn-dispatch-select-ref)))
+    (conn-quick-reference conn-dispatch-action-reference
+                          conn-dispatch-select-ref))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
@@ -1953,7 +1986,8 @@ the meaning of depth."
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recursive-edit)))
   (conn-with-dispatch-suspended
-    (recursive-edit))
+    (conn-with-recursive-stack 'conn-command-state
+      (recursive-edit)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom)))
@@ -3073,7 +3107,8 @@ contain targets."
   (action-target-predicate :type function)
   (action-thing-predicate :type function)
   (action-always-retarget :type boolean)
-  (action-always-prompt :type boolean))
+  (action-always-prompt :type boolean)
+  (action-doc-string :type string))
 
 (defalias 'conn-action-no-history 'conn-action--action-no-history)
 (defalias 'conn-action-auto-repeat 'conn-action--action-auto-repeat)
@@ -3083,21 +3118,25 @@ contain targets."
 (defalias 'conn-action-thing-predicate 'conn-action--action-thing-predicate)
 (defalias 'conn-action-always-retarget 'conn-action--action-always-retarget)
 (defalias 'conn-action-always-prompt 'conn-action--action-always-prompt)
+(defalias 'conn-action-doc-string 'conn-action--action-doc-string)
 
-(defun conn--action-type-p (item)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (when-let* ((class (and (symbolp item)
-                          (cl--find-class item))))
-    (and (oclosure--class-p class)
-         (memq 'conn-action (oclosure--class-allparents class)))))
+(defun conn-action-get-reference (action)
+  (conn-reference-page (conn-action-pretty-print action)
+    :depth -50
+    (:eval (conn-action-doc-string action))))
+
+(eval-and-compile
+  (defun conn--set-action-property (f _args val)
+    `(function-put ',f :conn-dispatch-action ',val))
+  (setf (alist-get 'conn-dispatch-action defun-declarations-alist)
+        (list #'conn--set-action-property)))
 
 (cl-defgeneric conn-make-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t)))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
-  (conn-make-action 'conn-dispatch-goto))
+  (conn-dispatch-goto))
 
 (cl-defgeneric conn-action-stale-p (action)
   (declare (important-return-value t)
@@ -3122,17 +3161,6 @@ contain targets."
 
 (cl-defgeneric conn-cancel-action (action)
   (:method (_) "Noop" nil))
-
-(cl-defgeneric conn-make-action (type)
-  (declare (important-return-value t))
-  (:method (type) (error "Unknown action type %s" type))
-  (:method :after (_type) (conn-read-args-consume-prefix-arg)))
-
-(cl-defmethod conn-make-action :around (type)
-  (or (atomic-change-group
-        (save-window-excursion
-          (cl-call-next-method)))
-      (error "Failed to construct %S" type)))
 
 (defun conn--action-buffer-change-group ()
   (declare (important-return-value t))
@@ -3182,9 +3210,13 @@ contain targets."
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
+(defun conn-dispatch-goto ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-goto
-                    (action-description "Goto"))
+                    (action-description "Goto")
+                    (action-doc-string
+                     "Goes to and marks the selected thing.  If other-end is non-nil then
+exchanges the point and mark."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3207,10 +3239,13 @@ contain targets."
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
+(defun conn-dispatch-push-button ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-push-button
                     (action-description "Push Button")
-                    (action-no-history t))
+                    (action-no-history t)
+                    (action-doc-string
+                     "Push the selected button."))
       ()
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
@@ -3225,7 +3260,8 @@ contain targets."
   (str :type string)
   (separator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
+(defun conn-dispatch-copy-to ()
+  (declare (conn-dispatch-action t))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
       ((`(,fthing ,farg) (conn-thing-argument))
@@ -3252,7 +3288,12 @@ contain targets."
                          (lambda (win)
                            (not
                             (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
+                                                (window-buffer win)))))
+                        (action-doc-string
+                         "Copy the current region to the region selected by dispatch.  By default
+this action copies the current region before the region selected by
+dispatch but if OTHER-END is non-nil then it copies the current region
+after the region selected by dispatch."))
           ()
         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                       (conn-select-target)))
@@ -3285,7 +3326,8 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to-replace)))
+(defun conn-dispatch-copy-to-replace ()
+  (declare (conn-dispatch-action t))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
       ((`(,fthing ,farg) (conn-thing-argument-dwim))
@@ -3305,7 +3347,9 @@ contain targets."
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
-                                              (window-buffer win))))))
+                                              (window-buffer win)))))
+                      (action-doc-string
+                       "Copy the current region to the region selected, replacing it."))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -3327,7 +3371,8 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to-replace)))
+(defun conn-dispatch-yank-to-replace ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-yank-to-replace
                     (action-description "Yank and Replace To")
                     (str (current-kill 0))
@@ -3335,7 +3380,10 @@ contain targets."
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
+                                            (window-buffer win)))))
+                    (action-doc-string
+                     "Yank the the last killed text from the kill ring and replace the region
+selected by dispatch with it."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3354,7 +3402,8 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to-replace)))
+(defun conn-dispatch-reading-yank-to-replace ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-reading-yank-to-replace
                     (action-description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
@@ -3362,7 +3411,10 @@ contain targets."
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
+                                            (window-buffer win)))))
+                    (action-doc-string
+                     "Select a string from the kill list and replace the region selected by
+dispatch with it."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3382,7 +3434,8 @@ contain targets."
   (str :type string)
   (separator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
+(defun conn-dispatch-yank-to ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
                     (separator
@@ -3396,7 +3449,12 @@ contain targets."
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
+                                            (window-buffer win)))))
+                    (action-doc-string
+                     "Yank the most recent kill to the region selected by dispatch.  By
+default this action inserts the text before the region selected by
+dispatch but if OTHER-END is non-nil then it inserts the text after the
+region selected by dispatch."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3430,7 +3488,8 @@ contain targets."
   (str :type string)
   (separator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
+(defun conn-dispatch-reading-yank-to ()
+  (declare (conn-dispatch-action t))
   (let ((str (read-from-kill-ring "Yank To: ")))
     (oclosure-lambda (conn-dispatch-reading-yank-to
                       (str str)
@@ -3445,7 +3504,12 @@ contain targets."
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
-                                              (window-buffer win))))))
+                                              (window-buffer win)))))
+                      (action-doc-string
+                       "Select a string from the kill ring and insert it at the region selected
+by dispatch.  By default this action inserts the string before the
+region selected by dispatch but if OTHER-END is non-nil then it inserts
+the string after the region selected by dispatch."))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -3482,7 +3546,8 @@ contain targets."
   (separator :type string)
   (action-change-group))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
+(defun conn-dispatch-send ()
+  (declare (conn-dispatch-action t))
   (conn-read-args (conn-kill-state
                    :prompt "Send Thing")
       ((`(,thing ,arg) (conn-thing-argument))
@@ -3515,7 +3580,12 @@ contain targets."
                          (lambda (win)
                            (not
                             (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
+                                                (window-buffer win)))))
+                        (action-doc-string
+                         "Delete a thing at point and insert it at the region selected
+by dispatch.  By default this action inserts the string before the
+region selected by dispatch but if OTHER-END is non-nil then it inserts
+the string after the region selected by dispatch."))
           ()
         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                       (conn-select-target)))
@@ -3552,7 +3622,8 @@ contain targets."
   (str :type string)
   (action-change-group))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
+(defun conn-dispatch-send-replace ()
+  (declare (conn-dispatch-action t))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send-replace
                       (action-description "Send and Replace")
@@ -3579,7 +3650,10 @@ contain targets."
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
-                                              (window-buffer win))))))
+                                              (window-buffer win)))))
+                      (action-doc-string
+                       "Delete a thing at point and replace a region selected by dispatch with
+it."))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -3608,7 +3682,8 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
+(defun conn-dispatch-register-load ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
       ()
@@ -3635,7 +3710,8 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load-replace)))
+(defun conn-dispatch-register-load-replace ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load-replace
                     (register (register-read-with-preview "Register: ")))
       ()
@@ -3679,11 +3755,13 @@ contain targets."
    action
    (copy-marker (conn-dispatch-copy-from--action-opoint action) t)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from)))
+(defun conn-dispatch-copy-from ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-copy-from
                     (action-description "Copy From")
                     (action-opoint (copy-marker (point) t)))
       ()
+    "Copies the selected thing to point."
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
       (let (str)
@@ -3711,7 +3789,8 @@ contain targets."
 (oclosure-define (conn-dispatch-copy-from-replace
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-from-replace)))
+(defun conn-dispatch-copy-from-replace ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-copy-from-replace
                     (action-description "Copy From and Replace"))
       ()
@@ -3748,7 +3827,8 @@ contain targets."
     (copy-marker t)
     (:> (conn-dispatch-take-replace-copy action))))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
+(defun conn-dispatch-take-replace ()
+  (declare (conn-dispatch-action t))
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
     (oclosure-lambda (conn-dispatch-take-replace
@@ -3806,7 +3886,8 @@ contain targets."
     (copy-marker t)
     (:> (conn-dispatch-take-copy action))))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
+(defun conn-dispatch-take ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-take
                     (action-description "Take From")
                     (action-opoint (copy-marker (point) t))
@@ -3836,7 +3917,8 @@ contain targets."
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
+(defun conn-dispatch-jump ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-jump
                     (action-description "Jump"))
       ()
@@ -3853,7 +3935,8 @@ contain targets."
                   (:parent conn-action))
   (command :type list))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-repeat-command)))
+(defun conn-dispatch-repeat-command ()
+  (declare (conn-dispatch-action t))
   (when command-history
     (oclosure-lambda (conn-dispatch-repeat-command
                       (command (car command-history))
@@ -3883,7 +3966,8 @@ contain targets."
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-transpose)))
+(defun conn-dispatch-transpose ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-transpose
                     (action-description "Transpose")
                     (action-always-retarget t)
@@ -4126,6 +4210,8 @@ contain targets."
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (let* ((dispatch-quit-flag nil)
+         (conn-dispatch-action-reference
+          (conn-action-get-reference action))
          (conn--dispatch-current-thing (list thing arg transform))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
@@ -4262,7 +4348,7 @@ contain targets."
 (defun conn-dispatch (&optional initial-arg)
   "Perform a dispatch.
 
-Interactively read the arguments for `conn-setup-dispatch' with
+Interactively read the arguments for `conn-dispatch-setup' with
 `conn-read-args'.
 
 INITIAL-ARG is the initial value of the prefix argument during
@@ -4406,7 +4492,7 @@ for the dispatch."
   "Dispatch on buttons."
   (interactive)
   (conn-dispatch-setup
-   (conn-make-action 'conn-dispatch-push-button)
+   (conn-dispatch-push-button)
    (conn-anonymous-thing
      'button
      :pretty-print ( :method (_self) "all-buttons")
@@ -4430,7 +4516,7 @@ for the dispatch."
       (unwind-protect ;In case this was a recursive isearch
           (isearch-exit)
         (conn-dispatch-setup
-         (conn-make-action 'conn-dispatch-goto)
+         (conn-dispatch-goto)
          (conn-anonymous-thing
            'region
            :target-finder ( :method (_self _arg)
@@ -4447,7 +4533,7 @@ for the dispatch."
   "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-dispatch-setup
-   (conn-make-action 'conn-dispatch-jump)
+   (conn-dispatch-jump)
    nil nil nil
    :other-end :no-other-end))
 

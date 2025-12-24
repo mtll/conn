@@ -247,11 +247,14 @@
          (let ((props ',(cons (intern (concat ":" (symbol-name f)))
                               properties)))
            (dolist (prop props)
-             (when-let* ((gfn (alist-get prop (get 'conn-anonymous-thing :known-properties)))
+             (when-let* ((gfn (alist-get prop
+                                         (get 'conn-anonymous-thing
+                                              :known-properties)))
                          (_ (not (eq gfn ',f))))
                (error "%s already an anonymous thing property for %s" prop gfn)))
            (dolist (prop props)
-             (setf (alist-get prop (get 'conn-anonymous-thing :known-properties))
+             (setf (alist-get prop (get 'conn-anonymous-thing
+                                        :known-properties))
                    ',f))))
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
@@ -986,10 +989,11 @@ Returns a `conn-bounds' struct."
 (eval-and-compile
   (defun conn--set-bounds-transform-property (f _args short-name doc-string)
     `(eval-and-compile
-       (setf (alist-get ',f (get 'conn-transform-bounds :known-transformations))
+       (setf (alist-get ',f (get 'conn-transform-bounds
+                                 :known-transformations))
              ,doc-string)
-       (put ',f :conn-bounds-transformation t)
-       (put ',f :conn-transform-description ,short-name)))
+       (function-put ',f :conn-bounds-transformation t)
+       (function-put ',f :conn-transform-description ,short-name)))
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 

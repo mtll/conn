@@ -1614,7 +1614,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                (pcase cmd
                  ('reference
                   (when reference
-                    (conn-quick-reference reference)))
+                    (apply #'conn-quick-reference
+                           reference
+                           (mapcar #'conn-argument-get-reference arguments))))
                  ((or 'execute-extended-command
                       'help)
                   (when-let* ((cmd (conn--read-args-completing-read
@@ -1727,7 +1729,8 @@ argument and the result is bound to the corresponding pattern form by
   (required nil :type boolean :read-only t)
   (name nil :type (or string function nil) :read-only t)
   (annotation nil :type (or nil string function) :read-only t)
-  (keymap nil :type keymap :read-only t))
+  (keymap nil :type keymap :read-only t)
+  (reference nil :type (or list conn--reference-page)))
 
 (cl-defstruct (conn-composite-argument
                (:include conn-argument)
@@ -1744,7 +1747,8 @@ argument and the result is bound to the corresponding pattern form by
   (required :type boolean)
   (name :type (or nil string function))
   (annotation :type (or nil string function))
-  (keymap :type keymap))
+  (keymap :type keymap)
+  (reference :type (or list conn--reference-page)))
 
 (defalias 'conn-anonymous-argument-name
   'conn-anonymous-argument--name)
@@ -1760,6 +1764,9 @@ argument and the result is bound to the corresponding pattern form by
 
 (defalias 'conn-anonymous-argument-keymap
   'conn-anonymous-argument--keymap)
+
+(defalias 'conn-anonymous-argument-reference
+  'conn-anonymous-argument--reference)
 
 (cl-defgeneric conn-argument-cancel (argument)
   ( :method (_arg) nil))
@@ -1887,6 +1894,15 @@ be displayed in the echo area during `conn-read-args'."
   ( :method ((arg conn-composite-argument) value)
     (cl-loop for a in (conn-composite-argument-value arg)
              thereis (conn-argument-completion-annotation a value))))
+
+(cl-defgeneric conn-argument-get-reference (arg)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (_arg) nil)
+  ( :method ((arg conn-argument))
+    (conn-argument-reference arg))
+  ( :method ((arg conn-anonymous-argument))
+    (conn-anonymous-argument-reference arg)))
 
 ;;;;; Boolean Argument
 

@@ -1100,7 +1100,8 @@ The iterator must be the first argument in ARGLIST.
                   (:parent conn-action))
   (macro :mutable t))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
+(defun conn-dispatch-kapply ()
+  (declare (conn-dispatch-action t))
   (let ((setup (make-symbol "setup-dispatch-kapply"))
         (applier nil)
         (pipeline nil))

@@ -169,7 +169,8 @@
 (oclosure-define (conn-open-org-link
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-open-org-link)))
+(defun conn-open-org-link ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-open-org-link
                     (action-description "Open Link"))
       (window pt _thing _arg)
@@ -179,7 +180,7 @@
         (org-open-at-point-global)))))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing org-link)))
-  (conn-make-action 'conn-open-org-link))
+  (conn-open-org-link))
 
 (defun conn-org-sentence-forward (arg)
   (interactive "p")

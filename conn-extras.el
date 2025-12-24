@@ -419,7 +419,7 @@
                          #'conn--dispatch-dired-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-jump))
 
 (conn-register-thing 'dired-subdir)
 
@@ -433,7 +433,7 @@
   #'conn--dispatch-dired-subdir)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-jump))
 
 (conn-register-thing 'dired-dirline)
 
@@ -446,12 +446,13 @@
   #'conn--dispatch-dired-dirline)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-jump))
 
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
+(defun conn-dispatch-dired-mark ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-dired-mark
                     (action-description "Mark")
                     (action-window-predicate
@@ -474,7 +475,8 @@
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
+(defun conn-dispatch-dired-kill-line ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-dired-kill-line
                     (action-description "Kill Line")
                     (action-window-predicate
@@ -493,7 +495,8 @@
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
+(defun conn-dispatch-dired-kill-subdir ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
                     (action-description "Kill Subdir")
                     (action-window-predicate
@@ -691,7 +694,7 @@
   #'conn--dispatch-ibuffer-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-jump))
 
 (conn-register-thing 'ibuffer-filter-group)
 
@@ -705,12 +708,13 @@
   #'conn--dispatch-ibuffer-filter-group)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
-  (conn-make-action 'conn-dispatch-jump))
+  (conn-dispatch-jump))
 
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
+(defun conn-dispatch-ibuffer-mark ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
                     (action-description "Mark")
                     (action-window-predicate
@@ -843,7 +847,8 @@
 (oclosure-define (conn-dispatch-bmenu-mark
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-bmenu-mark)))
+(defun conn-dispatch-bmenu-mark ()
+  (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-bmenu-mark
                     (action-description "Mark")
                     (action-window-predicate
