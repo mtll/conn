@@ -222,30 +222,30 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 
 (eval-and-compile
   (defun conn--define-remap-keymap (description keys)
-    (let ((keys (cl-loop for key in keys
-                         if (stringp key) collect (key-parse key)
-                         else collect key)))
+    (let (maps default-maps)
+      (dolist (key keys)
+        (pcase key
+          (`(:without-conn-maps ,key)
+           (if (stringp key) (setq key (key-parse key)))
+           (push `(conn--without-conn-maps
+                    (key-binding ,key t))
+                 maps))
+          ((and key (pred stringp))
+           (if (stringp key) (setq key (key-parse key)))
+           (push `(key-binding ,key t) maps))
+          ((and key (pred vectorp))
+           (push `(key-binding ,key t) maps))
+          (map
+           (push map maps)
+           (push map default-maps))))
       `(list 'menu-item
-             ',description
-             nil
+             ,description
+             ,(when default-maps
+                `(make-composed-keymap
+                  (list ,@default-maps)))
              :filter (lambda (_real-binding)
-                       ,(let (maps)
-                          (dolist (key keys)
-                            (pcase key
-                              (`(:without-conn-maps ,key)
-                               (if (stringp key) (setq key (key-parse key)))
-                               (push `(conn--without-conn-maps
-                                        (key-binding ,key t))
-                                     maps))
-                              ((and key (pred stringp))
-                               (if (stringp key) (setq key (key-parse key)))
-                               (push `(key-binding ,key t) maps))
-                              ((and key (pred vectorp))
-                               (push `(key-binding ,key t) maps))
-                              (map
-                               (push map maps))))
-                          `(make-composed-keymap
-                            (delq nil (list ,@(nreverse maps))))))))))
+                       (make-composed-keymap
+                        (delq nil (list ,@(nreverse maps)))))))))
 
 (defmacro conn-define-remap-keymap (name description &rest keys)
   (declare (indent 2))
