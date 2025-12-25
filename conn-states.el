@@ -192,9 +192,12 @@ See also `conn-declare-property-static'."
   (conn-declare-property-static :no-inherit-keymaps)
   (conn-declare-property-static :abstract)
 
-  (defun conn-state-get--cmacro ( exp state property
-                                  &optional
-                                  no-inherit default)
+  (defun conn-state-get--cmacro (exp
+                                 state
+                                 property
+                                 &optional
+                                 no-inherit
+                                 default)
     (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
           (prop (macroexpand-all property macroexpand-all-environment)))
       (if (or (and (macroexp-const-p no-inherit)
@@ -236,7 +239,8 @@ Returns VALUE."
                   t "%s is a static property")
        (thread-last
          (conn--find-state ,state)
-         conn-state--properties (puthash ,property ,value))))))
+         conn-state--properties
+         (puthash ,property ,value))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -261,7 +265,8 @@ property from its parents."
        (gethash ,property
                 (conn-state--properties (conn--find-state ,state))
                 conn--key-missing)
-       (eq conn--key-missing) not))))
+       (eq conn--key-missing)
+       not))))
 
 ;;;;; Keymaps
 

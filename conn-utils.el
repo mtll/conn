@@ -352,20 +352,17 @@ If ring is (1 2 3 4) 4 would be returned."
 
 (defun conn--with-region-emphasis (regions body)
   (cl-with-gensyms (overlays)
-    (cl-once-only (regions)
-      `(let (,overlays)
-         (unwind-protect
-             (progn
-               (when (conn-threadf<- ,regions
-                       (conn--merge-overlapping-regions t)
-                       sort)
-                 (cl-loop for (b e) on `(,(point-min) ,@,regions ,(point-max))
-                          for ov = (make-overlay b e)
-                          do (progn
-                               (overlay-put ov 'face 'shadow)
-                               (push ov ,overlays))))
-               ,@body)
-           (mapc #'delete-overlay ,overlays))))))
+    `(let (,overlays)
+       (unwind-protect
+           (progn
+             (when-let* ((r (sort (conn--merge-overlapping-regions ,regions t))))
+               (cl-loop for (b e) on `(,(point-min) ,@r ,(point-max))
+                        for ov = (make-overlay b e)
+                        do (progn
+                             (overlay-put ov 'face 'shadow)
+                             (push ov ,overlays))))
+             ,@body)
+         (mapc #'delete-overlay ,overlays)))))
 
 (defmacro conn-with-region-emphasis (regions &rest body)
   "Run BODY with the text in the complement of REGIONS shadowed."
