@@ -2480,8 +2480,8 @@ to the key binding for that target."
                       (cl-callf substring string 0 -1))
                     (:return)))
                 (:keymap (define-keymap "<backspace>" 'backspace))
-                (cl-callf thread-last
-                    string
+                (conn-threadf->
+                  string
                   (conn-dispatch-read-char prompt t nil)
                   (char-to-string)
                   (concat string))))

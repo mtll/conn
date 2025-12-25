@@ -411,8 +411,8 @@
                   (:return))))
             (:keymap (define-keymap
                        "<remap> <backward-delete-char>" 'backspace))
-            (cl-callf thread-last
-                so-far
+            (conn-threadf->
+              so-far
               (conn-dispatch-read-char prompt t nil)
               (char-to-string)
               (concat so-far)))

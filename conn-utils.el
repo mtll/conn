@@ -247,8 +247,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
-   (cl-callf thread-last
-       (conn-ring-history ,ring)
+   (conn-threadf->
+     (conn-ring-history ,ring)
      (cl-delete ,item)
      (cons ,item))))
 
@@ -268,8 +268,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (cl-callf thread-last
-      (conn-ring-list ring)
+  (conn-threadf->
+    (conn-ring-list ring)
     (delq item)
     (cons item))
   (conn-ring--visit ring item)
@@ -289,8 +289,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   "Rotate ring forward.
 
 Takes (1 2 3 4) to (2 3 4 1)."
-  (let ((head (car (cl-callf thread-last
-                       (conn-ring-list ring)
+  (let ((head (car (conn-threadf->
+                     (conn-ring-list ring)
                      car
                      list
                      (nconc (cdr (conn-ring-list ring)))))))
@@ -301,8 +301,8 @@ Takes (1 2 3 4) to (2 3 4 1)."
   "Rotate ring backward.
 
 Takes (1 2 3 4) to (4 1 2 3)."
-  (let ((head (car (cl-callf thread-last
-                       (conn-ring-list ring)
+  (let ((head (car (conn-threadf->
+                     (conn-ring-list ring)
                      butlast
                      (nconc (last (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
