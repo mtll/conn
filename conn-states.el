@@ -66,11 +66,14 @@ necessary state as well.")
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
-(defvar-local conn-next-state nil
+(defvar conn-next-state nil
   "Bound during `conn-state-defer' forms to the next state to be entered.")
 
-(defvar-local conn-previous-state nil
+(defvar conn-previous-state nil
   "Bound during `conn-enter-state' to the state being exited.")
+
+(defvar conn-entering-recursive-stack nil
+  "Non-nil during `conn-enter-state' when entering a recursive stack.")
 
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
@@ -877,7 +880,6 @@ this function.  The (conn-substate STATE) specializer is provided so
 that code can be run for every state inheriting from some parent state.
 
 To execute code when a state is exiting use `conn-state-defer'."
-  (:method ((_state (eql 'nil))) "Noop" nil)
   (:method ((_state (conn-substate t))) "Noop" nil)
   (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
@@ -914,8 +916,8 @@ To execute code when a state is exiting use `conn-state-defer'."
 (defun conn-push-state (state)
   "Enter STATE and push it to the state stack."
   (unless (symbol-value state)
-    (push state conn--state-stack)
-    (conn-enter-state state)))
+    (conn-enter-state state)
+    (push state conn--state-stack)))
 
 (defun conn-pop-state ()
   "Pop to the previous state in the state stack.
@@ -927,8 +929,8 @@ current state does not have a :pop-alternate property then push
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (progn
-        (pop conn--state-stack)
-        (conn-enter-state state))
+        (conn-enter-state state)
+        (pop conn--state-stack))
     (conn-push-state
      (conn-state-get conn-current-state :pop-alternate
                      t 'conn-command-state))))
@@ -943,10 +945,15 @@ current state does not have a :pop-alternate property then push
   "Enter a recursive stack with STATE as the base state."
   (prog1 conn--state-stack
     (push nil conn--state-stack)
-    (push state conn--state-stack)
-    (conn-enter-state state)
-    ;; Ensure the lighter gets updates even if we haven't changed state
-    (conn-update-lighter)))
+    (unwind-protect
+        (progn
+          (let ((conn-entering-recursive-stack t))
+            (conn-enter-state state))
+          (push state conn--state-stack)
+          ;; Ensure the lighter gets updates even if we haven't changed state
+          (conn-update-lighter))
+      (unless (car conn--state-stack)
+        (pop conn--state-stack)))))
 
 (defun conn-exit-recursive-stack (cookie)
   "Exit the current recursive state stack.
@@ -1257,9 +1264,7 @@ the state stays active if the previous command was a prefix command."
 (defun conn-mark-state-keep-mark-active-p ()
   "When non-nil keep the mark active when exiting `conn-mark-state'."
   (or (conn-substate-p conn-next-state 'conn-emacs-state)
-      (and (null (nth 1 conn--state-stack))
-           (eq (nth 2 conn--state-stack)
-               conn-current-state))))
+      conn-entering-recursive-stack))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
