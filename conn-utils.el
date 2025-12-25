@@ -87,7 +87,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                      forms))))))
 
 (defmacro conn-threadf<- (&rest forms)
-  (declare (indent 0))
+  (declare (indent 1))
   (cl-with-gensyms (last)
     (cl-flet ((expand-last (&rest args) `(,last ,@args)))
       `(cl-macrolet ((,last (a form) `(,@form ,a)))
@@ -108,7 +108,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                      forms))))))
 
 (defmacro conn-threadf-> (&rest forms)
-  (declare (indent 0))
+  (declare (indent 1))
   (cl-with-gensyms (first)
     (cl-flet ((expand-first (&rest args) `(,first ,@args)))
       `(cl-macrolet ((,first ((fn &rest args) a1)
@@ -356,17 +356,11 @@ If ring is (1 2 3 4) 4 would be returned."
       `(let (,overlays)
          (unwind-protect
              (progn
-               (when ,regions
-                 (cl-loop for (beg end) on (nconc (list (point-min))
-                                                  (thread-first
-                                                    (conn--merge-overlapping-regions
-                                                     ,regions t)
-                                                    flatten-tree
-                                                    sort)
-                                                  (list (point-max)))
-                          by #'cddr
-                          while beg
-                          for ov = (make-overlay beg end)
+               (when (conn-threadf<- ,regions
+                       (conn--merge-overlapping-regions t)
+                       sort)
+                 (cl-loop for (b e) on `(,(point-min) ,@,regions ,(point-max))
+                          for ov = (make-overlay b e)
                           do (progn
                                (overlay-put ov 'face 'shadow)
                                (push ov ,overlays))))
