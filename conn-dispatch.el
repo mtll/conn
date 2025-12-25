@@ -1689,23 +1689,23 @@ depths will be sorted before greater depths.
                       (push nil conn--dispatch-change-groups)
                       (conn-dispatch-undo-case 100
                         (:undo (redisplay)))
-                      (funcall action)
-                      (cl-incf conn-dispatch-iteration-count)
-                      (unless (or (equal wconf (current-window-configuration))
-                                  (null (car conn--dispatch-change-groups)))
-                        (conn-dispatch-undo-case -90
-                          (:undo
-                           (select-frame frame)
-                           (set-window-configuration wconf)
-                           (goto-char pt)
-                           (setq conn--dispatch-label-state label-state))))))
+                      (unwind-protect
+                          (funcall action)
+                        (unless (or (equal wconf (current-window-configuration))
+                                    (null (car conn--dispatch-change-groups)))
+                          (conn-dispatch-undo-case -90
+                            (:undo
+                             (select-frame frame)
+                             (set-window-configuration wconf)
+                             (goto-char pt)
+                             (setq conn--dispatch-label-state label-state)))))
+                      (cl-incf conn-dispatch-iteration-count)))
                 (user-error
                  (pcase-dolist (`(,_ . ,undo-fn)
                                 (pop conn--dispatch-change-groups))
-                   (funcall undo-fn :cancel))
+                   (funcall undo-fn :undo))
                  (setf conn--read-args-error-message
-                       (error-message-string err))
-                 (redisplay))))))
+                       (error-message-string err)))))))
         (setq success (not dispatch-quit-flag)))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
