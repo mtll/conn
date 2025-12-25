@@ -86,6 +86,16 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                        (macroexpand form `((:> . ,#'expand-last))))
                      forms))))))
 
+(defmacro conn-threadf<- (&rest forms)
+  (declare (indent 0))
+  (cl-with-gensyms (last)
+    (cl-flet ((expand-last (&rest args) `(,last ,@args)))
+      `(cl-macrolet ((,last (a form) `(,@form ,a)))
+         (cl-callf thread-first
+             ,@(mapcar (lambda (form)
+                         (macroexpand form `((:> . ,#'expand-last))))
+                       forms))))))
+
 (defmacro conn-thread-> (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (first)
@@ -96,6 +106,17 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
            ,@(mapcar (lambda (form)
                        (macroexpand form `((:< . ,#'expand-first))))
                      forms))))))
+
+(defmacro conn-threadf-> (&rest forms)
+  (declare (indent 0))
+  (cl-with-gensyms (first)
+    (cl-flet ((expand-first (&rest args) `(,first ,@args)))
+      `(cl-macrolet ((,first ((fn &rest args) a1)
+                       `(,fn ,a1 ,@args)))
+         (cl-callf thread-last
+             ,@(mapcar (lambda (form)
+                         (macroexpand form `((:< . ,#'expand-first))))
+                       forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
   (declare (indent 2) (debug (cl-function place &rest form)))

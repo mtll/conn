@@ -701,7 +701,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (,buffer (current-buffer)))
        (unwind-protect
            (progn
-             (conn-enter-recursive-stack ,state)
+             (ignore (conn-enter-recursive-stack ,state))
              ,@body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
@@ -859,14 +859,14 @@ If BUFFER is nil then use the current buffer."
 
 (defun conn--setup-state-properties ()
   (setf conn--disable-mark-cursor
-        (or (when-let* ((hide (conn-get-buffer-property
-                               :disable-mark-cursor)))
-              (if (eq hide t) t
-                (alist-get conn-current-state hide)))
-            (when-let* ((hide (conn-get-mode-property
-                               major-mode :disable-mark-cursor)))
-              (if (eq hide t) t
-                (alist-get conn-current-state hide)))
+        (or (and-let* ((hide (conn-get-buffer-property
+                              :disable-mark-cursor)))
+              (or (eq hide t)
+                  (alist-get conn-current-state hide)))
+            (and-let* ((hide (conn-get-mode-property
+                              major-mode :disable-mark-cursor)))
+              (or (eq hide t)
+                  (alist-get conn-current-state hide)))
             (conn-state-get conn-current-state :disable-mark-cursor)))
   (setf cursor-type
         (let ((c (conn-state-get conn-current-state :cursor nil t)))
@@ -943,8 +943,8 @@ current state does not have a :pop-alternate property then push
 
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
-  (prog1 conn--state-stack
-    (push nil conn--state-stack)
+  (declare (important-return-value t))
+  (prog1 (push nil conn--state-stack)
     (unwind-protect
         (progn
           (let ((conn-entering-recursive-stack t))
@@ -956,19 +956,18 @@ current state does not have a :pop-alternate property then push
         (pop conn--state-stack)))))
 
 (defun conn-exit-recursive-stack (cookie)
-  "Exit the current recursive state stack.
+  "Exit the recursive state stack associated with COOKIE.
 
-If there is not recursive stack an error is signaled."
-  (interactive)
+COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
   (if (cl-loop for cons on conn--state-stack
                thereis (eq cons cookie))
       (progn
-        (setq conn--state-stack cookie)
-        (conn-enter-state (car cookie))
+        (setq conn--state-stack (cdr cookie))
+        (conn-enter-state (car conn--state-stack))
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
         (conn-update-lighter))
-    (error "Not in a recursive state")))
+    (error "Invalid recursive stack cookie")))
 
 ;;;;; Definitions
 
@@ -1147,7 +1146,7 @@ Causes the mode-line face to be remapped to the face specified by the
 ;;;;; Emacs State
 
 (defvar conn-emacs-state-register nil
-  "If non-nil specifies a register to contain the last `conn-emacs-state' position.")
+  "Register containing the last `conn-emacs-state' position, or nil if none.")
 
 (defvar-local conn-emacs-state-ring nil
   "Ring of previous positions where `conn-emacs-state' was exited.")

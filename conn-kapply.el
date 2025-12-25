@@ -964,7 +964,7 @@ When kapply finishes restore the restrictions in each buffer."
                   (setf conn--state-stack stack)
                 (setf (alist-get (current-buffer) buffer-stacks)
                       conn--state-stack))
-              (conn-enter-recursive-stack conn-state))))
+              (ignore (conn-enter-recursive-stack conn-state)))))
          ret)))
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))
