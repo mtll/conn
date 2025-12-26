@@ -201,6 +201,20 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
     (set-marker-insertion-type mk (marker-insertion-type marker))
     mk))
 
+;; From quail
+(defun conn-add-unread-events (key &optional reset)
+  "Add KEY to `unread-command-events', but avoid recording it a second time.
+
+See `quail-add-unread-command-events'."
+  (if reset (setq unread-command-events nil))
+  (if (characterp key)
+      (cl-callf2 cons
+          (cons 'no-record key)
+          unread-command-events)
+    (cl-loop for e in (append (if (vectorp key) key (vector key)) nil)
+             collect (cons 'no-record e) into evs
+             finally (cl-callf2 nconc evs unread-command-events))))
+
 ;;;;; Buffer Properties
 
 (defvar-local conn--buffer-properties nil)

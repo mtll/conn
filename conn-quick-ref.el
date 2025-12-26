@@ -301,11 +301,9 @@
                   (funcall display-function buf nil))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
-                 (_ (setq unread-command-events
-                          (mapcar (lambda (key)
-                                    (cons 'no-record key))
-                                  (listify-key-sequence keys)))
-                    (cl-return))))))
+                 (_
+                  (conn-add-unread-events (this-single-command-raw-keys))
+                  (cl-return))))))
         (funcall display-function buf t)))))
 
 (defun conn-quick-ref-to-cols (list &optional col-count)

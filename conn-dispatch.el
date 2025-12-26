@@ -1733,11 +1733,12 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
                     conn-dispatch-target-finder))
                   (`(,thing ,arg ,transform)
                    conn--dispatch-current-thing))
-       (cl-return (list pt
-                        win
-                        (or thing-override thing)
-                        arg
-                        transform))))))
+       (cl-return
+        (list pt
+              win
+              (or thing-override thing)
+              arg
+              transform))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -1874,10 +1875,7 @@ the meaning of depth."
            ('dispatch-character-event
             (setq conn--read-args-error-message nil
                   conn--dispatch-must-prompt nil)
-            (cl-callf2 append
-                (cl-loop for key across (this-single-command-raw-keys)
-                         collect `(no-record . ,key))
-                unread-command-events)
+            (conn-add-unread-events (this-single-command-raw-keys))
             (cl-return
              (read-ev (unless inhibit-message
                         (concat prompt
@@ -4460,8 +4458,7 @@ This command must be bound to a mouse key."
                               (conn-ring-head conn-dispatch-ring)))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (push `(no-record . (dispatch-mouse-repeat ,@(cdr event)))
-        unread-command-events)
+  (conn-add-unread-events `(dispatch-mouse-repeat ,@(cdr event)))
   (conn-repeat-last-dispatch
    (and (conn-previous-dispatch-repeat (conn-ring-head conn-dispatch-ring))
         repeat)))
