@@ -97,7 +97,8 @@
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
 
-(defvar conn-quick-ref-text-scale 0.95)
+(defvar conn-quick-ref-text-scale 0.95
+  "Text scale to use for text in the quick ref buffer.")
 
 (defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))

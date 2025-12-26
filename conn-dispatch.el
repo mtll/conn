@@ -3839,7 +3839,7 @@ it."))
   (conn-thread<-
     (conn-dispatch-take-replace--action-opoint action)
     (copy-marker t)
-    (:> (conn-dispatch-take-replace-copy action))))
+    (:-> (conn-dispatch-take-replace-copy action))))
 
 (defun conn-dispatch-take-replace ()
   (declare (conn-dispatch-action t))
@@ -3898,7 +3898,7 @@ it."))
   (conn-thread<-
     (conn-dispatch-take--action-opoint action)
     (copy-marker t)
-    (:> (conn-dispatch-take-copy action))))
+    (:-> (conn-dispatch-take-copy action))))
 
 (defun conn-dispatch-take ()
   (declare (conn-dispatch-action t))

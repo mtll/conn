@@ -960,7 +960,7 @@ Current Window: `conn-this-window-prefix'"
   (if this-window
       (conn-this-window-prefix)
     (let ((windows (conn--get-windows nil 'nomini)))
-      (if (length= windows 1)
+      (if (length< windows 3)
           (other-window-prefix)
         (display-buffer-override-next-command
          (lambda (_ _)
@@ -968,8 +968,7 @@ Current Window: `conn-this-window-prefix'"
                   (conn--get-windows nil 'nomini nil nil
                                      (lambda (win)
                                        (not (eq win (selected-window))))))
-                 'reuse))
-         nil "[select]")
+                 'reuse)))
         (message "Display next command in selected buffer…")))))
 
 (defun conn-other-window-prompt-prefix ()

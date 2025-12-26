@@ -69,7 +69,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
-  (cl-once-only (keymap)
+  (macroexp-let2 nil keymap keymap
     `(progn
        (if ,keymap (internal-push-keymap ,keymap 'overriding-terminal-local-map))
        (unwind-protect
@@ -83,7 +83,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(cl-macrolet ((,last (a form) `(,@form ,a)))
          (thread-first
            ,@(mapcar (lambda (form)
-                       (macroexpand form `((:> . ,#'expand-last))))
+                       (macroexpand form `((:-> . ,#'expand-last))))
                      forms))))))
 
 (defmacro conn-threadf<- (&rest forms)
@@ -93,7 +93,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(cl-macrolet ((,last (a form) `(,@form ,a)))
          (cl-callf thread-first
              ,@(mapcar (lambda (form)
-                         (macroexpand form `((:> . ,#'expand-last))))
+                         (macroexpand form `((:-> . ,#'expand-last))))
                        forms))))))
 
 (defmacro conn-thread-> (&rest forms)
@@ -104,7 +104,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                        `(,fn ,a1 ,@args)))
          (thread-last
            ,@(mapcar (lambda (form)
-                       (macroexpand form `((:< . ,#'expand-first))))
+                       (macroexpand form `((:<- . ,#'expand-first))))
                      forms))))))
 
 (defmacro conn-threadf-> (&rest forms)
@@ -115,7 +115,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                        `(,fn ,a1 ,@args)))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
-                         (macroexpand form `((:< . ,#'expand-first))))
+                         (macroexpand form `((:<- . ,#'expand-first))))
                        forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
@@ -605,7 +605,8 @@ If END is less than BEG then the order of iteration is reversed.
 \(fn BEG END [:label label] &rest BODY)"
   (declare (indent 2))
   (cl-with-gensyms (vbeg vend)
-    (cl-once-only (beg end)
+    (macroexp-let2* nil ((beg beg)
+                         (end end))
       `(save-excursion
          (pcase-dolist (`(,,vbeg . ,,vend)
                         (conn--visible-regions (if (>= ,end ,beg) ,beg ,end)

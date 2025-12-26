@@ -112,12 +112,16 @@ function may setup any other necessary state as well.")
 (defmacro conn--find-state (state)
   (declare (debug (form))
            (important-return-value t))
-  (cl-once-only (state)
+  (macroexp-let2 nil state state
     `(or (get ,state :conn--state)
          (error "%s is not a state" ,state))))
 
 (gv-define-setter conn--find-state (val state)
-  `(setf (get ,state :conn--state) ,val))
+  (macroexp-let2 nil val val
+    `(setf (get ,state :conn--state)
+           (progn
+             (cl-check-type ,val conn-state)
+             ,val))))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
