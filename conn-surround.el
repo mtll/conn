@@ -41,7 +41,24 @@
 
 (conn-define-state conn-surround-with-state (conn-mode-line-face-state)
   :lighter "WITH"
-  :mode-line-face 'conn-read-surround-with-mode-line-face)
+  :mode-line-face 'conn-read-surround-with-mode-line-face
+  :full-keymap t)
+
+(let ((map (conn-get-state-map 'conn-surround-with-state)))
+  (set-char-table-range (nth 1 map)
+                        (cons #x100 (max-char))
+                        'dispatch-character-event)
+  (cl-loop for i from ?! below 256
+           do (define-key map (vector i) 'dispatch-character-event)))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-surround-with-state)
+  :suppress t
+  "SPC <t>" 'surround-self-insert
+  "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg)
 
 (conn-define-state conn-surrounding-state (conn-surround-with-state)
   :lighter "SURROUNDING")
@@ -145,21 +162,6 @@
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
   :lighter "SURROUND")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-surround-with-state)
-  :suppress t
-  "a" 'conn-adjust-surround
-  "z" 'conn-adjust-surround-other-end
-  "c" 'surround-comment
-  ";" 'surround-comment
-  "C" 'surround-uncomment
-  "<remap> <self-insert-command>" 'surround-self-insert
-  "SPC <t>" 'surround-self-insert
-  "DEL" 'backward-delete-arg
-  "<backspace>" 'backward-delete-arg
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg)
-
 (put 'conn-surround-overlay 'face 'region)
 (put 'conn-surround-overlay 'priority (1+ conn-mark-overlay-priority))
 (put 'conn-surround-overlay 'conn-overlay t)
@@ -200,7 +202,7 @@
 
 (cl-defmethod conn-argument-predicate ((arg conn-surround-with-argument)
                                        sym)
-  (or (memq sym '(surround-self-insert surround-command))
+  (or (memq sym '(surround-self-insert))
       (and (conn-surround-with-argument-adjustable arg)
            (memq sym '(conn-adjust-surround conn-adjust-surround-other-end)))))
 
@@ -241,16 +243,6 @@
   ;; Normalize point and mark
   (unless (= (point) (region-beginning))
     (exchange-point-and-mark)))
-
-(cl-defmethod conn-surround-do ((_with (eql surround-comment))
-                                arg
-                                &key &allow-other-keys)
-  (comment-or-uncomment-region (region-beginning) (region-end) arg))
-
-(cl-defmethod conn-surround-do ((_with (eql surround-uncomment))
-                                arg
-                                &key &allow-other-keys)
-  (uncomment-region (region-beginning) (region-end) arg))
 
 (defun conn--perform-surround-with-pair-subr (pair padding arg)
   (cl-labels ((ins-pair (open &optional close)
