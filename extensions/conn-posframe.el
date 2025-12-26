@@ -450,7 +450,6 @@
         (advice-add 'conn-dispatch-cycle-ring-next :after
                     'conn-posframe--dispatch-ring-display
                     '((name . conn-list-posframe)))
-        (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
         (defvar conn-quick-ref-display-function)
         (setq conn-quick-ref-display-function 'conn--quick-ref-posframe))
     (advice-remove 'kmacro-cycle-ring-next 'conn-list-posframe)
@@ -464,7 +463,6 @@
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-close-tab 'conn-list-posframe)
-    (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
     (defvar conn-quick-ref-display-function)
     (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
 
@@ -482,60 +480,6 @@
                  (string window bufname overlay)))
   "Store the state for a window label."
   string window bufname overlay)
-
-;;;###autoload
-(defun conn-posframe-progressive-read-pair (collection)
-  (let* ((collection (compat-call
-                      sort (seq-uniq (mapcar #'copy-sequence collection))
-                      :lessp (lambda (x y)
-                               (or (< (length x) (length y))
-                                   (and (= (length x) (length y))
-                                        (string< x y))))
-                      :in-place t))
-         (narrowed collection)
-         (prompt (propertize "Pair" 'face 'minibuffer-prompt))
-         (so-far ""))
-    (unwind-protect
-        (while (length> narrowed 1)
-          (posframe-show " *conn pair posframe*"
-                         :string (cl-loop for i from 0 below 10
-                                          for item in narrowed
-                                          concat (concat item "\n"))
-                         :left-fringe 0
-                         :right-fringe 0
-                         :background-color conn-posframe-completion-bg-color
-                         :border-width conn-posframe-border-width
-                         :border-color conn-posframe-border-color
-                         :min-width 8)
-          (conn-with-dispatch-event-handlers
-            ( :handler (cmd)
-              (when (and (eq cmd 'backspace)
-                         (length> so-far 0))
-                (cl-callf substring so-far 0 -1)
-                (setq narrowed collection)
-                (:return)))
-            (:keymap (define-keymap
-                       "<remap> <backward-delete-char>" 'backspace))
-            (conn-threadf->
-              so-far
-              (conn-dispatch-read-char prompt t nil)
-              (char-to-string)
-              (concat so-far)))
-          (cl-loop for item in narrowed
-                   when (string-prefix-p so-far item)
-                   do
-                   (remove-text-properties 0 (1- (length item)) '(face) item)
-                   (add-text-properties 0 (length so-far)
-                                        '(face completions-highlight)
-                                        item)
-                   and collect item into next
-                   finally do (if (null next)
-                                  (setq so-far (substring so-far 0 -1))
-                                (setq narrowed next))))
-      (posframe-hide " *conn pair posframe*"))
-    (let ((result (car narrowed)))
-      (remove-text-properties 0 (1- (length result)) '(face) result)
-      result)))
 
 (defun conn--setup-posframe-window-label (window string)
   (let ((bufname (format " *conn-label-posfame-%s*" string)))
@@ -575,8 +519,15 @@
 (cl-defmethod conn-label-payload ((label conn-posframe-window-label))
   (conn-posframe-window-label-window label))
 
+(cl-defmethod conn-label-completed-p ((label conn-posframe-window-label))
+  (pcase-let (((cl-struct conn-posframe-window-label bufname)
+               label))
+    (with-current-buffer bufname
+      (string-empty-p (buffer-string)))))
+
 (cl-defmethod conn-label-narrow ((label conn-posframe-window-label) prefix-char)
-  (pcase-let* (((cl-struct conn-posframe-window-label bufname overlay) label))
+  (pcase-let (((cl-struct conn-posframe-window-label bufname overlay)
+               label))
     (with-current-buffer bufname
       (goto-char 0)
       (if (eql (char-after) prefix-char)

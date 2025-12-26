@@ -105,8 +105,7 @@
                     'conn-surround arg (cons beg end)
                     :open (conn-make-bounds 'region nil (cons beg (1+ beg)))
                     :close (conn-make-bounds 'region nil (cons (1- end) end))
-                    :inner (conn-make-bounds 'region nil (cons (1+ beg) (1- end)))))))))
-    (signal 'conn-no-surround nil)))
+                    :inner (conn-make-bounds 'region nil (cons (1+ beg) (1- end)))))))))))
 
 ;;;;; Delete
 
@@ -151,7 +150,6 @@
   :suppress t
   "a" 'conn-adjust-surround
   "z" 'conn-adjust-surround-other-end
-  "r" 'conn-read-pair
   "c" 'surround-comment
   ";" 'surround-comment
   "C" 'surround-uncomment
@@ -369,93 +367,6 @@
 
 ;;;;;; Surround Read Pair
 
-(cl-defstruct (conn-surround-pair
-               (:constructor conn--make-surround-pair (id)))
-  id)
-
-(defvar conn-read-pair-function 'conn-progressive-read-pair)
-
-(defun conn-progressive-read-pair (collection)
-  (let* ((collection (compat-call
-                      sort (seq-uniq (mapcar #'copy-sequence collection))
-                      :lessp (lambda (x y)
-                               (or (< (length x) (length y))
-                                   (and (= (length x) (length y))
-                                        (string< x y))))
-                      :in-place t))
-         (narrowed collection)
-         (prompt (propertize "Pair" 'face 'minibuffer-prompt))
-         (so-far ""))
-    (unwind-protect
-        (while (not (length= narrowed 1))
-          (with-current-buffer-window
-              "*Conn Pairs*"
-              `((display-buffer--maybe-same-window
-                 display-buffer-reuse-window
-                 display-buffer-below-selected)
-                (window-height . completions--fit-window-to-buffer)
-                ,(when temp-buffer-resize-mode
-                   '(preserve-size . (nil . t)))
-                (body-function
-                 . ,#'(lambda (_window)
-                        (insert (cl-loop for i from 0 below 10
-                                         for item in narrowed
-                                         concat (concat item "\n"))))))
-              nil)
-          (conn-with-dispatch-event-handlers
-            ( :handler (cmd)
-              (when (eq cmd 'backspace)
-                (when (length> so-far 0)
-                  (cl-callf substring so-far 0 -1)
-                  (setq narrowed collection)
-                  (:return))))
-            (:keymap (define-keymap
-                       "<remap> <backward-delete-char>" 'backspace))
-            (conn-threadf->
-              so-far
-              (conn-dispatch-read-char prompt t nil)
-              (char-to-string)
-              (concat so-far)))
-          (cl-loop for item in narrowed
-                   when (string-prefix-p so-far item)
-                   do
-                   (remove-text-properties 0 (1- (length item)) '(face) item)
-                   (add-text-properties 0 (length so-far)
-                                        '(face completions-highlight)
-                                        item)
-                   and collect item into next
-                   finally do (if (null next)
-                                  (setq so-far (substring so-far 0 -1))
-                                (setq narrowed next))))
-      (delete-window (get-buffer-window "*Conn Pairs*" 0)))
-    (let ((result (car narrowed)))
-      (remove-text-properties 0 (1- (length result)) '(face) result)
-      result)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
-                                       (_sym (eql conn-read-pair)))
-  t)
-
-(cl-defmethod conn-handle-surround-with-argument ((_cmd (eql conn-read-pair)))
-  (conn--make-surround-pair
-   (funcall conn-read-pair-function
-            (cl-loop for (open . _) in insert-pair-alist
-                     collect (pcase open
-                               ((pred stringp) open)
-                               (_ (string open)))))))
-
-(cl-defmethod conn-surround-do ((with conn-surround-pair)
-                                arg
-                                &key
-                                padding
-                                &allow-other-keys)
-  (conn--perform-surround-with-pair-subr
-   (let ((open (conn-surround-pair-id with)))
-     (or (assoc open insert-pair-alist)
-         (assq (aref open 0) insert-pair-alist)))
-   padding
-   arg))
-
 (defun conn--adjust-surround-edit-message ()
   (message
    (substitute-command-keys
@@ -545,8 +456,6 @@
   (apply #'conn--adjust-surround-subr t keys))
 
 ;;;;;; Change Surround
-
-(define-error 'conn-no-surround "No surround at point" 'user-error)
 
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")

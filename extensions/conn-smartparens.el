@@ -257,63 +257,6 @@
                   :transpose-op ( :method (_self arg _)
                                   (sp-convolute-sexp arg))))
 
-(put 'conn-sp-pair :conn-thing t)
-
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-sp-pair))
-                              arg)
-  (save-mark-and-excursion
-    (let* ((open (funcall conn-read-pair-function
-                          (cl-loop for pair in sp-local-pairs
-                                   collect (plist-get pair :open))))
-           (close (sp-get-pair open :close))
-           (n (prefix-numeric-value arg)))
-      (conn--push-ephemeral-mark)
-      (pcase-dolist (`(,beg . ,end)
-                     (seq-drop-while (pcase-lambda (`(,beg . ,end))
-                                       (or (>= beg (region-beginning))
-                                           (<= end (region-end))))
-                                     (conn--expand-create-expansions)))
-        (when (and (progn (goto-char beg)
-                          (looking-at-p open))
-                   (progn (goto-char end)
-                          (looking-back close (length close)))
-                   (>= 0 (cl-decf n)))
-          (throw 'return
-                 (conn-make-bounds
-                  'conn-surround arg (cons beg end)
-                  :open (conn-make-bounds
-                         'region nil
-                         (cons beg (+ (length open))))
-                  :close (conn-make-bounds
-                          'region nil
-                          (cons (- end (length close)) end))
-                  :inner (conn-make-bounds
-                          'region nil
-                          (cons (+ beg (length open))
-                                (- end (length close)))))))))))
-
-(cl-defstruct (conn-surround-sp-pair
-               (:constructor conn--make-surround-sp-pair (id)))
-  id)
-
-(cl-defmethod conn-handle-surround-with-argument ((_cmd (eql conn-sp-pair)))
-  (conn--make-surround-sp-pair
-   (funcall conn-read-pair-function
-            (cl-loop for pair in sp-local-pairs
-                     collect (plist-get pair :open)))))
-
-(cl-defmethod conn-surround-do ((with conn-surround-sp-pair)
-                                _arg
-                                &key &allow-other-keys)
-  (sp-wrap-with-pair (conn-surround-sp-pair-id with)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-surround-with-argument)
-                                       (_sym (eql conn-sp-pair)))
-  t)
-
-(keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
-            "r" 'conn-sp-pair)
-
 (defun conn-sp-region-ok-p (bounds)
   (pcase bounds
     ((conn-bounds `(,beg . ,end))
