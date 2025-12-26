@@ -587,6 +587,30 @@ words."))
                   (keymap conn-transform-map)
                   (annotation "transform")))))
 
+(defun conn--transforms-get-references (transforms)
+  (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
+    (with-work-buffer
+      (dolist (tform transforms)
+        (when-let* ((doc (alist-get tform doc-strings)))
+          (let ((pt (point)))
+            (insert (propertize
+                     (concat (get tform :conn-transform-description) ":\n")
+                     'face 'conn-quick-ref-heading-face))
+            (capitalize-region pt (point)))
+          (insert doc "\n")))
+      (when (buffer-modified-p)
+        (substring (buffer-string) 0 -1)))))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-transform-argument))
+  (when-let* ((tforms (conn-argument-value arg))
+              (ref (conn--transforms-get-references tforms)))
+    (conn-reference-page "Active Transforms"
+      :depth -50
+      (:eval ref)
+      (:heading "Transform Bindings")
+      (:eval (conn-quick-ref-to-cols
+              conn-transformations-quick-ref 3)))))
+
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd updater)
   (cl-symbol-macrolet ((transforms (conn-argument-value arg)))

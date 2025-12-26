@@ -455,6 +455,16 @@ before each iteration."
        ,(lambda (iterator)
           (conn-kapply-with-state iterator 'conn-command-state))))))
 
+(defvar conn-kapply-match-reference
+  (list (conn-reference-page "Kapply Match"
+          "Apply keyboard macro at instances of a pattern in a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-replace-special-ref 2))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
 (transient-define-suffix conn-kapply-match-suffix (args)
   "Apply keyboard macro to every occurrence of a string within a thing."
   :transient 'transient--do-exit
@@ -462,7 +472,8 @@ before each iteration."
   :description "Match"
   (interactive (list (transient-args transient-current-command)))
   (conn-read-args (conn-read-thing-state
-                   :prompt "Thing")
+                   :prompt "Thing"
+                   :reference conn-kapply-match-reference)
       ((`(,thing ,arg) (conn-replace-thing-argument))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument (use-region-p)))

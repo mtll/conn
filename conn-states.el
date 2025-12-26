@@ -55,13 +55,13 @@
   :type '(list symbol))
 
 (defvar conn-setup-state-hook nil
-  "Hook responsible for setting up the base state in a new buffer.
+  "Hook responsible for setting up the base state in a buffer.
 
-The hook is run when `conn-local-mode' is turned on. Each function is
-called in turn until one returns non-nil.  A function returning non-nil
-should set the base state for the current buffer by pushing it to the
-stack with `conn-push-state'.  The function may setup any other
-necessary state as well.")
+The hook is run when `conn-local-mode' is turned on in a buffer or when
+a buffer is cloned. Each function is called in turn until one returns
+non-nil.  A function returning non-nil should set the base state for the
+current buffer by pushing it to the stack with `conn-push-state'.  The
+function may setup any other necessary state as well.")
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -76,6 +76,10 @@ necessary state as well.")
   "Non-nil during `conn-enter-state' when entering a recursive stack.")
 
 (defvar-local conn--state-stack nil
+  ;; Be careful when modifying this variable.
+  ;; `conn--state-re-entry-functions' is keyed on the conses of the
+  ;; stack so copying the stack will result in re-entry functions not
+  ;; being run.
   "Previous conn states in buffer.")
 
 (defvar conn--minor-mode-maps-sort-tick 0)
@@ -106,8 +110,14 @@ necessary state as well.")
   (major-mode-maps nil :type hash-table :read-only t))
 
 (defmacro conn--find-state (state)
-  (declare (debug (form)))
-  `(get ,state :conn--state))
+  (declare (debug (form))
+           (important-return-value t))
+  (cl-once-only (state)
+    `(or (get ,state :conn--state)
+         (error "%s is not a state" ,state))))
+
+(gv-define-setter conn--find-state (val state)
+  `(setf (get ,state :conn--state) ,val))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
@@ -121,8 +131,7 @@ necessary state as well.")
   "Return non-nil if STATE is a conn-state."
   (declare (side-effect-free t)
            (important-return-value t))
-  (inline-quote
-   (eq 'conn-state (type-of (conn--find-state ,state)))))
+  (inline-quote (get ,state :conn--state)))
 
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
@@ -172,25 +181,32 @@ necessary state as well.")
 ;;;;; Properties
 
 (eval-and-compile
-  (defun conn-declare-property-static (property)
-    "Declare a state PROPERTY static.
+  (defun conn-declare-state-property (property doc-string &optional static)
+    "Declare a state property PROPERTY.
 
-Static state properties can only be changed by redefining a state and
-are not inherited."
-    (setf (get property :conn-static-property) t))
+DOC-STRING is displayed in the `conn-define-state' doc-string when
+non-nil.
+
+If STATIC is non-nil then the property is declared static.  Static state
+properties can only be changed by redefining a state and are not
+inherited."
+    (setf (get property :conn-static-property) static)
+    (when doc-string
+      (setf (alist-get property
+                       (get 'conn-define-state :known-properties))
+            doc-string)))
 
   (define-inline conn-property-static-p (property)
     "Return non-nil if PROPERTY is static.
 
-See also `conn-declare-property-static'."
+Static state properties can only be changed by redefining a state and
+are not inherited.
+
+See also `conn-declare-state-property'."
     (declare (side-effect-free t)
              (important-return-value t))
     (inline-quote
      (and (get ,property :conn-static-property) t)))
-
-  (conn-declare-property-static :no-keymap)
-  (conn-declare-property-static :no-inherit-keymaps)
-  (conn-declare-property-static :abstract)
 
   (defun conn-state-get--cmacro (exp
                                  state
@@ -341,14 +357,20 @@ The composed keymap is of the form:
 (gv-define-simple-setter conn-get-state-map conn-set-state-map)
 
 (defun conn-get-state-map (state &optional dont-create)
-  "Return the state keymap for STATE."
+  "Return the state keymap for STATE.
+
+If dont-create is non-nil then return nil if STATE does not have a
+keymap."
   (declare (important-return-value t))
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
     (or (conn-state--keymap (conn--find-state state))
         (unless dont-create
-          (setf (conn-get-state-map state) (make-sparse-keymap))))))
+          (setf (conn-get-state-map state)
+                (if (conn-state-get state :full-keymap)
+                    (make-keymap)
+                  (make-sparse-keymap)))))))
 
 ;;;;;; Major Mode Maps
 
@@ -377,8 +399,9 @@ The composed keymap is of the form:
 (defun conn-set-major-mode-map (state mode map)
   "Set the major MODE map for STATE to MAP."
   (cl-assert (keymapp map))
-  (cl-check-type (conn--find-state state) conn-state)
   (cl-check-type mode symbol)
+  (cl-assert (not (conn-state-get state :no-keymap)) nil
+             "%s :no-keymap property non-nil" state)
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--composed-major-mode-maps-cache))
                 (get-composed-map (state)
@@ -471,6 +494,8 @@ depth value.  Depth should be an integer between -100 and 100."
       (progn
         (setf (get mode :conn-mode-depth) depth)
         (cl-incf conn--minor-mode-maps-sort-tick))
+    (cl-assert (not (conn-state-get state :no-keymap)) nil
+               "%s :no-keymap property non-nil" state)
     (let* ((state-obj (conn--find-state state))
            (mmode-maps (cdr (conn-state--minor-mode-maps state-obj)))
            (table (conn-state--minor-mode-depths state-obj)))
@@ -493,7 +518,8 @@ depth value.  Depth should be an integer between -100 and 100."
 (defun conn-set-minor-mode-map (state mode map)
   "Set minor MODE map to MAP in STATE."
   (cl-assert (keymapp map))
-  (cl-check-type (conn--find-state state) conn-state)
+  (cl-assert (not (conn-state-get state :no-keymap)) nil
+             "%s :no-keymap property non-nil" state)
   (cl-check-type mode symbol)
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
@@ -781,8 +807,12 @@ one state then BODY will evaluated that many times when the state is
 exited.  If you want to ensure that BODY will be evaluated only once
 when the current state exits then use `conn-state-defer-once'.
 
-When BODY is evaluated `conn-next-state' will be bound to the state
-that is being entered after the current state has exited."
+Note also that BODY maybe be run more than once if a buffer is cloned
+during the current state.  See also `conn--clone-buffer-setup'.
+
+When BODY is evaluated `conn-next-state' will be bound to the state that
+is being entered after the current state has exited or nil if
+`conn-local-mode' is being exited or a cloned buffer is being setup."
   (declare (indent 0)
            (debug (def-body)))
   (cl-with-gensyms (rest)
@@ -806,6 +836,25 @@ For more information see `conn-state-defer'."
                    ,(macroexp-progn body)
                  (funcall (car ,rest) (cdr ,rest))))
              conn--state-deferred))))
+
+(defconst conn--state-re-entry-functions
+  (make-hash-table :test 'eq
+                   :weakness 'key))
+
+(defmacro conn-state-on-re-entry (&rest body)
+  "Execute BODY when the current state is re-entered."
+  (declare (indent 0))
+  (cl-with-gensyms (next)
+    `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
+       (setf (gethash conn--state-stack conn--state-re-entry-functions)
+             (lambda ()
+               (unwind-protect
+                   ,(macroexp-progn body)
+                 (when ,next (funcall ,next))))))))
+
+(defun conn--run-re-entry-fns ()
+  (when-let* ((fn (gethash conn--state-stack conn--state-re-entry-functions)))
+    (funcall fn)))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -904,6 +953,7 @@ To execute code when a state is exiting use `conn-state-defer'."
             (unless (conn--mode-maps-sorted-p state)
               (conn--sort-mode-maps state))
             (cl-call-next-method)
+            (conn--run-re-entry-fns)
             (conn-update-lighter)
             (set state t))
         (unless (symbol-value state)
@@ -949,11 +999,12 @@ current state does not have a :pop-alternate property then push
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
   (declare (important-return-value t))
-  (prog1 (push nil conn--state-stack)
+  (prog1 conn--state-stack
     (unwind-protect
         (progn
           (let ((conn-entering-recursive-stack t))
             (conn-enter-state state))
+          (push nil conn--state-stack)
           (push state conn--state-stack)
           ;; Ensure the lighter gets updates even if we haven't changed state
           (conn-update-lighter))
@@ -967,7 +1018,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
   (if (cl-loop for cons on conn--state-stack
                thereis (eq cons cookie))
       (progn
-        (setq conn--state-stack (cdr cookie))
+        (setq conn--state-stack cookie)
         (conn-enter-state (car conn--state-stack))
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
@@ -984,7 +1035,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
                 (cl-callf seq-union
                     (gethash :no-inherit-keymaps table)
                   no-inherit-keymaps)))
-    (if-let* ((state-obj (conn--find-state name)))
+    (if-let* ((state-obj (conn-state-name-p name)))
         (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
           (clrhash (conn-state--properties state-obj))
@@ -1027,22 +1078,9 @@ PARENTS is a list of states from which NAME should inherit properties
 and keymaps.
 
 PROPERTIES is a property list defining the state properties for NAME.  A
-state may have any number of properties.  A state will inherit the
-value for unspecified properties from its parents.
-
-The following properties have a special meaning:
-
-:LIGHTER is the mode-line lighter for NAME.
-
-:DISABLE-MARK-CURSOR if non-nil will hide the mark cursor in NAME.
-
-:SUPPRESS-INPUT-METHOD if non-nil suppresses the current input method
-while NAME is active.
-
-:CURSOR is the `cursor-type' in NAME.
-
-:ABSTRACT if non-nil indicates that NAME is only for other states to
-inherit from and should never be entered directly.
+state may have any number of properties.  A state will inherit the value
+for unspecified properties from its parents.  Static state properties
+can only be changed by redefining a state and are not inherited.
 
 \(fn NAME PARENTS &optional DOCSTRING [KEY VALUE ...])"
   (declare (debug ( name form string-or-null-p
@@ -1072,8 +1110,79 @@ inherit from and should never be entered directly.
                          when (and (consp p)
                                    (eq (cadr p) :no-inherit-keymap))
                          collect `',(car p))))
-       (defvar-local ,name nil ,docstring)
+       (defvar-local ,name nil)
+       (put ',name
+            'variable-documentation
+            (concat
+             ,docstring
+             "\n\n\tParent states:\n"
+             (cl-loop for parent in (cdr (conn-state-all-parents ',name))
+                      concat (format "`%s'\n" parent) into ps
+                      finally return (if (string-empty-p ps)
+                                         "No parent states"
+                                       ps))))
        ',name)))
+
+(defun conn--make-define-state-docstring ()
+  (let* ((main (documentation (symbol-function 'conn-define-state) 'raw))
+         (ud (help-split-fundoc main 'conn-define-state)))
+    (require 'help-fns)
+    (with-temp-buffer
+      (insert (or (cdr ud) main ""))
+      (insert "\n\n\tCurrently known properties for states:\n\n")
+      (pcase-dolist (`(,property . ,doc-string)
+                     (reverse (get 'conn-define-state :known-properties)))
+        (insert (format "`%s' (static: %s)\n %s"
+                        (upcase (symbol-name property))
+                        (conn-property-static-p property)
+                        doc-string))
+        (insert "\n\n"))
+      (let ((combined-doc (buffer-string)))
+        (if ud
+            (help-add-fundoc-usage combined-doc (car ud))
+          combined-doc)))))
+
+(put 'conn-define-state 'function-documentation
+     '(conn--make-define-state-docstring))
+
+(conn-declare-state-property
+ :lighter
+ "State lighter to display in the mode line state stack display.")
+
+(conn-declare-state-property
+ :dispable-mark-cursor
+ "If non-nil do not display the mark cursor.")
+
+(conn-declare-state-property
+ :suppress-input-method
+ "If non-nil suppress the current input method while the state is active.")
+
+(conn-declare-state-property
+ :cursor
+ "The `cursor-type' to use while in the state.")
+
+(eval-and-compile
+  (conn-declare-state-property
+   :no-keymap
+   "Do not allow a keymap to be created for this state"
+   t)
+
+  (conn-declare-state-property
+   :full-keymap
+   "Create a chartable alist keymap for this state.  See also `make-keymap'."
+   t)
+
+  (conn-declare-state-property
+   :no-inherit-keymaps
+   "Parent states from which this state should not inherit keymaps."
+   t)
+
+  (conn-declare-state-property
+   :abstract
+   "If non-nil indicates that a state is only for other states to inherit
+from and should not be entered.  `conn-enter-state' will signal an error
+if it is called with an abstract state."
+   t))
 
 (conn-define-state conn-null-state ()
   "An empty state.
@@ -1089,19 +1198,15 @@ For use in buffers that should not have any other state."
   :pop-alternate 'conn-emacs-state
   :lighter "C"
   :suppress-input-method t
-  :cursor 'box)
-
-(setf (conn-get-state-map 'conn-command-state)
-      (define-keymap :full t :suppress t))
+  :cursor 'box
+  :full-keymap t)
 
 (conn-define-state conn-outline-state ()
   "A state for editing outline sections."
   :cursor '(hbar . 10)
   :lighter "*"
-  :suppress-input-method t)
-
-(setf (conn-get-state-map 'conn-outline-state)
-      (define-keymap :full t :suppress t))
+  :suppress-input-method t
+  :full-keymap t)
 
 (conn-define-state conn-org-state (conn-outline-state)
   "A state for structural editing of `org-mode' buffers.")
@@ -1121,6 +1226,11 @@ Causes the mode-line face to be remapped to the face specified by the
 :mode-line-face state property when the state is current."
   :abstract t
   :no-keymap t)
+
+(conn-declare-state-property
+ :mode-line-face
+ "Used by `conn-mode-line-face-state'.  Face to use for the mode line in
+the state.")
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
   (when-let* ((face (conn-state-get state :mode-line-face))
@@ -1193,6 +1303,14 @@ the state stays active if the previous command was a prefix command."
   :no-keymap t
   :pop-predicate #'always)
 
+(conn-declare-state-property
+ :pop-predicate
+ "Used by `conn-autopop-state'.  A function which is called at the end of
+`post-command-hook' and should return non-nil if the state should be
+popped and nil otherwise.  The default value is `always'.  Note that the
+function is not called and the state stays active if the previous
+command was a prefix command.")
+
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
@@ -1222,9 +1340,9 @@ the state stays active if the previous command was a prefix command."
                        (remove-hook 'prefix-command-preserve-state-hook preserve-state)
                        (conn-enter-state (conn-peek-state)))))))
     (conn-state-defer
-      (setq conn--state-stack
-            (append (remq state (seq-take-while #'identity conn--state-stack))
-                    (seq-drop-while #'identity conn--state-stack)))
+      (when (and (not conn-entering-recursive-stack)
+                 (eq state (car conn--state-stack)))
+        (pop conn--state-stack))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
@@ -1283,7 +1401,10 @@ the state stays active if the previous command was a prefix command."
       (set-marker (nth 0 conn--previous-mark-state) (point))
       (set-marker (nth 1 conn--previous-mark-state) (mark t))
       (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm))
-    (unless (conn-mark-state-keep-mark-active-p)
+    (if (conn-mark-state-keep-mark-active-p)
+        (when (bound-and-true-p rectangle-mark-mode)
+          (conn-state-on-re-entry
+            (rectangle-mark-mode 1)))
       (deactivate-mark)))
   (cl-call-next-method))
 
@@ -1622,10 +1743,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                (when pre (funcall pre cmd))
                (pcase cmd
                  ('reference
-                  (when reference
-                    (apply #'conn-quick-reference
-                           reference
-                           (mapcar #'conn-argument-get-reference arguments))))
+                  (let ((arg-ref (mapcar #'conn-argument-get-reference
+                                         arguments)))
+                    (when (or reference arg-ref)
+                      (apply #'conn-quick-reference reference arg-ref))))
                  ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
                                     state
@@ -1922,7 +2043,10 @@ be displayed in the echo area during `conn-read-args'."
   ( :method ((arg conn-argument))
     (conn-argument-reference arg))
   ( :method ((arg conn-anonymous-argument))
-    (conn-anonymous-argument-reference arg)))
+    (conn-anonymous-argument-reference arg))
+  ( :method ((arg conn-composite-argument))
+    (mapcar #'conn-argument-get-reference
+            (conn-composite-argument-value arg))))
 
 ;;;;; Boolean Argument
 

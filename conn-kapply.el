@@ -272,7 +272,8 @@ iterating over them.  SORT-FUNCTION should take a list of overlays."
 PROMPT is used as the minibuffer prompt when reading.
 
 BOUNDS is a list of the form returned by `region-bounds' and defines the
-limits of the highlighting.
+limits of the highlighting.  If bounds is nil then use the entire
+buffer.
 
 REGEXP-FLAG means to treat the from string as a regexp for the purpose
 of highlighting."
@@ -282,8 +283,9 @@ of highlighting."
           (minibuffer-lazy-highlight-setup
            :case-fold case-fold-search
            :filter (lambda (mb me)
-                     (cl-loop for (beg . end) in bounds
-                              when (<= beg mb me end) return t))
+                     (or (null bounds)
+                         (cl-loop for (beg . end) in bounds
+                                  when (<= beg mb me end) return t)))
            :highlight query-replace-lazy-highlight
            :regexp regexp-flag
            :regexp-function (or replace-regexp-function
@@ -350,8 +352,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                    (user-error "No files for kapply.")))
         (string (conn--kapply-read-from-with-preview
                  (if regexp-flag "Regexp" "String")
-                 (list (cons (point-min) (point-max)))
-                 regexp-flag))
+                 nil regexp-flag))
         matches)
     (cl-labels
         ((collect-matches (buffer)

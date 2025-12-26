@@ -278,7 +278,8 @@
                            :key #'conn--reference-page-depth)))
 
 (defun conn-quick-reference (&rest pages)
-  (when-let* ((pages (conn--quick-ref-parse-pages pages)))
+  (when-let* ((pages (conn--quick-ref-parse-pages
+                      (flatten-tree pages))))
     (let ((buf (get-buffer-create " *conn-quick-ref*"))
           (display-function conn-quick-ref-display-function)
           (inhibit-message t))

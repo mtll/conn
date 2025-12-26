@@ -128,13 +128,17 @@
   (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
         conn-movement-ring (conn-copy-ring conn-movement-ring)
         conn-mark-ring (conn-copy-ring conn-mark-ring)
-        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
-        conn--state-stack (copy-sequence conn--state-stack))
+        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring))
   (cl-loop for e in conn--previous-mark-state
            if (markerp e)
            collect (copy-marker (marker-position e)) into mstate
            else collect e into mstate
-           finally do (setq conn--previous-mark-state mstate)))
+           finally do (setq conn--previous-mark-state mstate))
+  (setq conn--state-stack nil)
+  (let (conn-next-state)
+    (conn--run-deferred))
+  (or (run-hook-with-args-until-success 'conn-setup-state-hook)
+      (conn-push-state 'conn-emacs-state)))
 
 (defun conn--setup-keymaps ()
   (if conn-mode
@@ -157,8 +161,8 @@
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
-        (setq conn-current-state nil)
-        (kill-local-variable 'conn--state-stack)
+        (setq conn-current-state nil
+              conn--state-stack nil)
         (make-local-variable 'conn-lighter)
         (setq-local conn--state-map (list (list 'conn-local-mode))
                     conn--major-mode-map (list (list 'conn-local-mode))
@@ -187,7 +191,10 @@
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (conn--run-deferred)
+    (setq conn--state-stack nil)
+    (let (conn-next-state)
+      (conn--run-deferred))
+    (kill-local-variable 'conn-lighter)
     (conn--clear-overlays)
     (setq cursor-type t)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)

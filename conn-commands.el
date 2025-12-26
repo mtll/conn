@@ -1070,10 +1070,6 @@ Currently selected window remains selected afterwards."
                                        (_cmd (eql project)))
   t)
 
-(cl-defmethod conn-argument-display ((_arg conn-replace-thing-argument))
-  (list (cl-call-next-method)
-        "\\[project] project"))
-
 (defvar-keymap conn-regexp-argument-map
   "q" 'regexp)
 
@@ -1392,12 +1388,6 @@ For more information about how the replacement is carried out see
                                        cmd)
   (or (memq cmd '(multi-file multi-buffer project))
       (cl-call-next-method)))
-
-(cl-defmethod conn-argument-display ((_arg conn-isearch-thing-argument))
-  (list (cl-call-next-method)
-        "\\[multi-buffer] multi-buffer"
-        "\\[multi-file] multi-file"
-        "\\[project] project"))
 
 (defun conn-isearch-yank-region ()
   "Yank the current region to the isearch search string."

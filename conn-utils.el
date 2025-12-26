@@ -364,25 +364,24 @@ If ring is (1 2 3 4) 4 would be returned."
 
 ;;;;; Region Utils
 
-(defun conn--with-region-emphasis (regions body)
+(defmacro conn-with-region-emphasis (regions &rest body)
+  "Run BODY with the text in the complement of REGIONS shadowed."
+  (declare (debug (form form body))
+           (indent 1))
   (cl-with-gensyms (overlays)
     `(let (,overlays)
        (unwind-protect
            (progn
              (when-let* ((r (sort (conn--merge-overlapping-regions ,regions t))))
-               (cl-loop for (b e) on `(,(point-min) ,@r ,(point-max))
-                        for ov = (make-overlay b e)
-                        do (progn
-                             (overlay-put ov 'face 'shadow)
-                             (push ov ,overlays))))
+               (setf r `(,(point-min) ,@(flatten-tree r) ,(point-max)))
+               (while r
+                 (pcase-let* ((`(,beg ,end) r)
+                              (ov (make-overlay beg end)))
+                   (overlay-put ov 'face 'shadow)
+                   (push ov ,overlays))
+                 (cl-callf cddr r)))
              ,@body)
          (mapc #'delete-overlay ,overlays)))))
-
-(defmacro conn-with-region-emphasis (regions &rest body)
-  "Run BODY with the text in the complement of REGIONS shadowed."
-  (declare (debug (form form body))
-           (indent 1))
-  (conn--with-region-emphasis regions body))
 
 ;; From expand-region
 (defun conn--point-in-comment-p ()

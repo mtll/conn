@@ -248,6 +248,8 @@ to reflect that the label is no longer active and nil should be
 returned."
   (declare (important-return-value t)))
 
+(cl-defgeneric conn-label-completed-p (label))
+
 (cl-defgeneric conn-label-redisplay (label)
   "Redisplay LABEL."
   (:method (_) "Noop" nil))
@@ -287,6 +289,10 @@ returned."
                 (not (eql prefix-char (string-to-char string))))
       (set-window-parameter window 'conn-label-string (substring string 1))
       label)))
+
+(cl-defmethod conn-label-completed-p ((label conn-window-label))
+  (length= (window-parameter (conn-window-label-window label)
+                             'conn-label-string) 0))
 
 (defvar conn-label-select-always-prompt nil)
 
@@ -329,9 +335,10 @@ themselves once the selection process has concluded."
         (mapc #'conn-label-reset current)
         (while-no-input
           (mapc #'conn-label-redisplay candidates)))
-       (`(,it . nil)
-        (unless prompt-flag
-          (cl-return (conn-label-payload it)))))
+       ((and `(,it . nil)
+             (guard (not prompt-flag))
+             (guard (conn-label-completed-p it)))
+        (cl-return (conn-label-payload it))))
      (while-no-input
        (mapc #'conn-label-redisplay candidates))
      (setq prompt-flag nil)
@@ -2120,6 +2127,9 @@ the meaning of depth."
     (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
     label))
 
+(cl-defmethod conn-label-completed-p ((label conn-dispatch-label))
+  (length= (conn-dispatch-label-narrowed-string label) 0))
+
 (cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
   (pcase-let (((cl-struct conn-dispatch-label
                           overlay
@@ -3681,7 +3691,9 @@ it."))
 (defun conn-dispatch-register-load ()
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load
-                    (register (register-read-with-preview "Register: ")))
+                    (register (register-read-with-preview "Register: "))
+                    (action-doc-string
+                     "Load register at point selected by dispatch."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3709,7 +3721,9 @@ it."))
 (defun conn-dispatch-register-load-replace ()
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load-replace
-                    (register (register-read-with-preview "Register: ")))
+                    (register (register-read-with-preview "Register: "))
+                    (action-doc-string
+                     "Replace region selected by dispatch with contents of register."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -3755,7 +3769,9 @@ it."))
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-copy-from
                     (action-description "Copy From")
-                    (action-opoint (copy-marker (point) t)))
+                    (action-opoint (copy-marker (point) t))
+                    (action-doc-string
+                     "Copy text in region selected by dispatch to point."))
       ()
     "Copies the selected thing to point."
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3788,7 +3804,9 @@ it."))
 (defun conn-dispatch-copy-from-replace ()
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-copy-from-replace
-                    (action-description "Copy From and Replace"))
+                    (action-description "Copy From and Replace")
+                    (action-doc-string
+                     "Replace current region with text in region selected by dispatch."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -4621,7 +4639,9 @@ for the dispatch."
                                 (action-description "Bounds")
                                 (action-window-predicate
                                  (let ((win (selected-window)))
-                                   (lambda (window) (eq win window)))))
+                                   (lambda (window) (eq win window))))
+                                (action-doc-string
+                                 "Bounds between the previous region and this region."))
                   ()
                 (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                               (conn-select-target)))
