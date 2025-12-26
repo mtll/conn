@@ -744,7 +744,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-dispatch-action-argument)
                                        sym)
-  (function-get sym :conn-dispatch-action t))
+  (function-get sym :conn-dispatch-action))
 
 (cl-defmethod conn-argument-completion-annotation ((_arg conn-dispatch-action-argument)
                                                    sym)
