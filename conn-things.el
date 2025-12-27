@@ -298,6 +298,7 @@ order to mark the region that should be defined by any of COMMANDS."
     (_ (user-error "Invalid region"))))
 
 (defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
+  (declare (autoload-macro expand))
   `(progn
      (defun ,name ()
        (interactive)

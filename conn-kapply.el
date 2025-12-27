@@ -1045,7 +1045,8 @@ The iterator must be the first argument in ARGLIST.
                     [&optional lambda-doc]
                     def-body))
            (doc-string 3)
-           (indent 2))
+           (indent 2)
+           (autoload-macro expand))
   (pcase-let ((`(,decls . ,exps) (macroexp-parse-body body)))
     `(defun ,name ,arglist
        ,@decls

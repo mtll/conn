@@ -676,7 +676,8 @@
 
 ;;;###autoload
 (defmacro conn-ts-define-thing (name group)
-  (declare (indent defun))
+  (declare (indent defun)
+           (autoload-macro expand))
   (let ((forward-cmd (intern (format "%s-forward" name)))
         (forward-flat-cmd (intern (format "%s-forward-flat" name)))
         (backward-cmd (intern (format "%s-backward" name)))
@@ -684,40 +685,41 @@
         (groups (cl-loop for g in (ensure-list group)
                          collect (intern g))))
     `(progn
-       (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
-       ,@(cl-loop for g in groups
-                  collect `(push ',name (get ',g :conn-ts--member-of)))
-
-       (conn-register-thing ',name
-                            :parent 'conn-ts-thing
-                            :forward-op ',forward-cmd)
-
        (defun ,forward-cmd (&optional arg)
          (interactive "p")
          (conn-ts--thing-forward ',name arg))
-       (put ',forward-cmd 'repeat-check-key 'no)
 
        (defun ,backward-cmd (&optional arg)
          (interactive "p")
          (conn-ts--thing-forward ',name (- arg)))
-       (put ',backward-cmd 'repeat-check-key 'no)
 
        (defun ,forward-flat-cmd (&optional arg)
          (interactive "p")
          (conn-ts--thing-forward-flat ',name arg))
-       (put ',forward-flat-cmd 'repeat-check-key 'no)
 
        (defun ,backward-flat-cmd (&optional arg)
          (interactive "p")
          (conn-ts--thing-forward-flat ',name (- arg)))
-       (put ',backward-flat-cmd 'repeat-check-key 'no)
+
+       (conn-register-thing ',name
+                            :parent 'conn-ts-thing
+                            :forward-op ',forward-cmd)
 
        (conn-register-thing-commands
         ',name 'ignore
         ',forward-cmd
         ',backward-cmd
         ',forward-flat-cmd
-        ',backward-flat-cmd))))
+        ',backward-flat-cmd)
+
+       :autoload-end
+       (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
+       ,@(cl-loop for g in groups
+                  collect `(push ',name (get ',g :conn-ts--member-of)))
+       (put ',backward-flat-cmd 'repeat-check-key 'no)
+       (put ',forward-flat-cmd 'repeat-check-key 'no)
+       (put ',backward-cmd 'repeat-check-key 'no)
+       (put ',forward-cmd 'repeat-check-key 'no))))
 
 (conn-ts-define-thing conn-ts-assignment-inner "assignment.inner")
 (conn-ts-define-thing conn-ts-assignment-outer "assignment.outer")

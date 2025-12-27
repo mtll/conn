@@ -2208,6 +2208,7 @@ updated.")
                       ('nil)
                       (_ (error "Malformed default handler definition")))))
           ,@(when docstring (list docstring)))
+        :autoload-end
         ,(pcase update-method
            (`((,state-var) . ,body)
             `(cl-defmethod conn-target-finder-update ((,state-var ,name))
@@ -2222,7 +2223,14 @@ updated.")
   "Define a target finder.
 
 \(fn NAME SUPERCLASSES SLOTS [DOC-STRING] [UPDATE-METHOD DEFAULT-UPDATE-HANDLER])"
-  (declare (doc-string 4) (indent 2))
+  (declare (doc-string 4)
+           (indent 2)
+           (autoload-macro expand)
+           (debug ( form form form
+                    [&rest (&define
+                            [&or :update-method :default-update-handler]
+                            lambda-list
+                            def-body)])))
   (let (docstring)
     (when (stringp (car rest))
       (setq docstring (pop rest)))

@@ -193,11 +193,7 @@
                  (key-binding (vector last-input-event) t)))))
 
 (defmacro conn-remap-key (from-keys &optional without-conn-maps no-accept-default)
-  "Map to whatever is bound at FROM-KEYS.
-
-This allows for transparently binding keys to commands which may be
-conceptually the same but vary in implementation by mode, for example
-paredit or smartparens commands.  Also see `conn-remap-key'."
+  "Map to whatever is bound at FROM-KEYS."
   (let ((accept-default (if (macroexp-const-p no-accept-default)
                             (and no-accept-default t)
                           `(not ,no-accept-default)))
