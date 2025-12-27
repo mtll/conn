@@ -184,48 +184,49 @@ strings have `conn-dispatch-label-face'."
 (defvar conn--dispatch-read-char-handlers nil)
 (defvar conn--dispatch-read-char-message-prefixes nil)
 
-(defun conn--with-dispatch-event-handlers (body)
-  (let* ((tag (gensym "tag"))
-         (return-expander
-          `(:return . ,(lambda (&optional result)
-                         `(throw ',tag ,result))))
-         (handler-expander
-          `(:handler . ,(lambda (&rest rest)
-                          `(push
-                            ,(pcase rest
-                               (`(#',fn) `#',fn)
-                               (_ (macroexpand-all
-                                   `(lambda ,@rest)
-                                   (cons return-expander
-                                         macroexpand-all-environment))))
-                            conn--dispatch-read-char-handlers))))
-         (msg-expander
-          `(:message . ,(lambda (depth &rest rest)
-                          (cl-assert (<= -100 depth 100))
-                          `(progn
-                             (push
-                              (cons ,depth ,(pcase rest
-                                              (`(#',fn) `#',fn)
-                                              (_ `(lambda ,@rest))))
-                              conn--dispatch-read-char-message-prefixes)
-                             (conn--compat-callf sort
-                                 conn--dispatch-read-char-message-prefixes
-                               :key #'car)))))
-         (keymap-expander
-          `(:keymap . ,(lambda (keymap)
-                         `(push ,keymap conn--dispatch-event-handler-maps))))
-         (body (macroexpand-all (macroexp-progn body)
-                                `(,handler-expander
-                                  ,msg-expander
-                                  ,keymap-expander
-                                  ,@macroexpand-all-environment))))
-    `(let ((conn--dispatch-event-handler-maps
-            conn--dispatch-event-handler-maps)
-           (conn--dispatch-read-char-message-prefixes
-            conn--dispatch-read-char-message-prefixes)
-           (conn--dispatch-read-char-handlers
-            conn--dispatch-read-char-handlers))
-       (catch ',tag ,@(macroexp-unprogn body)))))
+(eval-and-compile
+  (defun conn--with-dispatch-event-handlers (body)
+    (let* ((tag (gensym "tag"))
+           (return-expander
+            `(:return . ,(lambda (&optional result)
+                           `(throw ',tag ,result))))
+           (handler-expander
+            `(:handler . ,(lambda (&rest rest)
+                            `(push
+                              ,(pcase rest
+                                 (`(#',fn) `#',fn)
+                                 (_ (macroexpand-all
+                                     `(lambda ,@rest)
+                                     (cons return-expander
+                                           macroexpand-all-environment))))
+                              conn--dispatch-read-char-handlers))))
+           (msg-expander
+            `(:message . ,(lambda (depth &rest rest)
+                            (cl-assert (<= -100 depth 100))
+                            `(progn
+                               (push
+                                (cons ,depth ,(pcase rest
+                                                (`(#',fn) `#',fn)
+                                                (_ `(lambda ,@rest))))
+                                conn--dispatch-read-char-message-prefixes)
+                               (conn--compat-callf sort
+                                   conn--dispatch-read-char-message-prefixes
+                                 :key #'car)))))
+           (keymap-expander
+            `(:keymap . ,(lambda (keymap)
+                           `(push ,keymap conn--dispatch-event-handler-maps))))
+           (body (macroexpand-all (macroexp-progn body)
+                                  `(,handler-expander
+                                    ,msg-expander
+                                    ,keymap-expander
+                                    ,@macroexpand-all-environment))))
+      `(let ((conn--dispatch-event-handler-maps
+              conn--dispatch-event-handler-maps)
+             (conn--dispatch-read-char-message-prefixes
+              conn--dispatch-read-char-message-prefixes)
+             (conn--dispatch-read-char-handlers
+              conn--dispatch-read-char-handlers))
+         (catch ',tag ,@(macroexp-unprogn body))))))
 
 (defmacro conn-with-dispatch-event-handlers (&rest body)
   (declare (indent 0))
@@ -613,6 +614,8 @@ themselves once the selection process has concluded."
      (:splice (conn-quick-ref-to-cols conn-dispatch-thing-reference-list)))
     (:heading "Transforms")
     ((:splice (conn-quick-ref-to-cols conn-dispatch-thing-transforms-ref-list)))))
+
+(defvar conn-dispatch-action-reference nil)
 
 (defvar conn-dispatch-action-ref-list
   (conn-reference-quote
@@ -1608,8 +1611,6 @@ Target overlays may override this default by setting the
 
 `conn-with-dispatch-suspended' binds this variable to nil.")
 
-(defvar conn-dispatch-action-reference nil)
-
 (defvar conn--dispatch-change-groups nil)
 
 (defvar conn--dispatch-current-thing nil)
@@ -2189,39 +2190,40 @@ updated.")
 Each function in the hook is called with the window that is about to be
 updated.")
 
-(defun conn--define-target-finder (name
-                                   superclasses
-                                   slots
-                                   docstring
-                                   properties)
-  (pcase properties
-    ((map :update-method :default-update-handler)
-     `(progn
-        (defclass ,name ,(append superclasses '(conn-target-finder-base))
-          ,(append slots
-                   (list
-                    (pcase default-update-handler
-                      (`#',function
-                       `(default-update-handler
-                         :allocation :class
-                         :initform #',function))
-                      (`(,arglist . ,body)
-                       `(default-update-handler
-                         :allocation :class
-                         :initform (lambda ,arglist ,@body)))
-                      ('nil)
-                      (_ (error "Malformed default handler definition")))))
-          ,@(when docstring (list docstring)))
-        :autoload-end
-        ,(pcase update-method
-           (`((,state-var) . ,body)
-            `(cl-defmethod conn-target-finder-update ((,state-var ,name))
-               ,@body))
-           (`#',function
-            `(cl-defmethod conn-target-finder-update ((state ,name))
-               (,function state)))
-           ('nil)
-           (_ (error "Malformed update method definition")))))))
+(eval-and-compile
+  (defun conn--define-target-finder (name
+                                     superclasses
+                                     slots
+                                     docstring
+                                     properties)
+    (pcase properties
+      ((map :update-method :default-update-handler)
+       `(progn
+          (defclass ,name ,(append superclasses '(conn-target-finder-base))
+            ,(append slots
+                     (list
+                      (pcase default-update-handler
+                        (`#',function
+                         `(default-update-handler
+                           :allocation :class
+                           :initform #',function))
+                        (`(,arglist . ,body)
+                         `(default-update-handler
+                           :allocation :class
+                           :initform (lambda ,arglist ,@body)))
+                        ('nil)
+                        (_ (error "Malformed default handler definition")))))
+            ,@(when docstring (list docstring)))
+          :autoload-end
+          ,(pcase update-method
+             (`((,state-var) . ,body)
+              `(cl-defmethod conn-target-finder-update ((,state-var ,name))
+                 ,@body))
+             (`#',function
+              `(cl-defmethod conn-target-finder-update ((state ,name))
+                 (,function state)))
+             ('nil)
+             (_ (error "Malformed update method definition"))))))))
 
 (defmacro conn-define-target-finder (name superclasses slots &rest rest)
   "Define a target finder.

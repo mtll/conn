@@ -574,6 +574,9 @@ then an error is signaled."
 
 ;;;;; Input Methods
 
+(defvar-local conn-disable-input-method-hooks nil
+  "When non-nil conn input method hooks and advice do not run.")
+
 (defvar-local conn--input-method nil
   "Input method for current buffer.")
 (put 'conn--input-method 'permanent-local t)
@@ -667,9 +670,6 @@ mouse-3: Describe current input method")
             (:eval (mode-line-eol-desc)))))
    (conn--prev-mode-line-mule-info
     (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
-
-(defvar-local conn-disable-input-method-hooks nil
-  "When non-nil conn input method hooks and advice do not run.")
 
 (defmacro conn-with-input-method (&rest body)
   "Run BODY ensuring `conn--input-method' is active."

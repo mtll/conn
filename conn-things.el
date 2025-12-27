@@ -280,23 +280,24 @@ order to mark the region that should be defined by any of COMMANDS."
     (setf (conn-command-thing cmd) thing
           (conn-command-mark-handler cmd) handler)))
 
-(defun conn--mark-for-mark-command (region ignore-mark-active)
-  (pcase region
-    (`(,beg . ,end)
-     (cond ((or ignore-mark-active
-                (not (region-active-p)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end))
-           ((= (point) (mark))
-            (pcase (car (read-multiple-choice
-                         "Mark"
-                         '((?a "after point")
-                           (?b "before point"))))
-              (?e (goto-char end))
-              (?b (goto-char beg))))
-           ((> (point) (mark)) (goto-char end))
-           (t (goto-char beg))))
-    (_ (user-error "Invalid region"))))
+(eval-and-compile
+  (defun conn--mark-for-mark-command (region ignore-mark-active)
+    (pcase region
+      (`(,beg . ,end)
+       (cond ((or ignore-mark-active
+                  (not (region-active-p)))
+              (goto-char beg)
+              (conn--push-ephemeral-mark end))
+             ((= (point) (mark))
+              (pcase (car (read-multiple-choice
+                           "Mark"
+                           '((?a "after point")
+                             (?b "before point"))))
+                (?e (goto-char end))
+                (?b (goto-char beg))))
+             ((> (point) (mark)) (goto-char end))
+             (t (goto-char beg))))
+      (_ (user-error "Invalid region")))))
 
 (defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
   (declare (autoload-macro expand))
