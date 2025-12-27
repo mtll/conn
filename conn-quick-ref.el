@@ -244,7 +244,7 @@
                     :objects objs)
                    (goto-char (point-max))))))))))))
 
-(defun conn-quick-ref-insert-page (page buffer)
+(defun conn-quick-ref-insert-page (page buffer pg-num pg-count)
   (pcase-let (((cl-struct conn--reference-page
                           title
                           definition)
@@ -257,9 +257,12 @@
         (delete-region (point-min) (point-max))
         (insert
          (substitute-command-keys
-          (concat "\\<conn-quick-ref-map> "
+          (concat "\\<conn-quick-ref-map>"
+                  (propertize (format "[%s/%s] " pg-num pg-count)
+                              'face 'minibuffer-prompt)
                   (propertize title 'face 'bold)
-                  " — \\[next] Next; \\[previous] Previous; \\[close] Close \n")))
+                  " — \\[next] Next; \\[previous] Previous; \\[close] Close"
+                  "\n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (indent-region header-pos (point-max) 1)
@@ -287,8 +290,13 @@
                       (flatten-tree pages))))
     (let ((buf (get-buffer-create " *conn-quick-ref*"))
           (display-function conn-quick-ref-display-function)
-          (inhibit-message t))
-      (conn-quick-ref-insert-page (car pages) buf)
+          (inhibit-message t)
+          (pg-count (length pages))
+          (pg-num 0))
+      (conn-quick-ref-insert-page (car pages)
+                                  buf
+                                  (1+ pg-num)
+                                  pg-count)
       (funcall display-function buf nil)
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
@@ -298,12 +306,20 @@
                  ('close
                   (cl-return))
                  ('next
-                  (setq pages (nconc (cdr pages) (list (car pages))))
-                  (conn-quick-ref-insert-page (car pages) buf)
+                  (setq pages (nconc (cdr pages) (list (car pages)))
+                        pg-num (mod (1+ pg-num) pg-count))
+                  (conn-quick-ref-insert-page (car pages)
+                                              buf
+                                              (1+ pg-num)
+                                              pg-count)
                   (funcall display-function buf nil))
                  ('previous
-                  (setq pages (nconc (last pages) (butlast pages)))
-                  (conn-quick-ref-insert-page (car pages) buf)
+                  (setq pages (nconc (last pages) (butlast pages))
+                        pg-num (mod (1- pg-num) pg-count))
+                  (conn-quick-ref-insert-page (car pages)
+                                              buf
+                                              (1+ pg-num)
+                                              pg-count)
                   (funcall display-function buf nil))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
