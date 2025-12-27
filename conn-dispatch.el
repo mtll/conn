@@ -611,9 +611,11 @@ themselves once the selection process has concluded."
   (conn-reference-page "Things"
     (:heading "Extra Thing Bindings")
     ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
-     (:splice (conn-quick-ref-to-cols conn-dispatch-thing-reference-list)))
+     (:splice (conn-quick-ref-to-cols
+               conn-dispatch-thing-reference-list 3)))
     (:heading "Transforms")
-    ((:splice (conn-quick-ref-to-cols conn-dispatch-thing-transforms-ref-list)))))
+    ((:splice (conn-quick-ref-to-cols
+               conn-dispatch-thing-transforms-ref-list 3)))))
 
 (defvar conn-dispatch-action-reference nil)
 
@@ -2230,7 +2232,7 @@ updated.")
 
 \(fn NAME SUPERCLASSES SLOTS [DOC-STRING] [UPDATE-METHOD DEFAULT-UPDATE-HANDLER])"
   (declare (doc-string 4)
-           (indent 2)
+           (indent 3)
            (autoload-macro expand)
            (debug ( form form form
                     [&rest (&define
@@ -2450,14 +2452,14 @@ to the key binding for that target."
 
 (conn-define-target-finder conn-dispatch-string-targets
     (conn-dispatch-retargetable-mixin)
-  ((string :initform nil
-           :initarg :string)
-   (thing :initform nil
-          :initarg :thing)
-   (predicate :initform nil
-              :initarg :predicate)
-   (regex-p :initform nil
-            :initarg :regex-p))
+    ((string :initform nil
+             :initarg :string)
+     (thing :initform nil
+            :initarg :thing)
+     (predicate :initform nil
+                :initarg :predicate)
+     (regex-p :initform nil
+              :initarg :regex-p))
   ( :default-update-handler (state &optional len)
     (while-no-input
       (let ((string (oref state string))
@@ -2480,8 +2482,8 @@ to the key binding for that target."
 
 (conn-define-target-finder conn-dispatch-read-n-chars
     (conn-dispatch-string-targets)
-  ((string-length :initform 1
-                  :initarg :string-length))
+    ((string-length :initform 1
+                    :initarg :string-length))
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (if string
@@ -2504,7 +2506,7 @@ to the key binding for that target."
                     (:return)))
                 (:keymap (define-keymap "<backspace>" 'backspace))
                 (conn-threadf->
-                  string
+                    string
                   (conn-dispatch-read-char prompt t nil)
                   (char-to-string)
                   (concat string))))
@@ -2518,7 +2520,7 @@ to the key binding for that target."
 
 (conn-define-target-finder conn-dispatch-read-with-timeout
     (conn-dispatch-string-targets)
-  ((timeout :initform 0.5 :initarg :timeout))
+    ((timeout :initform 0.5 :initarg :timeout))
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (let ((timeout (oref state timeout)))
@@ -2575,8 +2577,8 @@ contain targets."
                                                    &context (conn-dispatch-target-finder
                                                              conn-dispatch-focus-mixin))
   (conn-threadf<-
-    (alist-get (selected-window)
-               (oref conn-dispatch-target-finder cursor-location))
+      (alist-get (selected-window)
+                 (oref conn-dispatch-target-finder cursor-location))
     (memq recenter-positions)
     (cadr)
     (or (car recenter-positions)))
@@ -2662,14 +2664,14 @@ contain targets."
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
      conn-dispatch-focus-mixin)
-  ((context-lines
-    :initform 1
-    :initarg :context-lines)
-   (window-predicate
-    :initarg :window-predicate
-    :initform (lambda (win)
-                (eq (window-buffer win)
-                    (current-buffer)))))
+    ((context-lines
+      :initform 1
+      :initarg :context-lines)
+     (window-predicate
+      :initarg :window-predicate
+      :initform (lambda (win)
+                  (eq (window-buffer win)
+                      (current-buffer)))))
   ( :default-update-handler (state)
     (let ((line-height (window-height))
           (string (oref state string))
@@ -2710,11 +2712,11 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-mark-ring
     (conn-dispatch-focus-mixin)
-  ((context-lines
-    :initform 1
-    :initarg :context-lines)
-   (window-predicate
-    :initform (lambda (win) (eq win (selected-window)))))
+    ((context-lines
+      :initform 1
+      :initarg :context-lines)
+     (window-predicate
+      :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (_state)
     (let ((points (conn-ring-list conn-mark-ring)))
       (dolist (pt points)
@@ -2728,18 +2730,18 @@ contain targets."
   :no-other-end)
 
 (conn-define-target-finder conn-dispatch-global-mark (conn-dispatch-focus-mixin)
-  ((context-lines
-    :initform 1
-    :initarg :context-lines)
-   (window-predicate
-    :initform (let ((cache nil))
-                (lambda (win)
-                  (if-let* ((val (assq win cache)))
-                      (cdr var)
-                    (setf (alist-get win cache)
-                          (cl-loop with buf = (window-buffer win)
-                                   for mk in global-mark-ring
-                                   thereis (eq buf (marker-buffer mk)))))))))
+                           ((context-lines
+                             :initform 1
+                             :initarg :context-lines)
+                            (window-predicate
+                             :initform (let ((cache nil))
+                                         (lambda (win)
+                                           (if-let* ((val (assq win cache)))
+                                               (cdr var)
+                                             (setf (alist-get win cache)
+                                                   (cl-loop with buf = (window-buffer win)
+                                                            for mk in global-mark-ring
+                                                            thereis (eq buf (marker-buffer mk)))))))))
   ( :default-update-handler (_state)
     (dolist (mk global-mark-ring)
       (when (and (eq (current-buffer) (marker-buffer mk))
@@ -2755,8 +2757,8 @@ contain targets."
 (conn-define-target-finder conn-dispatch-mark-register
     (conn-dispatch-focus-mixin
      conn-dispatch-target-key-labels-mixin)
-  ((context-lines :initform 1
-                  :initarg :context-lines))
+    ((context-lines :initform 1
+                    :initarg :context-lines))
   ( :default-update-handler (_state)
     (pcase-dolist (`(,key . ,obj) register-alist)
       (when (and (markerp obj)
@@ -2773,11 +2775,11 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-previous-emacs-state
     (conn-dispatch-focus-mixin)
-  ((context-lines
-    :initform 1
-    :initarg :context-lines)
-   (window-predicate
-    :initform (lambda (win) (eq win (selected-window)))))
+    ((context-lines
+      :initform 1
+      :initarg :context-lines)
+     (window-predicate
+      :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (_state)
     (dolist (pt (conn-ring-list conn-emacs-state-ring))
       (unless (invisible-p pt)
@@ -2800,7 +2802,7 @@ contain targets."
                   (conn-bounds-of thing nil)))))
 
 (conn-define-target-finder conn-dispatch-headings (conn-dispatch-focus-mixin)
-  ()
+                           ()
   ( :default-update-handler (state)
     (when (or (derived-mode-p (list 'outline-mode))
               (bound-and-true-p outline-minor-mode))
@@ -2815,11 +2817,11 @@ contain targets."
                  (match-beginning 0) 0)))))))))
 
 (conn-define-target-finder conn-dispatch-all-defuns (conn-dispatch-focus-mixin)
-  ((cache :initform nil)
-   (window-predicate
-    :initform (lambda (win)
-                (eq (window-buffer win)
-                    (current-buffer)))))
+                           ((cache :initform nil)
+                            (window-predicate
+                             :initform (lambda (win)
+                                         (eq (window-buffer win)
+                                             (current-buffer)))))
   ( :default-update-handler (state)
     (cl-symbol-macrolet ((cache (oref state cache)))
       (unless (and-let* ((cached (alist-get (current-buffer) cache)))
@@ -2838,7 +2840,7 @@ contain targets."
          :properties '(no-hide t))))))
 
 (conn-define-target-finder conn-all-things-targets ()
-  ((thing :initarg :thing))
+                           ((thing :initarg :thing))
   ( :default-update-handler (state)
     (let ((thing (oref state thing)))
       (conn-for-each-visible
@@ -2853,7 +2855,7 @@ contain targets."
           (conn-make-target-overlay (point) 0))))))
 
 (conn-define-target-finder conn-dispatch-button-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (conn-for-each-visible (window-start) (window-end)
       (goto-char (point-min))
@@ -2865,9 +2867,9 @@ contain targets."
           (conn-make-target-overlay (point) 0))))))
 
 (conn-define-target-finder conn-dispatch-regexp-targets ()
-  ((regexp :initarg :regexp)
-   (fixed-length :initform nil
-                 :initarg :fixed-length))
+                           ((regexp :initarg :regexp)
+                            (fixed-length :initform nil
+                                          :initarg :fixed-length))
   ( :default-update-handler (state)
     (let ((regexp (oref state regexp))
           (fixed-length (oref state fixed-length)))
@@ -2897,10 +2899,10 @@ contain targets."
                      (= beg tbeg)))))))
 
 (conn-define-target-finder conn-dispatch-things-with-prefix-targets ()
-  ((thing :initarg :thing)
-   (prefix-string :initarg :prefix-string)
-   (fixed-length :initform nil
-                 :initarg :fixed-length))
+                           ((thing :initarg :thing)
+                            (prefix-string :initarg :prefix-string)
+                            (fixed-length :initform nil
+                                          :initarg :fixed-length))
   ( :default-update-handler (state)
     (let ((thing (oref state thing))
           (prefix (oref state prefix-string))
@@ -2916,10 +2918,10 @@ contain targets."
        fixed-length))))
 
 (conn-define-target-finder conn-dispatch-things-with-re-prefix-targets ()
-  ((thing :initarg :thing)
-   (prefix-regexp :initarg :prefix-regexp)
-   (fixed-length :initform nil
-                 :initarg :fixed-length))
+                           ((thing :initarg :thing)
+                            (prefix-regexp :initarg :prefix-regexp)
+                            (fixed-length :initform nil
+                                          :initarg :fixed-length))
   ( :default-update-handler (state)
     (let ((thing (oref state thing))
           (prefix (oref state prefix-regexp))
@@ -2936,13 +2938,13 @@ contain targets."
         (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
 
 (conn-define-target-finder conn-dispatch-things-matching-re-targets ()
-  ((thing :initarg :thing)
-   (regexp :initarg :prefix-regexp)
-   (fixed-length :initform nil
-                 :initarg :fixed-length)
-   (update-function
-    :allocation :class
-    :initform #'conn--things-matching-re-update))
+                           ((thing :initarg :thing)
+                            (regexp :initarg :prefix-regexp)
+                            (fixed-length :initform nil
+                                          :initarg :fixed-length)
+                            (update-function
+                             :allocation :class
+                             :initform #'conn--things-matching-re-update))
   ( :default-update-handler (state)
     (let ((thing (oref state thing))
           (regexp (oref state regexp))
@@ -2959,7 +2961,7 @@ contain targets."
         (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
 
 (conn-define-target-finder conn-dispatch-column-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (let ((col-width nil))
       ;; From `line-move-visual'
@@ -2996,7 +2998,7 @@ contain targets."
   nil)
 
 (conn-define-target-finder conn-dispatch-line-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (let ((col (if (= 0 (window-hscroll)) 0 1)))
       (save-excursion
@@ -3017,7 +3019,7 @@ contain targets."
   nil)
 
 (conn-define-target-finder conn-dispatch-end-of-line-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (conn-for-each-visible (window-start) (window-end)
       (goto-char (point-min))
@@ -3042,7 +3044,7 @@ contain targets."
   t)
 
 (conn-define-target-finder conn-dispatch-inner-line-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (let ((thing (conn-anonymous-thing
                    'conn-forward-inner-line
@@ -3062,7 +3064,7 @@ contain targets."
              :thing thing)))))))
 
 (conn-define-target-finder conn-dispatch-end-of-inner-line-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (let ((thing (conn-anonymous-thing
                    'conn-forward-inner-line
@@ -3086,7 +3088,7 @@ contain targets."
   t)
 
 (conn-define-target-finder conn-dispatch-visual-line-targets ()
-  ()
+                           ()
   ( :default-update-handler (_state)
     (save-excursion
       (goto-char (window-start))

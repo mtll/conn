@@ -485,12 +485,13 @@
         (<= (car bd) (point) (cdr bd)))))
    'conn-ts-thing))
 
-(conn-define-target-finder conn-ts-query-targets ()
-  ((things :initarg :things)
-   (region-predicate :initarg :region-predicate)
-   (window-predicate
-    :initform (lambda (win)
-                (treesit-parser-list (window-buffer win)))))
+(conn-define-target-finder conn-ts-query-targets
+    ()
+    ((things :initarg :things)
+     (region-predicate :initarg :region-predicate)
+     (window-predicate
+      :initform (lambda (win)
+                  (treesit-parser-list (window-buffer win)))))
   ( :default-update-handler (state)
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
@@ -558,11 +559,12 @@
                                           (conn-anonymous-thing-property self :bounds)
                                           conn-ts-multi-always-prompt)))))))))))))
 
-(conn-define-target-finder conn-ts-all-things ()
-  ((thing :initarg :thing)
-   (window-predicate
-    :initform (lambda (win)
-                (treesit-parser-list (window-buffer win)))))
+(conn-define-target-finder conn-ts-all-things
+    ()
+    ((thing :initarg :thing)
+     (window-predicate
+      :initform (lambda (win)
+                  (treesit-parser-list (window-buffer win)))))
   ( :default-update-handler (state)
     (let* ((thing (oref state thing))
            (query (conn-ts--thing-node-query thing)))

@@ -57,7 +57,9 @@
   (declare (indent 0))
   (cl-labels ((process-definition (def)
                 (pcase def
-                  (`(,(and (or :eval :splice :keymap :heading) type) . ,form)
+                  (`(,(and (or :eval :splice :keymap :heading)
+                           type)
+                     . ,form)
                    (cons type (list '\, (cons 'lambda (cons nil form)))))
                   ((pred consp)
                    (mapcar #'process-definition def))
@@ -76,7 +78,9 @@
                    0)))
     (cl-labels ((process-definition (def)
                   (pcase def
-                    (`(,(and (or :eval :splice :keymap :heading) type) . ,form)
+                    (`(,(and (or :eval :splice :keymap :heading)
+                             type)
+                       . ,form)
                      (cons type (list '\, (cons 'lambda (cons nil form)))))
                     ((pred consp)
                      (mapcar #'process-definition def))
@@ -308,9 +312,8 @@
                   (cl-return))))))
         (funcall display-function buf t)))))
 
-(defun conn-quick-ref-to-cols (list &optional col-count)
-  (cl-loop with col-count = (or col-count 4)
-           with cols = (cl-loop repeat col-count collect nil)
+(defun conn-quick-ref-to-cols (list col-count)
+  (cl-loop with cols = (cl-loop repeat col-count collect nil)
            for elem in list
            for i from 0
            do (push elem (nth (mod i col-count) cols))
