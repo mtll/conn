@@ -381,7 +381,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                (cond (buffer
                       (when (check-buffer buffer)
                         (collect-matches buffer)))
-                     ((with-work-buffer
+                     ((conn--with-work-buffer
                         (condition-case err
                             (insert-file-contents next nil)
                           (file-missing nil)
@@ -1041,9 +1041,7 @@ After kapply has finished restore the previous window configuration."
 The iterator must be the first argument in ARGLIST.
 
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
-  (declare (debug ( name lambda-list
-                    [&optional lambda-doc]
-                    def-body))
+  (declare (debug (defun))
            (doc-string 3)
            (indent 2)
            (autoload-macro expand))

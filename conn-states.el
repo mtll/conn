@@ -110,18 +110,16 @@ function may setup any other necessary state as well.")
   (major-mode-maps nil :type hash-table :read-only t))
 
 (defmacro conn--find-state (state)
-  (declare (debug (form))
-           (important-return-value t))
+  (declare (important-return-value t))
   (macroexp-let2 nil state state
     `(or (get ,state :conn--state)
          (error "%s is not a state" ,state))))
 
 (gv-define-setter conn--find-state (val state)
   (macroexp-let2 nil val val
-    `(setf (get ,state :conn--state)
-           (progn
-             (cl-check-type ,val conn-state)
-             ,val))))
+    `(progn
+       (cl-check-type ,val conn-state)
+       (setf (get ,state :conn--state) ,val))))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
@@ -279,14 +277,13 @@ property from its parents."
   "Return t if STATE has an explicit value set for PROPERTY."
   (declare (side-effect-free t)
            (important-return-value t))
-  (inline-letevals (property)
-    (inline-quote
-     (thread-first
-       (gethash ,property
-                (conn-state--properties (conn--find-state ,state))
-                conn--key-missing)
-       (eq conn--key-missing)
-       not))))
+  (inline-quote
+   (thread-first
+     (gethash ,property
+              (conn-state--properties (conn--find-state ,state))
+              conn--key-missing)
+     (eq conn--key-missing)
+     not)))
 
 ;;;;; Keymaps
 
@@ -1087,8 +1084,9 @@ for unspecified properties from its parents.  Static state properties
 can only be changed by redefining a state and are not inherited.
 
 \(fn NAME PARENTS &optional DOCSTRING [KEY VALUE ...])"
-  (declare (debug ( name form string-or-null-p
-                    [&rest keywordp sexp]))
+  (declare (debug ( name form
+                    [&optional stringp]
+                    [&rest symbolp form]))
            (indent 2))
   (let ((docstring (or (and (stringp (car properties))
                             (pop properties))
@@ -1233,8 +1231,8 @@ Causes the mode-line face to be remapped to the face specified by the
 
 (conn-declare-state-property
  :mode-line-face
- "Used by `conn-mode-line-face-state'.  Face to use for the mode line in
-the state.")
+ "Used by `conn-mode-line-face-state'.  Face for the mode line in the
+state.")
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
   (when-let* ((face (conn-state-get state :mode-line-face))
@@ -1508,7 +1506,11 @@ Resets the current prefix argument."
 
 This function should be called from any function passed as the
 :command-handler argument to `conn-read-args' when the function
-chooses to handle a command."
+chooses to handle a command.
+
+If NEW-COMMAND is non-nil it will replace the current command and
+command handlers and argument update functions will be called with the
+new command."
   (if new-command
       (throw 'conn-read-args-new-command new-command)
     (throw 'conn-read-args-handle nil)))

@@ -119,13 +119,15 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                        forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
-  (declare (indent 2) (debug (cl-function place &rest form)))
+  (declare (indent 2)
+           (debug (cl-function place &rest form)))
   (gv-letplace (getter setter) place
     (let* ((rargs (cons getter args)))
       (funcall setter `(compat-call ,func ,@rargs)))))
 
 (defmacro conn--compat-callf2 (func arg1 place &rest args)
-  (declare (indent 3) (debug (cl-function form place &rest form)))
+  (declare (indent 3)
+           (debug (cl-function form place &rest form)))
   (if (and (cl--safe-expr-p arg1) (cl--simple-expr-p place) (symbolp func))
       `(setf ,place (compat-call ,func ,arg1 ,place ,@args))
     (macroexp-let2 nil a1 arg1
@@ -171,6 +173,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
          (point-min) (point-max)
          '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
         (car (buffer-text-pixel-size nil nil t))))))
+
+(defalias 'conn--with-work-buffer
+  (static-if (<= 31 emacs-major-version)
+      'with-temp-buffer
+    'with-work-buffer))
 
 (defun conn--open-invisible (beg end)
   (catch 'return

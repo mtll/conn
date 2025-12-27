@@ -197,7 +197,8 @@
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing inheriting from PARENT."
-  (declare (indent 0))
+  (declare (indent 0)
+           (debug (sexp [&rest symbolp form])))
   (cl-assert (plistp properties))
   (pcase-let ((`(,methods . ,props)
                (conn--anonymous-thing-parse-properties properties)))
@@ -590,7 +591,7 @@ words."))
 
 (defun conn--transforms-get-references (transforms)
   (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
-    (with-work-buffer
+    (conn--with-work-buffer
       (dolist (tform transforms)
         (when-let* ((doc (alist-get tform doc-strings)))
           (let ((pt (point)))

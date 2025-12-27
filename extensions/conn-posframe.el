@@ -259,7 +259,7 @@
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-list-posframe fn))))
-    (let* ((header (with-temp-buffer
+    (let* ((header (conn--with-work-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
                                (concat conn-posframe--padding
                                        (nerd-icons-faicon "nf-fa-buffer")
@@ -301,7 +301,7 @@
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
-              (with-temp-buffer
+              (conn--with-work-buffer
                 (insert (when (fboundp 'nerd-icons-mdicon)
                           (concat conn-posframe--padding
                                   (nerd-icons-mdicon "nf-md-tab")

@@ -224,7 +224,7 @@
                             (concat (symbol-name lang) "/textobjects.scm")
                             conn-ts-query-dir)))
              (when (file-exists-p filename)
-               (with-temp-buffer
+               (conn--with-work-buffer
                  (insert-file-contents-literally filename)
                  (pcase-let ((`(,inherits ,toplevel)
                               (parse-inherits)))

@@ -255,7 +255,7 @@
          (substitute-command-keys
           (concat "\\<conn-quick-ref-map> "
                   (propertize title 'face 'bold)
-                  " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
+                  " — \\[next] Next; \\[previous] Previous; \\[close] Close \n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (indent-region header-pos (point-max) 1)

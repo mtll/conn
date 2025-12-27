@@ -360,7 +360,9 @@ themselves once the selection process has concluded."
   (when (window-parameter (selected-window) 'conn-window-labeled-p)
     (let* ((window-width (window-width nil t))
            (label (window-parameter nil 'conn-label-string))
-           (label-width (string-pixel-width label))
+           (label-width (conn--string-pixel-width
+                         label
+                         (window-buffer (selected-window))))
            (padding-width (floor (- window-width label-width) 2))
            (padding (propertize " " 'display `(space :width (,padding-width)))))
       (concat padding label))))
@@ -418,9 +420,11 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
            unless (or ;; ignore child frames
-                   (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
-                   ;; When `ignore-window-parameters' is nil, ignore windows whose
-                   ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
+                   (and (fboundp 'frame-parent)
+                        (frame-parent (window-frame window)))
+                   ;; When `ignore-window-parameters' is nil, ignore
+                   ;; windows whose `no-other-window’ or
+                   ;; `no-delete-other-windows' parameter is non-nil.
                    (unless ignore-window-parameters
                      (window-parameter window 'no-other-window))
                    (and (null dedicated) (window-dedicated-p win))
