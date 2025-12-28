@@ -2133,6 +2133,17 @@ region after a `recursive-edit'."
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
              (funcall updater arg))))))
 
+(defun conn-check-bounds-argument ()
+  (when (cl-loop for h on conn-check-bounds-functions
+                 thereis (pcase h
+                           ('t (default-value 'conn-check-bounds-functions))
+                           ('nil)
+                           (_ t)))
+    (conn-boolean-argument 'check-bounds
+                           conn-check-bounds-argument-map
+                           "check bounds"
+                           conn-check-bounds-default)))
+
 (defun conn-kill-thing (cmd
                         arg
                         transform
@@ -2177,11 +2188,7 @@ hook, which see."
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register) (conn-kill-how-argument))
-        (check-bounds
-         (conn-boolean-argument 'check-bounds
-                                conn-check-bounds-argument-map
-                                "check bounds"
-                                conn-check-bounds-default)))
+        (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform append
            delete register fixup check-bounds)))
   (cl-assert (not (and delete (or register append))))

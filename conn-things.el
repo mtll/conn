@@ -1132,7 +1132,7 @@ the point is within the region then the entire region is returned.")))
 
 ;;;;;; Check Bounds
 
-(defvar-local conn-check-bounds-functions nil
+(defvar conn-check-bounds-functions nil
   "Abnormal hook to check the bounds of a region before deleting it.
 
 Each function in the hook is called with a single argument, a
@@ -1141,8 +1141,7 @@ not be delete.  The the value returned by each function is ignored.")
 
 (defun conn-check-bounds (bounds)
   "Run `conn-check-bounds-functions' with BOUNDS."
-  (cl-loop for fn in conn-check-bounds-functions
-           do (funcall fn bounds))
+  (run-hook-with-args 'conn-check-bounds-functions bounds)
   bounds)
 
 ;;;;; Perform Bounds
