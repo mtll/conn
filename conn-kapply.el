@@ -793,7 +793,9 @@ Changes will be undone if an error is signaled during macro application."
           (when (and (not conn-kmacro-apply-error)
                      (length> buffers 1))
             (ibuffer t "*Kapply Ibuffer*"
-                     `((predicate . (memq (current-buffer) ',buffers))))))
+                     `((predicate . (memq (current-buffer) ',buffers))))
+            ;; Does it make sense to always clear the marks?
+            (ibuffer-unmark-all-marks)))
          ((or :record :next)
           (prog1 (funcall iterator state)
             (unless (or automatic
