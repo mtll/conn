@@ -2966,16 +2966,16 @@ If copying to a registers then append to the register.  If APPEND is
 
 ;;;;; How Many
 
-(defvar conn-how-many-special-ref
-  (conn-reference-quote
-    nil))
+(defvar conn-how-many-special-ref nil)
 
 (defvar conn-how-many-reference
   (list (conn-reference-page "How Many"
           "Count the number of matches within a thing."
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-how-many-special-ref 3))
+          (:splice (when conn-how-many-special-ref
+                     (conn-reference-quote
+                       ((:heading "Special Bindings")
+                        (:eval (conn-quick-ref-to-cols
+                                conn-how-many-special-ref 3))))))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -3028,16 +3028,16 @@ The regexp is read interactively."
 
 ;;;;; Comment
 
-(defvar conn-comment-special-ref
-  (conn-reference-quote
-    nil))
+(defvar conn-comment-special-ref nil)
 
 (defvar conn-comment-reference
   (list (conn-reference-page "Comment"
           "Comment a thing."
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-comment-special-ref 3))
+          (:splice (when conn-comment-special-ref
+                     (conn-reference-quote
+                       ((:heading "Special Bindings")
+                        (:eval (conn-quick-ref-to-cols
+                                conn-comment-special-ref 3))))))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -3083,16 +3083,16 @@ For how they are used to define the region see `conn-bounds-of' and
 
 ;;;;; Duplicate
 
-(defvar conn-duplicate-special-ref
-  (conn-reference-quote
-    nil))
+(defvar conn-duplicate-special-ref nil)
 
 (defvar conn-duplicate-reference
   (list (conn-reference-page "Duplicate"
           "Duplicate a thing."
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-duplicate-special-ref 3))
+          (:splice (when conn-duplicate-special-ref
+                     (conn-reference-quote
+                       ((:heading "Special Bindings")
+                        (:eval (conn-quick-ref-to-cols
+                                conn-duplicate-special-ref 3))))))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
@@ -3441,7 +3441,8 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
 `conn-duplicate-repeat-map' is setup after duplicating."
   (interactive
    (conn-read-args (conn-duplicate-state
-                    :prompt "Thing")
+                    :prompt "Thing"
+                    :reference conn-duplicate-reference)
        ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
         (transform (conn-transform-argument)))
      (list thing arg transform
@@ -3560,9 +3561,11 @@ For how the region is determined using CMD, ARG, and TRANSFORM see
 (defvar conn-indent-reference
   (list (conn-reference-page "Indent"
           "Indent some thing."
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-indent-special-ref 3))
+          (:splice (when conn-indent-special-ref
+                     (conn-reference-quote
+                       ((:heading "Special Bindings")
+                        (:eval (conn-quick-ref-to-cols
+                                conn-indent-special-ref 3))))))
           (:heading "Transformations")
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
