@@ -1217,13 +1217,7 @@ not be delete.  The the value returned by each function is ignored.")
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
                               arg)
-  (let* ((name (pcase (conn-get-thing cmd)
-                 ((and sym (pred symbolp))
-                  (symbol-name sym))
-                 ((and thing (pred conn-anonymous-thing-p))
-                  (conn-thing-pretty-print thing))
-                 (_ "")))
-         (bounds nil)
+  (let* ((bounds nil)
          (quit (make-symbol "quit")))
     (fset quit (lambda ()
                  (unless isearch-suspended
@@ -1253,17 +1247,14 @@ not be delete.  The the value returned by each function is ignored.")
                    :prompt "Thing"
                    :prefix arg)
       ((`(,thing ,arg) (conn-thing-argument)))
-    (let* ((start (point))
-           (max nil)
-           (bounds nil)
+    (let* ((bounds nil)
            (quit (make-symbol "quit-hook")))
       (fset quit (lambda ()
                    (unless isearch-suspended
                      (when (or isearch-mode-end-hook-quit
                                (null isearch-other-end))
                        (abort-recursive-edit))
-                     (setq max (> (point) isearch-other-end)
-                           bounds (conn-bounds-of thing arg)))))
+                     (setq bounds (conn-bounds-of thing arg)))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)
