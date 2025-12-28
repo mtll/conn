@@ -106,7 +106,7 @@ Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
   (unless (or (region-active-p)
               (conn--valid-expansions-p))
-    (conn--push-ephemeral-mark))
+    (push-mark))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
@@ -126,9 +126,11 @@ Expansions are provided by functions in `conn-expansion-functions'."
                       when (> (abs (- end beg))
                               (abs (- (region-end) (region-beginning))))
                       return (progn
-                               (goto-char (if (= (point) (region-beginning)) beg end))
-                               (conn--push-ephemeral-mark
-                                (if (= (point) (region-beginning)) end beg)))
+                               (goto-char
+                                (if (= (point) (region-beginning)) beg end))
+                               (push-mark
+                                (if (= (point) (region-beginning)) end beg)
+                                t))
                       finally (user-error "No more expansions"))))))
   (unless (or (region-active-p)
               (not conn-expand-pulse-region)
@@ -161,8 +163,8 @@ Expansions and contractions are provided by functions in
                                (< end (region-end)))
                       return (progn
                                (goto-char (if (= (point) (region-beginning)) beg end))
-                               (conn--push-ephemeral-mark
-                                (if (= (point) (region-end)) beg end)))
+                               (push-mark (if (= (point) (region-end)) beg end)
+                                          t))
                       finally (user-error "No more contractions"))))))
   (unless (or (region-active-p)
               (not conn-expand-pulse-region)
@@ -205,9 +207,7 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               arg)
   (let ((thing (conn-get-thing cmd)))
-    (unless (region-active-p)
-      (conn--push-ephemeral-mark (point))
-      (conn-expand 1))
+    (conn-expand arg)
     (conn-read-args
         (conn-expand-state
          :prompt "Expansion"

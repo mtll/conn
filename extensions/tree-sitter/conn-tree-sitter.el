@@ -660,9 +660,7 @@
   (interactive "p")
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end))
-     (goto-char (if (> arg 0) end beg))
-     (unless (region-active-p)
-       (conn--push-ephemeral-mark (if (> arg 0) beg end))))
+     (goto-char (if (> arg 0) end beg)))
     (_ (signal 'scan-error
                (list (format-message "No more %S to move across" thing)
                      (point) (point))))))
@@ -674,8 +672,7 @@
            (conn-bounds-get :subregions)
            last car)
     ((conn-bounds `(,beg . ,end))
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))
+     (goto-char beg))
     (_ (signal 'scan-error
                (list (format-message "No more %S to move across" thing)
                      (point) (point))))))
@@ -712,7 +709,7 @@
                             :forward-op ',forward-cmd)
 
        (conn-register-thing-commands
-        ',name 'ignore
+        ',name #'ignore
         ',forward-cmd
         ',backward-cmd
         ',forward-flat-cmd

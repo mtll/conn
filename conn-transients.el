@@ -1075,11 +1075,7 @@ A zero means repeat until error."
   "Transient menu for narrow ring function."
   [ :description conn--narrow-ring-display
     [ ("m" "Merge" conn-merge-narrow-ring :transient t)
-      ("w" "Widen"
-       (lambda ()
-         (interactive)
-         (widen)
-         (conn-recenter-on-region)))
+      ("w" "Widen" widen)
       ("c" "Clear" conn-clear-narrow-ring)
       ("j" "Add Region" conn-thing-to-narrow-ring)]
     [ ("n" "Cycle Next" conn-cycle-narrowings :transient t)

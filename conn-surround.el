@@ -21,7 +21,6 @@
 (require 'conn-things)
 (require 'conn-states)
 (require 'conn-dispatch)
-(require 'conn-mark)
 (require 'conn-expand)
 (require 'conn-commands)
 (eval-when-compile
@@ -107,7 +106,6 @@
                     (or (assoc id insert-pair-alist)
                         (list id id)))
                    (n (prefix-numeric-value arg)))
-        (conn--push-ephemeral-mark)
         (pcase-dolist (`(,beg . ,end)
                        (seq-drop-while (pcase-lambda (`(,beg . ,end))
                                          (or (>= beg (region-beginning))
@@ -163,7 +161,7 @@
   :lighter "SURROUND")
 
 (put 'conn-surround-overlay 'face 'region)
-(put 'conn-surround-overlay 'priority (1+ conn-mark-overlay-priority))
+(put 'conn-surround-overlay 'priority 2000)
 (put 'conn-surround-overlay 'conn-overlay t)
 
 (defun conn-surround-create-regions (regions)
@@ -236,7 +234,7 @@
 (cl-defmethod conn-surround-do :around (_with _arg &key regions &allow-other-keys)
   (dolist (ov regions)
     (goto-char (overlay-start ov))
-    (conn--push-ephemeral-mark (overlay-end ov) nil t)
+    (push-mark (overlay-end ov) t t)
     (cl-call-next-method)))
 
 (cl-defmethod conn-surround-do :before (&rest _)

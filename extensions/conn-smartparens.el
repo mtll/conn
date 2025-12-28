@@ -86,47 +86,47 @@
  'symbol 'conn-continuous-thing-handler
  'sp-forward-symbol 'sp-backward-symbol)
 
-(defun conn-sp-list-handler (beg)
+(defun conn-sp-list-handler (_thing beg)
   (cond ((> (point) beg)
          (save-excursion
            (sp-backward-sexp)
-           (conn--push-ephemeral-mark (point))))
+           (point)))
         ((< (point) beg)
          (save-excursion
            (sp-forward-sexp)
-           (conn--push-ephemeral-mark (point))))))
+           (point)))))
 
 (conn-register-thing-commands
  'list 'conn-sp-list-handler
  'sp-up-sexp 'sp-backward-up-sexp)
 
-(defun conn-sp-down-list-handler (beg)
+(defun conn-sp-down-list-handler (_thing beg)
   (cond ((> (point) beg)
          (let ((pt (point)))
            (save-excursion
              (sp-end-of-sexp)
              (when (= pt (point))
                (sp-beginning-of-sexp))
-             (conn--push-ephemeral-mark (point)))))
+             (point))))
         ((< (point) beg)
          (let ((pt (point)))
            (save-excursion
              (sp-beginning-of-sexp)
              (when (= pt (point))
                (sp-end-of-sexp))
-             (conn--push-ephemeral-mark (point)))))
+             (point))))
         ((= (point) beg)
          (when-let* ((enc (sp-get-enclosing-sexp)))
            (if (eql (point) (sp-get enc :beg-in))
-               (conn--push-ephemeral-mark (sp-get enc :end-in))
-             (conn--push-ephemeral-mark (sp-get enc :beg-in)))))))
+               (sp-get enc :end-in)
+             (sp-get enc :beg-in))))))
 
 (conn-register-thing-commands
  'list 'conn-sp-down-list-handler
  'sp-down-sexp 'sp-backward-down-sexp
  'sp-beginning-of-sexp 'sp-end-of-sexp)
 
-(defun conn-sp-sexp-handler (beg)
+(defun conn-sp-sexp-handler (_thing beg)
   (unless (= (point) beg)
     (save-excursion
       (cond ((< (point) beg)
@@ -146,7 +146,7 @@
                            (setq thing (sp-backward-sexp))))
                (when conn-sp-sexp-include-prefix-chars-mode
                  (backward-char (length (sp-get thing :prefix)))))))
-      (conn--push-ephemeral-mark))))
+      (point))))
 
 (defun conn-sp-backward-sexp (&optional arg)
   (interactive "^p")

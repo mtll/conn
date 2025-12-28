@@ -26,7 +26,6 @@
 ;;; Code:
 
 (require 'conn-things)
-(require 'conn-mark)
 (require 'conn-expand)
 (require 'expand-region)
 (eval-when-compile
@@ -35,7 +34,7 @@
 ;;;###autoload
 (defun conn-er-expansions ()
   (save-mark-and-excursion
-    (conn--push-ephemeral-mark)
+    (push-mark nil t)
     (cl-loop
      with expansions = nil
      do (let ((start (region-beginning))

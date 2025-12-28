@@ -25,7 +25,6 @@
 (require 'conn-things)
 (require 'conn-states)
 (require 'conn-dispatch)
-(require 'conn-mark)
 (require 'conn-expand)
 (eval-when-compile
   (require 'cl-lib))
@@ -268,11 +267,8 @@ of line proper."
                                  (back-to-indentation)
                                  (point)))
                        (region-active-p)))
-          (goto-char (line-end-position))
-          (setq conn-this-command-thing 'outer-line)))
-    (forward-line N)
-    (setq conn-this-command-handler (conn-command-mark-handler 'forward-line)
-          conn-this-command-thing 'line)))
+          (goto-char (line-end-position))))
+    (forward-line N)))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Move point to the first non-whitespace character in line.
@@ -289,11 +285,8 @@ of line proper."
                                  (conn--end-of-inner-line-1)
                                  (point)))
                        (region-active-p)))
-          (goto-char (line-beginning-position))
-          (setq conn-this-command-thing 'outer-line)))
-    (forward-line (- N))
-    (setq conn-this-command-thing 'line
-          conn-this-command-handler (conn-command-mark-handler 'forward-line))))
+          (goto-char (line-beginning-position))))
+    (forward-line (- N))))
 
 (defun conn-end-of-list ()
   "Move point to the end of the enclosing list."
@@ -306,94 +299,6 @@ of line proper."
   (interactive)
   (backward-up-list nil t t)
   (down-list 1 t))
-
-(defun conn-unpop-movement-ring (arg)
-  "Rotate backward through `conn-movement-ring'."
-  (interactive "p")
-  (setq conn--movement-ring-rotating t)
-  (cond ((< arg 0)
-         (conn-pop-movement-ring (abs arg)))
-        ((null conn-movement-ring)
-         (message "Movement ring empty"))
-        (t
-         (conn-push-movement-ring (point) (mark t))
-         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
-           (conn-ring-rotate-backward conn-movement-ring))
-         (pcase (conn-ring-head conn-movement-ring)
-           (`(,pt . ,mk)
-            (goto-char pt)
-            (conn--push-ephemeral-mark mk))))))
-
-(defun conn-pop-movement-ring (arg)
-  "Rotate forward through `conn-movement-ring'."
-  (interactive "p")
-  (setq conn--movement-ring-rotating t)
-  (cond ((< arg 0)
-         (conn-unpop-movement-ring (abs arg)))
-        ((null conn-movement-ring)
-         (message "Movement ring empty"))
-        (t
-         (conn-push-movement-ring (point) (mark t))
-         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
-           (conn-ring-rotate-forward conn-movement-ring))
-         (pcase (conn-ring-head conn-movement-ring)
-           (`(,pt . ,mk)
-            (goto-char pt)
-            (conn--push-ephemeral-mark mk))))))
-
-;;;;; Recenter
-
-(defcustom conn-recenter-pulse t
-  "Momentarily highlight region after `conn-recenter-on-region'."
-  :group 'conn
-  :type 'boolean)
-
-(defvar conn-recenter-positions
-  (list 'center 'top 'bottom)
-  "Cycle order for `conn-recenter-on-region'.")
-
-(defun conn-recenter-on-region ()
-  "Recenter the screen on the current region.
-
-Repeated invocations scroll the window according to the ordering
-of `conn-recenter-positions'."
-  (interactive)
-  (if (eq this-command last-command)
-      (put this-command :conn-positions
-           (let ((ps (conn--command-property :conn-positions)))
-             (append (cdr ps) (list (car ps)))))
-    (put this-command :conn-positions conn-recenter-positions))
-  (let ((beg (region-beginning))
-        (end (region-end)))
-    (pcase (car (conn--command-property :conn-positions))
-      ('center
-       (save-excursion
-         (forward-line
-          (if (> (point) (mark t))
-              (- (/ (count-lines beg end) 2))
-            (/ (count-lines beg end) 2)))
-         (recenter))
-       (when (not (pos-visible-in-window-p (point)))
-         (if (> (point) (mark t))
-             (recenter -1)
-           (recenter 0))))
-      ('top
-       (save-excursion
-         (goto-char beg)
-         (recenter 0)))
-      ('bottom
-       (save-excursion
-         (goto-char end)
-         (recenter -1))))
-    (when (and conn-recenter-pulse
-               (not (region-active-p)))
-      (pulse-momentary-highlight-region beg end))))
-
-(defun conn-recenter-on-region-other-window ()
-  "Recenter the current region in `other-window-for-scrolling'."
-  (interactive)
-  (with-selected-window (other-window-for-scrolling)
-    (conn-recenter-on-region)))
 
 ;;;;; Command Registers
 
@@ -493,41 +398,18 @@ The command to be stored is read from `command-history'."
     (rectangle-mark-mode)
     (conn-push-state 'conn-mark-state)))
 
-(defun conn-toggle-mark-command (&optional arg)
+(defun conn-set-mark-command ()
   "Toggle `mark-active'.
 
 With a prefix ARG activate `rectangle-mark-mode'."
-  (interactive "P")
-  (cond (arg
-         (conn-rectangle-mark)
-         (conn-push-state 'conn-mark-state))
-        (mark-active (deactivate-mark))
-        (t
-         (activate-mark)
-         (conn-push-state 'conn-mark-state))))
-
-(defun conn-set-mark-command (&optional arg)
-  "Toggle `mark-active' and push ephemeral mark at point.
-
-With a prefix ARG activate `rectangle-mark-mode'.
-Immediately repeating this command pushes a mark."
-  (interactive "P")
-  (cond (arg
-         (rectangle-mark-mode 'toggle))
-        ((eq last-command 'conn-set-mark-command)
-         (setq conn-record-mark-state nil)
-         (if (region-active-p)
-             (progn
-               (push-mark nil t)
-               (deactivate-mark)
-               (message "Mark pushed and deactivated"))
-           (activate-mark)
-           (message "Mark activated")))
-        (t
-         (conn--push-ephemeral-mark)
-         (activate-mark)))
-  (when (region-active-p)
-    (conn-push-state 'conn-mark-state)))
+  (interactive)
+  (pcase (conn-bounds-of 'last-command nil)
+    ((conn-bounds `(,beg . ,end))
+     (push-mark (if (= (point) beg) end beg) t t)
+     (conn-push-state 'conn-mark-state))
+    (_
+     (push-mark nil t t)
+     (conn-push-state 'conn-mark-state))))
 
 (defun conn-previous-mark-command ()
   "Push, and mark the region from the previous, `conn-mark-state'."
@@ -535,8 +417,7 @@ Immediately repeating this command pushes a mark."
   (unless conn--previous-mark-state
     (user-error "No previous mark state"))
   (goto-char (nth 0 conn--previous-mark-state))
-  (conn--push-ephemeral-mark (nth 1 conn--previous-mark-state)
-                             nil t)
+  (push-mark (nth 1 conn--previous-mark-state) t t)
   (pcase (nth 2 conn--previous-mark-state)
     (`(,pc . ,mc)
      (rectangle-mark-mode 1)
@@ -556,9 +437,10 @@ Immediately repeating this command pushes a mark."
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (goto-char beg)
-     (push-mark end t t)
+    ((and (conn-bounds `(,beg . ,end) transform)
+          (conn-bounds-get :forward))
+     (goto-char (if forward end beg))
+     (push-mark (if forward beg end) t t)
      (conn-push-state 'conn-mark-state))))
 
 (defun conn-exchange-mark-command (&optional arg)
@@ -576,30 +458,6 @@ With a prefix ARG `push-mark' without activating it."
   "Set mark at point and push old mark on mark ring."
   (interactive)
   (push-mark))
-
-;;;;;; Mark Ring
-
-(defun conn-pop-mark-ring ()
-  "Like `pop-to-mark-command' but uses `conn-mark-ring'."
-  (interactive)
-  (if (null conn-mark-ring)
-      (user-error "Mark ring empty")
-    (conn--push-ephemeral-mark (point))
-    (conn--push-mark-ring (point))
-    (conn-ring-rotate-forward conn-mark-ring)
-    (goto-char (conn-ring-head conn-mark-ring)))
-  (deactivate-mark))
-
-(defun conn-unpop-mark-ring ()
-  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring'."
-  (interactive)
-  (if (null conn-mark-ring)
-      (user-error "Mark ring empty")
-    (conn--push-ephemeral-mark (point))
-    (conn--push-mark-ring (point))
-    (conn-ring-rotate-backward conn-mark-ring)
-    (goto-char (conn-ring-head conn-mark-ring)))
-  (deactivate-mark))
 
 ;;;;; Line Commands
 
@@ -634,6 +492,9 @@ With arg N, insert N newlines."
 (defvar conn--separator-history nil
   "History var for `conn-set-register-separator'.")
 
+(defvar-keymap conn-register-argument-map
+  "<" 'register)
+
 (defun conn-set-register-separator (string)
   "Set `register-separator' register to string STRING."
   (interactive
@@ -659,23 +520,36 @@ for the meaning of prefix ARG."
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
 
-(defun conn-register-load-and-replace (reg)
+(defun conn-register-load-and-replace (thing
+                                       arg
+                                       transform
+                                       register)
   "Do what I mean with a REG.
 
 For a window configuration, restore it.  For a number or text, insert it.
 For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
-   (progn
-     (barf-if-buffer-read-only)
-     (list (register-read-with-preview
-            "Insert register and replace: "
-            #'register--insertable-p))))
-  (atomic-change-group
-    (if (bound-and-true-p rectangle-mark-mode)
-        (delete-rectangle (region-beginning) (region-end))
-      (delete-region (region-beginning) (region-end)))
-    (register-val-insert (get-register reg))))
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument))
+        (register (conn-read-argument
+                   "register"
+                   'register
+                   conn-register-argument-map
+                   (lambda () (register-read-with-preview "Register"))
+                   #'char-to-string
+                   (register-read-with-preview "Register"))))
+     (list thing arg transform register)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (atomic-change-group
+       (if (and (eq thing 'regions)
+                (bound-and-true-p rectangle-mark-mode))
+           (delete-rectangle (region-beginning) (region-end))
+         (delete-region beg end))
+       (register-val-insert (get-register register))))))
 
 (defun conn-unset-register (register)
   "Unset REGISTER."
@@ -684,51 +558,35 @@ for the meaning of prefix ARG."
 
 ;;;;; Killing and Yanking
 
-(defcustom conn-completion-region-quote-function 'regexp-quote
-  "Function used to quote region strings for consult search functions."
-  :group 'conn
-  :type 'symbol)
-
-(defvar-local conn--minibuffer-initial-region nil)
-
-(defun conn--yank-region-to-minibuffer-hook ()
-  (setq conn--minibuffer-initial-region
-        (with-minibuffer-selected-window
-          (ignore-errors (cons (region-beginning) (region-end))))))
-
-(defun conn-yank-region-to-minibuffer (&optional quote-function)
-  "Yank region from `minibuffer-selected-window' into minibuffer."
-  (interactive
-   (list (if current-prefix-arg
-             (if conn-completion-region-quote-function
-                 (pcase (car (read-multiple-choice
-                              "Quote:"
-                              '((?r "regexp-quote")
-                                (?c "conn-completion-region-quote-function"))))
-                   (?r 'regexp-quote)
-                   (?c conn-completion-region-quote-function))
-               'regexp-quote)
-           'identity)))
-  (insert-for-yank
-   (pcase conn--minibuffer-initial-region
-     (`(,beg . ,end)
-      (with-minibuffer-selected-window
-        (funcall (or quote-function 'identity)
-                 (filter-buffer-substring beg end))))
-     (_ (user-error "No region in buffer")))))
-
-(defun conn-yank-replace (&optional kill-region)
+(defun conn-yank-replace (thing
+                          arg
+                          transform
+                          &optional
+                          kill
+                          check-bounds)
   "`yank' replacing region between START and END.
 
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
-  (interactive "P")
-  (pcase (conn-bounds-of 'region nil)
-    ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument))
+        (kill (conn-boolean-argument
+               'conn-kill-thing nil "kill"))
+        (check-bounds (conn-check-bounds-argument)))
+     (list thing arg transform kill check-bounds)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end)
+                  (append transform
+                          (when check-bounds
+                            (list 'conn-check-bounds))))
+     (goto-char beg)
      (atomic-change-group
        (conn--without-conn-maps
-         (if kill-region
+         (if kill
              (let ((str (filter-buffer-substring beg end t)))
                (yank)
                (kill-new str))
@@ -737,49 +595,40 @@ of deleting it."
          ;; yank changes this-command to 'yank, fix that
          (setq this-command 'conn-yank-replace))))))
 
-(defun conn-copy-region (start end &optional register)
-  "Copy region between START and END as kill.
-
-If REGISTER is given copy to REGISTER instead."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (when current-prefix-arg
-           (register-read-with-preview "Copy to register: "))))
-  (if register
-      (if (bound-and-true-p rectangle-mark-mode)
-          (copy-rectangle-to-register register start end)
-        (copy-to-register register start end)
-        (when (called-interactively-p 'interactive)
-          (pulse-momentary-highlight-region start end)))
-    (if (bound-and-true-p rectangle-mark-mode)
-        (copy-rectangle-as-kill start end)
-      (copy-region-as-kill start end)
-      (when (called-interactively-p 'interactive)
-        (pulse-momentary-highlight-region start end)))))
-
-(defun conn-completing-yank-replace (&optional arg)
+(defun conn-completing-yank-replace (thing
+                                     arg
+                                     transform
+                                     &optional
+                                     kill
+                                     check-bounds)
   "Replace region with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive "P")
-  (pcase (conn-bounds-of 'region nil)
-    ((conn-bounds `(,beg . ,end) (list 'conn-check-bounds))
-     (let ((ov (make-overlay beg end))
-           exchange)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument))
+        (kill (conn-boolean-argument
+               'conn-kill-thing nil "kill"))
+        (check-bounds (conn-check-bounds-argument)))
+     (list thing arg transform kill check-bounds)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end)
+                  (append transform
+                          (when check-bounds
+                            (list 'conn-check-bounds))))
+     (goto-char end)
+     (let ((ov (make-overlay beg end)))
        (overlay-put ov 'conn-overlay t)
        (unwind-protect
            (progn
-             (when (setq exchange (= (point) beg))
-               (exchange-point-and-mark (not mark-active)))
              (overlay-put ov 'invisible t)
              (call-interactively (or (command-remapping 'yank-from-kill-ring)
                                      'yank-from-kill-ring))
-             (if arg
+             (if kill
                  (kill-region (overlay-start ov) (overlay-end ov))
                (delete-region (overlay-start ov) (overlay-end ov))))
-         (when exchange
-           (exchange-point-and-mark (not mark-active)))
          (delete-overlay ov))))))
 
 (defun conn-yank-replace-rectangle ()
@@ -801,29 +650,39 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (outline-insert-heading)
         (recursive-edit)))))
 
-(defun conn-rgrep-region (beg end)
+(defun conn-rgrep-thing (thing arg transform)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (list (region-beginning)
-         (region-end)))
-  (let ((search-string
-         (read-string "Search for: "
-                      (regexp-quote (buffer-substring-no-properties beg end))
-                      'grep-regexp-history)))
-    (rgrep search-string)))
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (let ((search-string
+            (read-string "Search for: "
+                         (regexp-quote (buffer-substring-no-properties beg end))
+                         'grep-regexp-history)))
+       (rgrep search-string)))))
 
-(defun conn-occur-region (beg end)
+(defun conn-occur-thing (thing arg transform)
   "`occur' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (list (region-beginning)
-         (region-end)))
-  (let ((search-string
-         (read-string "Search for: "
-                      (regexp-quote (buffer-substring-no-properties beg end))
-                      'grep-regexp-history)))
-    (occur search-string)))
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (let ((search-string
+            (read-string "Search for: "
+                         (regexp-quote (buffer-substring-no-properties beg end))
+                         'grep-regexp-history)))
+       (occur search-string)))))
 
 ;;;;; Transition Functions
 
@@ -1105,20 +964,6 @@ instances of from-string.")
                           'face 'minibuffer-prompt
                           'separator t)))))
 
-(defun conn-replace-read-default ()
-  (let ((beg (region-beginning))
-        (end (region-end)))
-    (when (and (< (- end beg) 60)
-               (<= end (save-excursion
-                         (goto-char beg)
-                         (pos-eol)))
-               (not (use-region-p)))
-      (buffer-substring-no-properties beg end))))
-
-(defun conn-replace-read-regexp-default ()
-  (when-let* ((default (conn-replace-read-default)))
-    (regexp-quote default)))
-
 (defvar conn--replace-reading nil)
 
 (defun conn--replace-read-from ( prompt
@@ -1154,11 +999,7 @@ instances of from-string.")
             (make-composed-keymap conn-replace-from-map)
             (use-local-map)))
       (if regexp-flag
-          (let ((query-replace-read-from-regexp-default
-                 (if-let* ((def (conn-replace-read-regexp-default)))
-                     def
-                   query-replace-read-from-regexp-default)))
-            (query-replace-read-from prompt regexp-flag))
+          (query-replace-read-from prompt regexp-flag)
         (query-replace-read-from prompt regexp-flag)))))
 
 (defun conn--replace-read-args (prompt
@@ -1389,11 +1230,6 @@ For more information about how the replacement is carried out see
   (or (memq cmd '(multi-file multi-buffer project))
       (cl-call-next-method)))
 
-(defun conn-isearch-yank-region ()
-  "Yank the current region to the isearch search string."
-  (interactive)
-  (isearch-yank-internal (lambda () (mark t))))
-
 (defun conn-isearch-open-recursive-edit ()
   "Open a recursive edit from within an isearch.
 
@@ -1558,76 +1394,6 @@ Exiting the recursive edit will resume the isearch."
                             :regexp regexp
                             :subregions-p subregions-p))
 
-(defun conn-isearch-region-forward (thing
-                                    arg
-                                    transform
-                                    &optional
-                                    regexp
-                                    subregions)
-  "Isearch forward for region from BEG to END."
-  (interactive
-   (conn-read-args (conn-isearch-state
-                    :prompt "Thing"
-                    :reference conn-isearch-reference)
-       ((`(,thing ,arg) (conn-isearch-thing-argument))
-        (subregions (conn-subregions-argument))
-        (transform (conn-transform-argument))
-        (regexp (conn-boolean-argument 'regexp
-                                       conn-regexp-argument-map
-                                       "regexp")))
-     (list thing arg transform regexp subregions)))
-  (let ((string (buffer-substring-no-properties (region-beginning)
-                                                (region-end))))
-    (conn-isearch-in-thing-do thing
-                              arg
-                              transform
-                              :backward nil
-                              :regexp regexp
-                              :subregions-p subregions)
-    (with-isearch-suspended
-     (setq isearch-new-string (if regexp (regexp-quote string) string)
-           isearch-new-message (mapconcat #'isearch-text-char-description
-                                          isearch-new-string "")))))
-
-(defun conn-isearch-region-backward (thing
-                                     arg
-                                     transform
-                                     &optional
-                                     regexp
-                                     subregions)
-  "Isearch backward for region from BEG to END.
-
-Interactively `region-beginning' and `region-end'."
-  (interactive
-   (conn-read-args (conn-isearch-state
-                    :prompt "Thing"
-                    :reference conn-isearch-reference)
-       ((`(,thing ,arg) (conn-isearch-thing-argument))
-        (subregions (conn-subregions-argument))
-        (transform (conn-transform-argument))
-        (regexp (conn-boolean-argument 'regexp
-                                       conn-regexp-argument-map
-                                       "regexp")))
-     (list thing arg transform regexp subregions)))
-  (let ((string (buffer-substring-no-properties (region-beginning)
-                                                (region-end))))
-    (conn-isearch-in-thing-do thing
-                              arg
-                              transform
-                              :backward t
-                              :regexp regexp
-                              :subregions-p subregions)
-    (with-isearch-suspended
-     (setq isearch-new-string (if regexp (regexp-quote string) string)
-           isearch-new-message (mapconcat #'isearch-text-char-description
-                                          isearch-new-string "")))))
-
-(defun conn-isearch-exit-and-mark ()
-  "`isearch-exit' and set region to match."
-  (interactive)
-  (isearch-done)
-  (conn--push-ephemeral-mark isearch-other-end))
-
 (defun conn-isearch-exit-other-end ()
   "`isearch-exit' at the other end of the current match."
   (interactive)
@@ -1635,6 +1401,29 @@ Interactively `region-beginning' and `region-end'."
       (isearch-repeat-backward)
     (isearch-repeat-forward))
   (isearch-done))
+
+(defun conn-isearch-thing-to-search-string ()
+  "Read a thing and yank it to the isearch string."
+  (interactive)
+  (with-isearch-suspended
+   (pcase (conn-read-args (conn-read-thing-state
+                           :prompt "Thing")
+              ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+               (transform (conn-transform-argument)))
+            (conn-transform-bounds
+             (conn-bounds-of thing arg)
+             transform))
+     ((conn-bounds `(,beg . ,end))
+      (let ((string (buffer-substring-no-properties beg end)))
+        (if (and isearch-case-fold-search
+                 (eq 'not-yanks search-upper-case))
+            (setq string (downcase string)))
+        (if isearch-regexp (setq string (regexp-quote string)))
+        (setq isearch-yank-flag t)
+        (setq isearch-new-string (concat isearch-string string)
+              isearch-new-message (concat isearch-message
+                                          (mapconcat 'isearch-text-char-description
+                                                     string ""))))))))
 
 ;;;;; Transpose
 
@@ -2570,7 +2359,7 @@ hook, which see."
                                                  ,@(when check-bounds
                                                      (list 'conn-check-bounds)))))
                     (goto-char beg)
-                    (conn--push-ephemeral-mark end)
+                    (push-mark end t)
                     (if delete
                         (delete-region beg end)
                       (push (cons append (funcall region-extract-function t))
@@ -2811,10 +2600,7 @@ If copying to a registers then append to the register.  If APPEND is
                                   register)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (save-mark-and-excursion
-       (goto-char beg)
-       (conn--push-ephemeral-mark end)
-       (conn--kill-region beg end nil append register))
+     (conn--kill-region beg end nil append register)
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
 
@@ -2938,9 +2724,7 @@ If copying to a registers then append to the register.  If APPEND is
                (save-mark-and-excursion
                  (pcase (conn-bounds-of-dispatch thing arg pt)
                    ((conn-dispatch-bounds `(,beg . ,end) transform)
-                    (goto-char beg)
-                    (conn--push-ephemeral-mark end)
-                    (push (cons append (funcall region-extract-function nil))
+                    (push (cons append (filter-buffer-substring beg end))
                           strings)
                     (conn-dispatch-action-pulse beg end)
                     (conn-dispatch-undo-case 90
@@ -2963,6 +2747,16 @@ If copying to a registers then append to the register.  If APPEND is
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))))))
+
+(defun conn-last-thing ()
+  "Copy the thing just moved over or the active region."
+  (interactive)
+  (if (region-active-p)
+      (copy-region-as-kill (region-beginning) (region-end) t)
+    (pcase (conn-bounds-of 'last-command nil)
+      ((conn-bounds `(,beg . ,end))
+       (pulse-momentary-highlight-region beg end)
+       (copy-region-as-kill beg end)))))
 
 ;;;;; How Many
 
@@ -3254,7 +3048,7 @@ When `conn-duplicate-repeat-mode' is non-nil activate
                 ov beg (min end (save-excursion
                                   (goto-char (overlay-end ov))
                                   (pos-eol))))
-               (conn--push-ephemeral-mark (overlay-end ov))
+               (set-mark (overlay-end ov))
                (set-marker beg nil)
                (set-marker end nil))))
          (cleanup ()
@@ -3338,6 +3132,7 @@ When `conn-duplicate-repeat-mode' is non-nil activate
                  regexp (if extra-newline "\n" "[\t ]"))))
       (goto-char end)
       (save-excursion
+        (when (> repeat 0) (push-mark nil nil))
         (dotimes (_ repeat) (dup)))
       (if (not conn-duplicate-repeat-mode)
           (cleanup)
@@ -3604,12 +3399,15 @@ For how the region is determined using CMD, ARG, and TRANSFORM see
                                     cleanup-whitespace)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (save-mark-and-excursion
-       (goto-char beg)
-       (conn--push-ephemeral-mark end)
-       (indent-region (point) (mark t))
-       (when cleanup-whitespace
-         (whitespace-cleanup-region (point) (mark t)))))))
+     (let ((beg (set-marker (make-marker) beg))
+           (end (set-marker (make-marker) end)))
+       (unwind-protect
+           (save-excursion
+             (indent-region beg end)
+             (when cleanup-whitespace
+               (whitespace-cleanup-region beg end)))
+         (set-marker beg nil)
+         (set-marker end nil))))))
 
 (defun conn-indent-thing (cmd arg transform &optional cleanup-whitespace)
   "Indent the region defined by CMD, ARG, and TRANSFORM.

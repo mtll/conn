@@ -21,7 +21,6 @@
 
 (require 'conn-vars)
 (require 'conn-utils)
-(require 'conn-mark)
 (require 'conn-quick-ref)
 (eval-when-compile
   (require 'cl-lib))
@@ -913,16 +912,6 @@ If BUFFER is nil then use the current buffer."
                                  conn-current-state))))
 
 (defun conn--setup-state-properties ()
-  (setf conn--disable-mark-cursor
-        (or (and-let* ((hide (conn-get-buffer-property
-                              :disable-mark-cursor)))
-              (or (eq hide t)
-                  (alist-get conn-current-state hide)))
-            (and-let* ((hide (conn-get-mode-property
-                              major-mode :disable-mark-cursor)))
-              (or (eq hide t)
-                  (alist-get conn-current-state hide)))
-            (conn-state-get conn-current-state :disable-mark-cursor)))
   (setf cursor-type
         (let ((c (conn-state-get conn-current-state :cursor nil t)))
           (if (functionp c) (funcall c) c))))
@@ -1191,9 +1180,7 @@ if it is called with an abstract state."
 
 For use in buffers that should not have any other state."
   :no-keymap t
-  :lighter "Ø"
-  :disable-mark-cursor t
-  :cursor '(bar . 4))
+  :lighter "Ø")
 
 (conn-define-state conn-command-state ()
   "A state for editing commands."
@@ -1442,17 +1429,9 @@ command was a prefix command.")
 
 (defun conn-setup-minibuffer-state ()
   "Setup `minibuffer-mode' buffer state."
-  (let ((fn (make-symbol "hook")))
-    (fset fn (lambda ()
-               (conn--push-ephemeral-mark)
-               (remove-hook 'minibuffer-setup-hook fn)))
-    (when (eq major-mode 'minibuffer-mode)
-      (setf (alist-get 'conn-emacs-state
-                       (conn-get-buffer-property :disable-mark-cursor))
-            t)
-      (conn-push-state 'conn-emacs-state)
-      (add-hook 'minibuffer-setup-hook fn)
-      t)))
+  (when (eq major-mode 'minibuffer-mode)
+    (conn-push-state 'conn-emacs-state)
+    t))
 (add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
 ;;;; Read Args

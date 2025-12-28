@@ -341,8 +341,6 @@
   "M-w" 'dired-copy-filename-as-kill
   "RET" 'dired-find-file
   "o" 'dired-find-file-other-window
-  "M-u" 'conn-pop-mark-ring
-  "M-o" 'conn-unpop-mark-ring
   "* p" 'dired-sort-toggle-or-edit
   "* e" 'dired-mark-executables
   "* l" 'dired-mark-symlinks
@@ -365,8 +363,6 @@
 (declare-function dired-marker-regexp "dired")
 (declare-function dired-kill-subdir "dired-aux")
 (declare-function dired-kill-line "dired-aux")
-
-(conn-set-mode-property 'dired-mode :disable-mark-cursor t)
 
 (defun conn--dispatch-dired-dirline ()
   (save-excursion
@@ -529,8 +525,6 @@
 
 ;;;; Diff
 
-(conn-set-mode-property 'diff-mode :disable-mark-cursor t)
-
 (defvar conn-diff-ref
   (conn-reference-page "Diff"
     ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
@@ -592,8 +586,6 @@
 
 ;;;; Magit
 
-(conn-set-mode-property 'magit-section-mode :disable-mark-cursor t)
-
 (defvar conn-magit-ref
   (conn-reference-page "Magit"
     ((("section forward/back" magit-section-forward magit-section-backward)
@@ -628,7 +620,6 @@
 (conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
   "State for dispatch in `ibuffer-mode'."
   :cursor '(bar . 4)
-  :disable-mark-cursor t
   :suppress-input-method t)
 
 (defun conn-ibuffer-dispatch-state (&optional initial-arg)
@@ -648,8 +639,6 @@
      :repeat repeat
      :restrict-windows restrict-windows
      :other-end :no-other-end)))
-
-(conn-set-mode-property 'ibuffer-mode :disable-mark-cursor t)
 
 (defvar ibuffer-movement-cycle)
 (defvar ibuffer-marked-char)
@@ -827,7 +816,6 @@
 
 (conn-define-state conn-bmenu-dispatch-state (conn-dispatch-targets-state)
   "State for dispatch in `bookmark-bmenu-mode'."
-  :disable-mark-cursor t
   :suppress-input-method t)
 
 (defun conn-bmenu-dispatch-state (&optional initial-arg)
@@ -885,8 +873,6 @@
   "k" (conn-anonymous-thing
         'line
         :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
-
-(conn-set-mode-property 'bookmark-bmenu-mode :disable-mark-cursor t)
 
 (defvar conn-bookmark-bmenu-ref
   (conn-reference-page "Bookmark Menu"
@@ -1080,7 +1066,6 @@
 
 ;;;; Treemacs
 
-(conn-set-mode-property 'treemacs-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
   "h" 'conn-wincontrol-one-command
@@ -1096,7 +1081,6 @@
 
 ;;;; Messages
 
-(conn-set-mode-property 'messages-buffer-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
   "h" 'conn-wincontrol-one-command
@@ -1114,7 +1098,6 @@
 
 ;;;; Debugger mode
 
-(conn-set-mode-property 'debugger-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
   "h" 'conn-wincontrol-one-command
@@ -1132,8 +1115,6 @@
 
 ;;;; Occur mode
 
-(conn-set-mode-property 'occur-mode :disable-mark-cursor t)
-(conn-set-mode-property 'occur-edit-mode :disable-mark-cursor nil)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
   "'" 'conn-kapply-prefix
@@ -1154,9 +1135,6 @@
 
 ;;;; Compile mode
 
-(conn-set-mode-property 'compilation-mode :disable-mark-cursor t)
-(static-if (<= 31 emacs-major-version)
-    (conn-set-mode-property 'grep-edit-mode :disable-mark-cursor nil))
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
   "'" 'conn-kapply-prefix
@@ -1173,7 +1151,6 @@
 
 ;;;; pdf-tools
 
-(conn-set-mode-property 'pdf-view-mode :disable-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
   "x" (conn-remap-key "C-x" t)

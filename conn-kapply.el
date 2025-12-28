@@ -278,40 +278,43 @@ buffer.
 
 REGEXP-FLAG means to treat the from string as a regexp for the purpose
 of highlighting."
-  (let ((default (conn-replace-read-default)))
-    (conn-with-region-emphasis bounds
-      (minibuffer-with-setup-hook
-          (minibuffer-lazy-highlight-setup
-           :case-fold case-fold-search
-           :filter (lambda (mb me)
-                     (or (null bounds)
-                         (cl-loop for (beg . end) in bounds
-                                  when (<= beg mb me end) return t)))
-           :highlight query-replace-lazy-highlight
-           :regexp regexp-flag
-           :regexp-function (or replace-regexp-function
-                                (and replace-char-fold
-                                     (not regexp-flag)
-                                     #'char-fold-to-regexp))
-           :transform (lambda (string)
-                        (when (and case-fold-search search-upper-case)
-                          (setq isearch-case-fold-search
-                                (isearch-no-upper-case-p string regexp-flag)))
-                        string))
-        (if regexp-flag
-            (read-regexp (format-prompt prompt default)
-                         (when default (regexp-quote default))
-                         'minibuffer-history)
-          (let ((from (read-string
-                       (format-prompt prompt default)
-                       nil nil
-                       (if default
-                           (delete-dups
-                            (cons default (query-replace-read-from-suggestions)))
-                         (query-replace-read-from-suggestions))
-                       t)))
-            (or (and (length= from 0) default)
-                from)))))))
+  (conn-with-region-emphasis bounds
+    (minibuffer-with-setup-hook
+        (minibuffer-lazy-highlight-setup
+         :case-fold case-fold-search
+         :filter (lambda (mb me)
+                   (or (null bounds)
+                       (cl-loop for (beg . end) in bounds
+                                when (<= beg mb me end) return t)))
+         :highlight query-replace-lazy-highlight
+         :regexp regexp-flag
+         :regexp-function (or replace-regexp-function
+                              (and replace-char-fold
+                                   (not regexp-flag)
+                                   #'char-fold-to-regexp))
+         :transform (lambda (string)
+                      (when (and case-fold-search search-upper-case)
+                        (setq isearch-case-fold-search
+                              (isearch-no-upper-case-p string regexp-flag)))
+                      string))
+      (if regexp-flag
+          (let ((default (and query-replace-read-from-regexp-default
+                              (funcall query-replace-read-from-regexp-default))))
+            (read-regexp (concat prompt (unless default ": "))
+                         default
+                         'minibuffer-history))
+        (let* ((default (and query-replace-read-from-default
+                             (funcall query-replace-read-from-default)))
+               (from (read-from-minibuffer
+                      (concat prompt ": ")
+                      nil query-replace-read-map nil nil
+                      (if default
+                          (delete-dups
+                           (cons default (query-replace-read-from-suggestions)))
+                        (query-replace-read-from-suggestions))
+                      t)))
+          (or (and (length= from 0) default)
+              from))))))
 
 (cl-defgeneric conn-kapply-match-iterator (thing
                                            arg
@@ -676,7 +679,7 @@ current buffer."
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
              (goto-char beg)
-             (conn--push-ephemeral-mark end))
+             (push-mark end))
             ('nil)
             (_ (error "Invalid region %s" region)))))
        region))

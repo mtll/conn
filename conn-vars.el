@@ -38,18 +38,8 @@
   :prefix "conn-"
   :group 'editing)
 
-(defgroup conn-marks nil
-  "Conn-mode marks."
-  :prefix "conn-"
-  :group 'conn)
-
 (defgroup conn-faces nil
   "Conn-mode faces."
-  :prefix "conn-"
-  :group 'conn)
-
-(defgroup conn-states nil
-  "Conn-mode states."
   :prefix "conn-"
   :group 'conn)
 
@@ -169,6 +159,14 @@
   "`backward-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
+
+;;;;; Mark Variables
+
+(defvar conn-this-command-start (make-marker)
+  "Start position for current command.")
+
+(defvar conn-last-command-start (make-marker)
+  "Start position for last command.")
 
 ;;;;; Remaps
 

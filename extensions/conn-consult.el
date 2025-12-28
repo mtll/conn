@@ -32,6 +32,16 @@
 (declare-function conn-regions-kapply-prefix "conn-transient")
 (declare-function consult-imenu "consult-imenu")
 
+(defgroup conn-consult nil
+  "Consult integration for conn"
+  :prefix "conn-"
+  :group 'conn)
+
+(defcustom conn-completion-region-quote-function 'regexp-quote
+  "Function used to quote region strings for consult search functions."
+  :group 'conn-consult
+  :type 'symbol)
+
 (cl-defmethod conn-dispatch-common-commands ((_command (eql consult-line)))
   (let ((inhibit-message nil))
     (consult-line)))
@@ -41,74 +51,110 @@
     (consult-imenu)))
 
 ;;;###autoload
-(defun conn-consult-ripgrep-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-ripgrep
-   nil
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-ripgrep-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-ripgrep
+      nil
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 ;;;###autoload
-(defun conn-consult-line-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-line
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-line-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-line
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 ;;;###autoload
-(defun conn-consult-line-multi-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-line-multi
-   nil
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-line-multi-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-line-multi
+      nil
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 ;;;###autoload
-(defun conn-consult-locate-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-locate
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-locate-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-locate
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 ;;;###autoload
-(defun conn-consult-git-grep-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-git-grep
-   nil
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-git-grep-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-git-grep
+      nil
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 ;;;###autoload
-(defun conn-consult-find-region (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (deactivate-mark)
-  (consult-find
-   nil
-   (when (and (< (- end beg) 1000)
-              (= (count-lines beg end) 1))
-     (funcall conn-completion-region-quote-function
-              (buffer-substring-no-properties beg end)))))
+(defun conn-consult-find-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-read-thing-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (deactivate-mark)
+     (consult-find
+      nil
+      (when (and (< (- end beg) 1000)
+                 (= (count-lines beg end) 1))
+        (funcall conn-completion-region-quote-function
+                 (buffer-substring-no-properties beg end)))))))
 
 (defun conn-consult--isearch-matches (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))

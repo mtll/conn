@@ -50,12 +50,6 @@
 
 ;;;;; Repeat Map
 
-(defvar-keymap conn-pop-mark-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
-  "u" 'conn-pop-mark-ring
-  "o" 'conn-unpop-mark-ring)
-
 (defvar-keymap conn-mru-window-repeat-map
   :repeat t
   "`" 'conn-wincontrol-mru-window)
@@ -88,10 +82,8 @@
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
 (defvar-keymap conn-isearch-map
-  "M-Y" 'conn-isearch-yank-region
-  "M-<return>" 'conn-isearch-exit-and-mark
+  "M-Y" 'conn-isearch-thing-to-search-string
   "C-<return>" 'conn-isearch-exit-other-end
-  "M-RET" 'conn-isearch-exit-and-mark
   "M-'" 'conn-isearch-kapply-prefix
   "C-," 'conn-dispatch-isearch
   "C-'" 'conn-isearch-open-recursive-edit)
@@ -110,16 +102,12 @@
   "m" 'conn-replace
   "'" 'conn-kapply-on-thing-prefix
   "TAB" 'indent-rigidly
-  "$" 'ispell-region
-  "*" 'calc-grab-region
   ";" 'conn-comment-thing
-  "g" 'conn-rgrep-region
+  "g" 'conn-rgrep-thing
   "k" 'delete-region
   "j" 'conn-join-lines
-  "o" 'conn-occur-region
+  "o" 'conn-occur-thing
   "V" 'vc-region-history
-  "s" 'conn-isearch-region-forward
-  "r" 'conn-isearch-region-backward
   "n" 'conn-narrow-to-thing)
 
 (define-keymap
@@ -156,8 +144,15 @@
   :repeat t
   "n" 'pop-global-mark)
 
+(defvar-keymap conn-pop-to-mark-command-repeat-map
+  :repeat t
+  "o" 'conn-pop-jump-ring
+  "u" 'conn-unpop-jump-ring)
+
 (define-keymap
   :keymap conn-goto-map
+  "o" 'conn-pop-jump-ring
+  "u" 'conn-unpop-jump-ring
   "i" 'previous-error
   "k" 'next-error
   "n" 'pop-global-mark
@@ -166,17 +161,7 @@
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
   "," 'xref-go-back
-  "." 'xref-go-forward
-  "J" 'conn-pop-movement-ring
-  "L" 'conn-unpop-movement-ring)
-
-(defvar-keymap conn-movement-ring-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
-  "J" 'conn-pop-movement-ring
-  "L" 'conn-unpop-movement-ring
-  "j" 'conn-pop-movement-ring
-  "l" 'conn-unpop-movement-ring)
+  "." 'xref-go-forward)
 
 ;;;;; Misc Maps
 
@@ -205,8 +190,6 @@
 (defvar-keymap conn-local-mode-map
   "C-<escape>" 'exit-recursive-edit
   "C-x y" conn-dispatch-cycle-map
-  "M-g u" 'conn-pop-mark-ring
-  "M-g o" 'conn-unpop-mark-ring
   "M-g e" 'conn-previous-emacs-state
   "M-g E" 'conn-next-emacs-state
   "C-S-w" 'delete-region
@@ -282,6 +265,7 @@
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace
+  "^" 'ispell-region
   "*" 'calc-grab-region
   "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
@@ -305,7 +289,7 @@
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   ";" 'comment
-  "d" 'conn-forward-defun
+  ;; "d" 'conn-forward-defun
   "i" 'conn-backward-line
   "k" 'forward-line
   "h" 'conn-expand
@@ -326,6 +310,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "C" 'conn-last-thing
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
@@ -382,12 +367,9 @@
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
   "M-y" 'conn-completing-yank-replace
-  "C-M-l" 'conn-recenter-on-region
-  "C-M-S-l" 'conn-recenter-on-region-other-window
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "C" 'conn-copy-region
   "q" 'conn-copy-thing
   "w" 'conn-change-thing
   "f" 'conn-dispatch
@@ -398,7 +380,7 @@
   "<" 'conn-register-prefix
   "t" 'conn-transpose-things
   "r" conn-region-remap
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-thing
   "V" 'conn-previous-mark-command
   "b" 'conn-set-mark-command
   "d" 'conn-kill-thing
@@ -442,7 +424,6 @@
                             'expansion
                             :pretty-print ( :method (_) "conn-expand")
                             :bounds-op ( :method (_self arg)
-                                         (conn--push-ephemeral-mark)
                                          (conn-bounds-of 'conn-expand arg)))
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
@@ -520,12 +501,7 @@
   "<" (conn-anonymous-thing
         'point
         :pretty-print ( :method (_) "position-registers")
-        :target-finder (:method (_self _arg) (conn-dispatch-mark-register)))
-  "<remap> <conn-pop-mark-ring>"
-  (conn-anonymous-thing
-    'point
-    :pretty-print ( :method (_) "mark-ring")
-    :target-finder (:method (_self _arg) (conn-dispatch-mark-ring))))
+        :target-finder (:method (_self _arg) (conn-dispatch-mark-register))))
 
 ;;;;;; Transpose State
 

@@ -19,7 +19,6 @@
 
 (require 'eieio)
 (require 'conn-states)
-(require 'conn-mark)
 (require 'conn-things)
 (eval-when-compile
   (require 'cl-lib)
@@ -1432,9 +1431,6 @@ Target overlays may override this default by setting the
       (dolist (str pool)
         (remhash str in-use)))
     (pcase-dolist (`(,win . ,targets) conn-targets)
-      (when-let* ((ov (buffer-local-value 'conn--mark-cursor
-                                          (window-buffer win))))
-        (delete-overlay ov))
       (dolist (tar (if (eq win (selected-window))
                        (compat-call sort targets
                                     :lessp conn-target-sort-function)
@@ -1667,13 +1663,10 @@ depths will be sorted before greater depths.
   :lighter " SELECT"
   :group 'conn
   (if conn-dispatch-select-mode
-      (progn
-        (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
-          (face-remap-add-relative
-           'mode-line
-           (conn-state-get 'conn-dispatch-state :mode-line-face)))
-        (setq conn--hide-mark-cursor t))
-    (setq conn--hide-mark-cursor nil)
+      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+        (face-remap-add-relative
+         'mode-line
+         (conn-state-get 'conn-dispatch-state :mode-line-face)))
     (unwind-protect
         (conn-cleanup-labels)
       (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
@@ -1813,7 +1806,7 @@ the meaning of depth."
                       (or buffers (list (current-buffer)))))
           (saved-pos (cl-loop for buf in buffers
                               collect (with-current-buffer buf
-                                        (cons (point) (mark t))))))
+                                        (point)))))
       (when (and conn--dispatch-change-groups
                  (not conn-dispatch-amalgamate-undo))
         (dolist (b (or buffers (list (current-buffer))))
@@ -1823,10 +1816,9 @@ the meaning of depth."
         ((or :cancel :undo)
          (cancel-change-group cg)
          (cl-loop for buf in buffers
-                  for (pt . mk) in saved-pos
+                  for pt in saved-pos
                   do (with-current-buffer buf
-                       (goto-char pt)
-                       (conn--push-ephemeral-mark mk))))
+                       (goto-char pt))))
         (:accept (accept-change-group cg))))))
 
 (defun conn-dispatch-undo-pulse (beg end)
@@ -2730,7 +2722,7 @@ contain targets."
               (cl-incf line-count))
             (setq prev beg)))))))
 
-(conn-define-target-finder conn-dispatch-mark-ring
+(conn-define-target-finder conn-dispatch-jump-ring
     (conn-dispatch-focus-mixin)
     ((context-lines
       :initform 1
@@ -2738,7 +2730,7 @@ contain targets."
      (window-predicate
       :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (_state)
-    (let ((points (conn-ring-list conn-mark-ring)))
+    (let ((points (conn-ring-list conn-jump-ring)))
       (dolist (pt points)
         (unless (invisible-p pt)
           (conn-make-target-overlay pt 0)))))
@@ -2746,7 +2738,7 @@ contain targets."
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
 
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-mark-ring))
+(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-jump-ring))
   :no-other-end)
 
 (conn-define-target-finder conn-dispatch-global-mark
@@ -3282,7 +3274,7 @@ exchanges the point and mark."))
                                 end
                               beg))
                (push-mark nil t)
-               (conn--push-ephemeral-mark end)
+               (push-mark end t)
                (goto-char beg)))
             (_ (user-error "Cannot find thing at point"))))))))
 
@@ -3319,11 +3311,8 @@ exchanges the point and mark."))
        (separator (conn-dispatch-separator-argument 'default)))
     (let ((str (pcase (conn-bounds-of fthing farg)
                  ((conn-bounds `(,beg . ,end) ftransform)
-                  (save-mark-and-excursion
-                    (goto-char beg)
-                    (conn--push-ephemeral-mark end)
-                    (conn-dispatch-action-pulse beg end)
-                    (funcall region-extract-function nil)))
+                  (conn-dispatch-action-pulse beg end)
+                  (filter-buffer-substring beg end))
                  (_ (user-error "No %s found" (conn-thing-pretty-print fthing))))))
       (oclosure-lambda (conn-dispatch-copy-to
                         (str str)
@@ -3355,7 +3344,6 @@ after the region selected by dispatch."))
                  (goto-char beg)
                  (when (and separator (< end beg))
                    (conn-dispatch-insert-separator separator))
-                 (conn--push-ephemeral-mark)
                  (insert-for-yank str)
                  (when (and separator (not (< end beg)))
                    (conn-dispatch-insert-separator separator))
@@ -3386,11 +3374,8 @@ after the region selected by dispatch."))
                       (action-description "Copy and Replace To")
                       (str (pcase (conn-bounds-of fthing farg)
                              ((conn-bounds `(,beg . ,end) ftransform)
-                              (save-mark-and-excursion
-                                (goto-char beg)
-                                (conn--push-ephemeral-mark end)
-                                (conn-dispatch-action-pulse beg end)
-                                (funcall region-extract-function nil)))
+                              (conn-dispatch-action-pulse beg end)
+                              (filter-buffer-substring beg end))
                              (_ (user-error "Cannot find %s at point"
                                             (conn-thing-pretty-print fthing)))))
                       (action-window-predicate
@@ -4009,9 +3994,8 @@ it."))
           (conn-dispatch-change-group)
           (save-mark-and-excursion
             (pcase (conn-bounds-of-dispatch thing arg pt)
-              ((conn-dispatch-bounds `(,beg . ,end) transform)
+              ((conn-dispatch-bounds `(,beg . ,_end) transform)
                (goto-char beg)
-               (conn--push-ephemeral-mark end)
                (eval command))
               (_ (user-error "Cannot find thing at point")))))))))
 

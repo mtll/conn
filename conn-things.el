@@ -18,7 +18,6 @@
 ;;; Code:
 
 (require 'conn-utils)
-(require 'conn-mark)
 (require 'conn-states)
 (require 'thingatpt)
 (eval-when-compile
@@ -28,6 +27,62 @@
 (declare-function conn-exchange-mark-command "conn-command")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
+
+;;;; Mark Handlers
+
+(defvar-local conn-mark-handler-overrides-alist nil
+  "Buffer local overrides for command mark handlers.
+
+Is an alist of the form ((CMD . MARK-HANDLER) ...).
+
+For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
+
+(define-inline conn-command-mark-handler (command)
+  "Return the mark handler for COMMAND."
+  (declare (important-return-value t)
+           (side-effect-free t)
+           (gv-setter conn-set-command-mark-handler))
+  (inline-letevals (command)
+    (inline-quote
+     (and (symbolp ,command)
+          (or (alist-get ,command conn-mark-handler-overrides-alist)
+              (function-get ,command :conn-mark-handler t))))))
+
+(defun conn-set-command-mark-handler (command handler)
+  (function-put command :conn-mark-handler handler))
+
+(defun conn-continuous-thing-handler (thing beg)
+  "Mark the things which have been moved over."
+  (ignore-errors
+    (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
+          ((= (point) beg)
+           (pcase (bounds-of-thing-at-point thing)
+             (`(,beg . ,end)
+              (cond ((= (point) beg) end)
+                    ((= (point) end) beg)))))
+          ((let ((dir (pcase (- (point) beg)
+                        (0 0)
+                        ((pred (< 0)) 1)
+                        ((pred (> 0)) -1))))
+             (save-excursion
+               (goto-char beg)
+               (forward-thing thing dir)
+               (forward-thing thing (- dir))
+               (point)))))))
+
+(defun conn-discrete-thing-handler (thing _beg)
+  "Mark the thing at point."
+  (pcase (ignore-errors (bounds-of-thing-at-point thing))
+    (`(,beg . ,end)
+     (if (= (point) end) beg end))))
+
+(defun conn-jump-handler (beg)
+  "Place a mark where point used to be."
+  (unless (= beg (point)) beg))
+
+(defun conn--pos-pre-command-hook ()
+  (cl-rotatef conn-last-command-start conn-this-command-start)
+  (set-marker conn-this-command-start (point) (current-buffer)))
 
 ;;;; Thing Types
 
@@ -268,12 +323,7 @@
         (list #'conn--set-anonymous-thing-property)))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER.
-
-HANDLER will be run from the `post-command-hook' and should be a
-function of one argument, the location of `point' before the command
-ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
-order to mark the region that should be defined by any of COMMANDS."
+  "Associate COMMANDS with a THING and a HANDLER."
   (unless (conn-thing-p thing)
     (error "%s is not a known thing" thing))
   (dolist (cmd commands)
@@ -287,7 +337,7 @@ order to mark the region that should be defined by any of COMMANDS."
        (cond ((or ignore-mark-active
                   (not (region-active-p)))
               (goto-char beg)
-              (conn--push-ephemeral-mark end))
+              (push-mark end t))
              ((= (point) (mark))
               (pcase (car (read-multiple-choice
                            "Mark"
@@ -838,30 +888,30 @@ Returns a `conn-bounds' struct."
        (setf (conn-bounds bounds)
              (bounds-of-thing-at-point thing)))
       ((and thing
-            (let (and conn-this-command-handler
-                      (pred identity))
+            (let (and handler (pred identity))
               (conn-command-mark-handler thing)))
        (let (conn--last-bounds)
          (deactivate-mark)
          (pcase (prefix-numeric-value arg)
            (n
             (let ((current-prefix-arg n)
-                  (conn-this-command-thing (conn-command-thing thing))
-                  (conn-this-command-start (point-marker))
-                  (this-command thing))
+                  (start (point-marker)))
               (unwind-protect
                   (condition-case _
                       (progn
                         (call-interactively thing)
-                        (funcall conn-this-command-handler
-                                 conn-this-command-start)
-                        (setf (conn-bounds bounds)
-                              (cons (region-beginning)
-                                    (region-end))))
+                        (when (> (point) start)
+                          (setf (conn-bounds-get bounds :forward) t))
+                        (let ((mk (funcall handler
+                                           (conn-command-thing thing)
+                                           start)))
+                          (setf (conn-bounds bounds)
+                                (cons (min mk (point))
+                                      (max mk (point))))))
                     (error
                      (setf (conn-bounds bounds) nil
                            (conn-bounds-get bounds :subregions) nil)))
-                (set-marker conn-this-command-start nil))))))))
+                (set-marker start nil))))))))
     (conn-bounds bounds)))
 
 (defun conn--bounds-of-thing-subregions (bounds)
@@ -870,56 +920,53 @@ Returns a `conn-bounds' struct."
     (pcase (conn--get-boundable-thing thing)
       ((pred conn-thing-p) nil)
       ((and thing
-            (let (and conn-this-command-handler
-                      (pred identity))
+            (let (and handler (pred identity))
               (conn-command-mark-handler thing)))
        (let (conn--last-bounds)
          (deactivate-mark)
-         (cl-flet
-             ((bounds-1 ()
-                (let ((pt (point))
-                      (mk (mark t))
-                      (current-prefix-arg 1)
-                      (conn-this-command-thing (conn-command-thing thing))
-                      (conn-this-command-start (point-marker))
-                      (this-command thing))
+         (pcase (prefix-numeric-value arg)
+           (0
+            (conn--bounds-of-thing bounds)
+            (setf (conn-bounds-get bounds :subregions)
+                  (conn-bounds bounds)))
+           (n
+            (condition-case _
+                (let ((start (make-marker))
+                      subregions)
                   (unwind-protect
-                      (progn
-                        (call-interactively thing)
-                        (funcall conn-this-command-handler
-                                 conn-this-command-start)
-                        (unless (and (eql pt (point))
-                                     (eql mk (mark)))
-                          (conn-make-bounds
-                           thing 1
-                           (cons (region-beginning)
-                                 (region-end)))))
-                    (set-marker conn-this-command-start nil)))))
-           (pcase (prefix-numeric-value arg)
-             (0
-              (conn--bounds-of-thing bounds)
-              (setf (conn-bounds-get bounds :subregions)
-                    (conn-bounds bounds)))
-             (n
-              (condition-case _
-                  (let (subregions)
-                    (catch 'break
-                      (dotimes (_ (abs n))
-                        (if-let* ((bound (bounds-1)))
-                            (push bound subregions)
-                          (throw 'break nil))))
-                    (when (conn-bounds-delay-p (conn-bounds bounds))
-                      (setf (conn-bounds bounds)
-                            (cl-loop for bound in subregions
-                                     for (b . e) = (conn-bounds bound)
-                                     minimize b into beg
-                                     maximize e into end
-                                     finally return (cons beg end))))
-                    (setf (conn-bounds-get bounds :subregions)
-                          (nreverse subregions)))
-                (error
-                 (setf (conn-bounds bounds) nil
-                       (conn-bounds-get bounds :subregions) nil)))))))))))
+                      (catch 'break
+                        (dotimes (_ (abs n))
+                          (set-marker start (point))
+                          (let ((current-prefix-arg 1))
+                            (call-interactively thing)
+                            (let ((mk (funcall handler
+                                               (conn-command-thing thing)
+                                               start)))
+                              (pcase (car subregions)
+                                ((or 'nil
+                                     (conn-bounds
+                                      (and `(,beg . ,end)
+                                           (guard (or (/= beg (min (point) mk))
+                                                      (/= end (max (point) mk)))))))
+                                 (push (conn-make-bounds
+                                        thing 1
+                                        (cons (min (point) mk)
+                                              (max (point) mk)))
+                                       subregions))
+                                (_ (throw 'break nil)))))))
+                    (set-marker start nil))
+                  (when (conn-bounds-delay-p (conn-bounds bounds))
+                    (setf (conn-bounds bounds)
+                          (cl-loop for bound in subregions
+                                   for (b . e) = (conn-bounds bound)
+                                   minimize b into beg
+                                   maximize e into end
+                                   finally return (cons beg end))))
+                  (setf (conn-bounds-get bounds :subregions)
+                        (nreverse subregions)))
+              (error
+               (setf (conn-bounds bounds) nil
+                     (conn-bounds-get bounds :subregions) nil))))))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing t))
                               arg)
@@ -1186,6 +1233,13 @@ not be delete.  The the value returned by each function is ignored.")
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
+(cl-defmethod conn-bounds-of ((_cmd (eql 'last-command))
+                              _arg)
+  (when (conn-thing-command-p last-command)
+    (save-excursion
+      (goto-char conn-last-command-start)
+      (conn-bounds-of last-command last-prefix-arg))))
+
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
   (setq arg (prefix-numeric-value arg))
@@ -1203,8 +1257,7 @@ not be delete.  The the value returned by each function is ignored.")
     (user-error "No previous mark state"))
   (save-mark-and-excursion
     (goto-char (nth 0 conn--previous-mark-state))
-    (conn--push-ephemeral-mark (nth 1 conn--previous-mark-state)
-                               nil t)
+    (push-mark (nth 1 conn--previous-mark-state) t t)
     (pcase (nth 2 conn--previous-mark-state)
       (`(,pc . ,mc)
        (rectangle-mark-mode 1)
@@ -1441,16 +1494,14 @@ Only the background color is used."
                (pcase (nth curr bounds)
                  ((conn-bounds `(,beg . ,end))
                   (goto-char (if (< (point) (mark)) beg end))
-                  (conn--push-ephemeral-mark
-                   (if (< (point) (mark)) end beg))))
+                  (push-mark (if (< (point) (mark)) end beg) t)))
                (conn-read-args-handle))
               ('conn-expand
                (setq curr (mod (1+ curr) size))
                (pcase (nth curr bounds)
                  ((conn-bounds `(,beg . ,end))
                   (goto-char (if (< (point) (mark)) beg end))
-                  (conn--push-ephemeral-mark
-                   (if (< (point) (mark)) end beg))))
+                  (push-mark (if (< (point) (mark)) end beg))))
                (conn-read-args-handle))
               ('abort
                (user-error "Aborted"))))))
@@ -1462,7 +1513,7 @@ Only the background color is used."
       (`(,(conn-bounds `(,beg . ,end)) . ,_)
        (save-mark-and-excursion
          (goto-char end)
-         (conn--push-ephemeral-mark beg)
+         (push-mark beg t t)
          (activate-mark)
          (conn-read-args (conn-multi-thing-select-state
                           :prompt "Thing"
@@ -1550,8 +1601,9 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'region nil
+ 'conn-exchange-mark-command
+ 'conn-mark-thing
  'conn-previous-mark-command
- 'conn-toggle-mark-command
  'conn-set-mark-command)
 
 (conn-register-thing
@@ -1605,9 +1657,8 @@ Only the background color is used."
  'page 'conn-discrete-thing-handler
  'forward-page 'backward-page)
 
-(defun conn-char-mark-handler (beg)
-  (when current-prefix-arg
-    (conn--push-ephemeral-mark beg)))
+(defun conn-char-mark-handler (_thing beg)
+  (when current-prefix-arg beg))
 
 (conn-register-thing-commands
  'char 'conn-char-mark-handler
@@ -1631,40 +1682,40 @@ Only the background color is used."
  'list 'conn-continuous-thing-handler
  'forward-list 'backward-list)
 
-(defun conn--up-list-mark-handler (beg)
+(defun conn--up-list-mark-handler (thing beg)
   (condition-case _err
       (cond ((> (point) beg)
              (save-excursion
-               (forward-thing 'list -1)
-               (conn--push-ephemeral-mark (point))))
+               (forward-thing thing -1)
+               (point)))
             ((< (point) beg)
              (save-excursion
-               (forward-thing 'list 1)
-               (conn--push-ephemeral-mark (point)))))
+               (forward-thing thing 1)
+               (point))))
     (scan-error nil)))
 
 (conn-register-thing-commands
  'list 'conn--up-list-mark-handler
  'up-list 'backward-up-list)
 
-(defun conn--down-list-mark-handler (_beg)
+(defun conn--down-list-mark-handler (_thing _beg)
   (condition-case _err
       (cond ((= (point) (save-excursion
                           (up-list 1 t t)
                           (down-list -1 t)
                           (point)))
-             (conn--push-ephemeral-mark (save-excursion
-                                          (up-list -1 t t)
-                                          (down-list 1 t)
-                                          (point))))
+             (save-excursion
+               (up-list -1 t t)
+               (down-list 1 t)
+               (point)))
             ((= (point) (save-excursion
                           (up-list -1 t t)
                           (down-list 1 t)
                           (point)))
-             (conn--push-ephemeral-mark (save-excursion
-                                          (up-list 1 t t)
-                                          (down-list -1 t)
-                                          (point)))))
+             (save-excursion
+               (up-list 1 t t)
+               (down-list -1 t)
+               (point))))
     (scan-error nil)))
 
 (conn-register-thing-commands

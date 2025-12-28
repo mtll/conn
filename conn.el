@@ -31,7 +31,6 @@
 
 (require 'conn-utils)
 (require 'conn-things)
-(require 'conn-mark)
 (require 'conn-states)
 (require 'conn-kapply)
 (require 'conn-expand)
@@ -58,76 +57,11 @@
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
     (apply app)))
 
-(defun conn--read-from-suggestions-ad (&rest app)
-  (if (and (mark t)
-           (not (use-region-p))
-           ;; Maybe not when its extremely large
-           (> 10000 (abs (- (point) (mark t)))))
-      (cons (buffer-substring-no-properties
-             (region-beginning) (region-end))
-            (apply app))
-    (apply app)))
-
-(defun conn--push-mark-ad (&rest _)
-  (unless (or conn--ephemeral-mark
-              (null (marker-position (mark-marker))))
-    (conn--push-mark-ring (mark-marker)))
-  (setq conn--ephemeral-mark nil))
-
-(defun conn--pop-mark-ad (&rest _)
-  (unless (or conn--ephemeral-mark
-              (null (marker-position (mark-marker))))
-    (conn--push-mark-ring (mark-marker) t))
-  (setq conn--ephemeral-mark t))
-
-(defun conn--set-mark-ad (&rest _)
-  (setq conn--ephemeral-mark nil))
-
-(defvar conn--saved-ephemeral-marks nil)
-
-(defun conn--save-ephemeral-mark-ad (&rest _)
-  (push conn--ephemeral-mark conn--saved-ephemeral-marks))
-
-(defun conn--restore-ephemeral-mark-ad (&rest _)
-  (setq conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
-
-(defun conn--setup-advice ()
-  (if conn-mode
-      (progn
-        (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
-        (advice-add 'query-replace-read-from-suggestions :around
-                    #'conn--read-from-suggestions-ad)
-        (advice-add 'read-regexp-suggestions :around
-                    #'conn--read-from-suggestions-ad)
-        (advice-add 'push-mark :before #'conn--push-mark-ad)
-        (advice-add 'pop-mark :before #'conn--pop-mark-ad)
-        (advice-add 'set-mark :after #'conn--set-mark-ad)
-        (advice-add 'save-mark-and-excursion--save :before
-                    #'conn--save-ephemeral-mark-ad)
-        (advice-add 'save-mark-and-excursion--restore :after
-                    #'conn--restore-ephemeral-mark-ad))
-    (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
-    (advice-remove 'query-replace-read-from-suggestions
-                   #'conn--read-from-suggestions-ad)
-    (advice-remove 'read-regexp-suggestions
-                   #'conn--read-from-suggestions-ad)
-    (advice-remove 'set-mark #'conn--set-mark-ad)
-    (advice-remove 'pop-mark #'conn--pop-mark-ad)
-    (advice-remove 'push-mark #'conn--push-mark-ad)
-    (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
-    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
-
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
-  (setq conn--mark-cursor nil)
-  (dolist (ov (when (mark t)
-                (conn--overlays-in-of-type (mark t) (1+ (mark t))
-                                           'conn--mark-cursor)))
-    (delete-overlay ov))
   (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
-        conn-movement-ring (conn-copy-ring conn-movement-ring)
-        conn-mark-ring (conn-copy-ring conn-mark-ring)
+        conn-jump-ring (conn-copy-ring conn-jump-ring)
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring))
   (cl-loop for e in conn--previous-mark-state
            if (markerp e)
@@ -165,25 +99,12 @@
               conn--state-stack nil)
         (make-local-variable 'conn-lighter)
         (setq-local conn--state-map (list (list 'conn-local-mode))
-                    conn--major-mode-map (list (list 'conn-local-mode))
-                    conn-emacs-state-ring
-                    (conn-make-ring 8
-                                    :cleanup (lambda (mk) (set-marker mk nil))
-                                    :copier #'conn--copy-mark))
-        ;; We would like to be able to do the same to
-        ;; query-replace-read-from-regexp-default but it must be
-        ;; either nil, a string, a list of strings, or a symbol with a
-        ;; function definition.
-        (if query-replace-read-from-default
-            (add-function :around
-                          (local 'query-replace-read-from-default)
-                          (lambda (fn &rest args)
-                            (or (conn-replace-read-default)
-                                (when fn (apply fn args))))
-                          `((name . conn-replace-default)))
-          (setq query-replace-read-from-default 'conn-replace-read-default))
-        (unless (mark t)
-          (conn--push-ephemeral-mark (point) t nil))
+                    conn--major-mode-map (list (list 'conn-local-mode)))
+        (unless conn-emacs-state-ring
+          (setq conn-emacs-state-ring
+                (conn-make-ring 8
+                                :cleanup (lambda (mk) (set-marker mk nil))
+                                :copier #'conn--copy-mark)))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -197,10 +118,6 @@
     (kill-local-variable 'conn-lighter)
     (conn--clear-overlays)
     (setq cursor-type t)
-    (if (eq 'conn-replace-read-default query-replace-read-from-default)
-        (setq query-replace-read-from-default 'conn-replace-read-default)
-      (remove-function (local 'query-replace-read-from-default)
-                       'conn-replace-default))
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
@@ -217,22 +134,18 @@
   :group 'conn
   (progn
     (conn--setup-keymaps)
-    (conn--setup-mark)
-    (conn--setup-advice)
     (if conn-mode
         (progn
-          ;; TODO: don't do this unconditionally
-          (keymap-set minibuffer-mode-map "M-Y" 'conn-yank-region-to-minibuffer)
-          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50)
+          (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
           (add-hook 'clone-buffer-hook 'conn--clone-buffer-setup)
-          (add-hook 'clone-indirect-buffer-hook 'conn--clone-buffer-setup))
-      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook)
+          (add-hook 'clone-indirect-buffer-hook 'conn--clone-buffer-setup)
+          (add-hook 'pre-command-hook #'conn--pos-pre-command-hook)
+          (add-hook 'post-command-hook #'conn--jump-post-command-hook))
+      (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
       (remove-hook 'clone-buffer-hook 'conn--clone-buffer-setup)
       (remove-hook 'clone-indirect-buffer-hook 'conn--clone-buffer-setup)
-      (when (eq (keymap-lookup minibuffer-mode-map "M-Y")
-                'conn-yank-region-to-minibuffer)
-        (keymap-unset minibuffer-mode-map "M-Y"))
-      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
+      (remove-hook 'pre-command-hook #'conn--pos-pre-command-hook)
+      (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
 
 (define-minor-mode conn-emacs-state-operators-mode
   "Bind conn operators in conn-emacs-state."

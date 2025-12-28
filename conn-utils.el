@@ -369,6 +369,67 @@ If ring is (1 2 3 4) 4 would be returned."
                            (conn-ring-history ring) hist)
                      (mapc (conn-ring-cleanup ring) remove))))
 
+;;;;;; Jump Ring
+
+(defvar-local conn-jump-ring nil
+  "Ring of previous jump positions in a buffer.")
+
+(defun conn-push-jump-ring (location &optional back)
+  "Push LOCATION to the jump ring.
+
+If BACK is non-nil then push LOCATION to the back of the jump ring."
+  (when (not conn-jump-ring)
+    (setq conn-jump-ring
+          (conn-make-ring 40
+                          :cleanup (lambda (mk) (set-marker mk nil))
+                          :copier #'conn--copy-mark)))
+  (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
+              (ptf (conn-ring-head conn-jump-ring)))
+    (cond
+     ((and ptf (= location ptf))
+      (when back (conn-ring-rotate-forward conn-jump-ring)))
+     ((and ptb (= location ptb))
+      (unless back (conn-ring-rotate-backward conn-jump-ring)))
+     (t
+      (if back
+          (conn-ring-insert-back conn-jump-ring
+                                 (conn--create-marker location))
+        (conn-ring-insert-front conn-jump-ring
+                                (conn--create-marker location)))))))
+
+(defun conn--jump-post-command-hook ()
+  (when-let* ((_ (marker-position conn-this-command-start))
+              (pred (function-get this-command :conn-jump-command))
+              (_ (and (eq (marker-buffer conn-this-command-start)
+                          (current-buffer))
+                      (/= (point) conn-this-command-start))))
+    (if (eq t pred)
+        (conn-push-jump-ring conn-this-command-start)
+      (ignore-errors (funcall pred conn-this-command-start)))))
+
+(defun conn-set-jump-command (command &optional predicate)
+  "Register COMMAND as a jump command.
+
+If optional argument PREDICATE is nil then COMMAND will unconditionally
+push to the jump ring.  If predicate is non-nil it should be a function
+that will be called from the `post-command-hook' with the position at
+which command was first called and is responsible for pushing a position
+to the jump ring."
+  (dolist (cmd (ensure-list command))
+    (function-put cmd :conn-jump-command (or predicate t))))
+
+(defun conn-pop-jump-ring ()
+  (interactive)
+  (conn-push-jump-ring (point-marker))
+  (conn-ring-rotate-forward conn-jump-ring)
+  (goto-char (conn-ring-head conn-jump-ring)))
+
+(defun conn-unpop-jump-ring ()
+  (interactive)
+  (conn-push-jump-ring (point-marker))
+  (conn-ring-rotate-backward conn-jump-ring)
+  (goto-char (conn-ring-head conn-jump-ring)))
+
 ;;;;; Region Utils
 
 (defmacro conn-with-region-emphasis (regions &rest body)
