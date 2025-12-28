@@ -444,6 +444,9 @@
         (advice-add 'tab-bar-close-tab :after
                     'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
+        (advice-add 'tab-bar-duplicate-tab :after
+                    'conn-posframe--switch-tab-display
+                    '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-previous :after
                     'conn-posframe--dispatch-ring-display
                     '((name . conn-list-posframe)))
@@ -462,6 +465,7 @@
     (advice-remove 'tab-bar-new-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-list-posframe)
+    (advice-remove 'tab-bar-duplicate-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-close-tab 'conn-list-posframe)
     (defvar conn-quick-ref-display-function)
     (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
