@@ -1131,7 +1131,7 @@ can only be changed by redefining a state and are not inherited.
     (require 'help-fns)
     (with-temp-buffer
       (insert (or (cdr ud) main ""))
-      (insert "\n\n\tCurrently known properties for states:\n\n")
+      (insert "\n\n\tKnown properties for states:\n\n")
       (pcase-dolist (`(,property . ,doc-string)
                      (reverse (get 'conn-define-state :known-properties)))
         (insert (format "`%s' (static: %s)\n %s"
@@ -2063,13 +2063,13 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defstruct (conn-boolean-argument
                (:include conn-argument)
-               (:constructor conn-boolean-argument
-                             (toggle-command
-                              keymap
-                              name
-                              &optional
-                              value
-                              annotation)))
+               ( :constructor conn-boolean-argument
+                 (toggle-command
+                  keymap
+                  name
+                  &optional
+                  value
+                  annotation)))
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
@@ -2151,15 +2151,15 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defstruct (conn-read-argument
                (:include conn-argument)
-               (:constructor conn-read-argument
-                             (name
-                              toggle-command
-                              keymap
-                              reader-function
-                              format-function
-                              &optional
-                              value
-                              annotation)))
+               ( :constructor conn-read-argument
+                 (name
+                  toggle-command
+                  keymap
+                  reader-function
+                  format-function
+                  &optional
+                  value
+                  annotation)))
   (reader-function nil :type function :read-only t)
   (format-function nil :type function :read-only t)
   (toggle-command nil :type symbol :read-only t))
