@@ -29,6 +29,7 @@
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function project-files "project")
+(declare-function ibuffer-unmark-all-marks "ibuffer")
 
 ;;;; Kapply
 
