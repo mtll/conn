@@ -426,7 +426,11 @@
 
 (conn-register-thing 'conn-ts-thing)
 
-(defvar conn-ts-multi-always-prompt t)
+(defvar conn-ts-multi-always-prompt-p
+  (lambda ()
+    (not (memq conn-dispatch-current-action
+               '(conn-dispatch-goto
+                 conn-dispatch-jump)))))
 
 (defvar-local conn-ts-parent-things
   `(conn-ts-assignment-inner
@@ -557,7 +561,7 @@
                                        (conn-with-dispatch-suspended
                                          (conn-multi-thing-select
                                           (conn-anonymous-thing-property self :bounds)
-                                          conn-ts-multi-always-prompt)))))))))))))
+                                          (funcall conn-ts-multi-always-prompt-p))))))))))))))
 
 (conn-define-target-finder conn-ts-all-things
     ()
@@ -627,7 +631,7 @@
                                      (conn-with-dispatch-suspended
                                        (conn-multi-thing-select
                                         (conn-anonymous-thing-property self :bounds)
-                                        conn-ts-multi-always-prompt))))))))))))
+                                        (funcall conn-ts-multi-always-prompt-p)))))))))))))
 
 (defun conn-ts--thing-predicate (thing)
   (with-memoization (gethash (cons 'conn-all-things thing)

@@ -521,6 +521,7 @@ themselves once the selection process has concluded."
       "C-w" 'restrict-windows
       "RET" 'ignore
       "<return>" 'ignore
+      "M-TAB" 'repeat-dispatch
       "<tab>" 'quoted-insert
       "TAB" 'quoted-insert)
     map))
@@ -1613,6 +1614,9 @@ Target overlays may override this default by setting the
 
 `conn-with-dispatch-suspended' binds this variable to nil.")
 
+(defvar conn-dispatch-current-action nil
+  "The `oclosure-type' of the current dispatch action.")
+
 (defvar conn--dispatch-change-groups nil)
 
 (defvar conn--dispatch-current-thing nil)
@@ -1685,16 +1689,32 @@ depths will be sorted before greater depths.
         (owconf (current-window-configuration))
         (oframe (selected-frame))
         (opoint (point))
+        (conn-dispatch-current-action (oclosure-type action))
         (conn--dispatch-label-state nil)
         (conn--dispatch-change-groups nil)
-        (conn--read-args-error-message nil))
+        (conn--read-args-error-message nil)
+        (conn-dispatch-in-progress t))
     (conn--unwind-protect-all
       (progn
         (redisplay)
         (catch 'dispatch-exit
-          (let ((conn-dispatch-in-progress t))
-            (while (or repeat (< conn-dispatch-iteration-count 1))
-              (condition-case err
+          (while (or repeat (< conn-dispatch-iteration-count 1))
+            (condition-case err
+                (conn-with-dispatch-event-handlers
+                  ( :handler (obj)
+                    (when (eq obj 'repeat-dispatch)
+                      (cl-callf not repeat)
+                      (conn-dispatch-handle)))
+                  ( :message -51 (keymap)
+                    (when-let* ((binding
+                                 (where-is-internal 'repeat-dispatch keymap t)))
+                      (concat
+                       (propertize (key-description binding)
+                                   'face 'help-key-binding)
+                       " "
+                       (propertize
+                        "repeat"
+                        'face (when repeat 'conn-argument-active-face)))))
                   (catch 'dispatch-undo
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
@@ -1713,13 +1733,13 @@ depths will be sorted before greater depths.
                              (set-window-configuration wconf)
                              (goto-char pt)
                              (setq conn--dispatch-label-state label-state)))))
-                      (cl-incf conn-dispatch-iteration-count)))
-                (user-error
-                 (pcase-dolist (`(,_ . ,undo-fn)
-                                (pop conn--dispatch-change-groups))
-                   (funcall undo-fn :undo))
-                 (setf conn--read-args-error-message
-                       (error-message-string err)))))))
+                      (cl-incf conn-dispatch-iteration-count))))
+              (user-error
+               (pcase-dolist (`(,_ . ,undo-fn)
+                              (pop conn--dispatch-change-groups))
+                 (funcall undo-fn :undo))
+               (setf conn--read-args-error-message
+                     (error-message-string err))))))
         (setq success (not dispatch-quit-flag)))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
