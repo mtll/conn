@@ -561,14 +561,15 @@ words."))
 
 (defvar conn-transformations-quick-ref
   (conn-reference-quote
-    (("trim" conn-bounds-trim)
+    (("upto" conn-bounds-upto)
      ("after point/exclusive"
       conn-bounds-after-point
       conn-bounds-after-point-exclusive)
+     ("trim" conn-bounds-trim)
+     ("last" conn-bounds-last)
      ("before point/exclusive"
       conn-bounds-before-point
       conn-bounds-before-point-exclusive)
-     ("last" conn-bounds-last)
      ("reset" conn-transform-reset))))
 
 (defvar-keymap conn-transform-map
@@ -579,7 +580,8 @@ words."))
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
   "SPC" 'conn-bounds-last
-  "X" 'conn-transform-reset)
+  "X" 'conn-transform-reset
+  "t" 'conn-bounds-upto)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)
@@ -1024,15 +1026,45 @@ Returns a `conn-bounds' struct."
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 
+;;;;;; Upto Bounds
+
+(cl-defgeneric conn-bounds-upto (bounds)
+  (declare (conn-bounds-transformation
+            "upto"
+            "Bounds from point up to the nearest bound of the final subregion.  If
+the point is within the region then the entire region is returned.")))
+
+(cl-defmethod conn-bounds-upto (bounds)
+  (pcase (or (car (last (conn-bounds-get bounds :subregions)))
+             bounds)
+    ((conn-bounds (and `(,beg . ,end) last))
+     (conn-make-transformed-bounds
+      'conn-bounds-upto
+      bounds
+      (cond ((< (point) beg)
+             (cons (point) beg))
+            ((> (point) end)
+             (cons end (point)))
+            (t last))))))
+
 ;;;;;; Last Bounds
 
 (cl-defgeneric conn-bounds-last (bounds)
   (declare (conn-bounds-transformation
             "last"
-            "Only return the bounds of the last thing."))
-  ( :method (bounds)
-    (or (car (last (conn-bounds-get bounds :subregions)))
-        bounds)))
+            "Only return the bounds of the last thing.")))
+
+(cl-defmethod conn-bounds-last (bounds)
+  (conn-bounds bounds)
+  (pcase (car (last (conn-bounds-get bounds :subregions)))
+    ((conn-bounds last)
+     (conn-make-transformed-bounds
+      'conn-bounds-trim
+      bounds last))
+    (_
+     (conn-make-transformed-bounds
+      'conn-bounds-trim
+      bounds bounds))))
 
 ;;;;;; Trim Bounds
 
@@ -1186,52 +1218,32 @@ not be delete.  The the value returned by each function is ignored.")
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
                               arg)
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Thing"
-                   :prefix arg)
-      ((`(,thing ,arg) (conn-thing-argument)))
-    (let* ((name (pcase (conn-get-thing cmd)
-                   ((and sym (pred symbolp))
-                    (symbol-name sym))
-                   ((and thing (pred conn-anonymous-thing-p))
-                    (conn-thing-pretty-print thing))
-                   (_ "")))
-           (start (point))
-           (max nil)
-           (bounds nil)
-           (quit (make-symbol "quit")))
-      (fset quit (lambda ()
+  (let* ((name (pcase (conn-get-thing cmd)
+                 ((and sym (pred symbolp))
+                  (symbol-name sym))
+                 ((and thing (pred conn-anonymous-thing-p))
+                  (conn-thing-pretty-print thing))
+                 (_ "")))
+         (bounds nil)
+         (quit (make-symbol "quit")))
+    (fset quit (lambda ()
+                 (unless isearch-suspended
                    (when (or isearch-mode-end-hook-quit
                              (null isearch-other-end))
                      (abort-recursive-edit))
-                   (setq max (> (point) isearch-other-end)
-                         bounds (conn-bounds-of thing arg))))
-      (unwind-protect
-          (save-mark-and-excursion
-            (add-hook 'isearch-mode-end-hook quit)
-            (isearch-mode (not (string-match-p "backward" name))
-                          (string-match-p "regexp" name)
-                          nil t))
-        (remove-hook 'isearch-mode-end-hook quit))
-      (pcase bounds
-        ((conn-bounds `(,beg . ,end))
-         (cond ((<= beg start end)
-                (unless max bounds))
-               ((< start beg)
-                (conn-make-bounds
-                 'isearch nil
-                 (cons start (if max
-                                 (max beg end)
-                               (min beg end)))
-                 :subregions (list bounds)))
-               (t
-                (conn-make-bounds
-                 'isearch nil
-                 (cons (if max
-                           (max beg end)
-                         (min beg end))
-                       start)
-                 :subregions (list bounds)))))))))
+                   (setq bounds (conn-make-bounds
+                                 cmd arg
+                                 (cons (min (point) isearch-other-end)
+                                       (max (point) isearch-other-end)))))))
+    (unwind-protect
+        (save-mark-and-excursion
+          (add-hook 'isearch-mode-end-hook quit)
+          (call-interactively cmd)
+          (unless bounds
+            (let ((isearch-recursive-edit t))
+              (recursive-edit))))
+      (remove-hook 'isearch-mode-end-hook quit))
+    bounds))
 
 ;;;; Bounds of Things in Region
 
@@ -1542,6 +1554,8 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'isearch nil
+ 'conn-isearch-region-forward
+ 'conn-isearch-region-backward
  'isearch-forward
  'isearch-backward
  'isearch-forward-regexp

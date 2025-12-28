@@ -300,8 +300,6 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
   "C-s" 'isearch-forward
-  "s" 'isearch-forward
-  "r" 'isearch-backward
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
