@@ -477,7 +477,8 @@
   "Face for conn window label posframe."
   :group 'conn-faces)
 
-(defvar conn-posframe-window-label-poshandler 'posframe-poshandler-window-center)
+(defvar conn-posframe-window-label-poshandler
+  'posframe-poshandler-window-center)
 
 (cl-defstruct (conn-posframe-window-label
                ( :constructor conn--make-posframe-window-label
