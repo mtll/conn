@@ -1238,12 +1238,47 @@ not be delete.  The the value returned by each function is ignored.")
     (unwind-protect
         (save-mark-and-excursion
           (add-hook 'isearch-mode-end-hook quit)
-          (call-interactively cmd)
-          (unless bounds
-            (let ((isearch-recursive-edit t))
-              (recursive-edit))))
+          (if (conn-thing-command-p cmd)
+              (progn
+                (call-interactively cmd)
+                (when isearch-mode
+                  (let ((isearch-recursive-edit t))
+                    (recursive-edit))))
+            (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
+                              arg)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Thing"
+                   :prefix arg)
+      ((`(,thing ,arg) (conn-thing-argument)))
+    (let* ((start (point))
+           (max nil)
+           (bounds nil)
+           (quit (make-symbol "quit-hook")))
+      (fset quit (lambda ()
+                   (unless isearch-suspended
+                     (when (or isearch-mode-end-hook-quit
+                               (null isearch-other-end))
+                       (abort-recursive-edit))
+                     (setq max (> (point) isearch-other-end)
+                           bounds (conn-bounds-of thing arg)))))
+      (unwind-protect
+          (save-mark-and-excursion
+            (add-hook 'isearch-mode-end-hook quit)
+            (if (conn-thing-command-p cmd)
+                (progn
+                  (call-interactively cmd)
+                  (when isearch-mode
+                    (let ((isearch-recursive-edit t))
+                      (recursive-edit))))
+              (isearch-forward)))
+        (remove-hook 'isearch-mode-end-hook quit))
+      bounds)))
+
+(conn-register-thing 'conn-thing-at-isearch)
 
 ;;;; Bounds of Things in Region
 
