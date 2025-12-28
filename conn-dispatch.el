@@ -503,7 +503,7 @@ themselves once the selection process has concluded."
       "C-z" 'dispatch-other-end
       "DEL" 'restart
       "<backspace>" 'restart
-      "C-'" 'recursive-edit
+      "R" 'recursive-edit
       "<mouse-1>" 'act
       "<mouse-3>" 'undo
       "C-/" 'undo
@@ -521,9 +521,7 @@ themselves once the selection process has concluded."
       "C-w" 'restrict-windows
       "RET" 'ignore
       "<return>" 'ignore
-      "M-TAB" 'repeat-dispatch
-      "<tab>" 'quoted-insert
-      "TAB" 'quoted-insert)
+      "M-TAB" 'repeat-dispatch)
     map))
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
