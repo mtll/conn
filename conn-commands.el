@@ -2486,7 +2486,7 @@ hook, which see."
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing dispatch))
                                   arg
-                                  _transform
+                                  transform
                                   &optional
                                   append
                                   delete
@@ -2501,7 +2501,7 @@ hook, which see."
                      :prompt "Kill"
                      :reference (list conn-dispatch-thing-reference))
         ((`(,thing ,arg) (conn-thing-argument t))
-         (`(,transform ,fixup-whitespace)
+         (`(,dtform ,fixup-whitespace)
           (conn-dispatch-transform-and-fixup-argument
            fixup-whitespace))
          (`(,delete ,append ,register)
@@ -2550,7 +2550,7 @@ hook, which see."
          (oclosure-lambda (conn-kill-action
                            (action-description "Kill"))
              ()
-           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+           (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
              (with-selected-window window
                (conn-dispatch-change-group)
@@ -2558,7 +2558,8 @@ hook, which see."
                  (pcase (conn-bounds-of-dispatch thing arg pt)
                    ((and bounds
                          (conn-dispatch-bounds `(,beg . ,end)
-                                               `(,@transform
+                                               `(,@dtform
+                                                 ,@transform
                                                  ,@(when check-bounds
                                                      (list 'conn-check-bounds)))))
                     (goto-char beg)
@@ -2576,7 +2577,7 @@ hook, which see."
                     (when fixup-whitespace
                       (funcall conn-kill-fixup-whitespace-function bounds)))
                    (_ (user-error "No %s found" thing)))))))
-         thing arg transform
+         thing arg dtform
          :repeat repeat
          :other-end :no-other-end
          :restrict-windows restrict-windows))
