@@ -398,18 +398,22 @@ The command to be stored is read from `command-history'."
     (rectangle-mark-mode)
     (conn-push-state 'conn-mark-state)))
 
-(defun conn-set-mark-command ()
-  "Toggle `mark-active'.
-
-With a prefix ARG activate `rectangle-mark-mode'."
+(defun conn-mark-last-command ()
   (interactive)
-  (pcase (conn-bounds-of 'last-command nil)
+  (pcase (conn-bounds-of-last)
     ((conn-bounds `(,beg . ,end))
      (push-mark (if (= (point) beg) end beg) t t)
      (conn-push-state 'conn-mark-state))
     (_
      (push-mark nil t t)
      (conn-push-state 'conn-mark-state))))
+
+(defun conn-set-mark-command ()
+  (interactive)
+  (if (region-active-p)
+      (deactivate-mark)
+    (push-mark nil t t)
+    (conn-push-state 'conn-mark-state)))
 
 (defun conn-previous-mark-command ()
   "Push, and mark the region from the previous, `conn-mark-state'."
@@ -558,31 +562,18 @@ for the meaning of prefix ARG."
 
 ;;;;; Killing and Yanking
 
-(defun conn-yank-replace (thing
-                          arg
-                          transform
-                          &optional
-                          kill
-                          check-bounds)
+(defun conn-yank-replace (&optional kill)
   "`yank' replacing region between START and END.
 
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument))
-        (kill (conn-boolean-argument
-               'conn-kill-thing nil "kill"))
-        (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform kill check-bounds)))
-  (pcase (conn-bounds-of thing arg)
+  (interactive "P")
+  (pcase (if (region-active-p)
+             (conn-bounds-of 'region nil)
+           (conn-bounds-of-last))
     ((conn-bounds `(,beg . ,end)
-                  (append transform
-                          (when check-bounds
-                            (list 'conn-check-bounds))))
+                  (list 'conn-check-bounds))
      (goto-char beg)
      (atomic-change-group
        (conn--without-conn-maps
@@ -595,29 +586,53 @@ of deleting it."
          ;; yank changes this-command to 'yank, fix that
          (setq this-command 'conn-yank-replace))))))
 
-(defun conn-completing-yank-replace (thing
-                                     arg
-                                     transform
-                                     &optional
-                                     kill
-                                     check-bounds)
+;; (defun conn-yank-replace (thing
+;;                           arg
+;;                           transform
+;;                           &optional
+;;                           kill
+;;                           check-bounds)
+;;   "`yank' replacing region between START and END.
+;; 
+;; If called interactively uses the region between point and mark.
+;; If arg is non-nil, kill the region between START and END instead
+;; of deleting it."
+;;   (interactive
+;;    (conn-read-args (conn-read-thing-state
+;;                     :prompt "Thing")
+;;        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+;;         (transform (conn-transform-argument))
+;;         (kill (conn-boolean-argument
+;;                'conn-kill-thing nil "kill"))
+;;         (check-bounds (conn-check-bounds-argument)))
+;;      (list thing arg transform kill check-bounds)))
+;;   (pcase (conn-bounds-of thing arg)
+;;     ((conn-bounds `(,beg . ,end)
+;;                   (append transform
+;;                           (when check-bounds
+;;                             (list 'conn-check-bounds))))
+;;      (goto-char beg)
+;;      (atomic-change-group
+;;        (conn--without-conn-maps
+;;          (if kill
+;;              (let ((str (filter-buffer-substring beg end t)))
+;;                (yank)
+;;                (kill-new str))
+;;            (delete-region beg end)
+;;            (yank))
+;;          ;; yank changes this-command to 'yank, fix that
+;;          (setq this-command 'conn-yank-replace))))))
+
+(defun conn-completing-yank-replace (&optional kill)
   "Replace region with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument))
-        (kill (conn-boolean-argument
-               'conn-kill-thing nil "kill"))
-        (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform kill check-bounds)))
-  (pcase (conn-bounds-of thing arg)
+  (interactive "P")
+  (pcase (if (region-active-p)
+             (conn-bounds-of 'region nil)
+           (conn-bounds-of-last))
     ((conn-bounds `(,beg . ,end)
-                  (append transform
-                          (when check-bounds
-                            (list 'conn-check-bounds))))
+                  (list 'conn-check-bounds))
      (goto-char end)
      (let ((ov (make-overlay beg end)))
        (overlay-put ov 'conn-overlay t)
@@ -630,6 +645,42 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                  (kill-region (overlay-start ov) (overlay-end ov))
                (delete-region (overlay-start ov) (overlay-end ov))))
          (delete-overlay ov))))))
+
+;; (defun conn-completing-yank-replace (thing
+;;                                      arg
+;;                                      transform
+;;                                      &optional
+;;                                      kill
+;;                                      check-bounds)
+;;   "Replace region with result of `yank-from-kill-ring'.
+;; 
+;; If ARG is non-nil `kill-region' instead of `delete-region'."
+;;   (interactive
+;;    (conn-read-args (conn-read-thing-state
+;;                     :prompt "Thing")
+;;        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+;;         (transform (conn-transform-argument))
+;;         (kill (conn-boolean-argument
+;;                'conn-kill-thing nil "kill"))
+;;         (check-bounds (conn-check-bounds-argument)))
+;;      (list thing arg transform kill check-bounds)))
+;;   (pcase (conn-bounds-of thing arg)
+;;     ((conn-bounds `(,beg . ,end)
+;;                   (append transform
+;;                           (when check-bounds
+;;                             (list 'conn-check-bounds))))
+;;      (goto-char end)
+;;      (let ((ov (make-overlay beg end)))
+;;        (overlay-put ov 'conn-overlay t)
+;;        (unwind-protect
+;;            (progn
+;;              (overlay-put ov 'invisible t)
+;;              (call-interactively (or (command-remapping 'yank-from-kill-ring)
+;;                                      'yank-from-kill-ring))
+;;              (if kill
+;;                  (kill-region (overlay-start ov) (overlay-end ov))
+;;                (delete-region (overlay-start ov) (overlay-end ov))))
+;;          (delete-overlay ov))))))
 
 (defun conn-yank-replace-rectangle ()
   "Delete the current rectangle and `yank-rectangle'."
@@ -2753,7 +2804,7 @@ If copying to a registers then append to the register.  If APPEND is
   (interactive)
   (if (region-active-p)
       (copy-region-as-kill (region-beginning) (region-end) t)
-    (pcase (conn-bounds-of 'last-command nil)
+    (pcase (conn-bounds-of-last)
       ((conn-bounds `(,beg . ,end))
        (pulse-momentary-highlight-region beg end)
        (copy-region-as-kill beg end)))))

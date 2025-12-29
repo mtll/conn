@@ -398,13 +398,24 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
                                 (conn--create-marker location)))))))
 
 (defun conn--jump-post-command-hook ()
+  (when (and (conn-thing-command-p this-command)
+             ;; TODO: make this customizable
+             (not (or (eq 'char (conn-command-thing this-command))
+                      (eq 'point (conn-command-thing this-command))))
+             (eq (current-buffer)
+                 (marker-buffer conn-this-command-start)))
+    (setf conn--last-thing-command-pos
+          (list this-command
+                current-prefix-arg
+                (marker-position conn-this-command-start)
+                (buffer-chars-modified-tick))))
   (when-let* ((_ (marker-position conn-this-command-start))
-              (pred (function-get this-command :conn-jump-command))
-              (_ (and (eq (marker-buffer conn-this-command-start)
-                          (current-buffer))
-                      (/= (point) conn-this-command-start))))
+              (pred (function-get this-command :conn-jump-command)))
     (if (eq t pred)
-        (conn-push-jump-ring conn-this-command-start)
+        (when (and (eq (marker-buffer conn-this-command-start)
+                       (current-buffer))
+                   (/= (point) conn-this-command-start))
+          (conn-push-jump-ring conn-this-command-start))
       (ignore-errors (funcall pred conn-this-command-start)))))
 
 (defun conn-set-jump-command (command &optional predicate)
@@ -429,6 +440,11 @@ to the jump ring."
   (conn-push-jump-ring (point-marker))
   (conn-ring-rotate-backward conn-jump-ring)
   (goto-char (conn-ring-head conn-jump-ring)))
+
+(defun conn--isearch-jump-predicate ()
+  (when (/= (point) isearch-opoint)
+    (or mark-active
+        (conn-push-jump-ring isearch-opoint))))
 
 ;;;;; Region Utils
 

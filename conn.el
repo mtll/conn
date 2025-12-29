@@ -51,7 +51,7 @@
            conn--input-method)
       (unwind-protect
           (progn
-            (remove-hook 'input-method-activate-hook 'conn--activate-input-method t)
+            (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
             (activate-input-method conn--input-method)
             (deactivate-input-method))
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
@@ -137,13 +137,15 @@
     (if conn-mode
         (progn
           (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
-          (add-hook 'clone-buffer-hook 'conn--clone-buffer-setup)
-          (add-hook 'clone-indirect-buffer-hook 'conn--clone-buffer-setup)
+          (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
+          (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
+          (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'pre-command-hook #'conn--pos-pre-command-hook)
           (add-hook 'post-command-hook #'conn--jump-post-command-hook))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
-      (remove-hook 'clone-buffer-hook 'conn--clone-buffer-setup)
-      (remove-hook 'clone-indirect-buffer-hook 'conn--clone-buffer-setup)
+      (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
+      (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
+      (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
       (remove-hook 'pre-command-hook #'conn--pos-pre-command-hook)
       (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
 

@@ -671,7 +671,7 @@
            (conn-bounds-of thing arg :flat t)
            (conn-bounds-get :subregions)
            last car)
-    ((conn-bounds `(,beg . ,end))
+    ((conn-bounds `(,beg . ,_end))
      (goto-char beg))
     (_ (signal 'scan-error
                (list (format-message "No more %S to move across" thing)

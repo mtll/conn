@@ -81,7 +81,6 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
   (unless (= beg (point)) beg))
 
 (defun conn--pos-pre-command-hook ()
-  (cl-rotatef conn-last-command-start conn-this-command-start)
   (set-marker conn-this-command-start (point) (current-buffer)))
 
 ;;;; Thing Types
@@ -117,8 +116,7 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
            (important-return-value t))
   (inline-letevals (cmd)
     (inline-quote
-     (and (symbolp ,cmd)
-          (get ,cmd :conn-command-thing)
+     (and (function-get ,cmd :conn-command-thing)
           t))))
 
 (defun conn-set-command-thing (cmd thing)
@@ -1191,7 +1189,7 @@ not be delete.  The the value returned by each function is ignored.")
   (run-hook-with-args 'conn-check-bounds-functions bounds)
   bounds)
 
-;;;;; Perform Bounds
+;;;;; Bounds Of
 
 (defvar conn--eldoc-prev-msg-fn nil)
 
@@ -1233,13 +1231,6 @@ not be delete.  The the value returned by each function is ignored.")
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql 'last-command))
-                              _arg)
-  (when (conn-thing-command-p last-command)
-    (save-excursion
-      (goto-char conn-last-command-start)
-      (conn-bounds-of last-command last-prefix-arg))))
-
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
   (setq arg (prefix-numeric-value arg))
@@ -1250,6 +1241,12 @@ not be delete.  The the value returned by each function is ignored.")
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
+
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-mark-last-command))
+                              _arg)
+  (if (region-active-p)
+      (cl-call-next-method)
+    (conn-bounds-of-last)))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
                               _arg)
@@ -1322,6 +1319,35 @@ not be delete.  The the value returned by each function is ignored.")
       bounds)))
 
 (conn-register-thing 'conn-thing-at-isearch)
+
+;;;;; Bounds of Last
+
+(defun conn-bounds-of-last ()
+  (pcase conn--last-thing-command-pos
+    (`(,command ,arg ,point ,tick)
+     (when (= tick (buffer-chars-modified-tick))
+       (conn-bounds-of-last-do command arg point)))))
+
+(cl-defgeneric conn-bounds-of-last-do (cmd arg point))
+
+(cl-defmethod conn-bounds-of-last-do (cmd arg point)
+  (when (function-get cmd :conn-mark-handler)
+    (pcase (save-excursion
+             (goto-char point)
+             (conn-bounds-of cmd arg))
+      ((and bounds (conn-bounds `(,beg . ,end)))
+       (conn-make-bounds
+        'region nil
+        (if (conn-bounds-get bounds :forward)
+            (cons beg (point))
+          (cons (point) end)))))))
+
+(cl-defmethod conn-bounds-of-last-do ((_cmd (conn-thing isearch))
+                                      _arg
+                                      point)
+  (conn-make-bounds
+   'region nil
+   (cons point (point))))
 
 ;;;; Bounds of Things in Region
 
@@ -1601,6 +1627,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'region nil
+ 'conn-mark-last-command
  'conn-exchange-mark-command
  'conn-mark-thing
  'conn-previous-mark-command

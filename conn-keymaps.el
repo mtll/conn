@@ -380,7 +380,7 @@
   "<" 'conn-register-prefix
   "t" 'conn-transpose-things
   "r" conn-region-remap
-  "v" 'conn-mark-thing
+  "v" 'conn-mark-last-command
   "V" 'conn-previous-mark-command
   "b" 'conn-set-mark-command
   "d" 'conn-kill-thing

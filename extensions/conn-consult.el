@@ -50,6 +50,30 @@
   (let ((inhibit-message nil))
     (consult-imenu)))
 
+(defun conn--consult-jump-advice (&rest _)
+  (conn-push-jump-ring (mark-marker)))
+
+(defun conn--consult-setup-jump-advice ()
+  (if conn-mode
+      (progn
+        (advice-add 'consult-ripgrep :after #'conn--consult-jump-advice)
+        (advice-add 'consult-line :after #'conn--consult-jump-advice)
+        (advice-add 'consult-line-multi :after #'conn--consult-jump-advice)
+        (advice-add 'consult-find :after #'conn--consult-jump-advice)
+        (advice-add 'consult-grep :after #'conn--consult-jump-advice)
+        (advice-add 'consult-mark :after #'conn--consult-jump-advice)
+        (advice-add 'consult-imenu :after #'conn--consult-jump-advice))
+    (progn
+      (advice-remove 'consult-ripgrep #'conn--consult-jump-advice)
+      (advice-remove 'consult-line #'conn--consult-jump-advice)
+      (advice-remove 'consult-line-multi #'conn--consult-jump-advice)
+      (advice-remove 'consult-find #'conn--consult-jump-advice)
+      (advice-remove 'consult-grep #'conn--consult-jump-advice)
+      (advice-remove 'consult-mark #'conn--consult-jump-advice)
+      (advice-remove 'consult-imenu #'conn--consult-jump-advice))))
+(conn--consult-setup-jump-advice)
+(add-hook 'conn-mode-hook #'conn--consult-setup-jump-advice)
+
 ;;;###autoload
 (defun conn-consult-ripgrep-thing (thing arg transform)
   (interactive
@@ -66,7 +90,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-line-thing (thing arg transform)
@@ -83,7 +108,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-line-multi-thing (thing arg transform)
@@ -101,7 +127,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-locate-thing (thing arg transform)
@@ -118,7 +145,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-git-grep-thing (thing arg transform)
@@ -136,7 +164,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-find-thing (thing arg transform)
@@ -154,7 +183,8 @@
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
-                 (buffer-substring-no-properties beg end)))))))
+                 (buffer-substring-no-properties beg end))))
+     (conn-push-jump-ring (mark-marker)))))
 
 (defun conn-consult--isearch-matches (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))

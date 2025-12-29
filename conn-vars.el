@@ -165,8 +165,7 @@
 (defvar conn-this-command-start (make-marker)
   "Start position for current command.")
 
-(defvar conn-last-command-start (make-marker)
-  "Start position for last command.")
+(defvar-local conn--last-thing-command-pos nil)
 
 ;;;;; Remaps
 
