@@ -1344,13 +1344,17 @@ not be delete.  The the value returned by each function is ignored.")
 
 (defun conn-bounds-of-last ()
   (cdr
-   (if (eq conn--last-thing-command
-           (car conn--bounds-of-last-cache))
+   (if (and conn--bounds-of-last-cache
+            (eq conn--last-thing-command
+                (caar conn--bounds-of-last-cache))
+            (= (buffer-chars-modified-tick)
+               (cdar conn--bounds-of-last-cache)))
        conn--bounds-of-last-cache
      (pcase conn--last-thing-command
        (`(,command . ,arg)
         (setf conn--bounds-of-last-cache
-              (cons conn--last-thing-command
+              (cons (cons conn--last-thing-command
+                          (buffer-chars-modified-tick))
                     (conn-bounds-of-last-do
                      command arg
                      (marker-position conn--last-thing-command-pos)))))))))
