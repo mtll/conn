@@ -399,20 +399,26 @@ The command to be stored is read from `command-history'."
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-mark-last-command ()
+  "Mark the region defined by the most recent thing command.
+
+If no region is found then push a mark at point and activate it."
   (interactive)
   (pcase (conn-bounds-of-last)
     ((conn-bounds `(,beg . ,end))
-     (push-mark (if (= (point) beg) end beg) t t)
+     (push-mark (if (= (point) beg) end beg) nil t)
      (conn-push-state 'conn-mark-state))
     (_
-     (push-mark nil t t)
+     (push-mark nil nil t)
      (conn-push-state 'conn-mark-state))))
 
 (defun conn-set-mark-command ()
+  "Push a mark at point and activate it.
+
+If the mark is already active then deactivate it instead."
   (interactive)
   (if (region-active-p)
       (deactivate-mark)
-    (push-mark nil t t)
+    (push-mark nil nil t)
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-previous-mark-command ()
@@ -744,14 +750,19 @@ Interactively `region-beginning' and `region-end'."
   (run-hook-with-args-until-success 'conntext-state-hook))
 
 (defun conn-one-emacs-state ()
+  "Execute one command in `conn-emacs-state'."
   (interactive)
   (conn-push-state 'conn-one-emacs-state))
 
 (defun conn-one-command ()
+  "Execute one command in `conn-command-state'."
   (interactive)
   (conn-push-state 'conn-one-command-state))
 
 (defun conn-previous-emacs-state (arg)
+  "Enter `conn-emacs-state' ARG positions back in `conn-emacs-state-ring'.
+
+Interactively ARG is the prefix argument."
   (interactive "p")
   (cond ((< arg 0)
          (conn-next-emacs-state (abs arg)))
@@ -769,6 +780,9 @@ Interactively `region-beginning' and `region-end'."
            (conn-push-state 'conn-emacs-state)))))
 
 (defun conn-next-emacs-state (arg)
+  "Enter `conn-emacs-state' ARG positions forward in `conn-emacs-state-ring'.
+
+Interactively ARG is the prefix argument."
   (interactive "p")
   (cond ((< arg 0)
          (conn-previous-emacs-state (abs arg)))
@@ -780,10 +794,12 @@ Interactively `region-beginning' and `region-end'."
          (conn-push-state 'conn-emacs-state))))
 
 (defun conn-emacs-state ()
+  "Enter `conn-emacs-state'."
   (interactive)
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-command-state ()
+  "Enter `conn-command-state'."
   (interactive)
   (conn-push-state 'conn-command-state))
 
@@ -867,6 +883,10 @@ Current Window: `conn-this-window-prefix'"
     (?g (conn-other-window-prompt-prefix))))
 
 (defun conn-other-window-prefix (&optional this-window)
+  "Display next buffer in another window.
+
+If there are more than 2 windows prompt with `conn-prompt-for-window' to
+determine which window to display the buffer in."
   (interactive "P")
   (if this-window
       (conn-this-window-prefix)
