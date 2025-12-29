@@ -149,8 +149,16 @@
   "o" 'conn-pop-jump-ring
   "u" 'conn-unpop-jump-ring)
 
+(defvar-keymap conn-pop-mark-ring-repeat-map
+  :repeat t
+  ">" 'conn-pop-mark-ring
+  "<" 'conn-unpop-mark-ring)
+
 (define-keymap
   :keymap conn-goto-map
+  "O" 'conn-push-jump-ring
+  ">" 'conn-pop-mark-ring
+  "<" 'conn-unpop-mark-ring
   "o" 'conn-pop-jump-ring
   "u" 'conn-unpop-jump-ring
   "i" 'previous-error
@@ -310,7 +318,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "C" 'conn-last-thing
+  "C" 'conn-copy-last-thing
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
@@ -354,7 +362,6 @@
   "+" 'conn-set-register-separator
   "H" 'conn-expand
   "SPC" conn-edit-remap
-  "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
   "E" 'conn-emacs-state-at-mark
@@ -388,7 +395,8 @@
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "z" 'conn-exchange-mark-command)
+  "z" 'conn-last-thing-other-end
+  "Z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
 

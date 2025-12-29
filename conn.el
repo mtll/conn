@@ -57,6 +57,12 @@
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
     (apply app)))
 
+(defun conn--xref-push-markers-ad (buf pt _win)
+  (when (buffer-live-p buf)
+    (with-current-buffer buf
+      (unless (= pt (point))
+        (conn-push-jump-ring pt)))))
+
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
@@ -137,16 +143,20 @@
     (if conn-mode
         (progn
           (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
+          (advice-add 'xref--push-markers :after #'conn--xref-push-markers-ad)
           (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-          (add-hook 'pre-command-hook #'conn--pos-pre-command-hook)
+          (add-hook 'pre-command-hook #'conn--thing-pre-command-hook)
+          (add-hook 'post-command-hook #'conn--thing-post-command-hook)
           (add-hook 'post-command-hook #'conn--jump-post-command-hook))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
+      (advice-remove 'xref--push-markers #'conn--xref-push-markers-ad)
       (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
       (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
       (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-      (remove-hook 'pre-command-hook #'conn--pos-pre-command-hook)
+      (remove-hook 'pre-command-hook #'conn--thing-pre-command-hook)
+      (remove-hook 'post-command-hook #'conn--thing-post-command-hook)
       (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
 
 (define-minor-mode conn-emacs-state-operators-mode

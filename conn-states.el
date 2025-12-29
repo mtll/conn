@@ -1382,19 +1382,21 @@ command was a prefix command.")
                                   (fboundp 'rectangle--pos-cols)
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
+  (remove-hook 'post-command-hook #'conn--thing-post-command-hook)
   (conn-state-defer
+    (add-hook 'post-command-hook #'conn--thing-post-command-hook)
+    (if (conn-mark-state-keep-mark-active-p)
+        (when (bound-and-true-p rectangle-mark-mode)
+          (conn-state-on-re-entry
+            (rectangle-mark-mode 1)))
+      (deactivate-mark))
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit))
       (unless conn--previous-mark-state
         (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
       (set-marker (nth 0 conn--previous-mark-state) (point))
       (set-marker (nth 1 conn--previous-mark-state) (mark t))
-      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm))
-    (if (conn-mark-state-keep-mark-active-p)
-        (when (bound-and-true-p rectangle-mark-mode)
-          (conn-state-on-re-entry
-            (rectangle-mark-mode 1)))
-      (deactivate-mark)))
+      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup

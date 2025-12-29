@@ -374,10 +374,11 @@ If ring is (1 2 3 4) 4 would be returned."
 (defvar-local conn-jump-ring nil
   "Ring of previous jump positions in a buffer.")
 
-(defun conn-push-jump-ring (location &optional back)
+(defun conn-push-jump-ring (location &optional back msg)
   "Push LOCATION to the jump ring.
 
 If BACK is non-nil then push LOCATION to the back of the jump ring."
+  (interactive (list (point) nil t))
   (when (not conn-jump-ring)
     (setq conn-jump-ring
           (conn-make-ring 40
@@ -395,20 +396,10 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
           (conn-ring-insert-back conn-jump-ring
                                  (conn--create-marker location))
         (conn-ring-insert-front conn-jump-ring
-                                (conn--create-marker location)))))))
+                                (conn--create-marker location))))))
+  (when msg (message "Jump ring pushed")))
 
 (defun conn--jump-post-command-hook ()
-  (when (and (conn-thing-command-p this-command)
-             ;; TODO: make this customizable
-             (not (or (eq 'char (conn-command-thing this-command))
-                      (eq 'point (conn-command-thing this-command))))
-             (eq (current-buffer)
-                 (marker-buffer conn-this-command-start)))
-    (setf conn--last-thing-command-pos
-          (list this-command
-                current-prefix-arg
-                (marker-position conn-this-command-start)
-                (buffer-chars-modified-tick))))
   (when-let* ((_ (marker-position conn-this-command-start))
               (pred (function-get this-command :conn-jump-command)))
     (if (eq t pred)
@@ -416,7 +407,15 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
                        (current-buffer))
                    (/= (point) conn-this-command-start))
           (conn-push-jump-ring conn-this-command-start))
-      (ignore-errors (funcall pred conn-this-command-start)))))
+      (ignore-errors
+        (funcall pred conn-this-command-start)))))
+
+(defun conn-set-last-thing-command (thing arg pt)
+  (when conn--last-thing-override
+    (set-marker (car conn--last-thing-override) nil))
+  (setq conn--last-thing-override
+        (cons (and pt (set-marker (make-marker) pt))
+              (cons thing arg))))
 
 (defun conn-set-jump-command (command &optional predicate)
   "Register COMMAND as a jump command.
@@ -428,18 +427,6 @@ which command was first called and is responsible for pushing a position
 to the jump ring."
   (dolist (cmd (ensure-list command))
     (function-put cmd :conn-jump-command (or predicate t))))
-
-(defun conn-pop-jump-ring ()
-  (interactive)
-  (conn-push-jump-ring (point-marker))
-  (conn-ring-rotate-forward conn-jump-ring)
-  (goto-char (conn-ring-head conn-jump-ring)))
-
-(defun conn-unpop-jump-ring ()
-  (interactive)
-  (conn-push-jump-ring (point-marker))
-  (conn-ring-rotate-backward conn-jump-ring)
-  (goto-char (conn-ring-head conn-jump-ring)))
 
 (defun conn--isearch-jump-predicate ()
   (when (/= (point) isearch-opoint)

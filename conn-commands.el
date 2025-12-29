@@ -91,6 +91,18 @@ Complex commands are those that read arguments from terminal.  See
 
 ;;;;; Movement
 
+(defun conn-pop-jump-ring ()
+  (interactive)
+  (conn-push-jump-ring (point-marker))
+  (conn-ring-rotate-forward conn-jump-ring)
+  (goto-char (conn-ring-head conn-jump-ring)))
+
+(defun conn-unpop-jump-ring ()
+  (interactive)
+  (conn-push-jump-ring (point-marker))
+  (conn-ring-rotate-backward conn-jump-ring)
+  (goto-char (conn-ring-head conn-jump-ring)))
+
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
   (interactive "p")
@@ -453,21 +465,63 @@ If the mark is already active then deactivate it instead."
      (push-mark (if forward beg end) t t)
      (conn-push-state 'conn-mark-state))))
 
-(defun conn-exchange-mark-command (&optional arg)
+(defun conn-exchange-mark-command ()
   "`exchange-mark-and-point' avoiding activating the mark.
 
 With a prefix ARG `push-mark' without activating it."
-  (interactive "P")
-  (cond (arg
-         (push-mark (point) t nil)
-         (message "Marker pushed"))
-        (t
-         (exchange-point-and-mark (not mark-active)))))
+  (interactive)
+  (exchange-point-and-mark (not mark-active)))
+
+(defun conn-last-thing-other-end ()
+  "`exchange-mark-and-point' avoiding activating the mark.
+
+With a prefix ARG `push-mark' without activating it."
+  (interactive)
+  (if (region-active-p)
+      (conn-exchange-mark-command)
+    (pcase (conn-bounds-of-last)
+      ((conn-bounds `(,beg . ,end))
+       (goto-char (if (= (point) end) beg end))))))
 
 (defun conn-push-mark-command ()
   "Set mark at point and push old mark on mark ring."
   (interactive)
   (push-mark))
+
+(defvar conn--unpoped-marks nil)
+(defvar conn--popping-marks nil)
+
+(defun conn--popping-marks-hook ()
+  (if conn--popping-marks
+      (setf conn--popping-marks nil)
+    (when conn--unpoped-marks
+      (conn-push-jump-ring (car (last conn--unpoped-marks))))
+    (setf conn--unpoped-marks nil)
+    (remove-hook 'post-command-hook 'conn--popping-marks-hook)))
+
+(defun conn-pop-mark-ring ()
+  (interactive)
+  (setf conn--popping-marks t)
+  (cond ((null (mark t))
+         (user-error "Mark ring empty"))
+        ((/= (point) (mark t))
+         (push (point) conn--unpoped-marks))
+        (mark-ring
+         (push (mark t) conn--unpoped-marks)
+         (set-marker (mark-marker) (car mark-ring))
+         (set-marker (pop mark-ring) nil))
+        (t (user-error "Mark ring empty")))
+  (goto-char (mark t))
+  (add-hook 'post-command-hook #'conn--popping-marks-hook))
+
+(defun conn-unpop-mark-ring ()
+  (interactive)
+  (setf conn--popping-marks t)
+  (if (null conn--unpoped-marks)
+      (user-error "No marks to unpop")
+    (when conn--unpoped-marks
+      (push-mark (pop conn--unpoped-marks))
+      (goto-char (mark t)))))
 
 ;;;;; Line Commands
 
@@ -2819,11 +2873,13 @@ If copying to a registers then append to the register.  If APPEND is
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))))))
 
-(defun conn-last-thing ()
+(defun conn-copy-last-thing ()
   "Copy the thing just moved over or the active region."
   (interactive)
   (if (region-active-p)
-      (copy-region-as-kill (region-beginning) (region-end) t)
+      (progn
+        (pulse-momentary-highlight-region (region-beginning) (region-end))
+        (copy-region-as-kill (region-beginning) (region-end) t))
     (pcase (conn-bounds-of-last)
       ((conn-bounds `(,beg . ,end))
        (pulse-momentary-highlight-region beg end)

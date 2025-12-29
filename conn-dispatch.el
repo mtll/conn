@@ -3264,6 +3264,8 @@ exchanges the point and mark."))
                   (conn-select-target)))
       (select-window window)
       (conn-dispatch-change-group)
+      (unless conn-dispatch-repeating
+        (conn-push-jump-ring (point)))
       (unless (and (= pt (point))
                    (region-active-p))
         (let ((forward (< (point) pt)))
@@ -3274,8 +3276,8 @@ exchanges the point and mark."))
                                 end
                               beg))
                (push-mark nil t)
-               (push-mark end t)
-               (goto-char beg)))
+               (goto-char beg)
+               (conn-set-last-thing-command thing arg pt)))
             (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-push-button
@@ -3969,10 +3971,13 @@ it."))
                   (conn-select-target)))
       (select-window window)
       (conn-dispatch-change-group)
+      (unless conn-dispatch-repeating
+        (conn-push-jump-ring (point)))
       (unless (= pt (point))
         (unless (region-active-p)
           (push-mark nil t))
-        (goto-char pt)))))
+        (goto-char pt))
+      (conn-set-last-thing-command 'region nil nil))))
 
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))

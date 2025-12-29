@@ -166,6 +166,9 @@
   "Start position for current command.")
 
 (defvar-local conn--last-thing-command-pos nil)
+(defvar-local conn--last-thing-command nil)
+
+(defvar conn--last-thing-override nil)
 
 ;;;;; Remaps
 
