@@ -1089,6 +1089,20 @@ instances of from-string.")
                           'face 'minibuffer-prompt
                           'separator t)))))
 
+(defun conn-replace-read-default ()
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
+     (when (and (< (- end beg) 60)
+                (<= end (save-excursion
+                          (goto-char beg)
+                          (pos-eol)))
+                (not (use-region-p)))
+       (buffer-substring-no-properties beg end)))))
+
+(defun conn-replace-read-regexp-default ()
+  (when-let* ((default (conn-replace-read-default)))
+    (regexp-quote default)))
+
 (defvar conn--replace-reading nil)
 
 (defun conn--replace-read-from ( prompt
@@ -1124,7 +1138,11 @@ instances of from-string.")
             (make-composed-keymap conn-replace-from-map)
             (use-local-map)))
       (if regexp-flag
-          (query-replace-read-from prompt regexp-flag)
+          (let ((query-replace-read-from-regexp-default
+                 (if-let* ((def (conn-replace-read-regexp-default)))
+                     def
+                   query-replace-read-from-regexp-default)))
+            (query-replace-read-from prompt regexp-flag))
         (query-replace-read-from prompt regexp-flag)))))
 
 (defun conn--replace-read-args (prompt
