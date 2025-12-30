@@ -416,11 +416,13 @@ The command to be stored is read from `command-history'."
 If no region is found then push a mark at point and activate it."
   (interactive)
   (pcase (conn-bounds-of-last)
-    ((conn-bounds `(,beg . ,end))
-     (push-mark (if (= (point) beg) end beg) nil t)
+    ((and bounds (conn-bounds `(,beg . ,end)))
+     (push-mark (if (conn-bounds-get bounds :forward) beg end) nil t)
+     (goto-char (if (conn-bounds-get bounds :forward) end beg))
      (conn-push-state 'conn-mark-state))
     (_
-     (push-mark nil nil t)
+     (activate-mark)
+     ;; (push-mark nil nil t)
      (conn-push-state 'conn-mark-state))))
 
 (defun conn-set-mark-command ()

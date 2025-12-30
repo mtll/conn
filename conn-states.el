@@ -1382,9 +1382,7 @@ command was a prefix command.")
                                   (fboundp 'rectangle--pos-cols)
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
-  (remove-hook 'post-command-hook #'conn--thing-post-command-hook)
   (conn-state-defer
-    (add-hook 'post-command-hook #'conn--thing-post-command-hook)
     (if (conn-mark-state-keep-mark-active-p)
         (when (bound-and-true-p rectangle-mark-mode)
           (conn-state-on-re-entry
