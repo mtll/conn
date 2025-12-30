@@ -428,9 +428,10 @@
 
 (defvar conn-ts-multi-always-prompt-p
   (lambda ()
-    (not (memq conn-dispatch-current-action
-               '(conn-dispatch-goto
-                 conn-dispatch-jump)))))
+    (and conn-dispatch-in-progress
+         (not (memq conn-dispatch-current-action
+                    '(conn-dispatch-ts-goto
+                      conn-dispatch-jump))))))
 
 (defvar-local conn-ts-parent-things
   `(conn-ts-assignment-inner
