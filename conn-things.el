@@ -1340,6 +1340,12 @@ not be delete.  The the value returned by each function is ignored.")
 
 ;;;;; Bounds of Last
 
+(cl-defmethod conn-bounds-of ((_cmd (eql conn-mark-last-command))
+                              _arg)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds bds)
+     (conn-make-bounds 'region nil bds))))
+
 (defvar-local conn--bounds-of-last-cache nil)
 
 (defun conn-bounds-of-last ()
