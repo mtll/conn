@@ -76,7 +76,7 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
     (`(,beg . ,end)
      (if (= (point) end) beg end))))
 
-(defun conn-jump-handler (beg)
+(defun conn-jump-handler (_thing beg)
   "Place a mark where point used to be."
   (unless (= beg (point)) beg))
 
@@ -1349,21 +1349,25 @@ not be delete.  The the value returned by each function is ignored.")
 (defvar-local conn--bounds-of-last-cache nil)
 
 (defun conn-bounds-of-last ()
-  (cdr
-   (if (and conn--bounds-of-last-cache
-            (eq conn--last-thing-command
-                (caar conn--bounds-of-last-cache))
-            (= (buffer-chars-modified-tick)
-               (cdar conn--bounds-of-last-cache)))
-       conn--bounds-of-last-cache
-     (pcase conn--last-thing-command
-       (`(,command . ,arg)
-        (setf conn--bounds-of-last-cache
-              (cons (cons conn--last-thing-command
-                          (buffer-chars-modified-tick))
-                    (conn-bounds-of-last-do
-                     command arg
-                     (marker-position conn--last-thing-command-pos)))))))))
+  (if (region-active-p)
+      (progn
+        (setf conn--bounds-of-last-cache nil)
+        (conn-bounds-of 'region nil))
+    (cdr
+     (if (and conn--bounds-of-last-cache
+              (eq conn--last-thing-command
+                  (caar conn--bounds-of-last-cache))
+              (= (buffer-chars-modified-tick)
+                 (cdar conn--bounds-of-last-cache)))
+         conn--bounds-of-last-cache
+       (pcase conn--last-thing-command
+         (`(,command . ,arg)
+          (setf conn--bounds-of-last-cache
+                (cons (cons conn--last-thing-command
+                            (buffer-chars-modified-tick))
+                      (conn-bounds-of-last-do
+                       command arg
+                       (marker-position conn--last-thing-command-pos))))))))))
 
 (cl-defgeneric conn-bounds-of-last-do (cmd arg point))
 

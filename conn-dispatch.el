@@ -744,8 +744,6 @@ themselves once the selection process has concluded."
   (conn-cancel-action (conn-argument-value arg)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-argument-value arg)))
-    (conn-accept-action action))
   (list (conn-argument-value arg)
         (conn-dispatch-action-argument-repeat arg)))
 
@@ -1736,6 +1734,9 @@ depths will be sorted before greater depths.
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel))))
+      (if success
+          (conn-accept-action action)
+        (conn-cancel-action action))
       (unless success
         (select-frame oframe)
         (set-window-configuration owconf)
@@ -1808,7 +1809,8 @@ the meaning of depth."
                               collect (with-current-buffer buf
                                         (point)))))
       (when (and conn--dispatch-change-groups
-                 (not conn-dispatch-amalgamate-undo))
+                 (not conn-dispatch-amalgamate-undo)
+                 (length> conn--dispatch-change-groups 1))
         (dolist (b (or buffers (list (current-buffer))))
           (with-current-buffer b
             (undo-boundary))))
@@ -3180,6 +3182,9 @@ contain targets."
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
   (conn-dispatch-goto))
 
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
+  (conn-dispatch-jump))
+
 (cl-defgeneric conn-action-stale-p (action)
   (declare (important-return-value t)
            (side-effect-free t))
@@ -3215,20 +3220,22 @@ contain targets."
     (accept-change-group handle)))
 
 (defun conn--action-cancel-change-group (change-group)
-  (pcase-let ((`(,handle ,saved-point ,saved-mark ,saved-mark-active)
-               change-group))
-    (cancel-change-group handle)
-    (goto-char saved-point)
-    (let ((omark (marker-position (mark-marker)))
-          (cur-mark-active mark-active))
-      (set-marker (mark-marker) saved-mark)
-      (setq mark-active saved-mark-active)
-      (if saved-mark-active
-          (when (or (not cur-mark-active)
-                    (not (= omark saved-mark)))
-            (run-hooks 'activate-mark-hook))
-        (when cur-mark-active
-          (run-hooks 'deactivate-mark-hook))))))
+  (pcase change-group
+    (`(,handle ,saved-point ,saved-mark ,saved-mark-active)
+     (cancel-change-group handle)
+     (goto-char saved-point)
+     (let ((omark (marker-position (mark-marker)))
+           (cur-mark-active mark-active))
+       (set-marker (mark-marker) saved-mark)
+       (setq mark-active saved-mark-active)
+       (if saved-mark-active
+           (when (or (not cur-mark-active)
+                     (not (= omark saved-mark)))
+             (run-hooks 'activate-mark-hook))
+         (when cur-mark-active
+           (run-hooks 'deactivate-mark-hook))))
+     (setf (cdr change-group) nil
+           (car change-group) nil))))
 
 (defun conn-dispatch-insert-separator (separator)
   (pcase separator
@@ -3830,26 +3837,59 @@ it."))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (oclosure-define (conn-dispatch-copy-from-replace
-                  (:parent conn-action)))
+                  (:parent conn-action))
+  (action-opoint :type marker)
+  (action-change-group))
+
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from-replace))
+  (when-let* ((mk (conn-dispatch-copy-from-replace--action-opoint action)))
+    (thread-first mk marker-buffer buffer-live-p not)))
+
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from-replace))
+  (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil))
+
+(cl-defmethod conn-action-copy ((action conn-dispatch-copy-from-replace))
+  (conn-thread<-
+    (conn-dispatch-copy-from-replace--action-opoint action)
+    (copy-marker t)
+    (:-> (conn-dispatch-take-replace-copy action))))
 
 (defun conn-dispatch-copy-from-replace ()
   (declare (conn-dispatch-action t))
-  (oclosure-lambda (conn-dispatch-copy-from-replace
-                    (action-description "Copy From and Replace")
-                    (action-doc-string
-                     "Replace current region with text in region selected by dispatch."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (pcase (conn-bounds-of-dispatch thing arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
-           (conn-dispatch-action-pulse beg end)
-           (copy-region-as-kill beg end))
-          (_ (user-error "Cannot find thing at point"))))
-      (conn-dispatch-change-group)
-      (delete-region (region-beginning) (region-end))
-      (yank))))
+  (let ((cg (conn--action-buffer-change-group)))
+    (pcase (conn-bounds-of-last)
+      ((conn-bounds `(,rbeg . ,rend))
+       (delete-region rbeg rend)
+       (oclosure-lambda (conn-dispatch-copy-from-replace
+                         (action-description "Copy From and Replace")
+                         (action-opoint (copy-marker (point) t))
+                         (action-change-group cg)
+                         (action-doc-string
+                          "Replace current region with text in region selected by dispatch."))
+           ()
+         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                       (conn-select-target)))
+           (with-selected-window window
+             (pcase (conn-bounds-of-dispatch thing arg pt)
+               ((conn-bounds `(,beg . ,end) transform)
+                (conn-dispatch-action-pulse beg end)
+                (copy-region-as-kill beg end))
+               (_ (user-error "Cannot find thing at point"))))
+           (with-current-buffer (marker-buffer action-opoint)
+             (save-excursion
+               (conn-dispatch-change-group)
+               (goto-char action-opoint)
+               (yank))))))
+      (_ (error "No region to replace")))))
+
+(cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from-replace))
+  (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil)
+  (conn--action-cancel-change-group
+   (conn-dispatch-copy-from-replace--action-change-group action)))
+
+(cl-defmethod conn-accept-action ((action conn-dispatch-copy-from-replace))
+  (conn--action-accept-change-group
+   (conn-dispatch-copy-from-replace--action-change-group action)))
 
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action)
@@ -3875,32 +3915,35 @@ it."))
 (defun conn-dispatch-take-replace ()
   (declare (conn-dispatch-action t))
   (let ((cg (conn--action-buffer-change-group)))
-    (delete-region (region-beginning) (region-end))
-    (oclosure-lambda (conn-dispatch-take-replace
-                      (action-description "Take From and Replace")
-                      (action-change-group cg)
-                      (action-opoint (copy-marker (point) t))
-                      (action-window-predicate
-                       (lambda (win)
-                         (not
-                          (buffer-local-value 'buffer-read-only
-                                              (window-buffer win))))))
-        ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
-        (conn-dispatch-change-group (current-buffer) (window-buffer window))
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (conn-bounds-of thing arg)
-              ((and bounds (conn-bounds `(,beg . ,end) transform))
-               (kill-region beg end)
-               (funcall conn-kill-fixup-whitespace-function bounds))
-              (_ (user-error "Cannot find thing at point")))))
-        (with-current-buffer (marker-buffer action-opoint)
-          (save-excursion
-            (goto-char action-opoint)
-            (yank)))))))
+    (pcase (conn-bounds-of-last)
+      ((conn-bounds `(,rbeg . ,rend))
+       (delete-region rbeg rend)
+       (oclosure-lambda (conn-dispatch-take-replace
+                         (action-description "Take From and Replace")
+                         (action-change-group cg)
+                         (action-opoint (copy-marker rbeg t))
+                         (action-window-predicate
+                          (lambda (win)
+                            (not
+                             (buffer-local-value 'buffer-read-only
+                                                 (window-buffer win))))))
+           ()
+         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                       (conn-select-target)))
+           (conn-dispatch-change-group (current-buffer) (window-buffer window))
+           (with-selected-window window
+             (save-excursion
+               (goto-char pt)
+               (pcase (conn-bounds-of thing arg)
+                 ((and bounds (conn-bounds `(,beg . ,end) transform))
+                  (kill-region beg end)
+                  (funcall conn-kill-fixup-whitespace-function bounds))
+                 (_ (user-error "Cannot find thing at point")))))
+           (with-current-buffer (marker-buffer action-opoint)
+             (save-excursion
+               (goto-char action-opoint)
+               (yank))))))
+      (_ (error "No region to replace")))))
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
   (set-marker (conn-dispatch-take-replace--action-opoint action) nil)
@@ -4256,43 +4299,45 @@ it."))
     (setq action (conn-make-default-action thing)))
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
-  (let* ((dispatch-quit-flag nil)
-         (conn-dispatch-action-reference
-          (conn-action-get-reference action))
-         (conn--dispatch-current-thing (list thing arg transform))
-         (eldoc-display-functions nil)
-         (recenter-last-op nil)
-         (conn-read-args-last-command nil)
-         (conn-dispatch-repeating (and repeat t))
-         (conn--dispatch-prev-state
-          (list conn-target-window-predicate
-                conn-target-predicate
-                conn-target-sort-function))
-         (conn-target-window-predicate conn-target-window-predicate)
-         (conn-target-predicate conn-target-predicate)
-         (conn-target-sort-function conn-target-sort-function)
-         (conn--dispatch-must-prompt nil)
-         (conn--read-args-prefix-mag nil)
-         (conn--read-args-prefix-sign nil)
-         (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
-         (conn-dispatch-target-finder
-          (conn-get-target-finder thing arg))
-         (conn-dispatch-iteration-count 0)
-         (conn--dispatch-always-retarget
-          (or always-retarget
-              (conn-action-always-retarget action)))
-         (target-other-end (conn-target-finder-other-end
-                            conn-dispatch-target-finder))
-         (conn-dispatch-no-other-end
-          (or (eq other-end :no-other-end)
-              (eq target-other-end :no-other-end)))
-         (conn-dispatch-other-end
-          (unless conn-dispatch-no-other-end
-            (xor target-other-end (or other-end conn-dispatch-other-end))))
-         (conn-dispatch-input-buffer (current-buffer))
-         (prev-input-method current-input-method)
-         (default-input-method default-input-method)
-         (input-method-history input-method-history))
+  (conn-protected-let*
+      ((action action (conn-cancel-action action))
+       (dispatch-quit-flag nil)
+       (conn-dispatch-action-reference
+        (conn-action-get-reference action))
+       (conn--dispatch-current-thing (list thing arg transform))
+       (eldoc-display-functions nil)
+       (recenter-last-op nil)
+       (conn-read-args-last-command nil)
+       (conn-dispatch-repeating (and repeat t))
+       (conn--dispatch-prev-state
+        (list conn-target-window-predicate
+              conn-target-predicate
+              conn-target-sort-function))
+       (conn-target-window-predicate conn-target-window-predicate)
+       (conn-target-predicate conn-target-predicate)
+       (conn-target-sort-function conn-target-sort-function)
+       (conn--dispatch-must-prompt nil)
+       (conn--read-args-prefix-mag nil)
+       (conn--read-args-prefix-sign nil)
+       (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
+       (conn-dispatch-target-finder
+        (conn-get-target-finder thing arg))
+       (conn-dispatch-iteration-count 0)
+       (conn--dispatch-always-retarget
+        (or always-retarget
+            (conn-action-always-retarget action)))
+       (target-other-end (conn-target-finder-other-end
+                          conn-dispatch-target-finder))
+       (conn-dispatch-no-other-end
+        (or (eq other-end :no-other-end)
+            (eq target-other-end :no-other-end)))
+       (conn-dispatch-other-end
+        (unless conn-dispatch-no-other-end
+          (xor target-other-end (or other-end conn-dispatch-other-end))))
+       (conn-dispatch-input-buffer (current-buffer))
+       (prev-input-method current-input-method)
+       (default-input-method default-input-method)
+       (input-method-history input-method-history))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
       ( :message -99 (_)
