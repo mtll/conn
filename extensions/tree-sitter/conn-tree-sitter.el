@@ -489,6 +489,23 @@
         (<= (car bd) (point) (cdr bd)))))
    'conn-ts-thing))
 
+(defun conn-dispatch-ts-goto ()
+  (declare (conn-dispatch-action t))
+  (oclosure-lambda (conn-dispatch-goto
+                    (action-description "Goto Node"))
+      ()
+    (pcase-let* ((`(,pt ,window ,thing ,arg ,_transform)
+                  (conn-select-target)))
+      (select-window window)
+      (conn-dispatch-change-group)
+      (unless (= pt (point))
+        (unless conn-dispatch-repeating
+          (conn-push-jump-ring (point)))
+        (unless (region-active-p)
+          (push-mark nil t))
+        (goto-char pt))
+      (conn-set-last-thing-command thing arg pt))))
+
 (conn-define-target-finder conn-ts-query-targets
     ()
     ((things :initarg :things)
@@ -505,6 +522,10 @@
                    (conn-anonymous-thing
                      'conn-ts-thing
                      :types things
+                     :target-finder ( :method (self _arg)
+                                      (conn-ts-query-targets
+                                       :things (conn-anonymous-thing-property
+                                                self :types)))
                      :pretty-print ( :method (self)
                                      (mapconcat
                                       #'conn-thing-pretty-print
@@ -577,6 +598,8 @@
                    (conn-anonymous-thing
                      parent-thing
                      :types (list type)
+                     :target-finder ( :method (self _arg)
+                                      (conn-ts-all-things :thing thing))
                      :pretty-print ( :method (self)
                                      (string-join
                                       (conn-anonymous-thing-property self :types)
@@ -1357,6 +1380,7 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
   "w" (conn-anonymous-thing
         'conn-ts-thing
+        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-things")
         :target-finder ( :method (_self _arg)
                          (conn-ts-query-targets
@@ -1372,6 +1396,7 @@
                       'conn-ts-thing)))
   "W" (conn-anonymous-thing
         'conn-ts-thing
+        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-parents")
         :target-finder ( :method (_self _arg)
                          (conn-ts-query-targets
@@ -1390,6 +1415,7 @@
                       'conn-ts-thing)))
   "n" (conn-anonymous-thing
         'sexp
+        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-sexps")
         :target-finder ( :method (_self _arg)
                          (conn-ts-all-things :thing 'sexp))
