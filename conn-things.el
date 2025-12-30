@@ -1357,8 +1357,8 @@ not be delete.  The the value returned by each function is ignored.")
      (if (and conn--bounds-of-last-cache
               (eq conn--last-thing-command
                   (caar conn--bounds-of-last-cache))
-              (= (buffer-chars-modified-tick)
-                 (cdar conn--bounds-of-last-cache)))
+              (eql (buffer-chars-modified-tick)
+                   (cdar conn--bounds-of-last-cache)))
          conn--bounds-of-last-cache
        (pcase conn--last-thing-command
          (`(,command . ,arg)
@@ -1482,6 +1482,7 @@ not be delete.  The the value returned by each function is ignored.")
   "s" 'conn-contract
   "j" 'conn-contract
   "e" 'select
+  "r" 'select-other-end
   "a" 'abort
   "<escape>" 'abort)
 
@@ -1541,6 +1542,7 @@ Only the background color is used."
                (when-let* ((msg (conn--read-args-display-message)))
                  (concat ": " msg))
                "\n\\[select] select; "
+               "\\[select-other-end] select other end; "
                "\\[abort] abort"
                (when (> size 1)
                  (concat
@@ -1591,9 +1593,14 @@ Only the background color is used."
                (oclosure-lambda (conn-anonymous-argument
                                  (required t))
                    (_self command updater)
-                 (pcase command
-                   ('select
-                    (funcall updater (conn-argument (nth curr bounds))))))))
+                 (let ((bounds (nth curr bounds)))
+                   (pcase command
+                     ('select
+                      (setf (conn-bounds-get bounds :forward) nil)
+                      (funcall updater (conn-argument bounds)))
+                     ('select-other-end
+                      (setf (conn-bounds-get bounds :forward) t)
+                      (funcall updater (conn-argument bounds))))))))
            bound))))))
 
 ;;;; Thing Definitions
