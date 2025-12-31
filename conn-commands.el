@@ -417,8 +417,8 @@ If no region is found then push a mark at point and activate it."
   (interactive)
   (pcase (conn-bounds-of-last)
     ((and bounds (conn-bounds `(,beg . ,end)))
-     (push-mark (if (conn-bounds-get bounds :forward) beg end) nil t)
-     (goto-char (if (conn-bounds-get bounds :forward) end beg))
+     (push-mark (if (eql 1 (conn-bounds-get bounds :direction)) beg end) nil t)
+     (goto-char (if (eql 1 (conn-bounds-get bounds :direction)) end beg))
      (conn-push-state 'conn-mark-state))
     (_
      (activate-mark)
@@ -462,9 +462,9 @@ If the mark is already active then deactivate it instead."
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
     ((and (conn-bounds `(,beg . ,end) transform)
-          (conn-bounds-get :forward))
-     (goto-char (if forward end beg))
-     (push-mark (if forward beg end) t t)
+          (conn-bounds-get :direction))
+     (goto-char (if (eql direction 1) end beg))
+     (push-mark (if (eql direction 1) beg end) t t)
      (conn-push-state 'conn-mark-state))))
 
 (defun conn-exchange-mark-command ()
@@ -624,6 +624,46 @@ for the meaning of prefix ARG."
 
 ;;;;; Killing and Yanking
 
+(defvar-keymap conn-yank-pop-repeat-map
+  "C-y" 'conn-yank-with-completion
+  "y" 'yank-pop
+  "Y" 'conn-yank-unpop)
+
+;; Adapted from `yank-with-completion'
+(defun conn-yank-with-completion (string)
+  (interactive
+   (let ((ov (make-overlay (region-beginning)
+                           (region-end)
+                           nil t)))
+     (unwind-protect
+         (progn
+           (overlay-put ov 'invisible t)
+           (list (read-from-kill-ring "Yank from kill-ring: ")))
+       (delete-overlay ov))))
+  (when string
+    (let ((inhibit-read-only t)
+          (before (< (point) (mark t))))
+      (if before
+          (funcall (or yank-undo-function 'delete-region) (point) (mark t))
+        (funcall (or yank-undo-function 'delete-region) (mark t) (point)))
+      (setq yank-undo-function nil)
+      (set-marker (mark-marker) (point) (current-buffer))
+      (insert-for-yank string)
+      ;; Set the window start back where it was in the yank command,
+      ;; if possible.
+      (set-window-start (selected-window) yank-window-start t)
+      (if before
+          ;; This is like exchange-point-and-mark, but doesn't activate the mark.
+          ;; It is cleaner to avoid activation, even though the command
+          ;; loop would deactivate the mark because we inserted text.
+          (goto-char (prog1 (mark t)
+                       (set-marker (mark-marker) (point) (current-buffer))))))))
+
+(defun conn-yank-unpop (arg)
+  "Like `yank-pop' but rotate the kill ring in the other direction."
+  (interactive "p")
+  (yank-pop (- arg)))
+
 (defun conn-yank-replace (thing
                           arg
                           transform
@@ -667,43 +707,33 @@ for the meaning of prefix ARG."
                (let ((str (filter-buffer-substring beg end t)))
                  (yank)
                  (kill-new str))
-             (delete-region beg end)
-             (yank))
-           ;; yank changes this-command to 'yank, fix that
-           (setq this-command 'conn-yank-replace)))))))
-
-(defun conn-completing-yank-replace (thing
-                                     arg
-                                     transform
-                                     &optional
-                                     swap
-                                     check-bounds)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument))
-        (swap (conn-boolean-argument
-               'conn-kill-thing nil "swap"))
-        (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform swap check-bounds)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end)
-                  (append transform
-                          (when check-bounds
-                            (list 'conn-check-bounds))))
-     (goto-char end)
-     (let ((ov (make-overlay beg end)))
-       (overlay-put ov 'conn-overlay t)
-       (unwind-protect
-           (progn
-             (overlay-put ov 'invisible t)
-             (call-interactively (or (command-remapping 'yank-from-kill-ring)
-                                     'yank-from-kill-ring))
-             (if swap
-                 (kill-region (overlay-start ov) (overlay-end ov))
-               (delete-region (overlay-start ov) (overlay-end ov))))
-         (delete-overlay ov))))))
+             (let ((cg (prepare-change-group)))
+               (delete-region beg end)
+               (yank)
+               (set-transient-map
+                conn-yank-pop-repeat-map
+                t
+                (lambda () (undo-amalgamate-change-group cg))
+                (concat
+                 (format "%s yank pop; %s yank unpop; %s yank with completion"
+                         (propertize
+                          (key-description
+                           (where-is-internal 'yank-pop
+                                              (list conn-yank-pop-repeat-map)
+                                              t))
+                          'face 'help-key-binding)
+                         (propertize
+                          (key-description
+                           (where-is-internal 'conn-yank-unpop
+                                              (list conn-yank-pop-repeat-map)
+                                              t))
+                          'face 'help-key-binding)
+                         (propertize
+                          (key-description
+                           (where-is-internal 'conn-yank-with-completion
+                                              (list conn-yank-pop-repeat-map)
+                                              t))
+                          'face 'help-key-binding))))))))))))
 
 (defun conn-yank-replace-rectangle ()
   "Delete the current rectangle and `yank-rectangle'."
@@ -823,7 +853,7 @@ Interactively ARG is the prefix argument."
             (goto-char end))
            ((= (point) end)
             (goto-char beg))
-           ((conn-bounds-get bounds :forward)
+           ((eql 1 (conn-bounds-get bounds :direction))
             (goto-char beg))
            (t (goto-char end)))
      (conn-push-state 'conn-emacs-state))
@@ -1683,8 +1713,8 @@ Exiting the recursive edit will resume the isearch."
                                         _at-point-and-mark)
   (pcase (conn-bounds-of-last)
     ((and bounds (conn-bounds `(,beg . ,end)))
-     (push-mark (if (conn-bounds-get bounds :forward) beg end) nil t)
-     (goto-char (if (conn-bounds-get bounds :forward) end beg))))
+     (push-mark (if (eql 1 (conn-bounds-get bounds :direction)) beg end) nil t)
+     (goto-char (if (eql 1 (conn-bounds-get bounds :direction)) end beg))))
   (cl-call-next-method))
 
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch))

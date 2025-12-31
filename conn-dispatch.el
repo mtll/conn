@@ -3436,6 +3436,7 @@ selected by dispatch with it."))
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
+             (goto-char beg)
              (delete-region beg end)
              (insert-for-yank str)
              (conn-dispatch-action-pulse
@@ -3467,6 +3468,7 @@ dispatch with it."))
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
+             (goto-char beg)
              (delete-region beg end)
              (insert-for-yank str)
              (conn-dispatch-action-pulse

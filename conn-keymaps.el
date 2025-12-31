@@ -368,7 +368,6 @@
   "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
-  "C-y" 'conn-completing-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "w" 'conn-copy-thing
@@ -461,10 +460,10 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "'" 'conn-dispatch-kapply
-  "q" 'conn-dispatch-copy-to
-  "Q" 'conn-dispatch-copy-to-replace
-  "C-y" 'conn-dispatch-yank-to-replace
-  "M-y" 'conn-dispatch-reading-yank-to-replace
+  "w" 'conn-dispatch-copy-to
+  "W" 'conn-dispatch-copy-to-replace
+  "q" 'conn-dispatch-yank-to-replace
+  "Q" 'conn-dispatch-reading-yank-to-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from

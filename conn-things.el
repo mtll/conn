@@ -915,8 +915,9 @@ Returns a `conn-bounds' struct."
                   (condition-case _
                       (progn
                         (call-interactively thing)
-                        (when (> (point) start)
-                          (setf (conn-bounds-get bounds :forward) t))
+                        (setf (conn-bounds-get bounds :direction)
+                              (cond ((> (point) start) 1)
+                                    ((> start (point)) -1)))
                         (let ((mk (funcall handler
                                            (conn-command-thing thing)
                                            start)))
@@ -1314,8 +1315,8 @@ not be delete.  The the value returned by each function is ignored.")
                    :prompt "Thing"
                    :prefix arg)
       ((`(,thing ,arg) (conn-thing-argument)))
-    (let* ((bounds nil)
-           (quit (make-symbol "quit-hook")))
+    (let ((bounds nil)
+          (quit (make-symbol "quit-hook")))
       (fset quit (lambda ()
                    (unless isearch-suspended
                      (when (or isearch-mode-end-hook-quit
@@ -1603,10 +1604,10 @@ Only the background color is used."
                  (let ((bounds (nth curr bounds)))
                    (pcase command
                      ('select
-                      (setf (conn-bounds-get bounds :forward) nil)
+                      (setf (conn-bounds-get bounds :direction) -1)
                       (funcall updater (conn-argument bounds)))
                      ('select-other-end
-                      (setf (conn-bounds-get bounds :forward) t)
+                      (setf (conn-bounds-get bounds :direction) 1)
                       (funcall updater (conn-argument bounds))))))))
            bound))))))
 
