@@ -988,11 +988,11 @@ A zero means repeat until error."
                                     (kmacro-start-macro '(16))))]
     [ ("E" "Edit Macro" kmacro-edit-macro)
       ("L" "Edit Lossage" kmacro-edit-lossage)
-      ("s" "Register Save" kmacro-to-register)
+      ("." "Register Save" kmacro-to-register)
       ("c" "Apply Macro on Lines" apply-macro-to-region-lines)]
     [ ("b" "Bind Last Macro" conn-bind-last-kmacro-to-key)
       ("d" "Name Last Macro" kmacro-name-last-macro)
-      ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
+      ("s" "Step Edit Macro" kmacro-step-edit-macro)]]
   [ :if conn--in-kbd-macro-p
     [ "Commands"
       ("q" "Query" conn-kapply-kbd-macro-query)
@@ -1106,41 +1106,6 @@ A zero means repeat until error."
   (interactive)
   (transient-setup 'conn-narrow-ring-prefix nil nil
                    :scope (conn--narrow-ring-save-state)))
-
-;;;; Register Prefix
-
-;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
-(transient-define-prefix conn-register-prefix ()
-  "Transient menu for register functions."
-  [[ :description "Register"
-     ("e" "Load" conn-register-load)
-     ("u" "Unset" conn-unset-register)
-     ("+" "Set Separator" conn-set-register-separator)
-     ("i" "Increment" increment-register)
-     ("L" "List" list-registers)]
-   [ :description "Register Store"
-     (">" "Point" point-to-register)
-     ("r" "Rectangle" copy-rectangle-to-register)
-     ("a" "Command" conn-command-to-register)
-     ("b" "Buffer" buffer-to-register :if (lambda () (<= 31 emacs-major-version)))
-     ("o" "File" file-to-register :if (lambda () (<= 31 emacs-major-version)))]
-   [ ""
-     ("f" "Dispatch" conn-last-dispatch-to-register)
-     ("k" "Keyboard Macro" kmacro-to-register)
-     ("t" "Tab" conn-tab-to-register)
-     ("4" "Window Configuration" window-configuration-to-register)
-     ("5" "Frameset" frameset-to-register)]
-   [ "Bookmarks"
-     ("l" "List" (lambda ()
-                   (interactive)
-                   ;; Do this so that called-interactively will
-                   ;; return t in bookmark-bmenu-list.
-                   (call-interactively #'bookmark-bmenu-list)))
-     ("m" "Set" bookmark-set)
-     ("M" "Push" (lambda ()
-                   (interactive)
-                   (bookmark-set-no-overwrite nil t)))
-     ("j" "Jump" bookmark-jump)]])
 
 ;;;; Fill Prefix
 

@@ -116,6 +116,8 @@
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "F" 'conn-fill-prefix
+  "." 'conn-last-dispatch-to-register
+  "m" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
   "i" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
@@ -153,6 +155,8 @@
 
 (define-keymap
   :keymap conn-goto-map
+  "e" 'conn-previous-emacs-state
+  "E" 'conn-next-emacs-state
   "O" 'conn-push-jump-ring
   ">" 'conn-pop-mark-ring
   "<" 'conn-unpop-mark-ring
@@ -193,24 +197,7 @@
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
 
 (defvar-keymap conn-local-mode-map
-  "C-<escape>" 'exit-recursive-edit
-  "C-x y" conn-dispatch-cycle-map
-  "M-g e" 'conn-previous-emacs-state
-  "M-g E" 'conn-next-emacs-state
-  "C-S-w" 'delete-region
-  "C-," 'conn-dispatch
-  "C->" 'conn-dispatch-on-buttons
-  "C-x /" 'tab-bar-history-back
-  "C-x 4 /" 'tab-bar-history-back
-  "C-x 4 ?" 'tab-bar-history-forward
-  "C-x 4 -" 'conn-window-resize-map
-  "C-x ?" 'tab-bar-history-forward
-  "C-x t s" 'tab-switch
-  "C-x t a" 'conn-tab-to-register
-  "C-`" 'other-window
-  "C-x m" 'conn-kmacro-prefix
-  "M-H" 'conn-wincontrol-maximize-horizontally
-  "M-V" 'conn-wincontrol-maximize-vertically)
+  "C-<escape>" 'exit-recursive-edit)
 
 (defvar-keymap conn-whitespace-repeat-map
   :repeat t
@@ -294,7 +281,6 @@
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   ";" 'comment
-  ;; "d" 'conn-forward-defun
   "i" 'conn-backward-line
   "k" 'forward-line
   "h" 'conn-expand
@@ -377,7 +363,7 @@
   "," conn-thing-remap
   "." 'conn-register-load
   "q" 'conn-yank-replace
-  "<" 'conn-register-prefix
+  "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-last-command
   "V" 'conn-previous-mark-command
@@ -388,7 +374,7 @@
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
   "z" 'conn-emacs-state-other-end
-  "Z" 'conn-exchange-mark-command)
+  "Z" 'pop-to-mark-command)
 
 ;;;;;; Dispatch State
 
