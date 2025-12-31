@@ -154,15 +154,6 @@
                            arg
                          (1- arg))))
 
-;;;###autoload
-(define-minor-mode conntext-outline-mode
-  "Minor mode for contextual bindings in outline-mode."
-  :global t
-  :group 'conn
-  (if conntext-outline-mode
-      (add-hook 'conntext-state-hook 'conntext-outline-state -80)
-    (remove-hook 'conntext-state-hook 'conntext-outline-state)))
-
 (defun conn-outline-state ()
   (interactive)
   (conn-push-state 'conn-outline-state))
@@ -171,15 +162,6 @@
   (interactive "p")
   (outline-up-heading (1- arg))
   (conn-push-state 'conn-outline-state))
-
-(defun conntext-outline-state ()
-  (when (and (bound-and-true-p outline-minor-mode)
-             (save-excursion
-               (goto-char (pos-bol))
-               (looking-at-p outline-regexp)))
-    (goto-char (pos-bol))
-    (conn-push-state 'conn-outline-state)
-    t))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)

@@ -682,7 +682,7 @@ mouse-3: Describe current input method")
 
 ;; Adapted from map pattern, we can't just use the map pattern on the
 ;; property table because of inheritance.
-(pcase-defmacro conn-state-props (&rest properties)
+(pcase-defmacro conn-state-properties (&rest properties)
   "Build a `pcase' pattern matching state properties.
 
 PROPERTIES is a list of elements to be matched in the state.
@@ -2156,12 +2156,16 @@ be displayed in the echo area during `conn-read-args'."
   (eq sym (conn-read-argument-toggle-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
-  (concat
-   (format "\\[%s] " (conn-read-argument-toggle-command arg))
-   (conn-read-argument-name arg)
-   (when-let* ((v (funcall (conn-read-argument-format-function arg)
-                           (conn-argument-value arg)))
-               (_ (not (string-empty-p v))))
-     (concat ": " v))))
+  (let ((v (funcall (conn-read-argument-format-function arg)
+                    (conn-argument-value arg))))
+    (concat
+     (format "\\[%s] " (conn-read-argument-toggle-command arg))
+     (propertize
+      (concat
+       (conn-read-argument-name arg)
+       (when (and v (not (string-empty-p v)))
+         (concat ": " v)))
+      'face (when (and v (not (string-empty-p v)))
+              'conn-argument-active-face)))))
 
 (provide 'conn-states)

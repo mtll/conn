@@ -270,22 +270,6 @@
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-commit-state -50)
 
-(defun conntext-edit-special ()
-  (when (or (org-babel-where-is-src-block-head)
-            (org-inside-LaTeX-fragment-p (org-element-context)))
-    (org-edit-special)
-    t))
-
-(defun conntext-org-state ()
-  (conn-org-heading-state)
-  t)
-
-(defun conntext-org-hook ()
-  (add-hook 'conntext-state-hook 'conntext-edit-special -20 t)
-  (add-hook 'conntext-state-hook 'conntext-org-state 90 t))
-
-(add-hook 'org-mode-hook 'conntext-org-hook)
-
 ;;;; Surround
 
 (define-keymap

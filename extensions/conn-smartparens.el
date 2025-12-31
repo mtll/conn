@@ -177,19 +177,19 @@
                      'sp-backward-sexp
                      'sp-forward-sexp))
 
-(conn-define-state conntext-paren-state ()
+(conn-define-state conn-paren-state ()
   "State for editing parens."
   :cursor '(hbar . 5)
   :suppress-input-method t
   :lighter "()")
 
 (define-keymap
-  :keymap (conn-get-state-map 'conntext-paren-state)
+  :keymap (conn-get-state-map 'conn-paren-state)
   :suppress t
   "SPC" 'conn-set-mark-command
-  "v" 'conn-toggle-mark-command
-  "z" 'conn-exchange-mark-command
-  "`" 'other-window
+  "v" 'conn-mark-last-command
+  ;; "z"
+  "`" 'conn-wincontrol-mru-window
   "e" 'conn-pop-state
   "<escape>" 'conn-pop-state
   "N" 'beginning-of-defun
@@ -246,10 +246,6 @@
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote)))))))
 
-(defun conntext-paren-state ()
-  (conn-push-state 'conntext-paren-state)
-  t)
-
 (keymap-set (conn-get-minor-mode-map 'conn-transpose-state 'smartparens-mode)
             "c" (conn-anonymous-thing
                   'sexp
@@ -271,22 +267,6 @@
 
 (keymap-set conn-read-args-map
             "<remap> <sp-remove-active-pair-overlay>" 'keyboard-quit)
-
-;;;###autoload
-(define-minor-mode conntext-smartparens-mode
-  "Minor mode for contextual bindings in outline-mode."
-  :global t
-  :group 'conn
-  (if conntext-smartparens-mode
-      (add-hook 'smartparens-mode-hook 'conntext-smartparens--turn-on)
-    (remove-hook 'smartparens-mode-hook 'conntext-smartparens--turn-on)))
-
-(defun conntext-smartparens--turn-on ()
-  (if conntext-smartparens-mode
-      (add-hook 'conntext-state-hook 'conntext-paren-state 95 t)
-    (remove-hook 'conntext-state-hook 'conntext-paren-state t)))
-
-(conn-set-mode-map-depth 'conntext-smartparens-mode -90 'conn-command-state)
 
 (provide 'conn-smartparens)
 

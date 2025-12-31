@@ -27,6 +27,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "z" 'conn-exchange-mark-command
   "p" conn-thing-inner-remap
   "@" 'append-next-kill
   "TAB" 'indent-rigidly
@@ -104,7 +105,6 @@
   "TAB" 'indent-rigidly
   ";" 'conn-comment-thing
   "g" 'conn-rgrep-thing
-  "k" 'delete-region
   "j" 'conn-join-lines
   "o" 'conn-occur-thing
   "V" 'vc-region-history
@@ -364,17 +364,14 @@
   "SPC" conn-edit-remap
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
-  "E" 'conn-emacs-state-at-mark
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-thing
-  "\\" 'conntext-state
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
   "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
-  "M-y" 'conn-completing-yank-replace
-  "C-y" 'conn-yank-replace
+  "C-y" 'conn-completing-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "q" 'conn-copy-thing
@@ -383,7 +380,7 @@
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
   "." 'conn-register-load
-  ">" 'conn-register-load-and-replace
+  ">" 'conn-yank-replace
   "<" 'conn-register-prefix
   "t" 'conn-transpose-things
   "r" conn-region-remap
@@ -395,7 +392,7 @@
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "z" 'conn-last-thing-other-end
+  "z" 'conn-emacs-state-other-end
   "Z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
