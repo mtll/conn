@@ -216,8 +216,6 @@
   :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-emacs-state-operators-mode)
   "C-w" 'conn-kill-thing
   "M-w" 'conn-copy-thing
-  "C-." 'conn-change-thing
-  "C-," 'conn-dispatch
   "C-t" 'conn-transpose-things)
 
 (provide 'conn)
