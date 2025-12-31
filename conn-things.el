@@ -734,7 +734,6 @@ words."))
   "C-q" 'reference
   "C-h" 'help
   "," conn-thing-remap
-  ;; "'" 'recursive-edit
   "c" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -753,13 +752,13 @@ words."))
                           ,(if transform
                                `(conn-transform-bounds bounds ,transform)
                              'bounds))))
-                 (if (functionp w) (funcall w bounds) w))))
+                 (if (conn-bounds-delay-p w) (funcall w bounds) w))))
            (important-return-value t))
   (let ((w (conn-bounds--whole
             (if transform
                 (conn-transform-bounds bounds transform)
               bounds))))
-    (if (functionp w) (funcall w bounds) w)))
+    (if (conn-bounds-delay-p w) (funcall w bounds) w)))
 
 (defun conn-make-bounds (thing arg whole &rest properties)
   (declare (compiler-macro
