@@ -283,11 +283,6 @@
     "Conn Inner Thing Map"
   [conn-thing-map ?i])
 
-(conn-define-remap-keymap conn-region-remap
-    "Conn Region Map"
-  [conn-region-map]
-  conn-default-region-map)
-
 (conn-define-remap-keymap conn-edit-remap
     "Conn Edit Map"
   [conn-edit-map]

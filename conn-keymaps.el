@@ -97,39 +97,36 @@
   "+" 'indent-relative-first-indent-point)
 
 (define-keymap
-  :keymap conn-default-region-map
-  "=" 'indent-relative
-  "+" 'indent-relative-first-indent-point
-  "m" 'conn-replace
-  "'" 'conn-kapply-on-thing-prefix
-  "TAB" 'indent-rigidly
-  ";" 'conn-comment-thing
-  "g" 'conn-rgrep-thing
-  "j" 'conn-join-lines
-  "o" 'conn-occur-thing
-  "V" 'vc-region-history
-  "n" 'conn-narrow-to-thing)
-
-(define-keymap
   :keymap conn-default-edit-map
-  "TAB" 'conn-indent-thing
-  "s" 'conn-sort-things
-  "v" 'diff-buffer-with-file
-  "SPC" 'whitespace-cleanup
-  "f" 'conn-fill-prefix
   "#" 'conn-how-many-in-thing
-  "L" 'clone-indirect-buffer
-  "i" 'conn-emacs-state-open-line-above
-  "k" 'conn-emacs-state-open-line
-  "y" 'yank-in-context
-  "r" 'yank-rectangle
+  "'" 'conn-kapply-on-thing-prefix
+  "+" 'indent-relative-first-indent-point
+  ";" 'conn-comment-thing
+  "=" 'indent-relative
   "DEL" 'clear-rectangle
+  "L" 'clone-indirect-buffer
+  "SPC" 'whitespace-cleanup
+  "TAB" 'conn-indent-thing
+  "R" 'indent-rigidly
+  "V" 'vc-region-history
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
-  "a u" 'align-unhighlight-rule)
+  "a u" 'align-unhighlight-rule
+  "F" 'conn-fill-prefix
+  "g" 'conn-rgrep-thing
+  "i" 'conn-emacs-state-open-line-above
+  "j" 'conn-join-lines
+  "k" 'conn-emacs-state-open-line
+  "r" 'conn-replace
+  "n" 'conn-narrow-to-thing
+  "o" 'conn-occur-thing
+  "Y" 'yank-rectangle
+  "s" 'conn-sort-things
+  "v" 'diff-buffer-with-file
+  "y" 'yank-in-context)
 
 (define-keymap
   :keymap conn-search-map
@@ -374,16 +371,15 @@
   "C-y" 'conn-completing-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "q" 'conn-copy-thing
-  "w" 'conn-change-thing
+  "w" 'conn-copy-thing
+  "r" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
   "," conn-thing-remap
   "." 'conn-register-load
-  ">" 'conn-yank-replace
+  "q" 'conn-yank-replace
   "<" 'conn-register-prefix
   "t" 'conn-transpose-things
-  "r" conn-region-remap
   "v" 'conn-mark-last-command
   "V" 'conn-previous-mark-command
   "b" 'conn-set-mark-command

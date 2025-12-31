@@ -559,7 +559,7 @@ With arg N, insert N newlines."
   "History var for `conn-set-register-separator'.")
 
 (defvar-keymap conn-register-argument-map
-  "<" 'register)
+  "." 'register)
 
 (defun conn-set-register-separator (string)
   "Set `register-separator' register to string STRING."
@@ -604,9 +604,9 @@ for the meaning of prefix ARG."
                    "register"
                    'register
                    conn-register-argument-map
-                   (lambda (_) (register-read-with-preview "Register"))
+                   (lambda (_) (register-read-with-preview "Register:"))
                    (lambda (r) (when r (concat "<" (char-to-string r) ">")))
-                   (register-read-with-preview "Register"))))
+                   (register-read-with-preview "Register:"))))
      (list thing arg transform register)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -628,29 +628,24 @@ for the meaning of prefix ARG."
                           arg
                           transform
                           &optional
-                          kill
+                          swap
                           register
                           check-bounds)
-  "`yank' replacing region between START and END.
-
-If called interactively uses the region between point and mark.
-If arg is non-nil, kill the region between START and END instead
-of deleting it."
   (interactive
    (conn-read-args (conn-read-thing-state
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
-        (kill (conn-boolean-argument
-               'conn-kill-thing nil "kill"))
+        (swap (conn-boolean-argument
+               'conn-copy-thing nil "swap"))
         (register (conn-read-argument
                    "register"
                    'register
                    conn-register-argument-map
-                   (lambda (_) (register-read-with-preview "Register"))
+                   (lambda (_) (register-read-with-preview "Register:"))
                    (lambda (r) (when r (concat "<" (char-to-string r) ">")))))
         (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform kill register check-bounds)))
+     (list thing arg transform swap register check-bounds)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end)
                   (append transform
@@ -658,17 +653,17 @@ of deleting it."
                             (list 'conn-check-bounds))))
      (atomic-change-group
        (if register
-           (let ((str (cond (kill (filter-buffer-substring beg end t))
+           (let ((str (cond (swap (filter-buffer-substring beg end t))
                             ((and (eq thing 'region)
                                   (bound-and-true-p rectangle-mark-mode))
                              (delete-rectangle (region-beginning)
                                                (region-end)))
                             (t (delete-region beg end)))))
              (register-val-insert (get-register register))
-             (when kill (set-register register str)))
+             (when swap (set-register register str)))
          (goto-char beg)
          (conn--without-conn-maps
-           (if kill
+           (if swap
                (let ((str (filter-buffer-substring beg end t)))
                  (yank)
                  (kill-new str))
@@ -681,20 +676,17 @@ of deleting it."
                                      arg
                                      transform
                                      &optional
-                                     kill
+                                     swap
                                      check-bounds)
-  "Replace region with result of `yank-from-kill-ring'.
-
-If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive
    (conn-read-args (conn-read-thing-state
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
-        (kill (conn-boolean-argument
-               'conn-kill-thing nil "kill"))
+        (swap (conn-boolean-argument
+               'conn-kill-thing nil "swap"))
         (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform kill check-bounds)))
+     (list thing arg transform swap check-bounds)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end)
                   (append transform
@@ -708,7 +700,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
              (overlay-put ov 'invisible t)
              (call-interactively (or (command-remapping 'yank-from-kill-ring)
                                      'yank-from-kill-ring))
-             (if kill
+             (if swap
                  (kill-region (overlay-start ov) (overlay-end ov))
                (delete-region (overlay-start ov) (overlay-end ov))))
          (delete-overlay ov))))))
@@ -1886,7 +1878,7 @@ region after a `recursive-edit'."
   "z" 'append-next-kill
   "c" 'copy
   "d" 'delete
-  "<" 'register)
+  "." 'register)
 
 (cl-defstruct (conn-kill-how-argument
                (:include conn-argument))
@@ -1978,7 +1970,7 @@ region after a `recursive-edit'."
         (conn-kill-how-argument-register arg)))
 
 (defvar-keymap conn-kill-thing-argument-map
-  "." 'filename
+  "/" 'filename
   "P" 'project-filename
   ">" 'kill-matching-lines
   "%" 'keep-lines)
@@ -2594,7 +2586,7 @@ hook, which see."
 
 (defvar-keymap conn-copy-how-map
   "z" 'append-next-kill
-  "<" 'register)
+  "." 'register)
 
 (cl-defstruct (conn-copy-how-argument
                (:include conn-argument)
@@ -2656,7 +2648,7 @@ hook, which see."
         (conn-copy-how-argument-register arg)))
 
 (defvar-keymap conn-copy-thing-argument-map
-  "." 'filename
+  "/" 'filename
   "P" 'project-filename
   ">" 'copy-matching-lines)
 

@@ -46,7 +46,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
-  "SPC" 'conn-one-emacs-state
+  "<conn-edit-map> SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state)
 
@@ -200,7 +200,6 @@
   "o" 'outline-hide-other
   "p" 'conn-register-prefix
   "q" 'conn-transpose-things
-  "r" conn-region-remap
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body
   "u" 'outline-up-heading
