@@ -1376,7 +1376,8 @@ not be delete.  The the value returned by each function is ignored.")
     ((conn-bounds bds)
      (conn-make-bounds 'region nil bds))))
 
-(cl-defgeneric conn-bounds-of-last-do (cmd arg point))
+(cl-defgeneric conn-bounds-of-last-do (cmd arg point)
+  (declare (conn-anonymous-thing-property :bounds-of-last-op)))
 
 (cl-defmethod conn-bounds-of-last-do (cmd arg point)
   (save-excursion
