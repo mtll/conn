@@ -358,6 +358,7 @@
     (let* ((seen (when (> arg 100)
                    (make-hash-table :test 'equal :size arg)))
            (captures nil)
+           (opoint (point))
            (at (point))
            (beg (point))
            (end nil)
@@ -422,7 +423,9 @@
         (conn-make-bounds
          cmd arg
          (cons min max)
-         :subregions (nreverse nodes))))))
+         :subregions (nreverse nodes)
+         :direction (cond ((< opoint at) 1)
+                          ((> opoint at) -1)))))))
 
 (conn-register-thing 'conn-ts-thing)
 
@@ -782,11 +785,11 @@
 (conn-ts-define-thing conn-ts-statement "statement.outer")
 
 (defvar-keymap conn-ts-assignment-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "m" 'conn-ts-assignment-side-forward
@@ -797,17 +800,17 @@
   "j" 'conn-ts-assignment-inner-backward
   "k" 'conn-ts-assignment-inner-forward-flat
   "i" 'conn-ts-assignment-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-assignment-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "m" 'conn-ts-assignment-side-forward
@@ -818,449 +821,449 @@
   "j" 'conn-ts-assignment-outer-backward
   "k" 'conn-ts-assignment-outer-forward-flat
   "i" 'conn-ts-assignment-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-attribute-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-attribute-inner-forward
   "j" 'conn-ts-attribute-inner-backward
   "k" 'conn-ts-attribute-inner-forward-flat
   "i" 'conn-ts-attribute-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-attribute-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-attribute-outer-forward
   "j" 'conn-ts-attribute-outer-backward
   "k" 'conn-ts-attribute-outer-forward-flat
   "i" 'conn-ts-attribute-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-block-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-block-inner-forward
   "j" 'conn-ts-block-inner-backward
   "k" 'conn-ts-block-inner-forward-flat
   "i" 'conn-ts-block-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-block-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-block-outer-forward
   "j" 'conn-ts-block-outer-backward
   "k" 'conn-ts-block-outer-forward-flat
   "i" 'conn-ts-block-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-call-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-call-inner-forward
   "j" 'conn-ts-call-inner-backward
   "k" 'conn-ts-call-inner-forward-flat
   "i" 'conn-ts-call-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-call-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-call-outer-forward
   "j" 'conn-ts-call-outer-backward
   "k" 'conn-ts-call-outer-forward-flat
   "i" 'conn-ts-call-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-class-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-class-inner-forward
   "j" 'conn-ts-class-inner-backward
   "k" 'conn-ts-class-inner-forward-flat
   "i" 'conn-ts-class-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-class-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-class-outer-forward
   "j" 'conn-ts-class-outer-backward
   "k" 'conn-ts-class-outer-forward-flat
   "i" 'conn-ts-class-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-comment-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-comment-inner-forward
   "j" 'conn-ts-comment-inner-backward
   "k" 'conn-ts-comment-inner-forward-flat
   "i" 'conn-ts-comment-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-comment-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-comment-outer-forward
   "j" 'conn-ts-comment-outer-backward
   "k" 'conn-ts-comment-outer-forward-flat
   "i" 'conn-ts-comment-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-conditional-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-conditional-inner-forward
   "j" 'conn-ts-conditional-inner-backward
   "k" 'conn-ts-conditional-inner-forward-flat
   "i" 'conn-ts-conditional-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-conditional-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-conditional-outer-forward
   "j" 'conn-ts-conditional-outer-backward
   "k" 'conn-ts-conditional-outer-forward-flat
   "i" 'conn-ts-conditional-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-frame-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-frame-inner-forward
   "j" 'conn-ts-frame-inner-backward
   "k" 'conn-ts-frame-inner-forward-flat
   "i" 'conn-ts-frame-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-frame-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-frame-outer-forward
   "j" 'conn-ts-frame-outer-backward
   "k" 'conn-ts-frame-outer-forward-flat
   "i" 'conn-ts-frame-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-function-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-function-inner-forward
   "j" 'conn-ts-function-inner-backward
   "k" 'conn-ts-function-inner-forward-flat
   "i" 'conn-ts-function-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-function-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-function-outer-forward
   "j" 'conn-ts-function-outer-backward
   "k" 'conn-ts-function-outer-forward-flat
   "i" 'conn-ts-function-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-loop-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-loop-inner-forward
   "j" 'conn-ts-loop-inner-backward
   "k" 'conn-ts-loop-inner-forward-flat
   "i" 'conn-ts-loop-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-loop-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-loop-outer-forward
   "j" 'conn-ts-loop-outer-backward
   "k" 'conn-ts-loop-outer-forward-flat
   "i" 'conn-ts-loop-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-number-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-number-forward
   "j" 'conn-ts-number-backward
   "k" 'conn-ts-number-forward-flat
   "i" 'conn-ts-number-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-parameter-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-parameter-inner-forward
   "j" 'conn-ts-parameter-inner-backward
   "k" 'conn-ts-parameter-inner-forward-flat
   "i" 'conn-ts-parameter-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-parameter-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-parameter-outer-forward
   "j" 'conn-ts-parameter-outer-backward
   "k" 'conn-ts-parameter-outer-forward-flat
   "i" 'conn-ts-parameter-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-regex-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-regex-inner-forward
   "j" 'conn-ts-regex-inner-backward
   "k" 'conn-ts-regex-inner-forward-flat
   "i" 'conn-ts-regex-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-regex-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-regex-outer-forward
   "j" 'conn-ts-regex-outer-backward
   "k" 'conn-ts-regex-outer-forward-flat
   "i" 'conn-ts-regex-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-return-inner-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-return-inner-forward
   "j" 'conn-ts-return-inner-backward
   "k" 'conn-ts-return-inner-forward-flat
   "i" 'conn-ts-return-inner-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-return-outer-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-return-outer-forward
   "j" 'conn-ts-return-outer-backward
   "k" 'conn-ts-return-outer-forward-flat
   "i" 'conn-ts-return-outer-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)
 
 (defvar-keymap conn-ts-scopename-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command
+  :repeat ( :continue (conn-mark-last-command
                        conn-set-mark-command
                        conn-exchange-mark-command)
             :exit (ignore
-                   conn-toggle-mark-command
+                   conn-mark-last-command
                    conn-set-mark-command
                    conn-exchange-mark-command))
   "l" 'conn-ts-scopename-forward
   "j" 'conn-ts-scopename-backward
   "k" 'conn-ts-scopename-forward-flat
   "i" 'conn-ts-scopename-backward-flat
-  "v" 'conn-toggle-mark-command
+  "v" 'conn-mark-last-command
   "b" 'conn-set-mark-command
   "z" 'conn-exchange-mark-command
   "e" 'ignore)

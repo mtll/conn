@@ -203,7 +203,6 @@
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body
   "u" 'outline-up-heading
-  "v" 'conn-toggle-mark-command
   "x" (conn-remap-key "C-x" t)
   "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)

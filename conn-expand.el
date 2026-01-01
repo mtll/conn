@@ -37,9 +37,7 @@ potential expansions.  Functions may return invalid expansions
 (defvar-local conn--current-expansions-tick nil)
 
 (defvar-keymap conn-expand-repeat-map
-  :repeat ( :continue (conn-toggle-mark-command)
-            :exit (ignore
-                   conn-toggle-mark-command))
+  :repeat (:exit (ignore))
   "e" 'ignore
   "z" 'conn-expand-exchange
   "j" 'conn-contract
@@ -63,14 +61,10 @@ potential expansions.  Functions may return invalid expansions
   (declare (important-return-value t)
            (side-effect-free t))
   (and (eql conn--current-expansions-tick (buffer-chars-modified-tick))
-       (or (and conn--current-expansions
-                (region-active-p)
-                (cl-loop for (beg . end) in conn--current-expansions
-                         when (or (= beg (region-beginning))
-                                  (= end (region-end)))
-                         return t))
-           (member (cons (region-beginning) (region-end))
-                   conn--current-expansions))))
+       conn--current-expansions
+       (region-active-p)
+       (member (cons (region-beginning) (region-end))
+               conn--current-expansions)))
 
 (defun conn--expand-create-expansions ()
   (unless (conn--valid-expansions-p)
@@ -94,14 +88,6 @@ potential expansions.  Functions may return invalid expansions
     (conn-exchange-mark-command)))
 
 (defun conn-expand-subr (arg)
-  "Expend region by semantic units.
-
-If the region is active only the `point' is moved.
-Expansions are provided by functions in `conn-expansion-functions'."
-  (interactive "p")
-  (unless (or (region-active-p)
-              (conn--valid-expansions-p))
-    (push-mark nil t))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
@@ -110,21 +96,27 @@ Expansions are provided by functions in `conn-expansion-functions'."
                when (> (abs (- end beg))
                        (abs (- (region-end) (region-beginning))))
                return (progn
-                        (goto-char
-                         (if (= (point) (region-beginning)) beg end))
-                        (push-mark
-                         (if (= (point) (region-beginning)) end beg)
-                         t t))
+                        (goto-char (if (= (point) (region-beginning)) beg end))
+                        (set-mark (if (= (point) (region-end)) beg end))
+                        (unless (region-active-p) (activate-mark)))
                finally (user-error "No more expansions")))))
 
 (defun conn-expand (arg)
+  "Expend region by semantic units.
+
+If the region is active only the `point' is moved.
+Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
+  (unless (and (region-active-p)
+               (conn--valid-expansions-p))
+    (push-mark nil t t))
   (conn-expand-subr arg)
   (unless conn-mark-state
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-contract-subr (arg)
-  (conn--expand-create-expansions)
+  (unless (conn--valid-expansions-p)
+    (user-error "No expansion in progress"))
   (if (< arg 0)
       (conn-expand (- arg))
     (dotimes (_ arg)
@@ -133,8 +125,8 @@ Expansions are provided by functions in `conn-expansion-functions'."
                         (< end (region-end)))
                return (progn
                         (goto-char (if (= (point) (region-beginning)) beg end))
-                        (push-mark (if (= (point) (region-end)) beg end)
-                                   t t))
+                        (set-mark (if (= (point) (region-end)) beg end))
+                        (unless (region-active-p) (activate-mark)))
                finally (user-error "No more contractions")))))
 
 (defun conn-contract (arg)
@@ -181,6 +173,7 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               arg)
   (let ((thing (conn-get-thing cmd)))
+    (push-mark nil t)
     (conn-expand-subr (prefix-numeric-value arg))
     (conn-read-args
         (conn-expand-state
