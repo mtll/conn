@@ -77,14 +77,27 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-(defun conn-repeat-last-complex-command ()
+(defun conn-repeat-last-complex-command (&optional arg)
   "Repeat the last conn operator."
-  (interactive)
+  (interactive "P")
   (unless conn-command-history
     (user-error "No repeatable last command"))
-  (let ((conn-repeating-command t))
-    (setq this-command (caar conn-command-history))
-    (apply #'funcall-interactively (car conn-command-history))))
+  (let ((cmd (if arg
+                 (let* ((print-level nil)
+                        (cmds (cl-loop for cmd in conn-command-history
+                                       collect (cons (prin1-to-string cmd) cmd))))
+                   (alist-get (completing-read
+                               "Command: "
+                               (lambda (string pred action)
+                                 (if (eq action 'metadata)
+                                     `(metadata (display-sort-function . ,#'identity))
+                                   (complete-with-action action cmds string pred)))
+                               nil t)
+                              cmds nil nil #'equal))
+               (car conn-command-history)))
+        (conn-repeating-command t))
+    (setq this-command (car cmd))
+    (apply #'funcall-interactively cmd)))
 
 ;;;;; Movement
 
@@ -316,10 +329,7 @@ of line proper."
 
 (cl-defmethod register-val-jump-to ((val conn-command-register)
                                     _arg)
-  (let ((cmd (conn-command-register-command val)))
-    (apply #'funcall-interactively
-           (car cmd)
-           (mapcar (lambda (e) (eval e t)) (cdr cmd)))))
+  (apply #'funcall-interactively (conn-command-register-command val)))
 
 (cl-defmethod register-val-describe ((val conn-command-register)
                                      _arg)
@@ -336,14 +346,16 @@ The command to be stored is read from `command-history'."
    register
    (make-conn-command-register
     :command (let* ((print-level nil)
-                    (cmds (cdr (mapcar #'prin1-to-string command-history))))
-               (completing-read
-                "Command: "
-                (lambda (string pred action)
-                  (if (eq action 'metadata)
-                      `(metadata (display-sort-function . ,#'identity))
-                    (complete-with-action action cmds string pred)))
-                nil t)))))
+                    (cmds (cl-loop for cmd in conn-command-history
+                                   collect (cons (prin1-to-string cmd) cmd))))
+               (alist-get (completing-read
+                           "Command: "
+                           (lambda (string pred action)
+                             (if (eq action 'metadata)
+                                 `(metadata (display-sort-function . ,#'identity))
+                               (complete-with-action action cmds string pred)))
+                           nil t)
+                          cmds nil nil #'equal)))))
 
 ;;;;; Tab Registers
 

@@ -98,11 +98,12 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "=" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-on-thing-prefix
   "+" 'indent-relative-first-indent-point
   ";" 'conn-comment-thing
-  "=" 'indent-relative
+  "_" 'indent-relative
   "DEL" 'clear-rectangle
   "L" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
@@ -116,7 +117,7 @@
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "F" 'conn-fill-prefix
-  "." 'conn-last-dispatch-to-register
+  "f" 'conn-last-dispatch-to-register
   "m" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
   "i" 'conn-emacs-state-open-line-above
