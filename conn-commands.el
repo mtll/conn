@@ -467,17 +467,15 @@ If the mark is already active then deactivate it instead."
      (push-mark (if (eql direction 1) beg end) t t)
      (conn-push-state 'conn-mark-state))))
 
-(defun conn-exchange-mark-command ()
-  "`exchange-mark-and-point' avoiding activating the mark.
-
-With a prefix ARG `push-mark' without activating it."
-  (interactive)
-  (exchange-point-and-mark (not mark-active)))
+(defun conn-exchange-mark-command (&optional arg)
+  "`exchange-mark-and-point' and push `conn-mark-state' if mark is activated."
+  (interactive "P")
+  (exchange-point-and-mark arg)
+  (when (and (region-active-p)
+             (not conn-mark-state))
+    (conn-push-state 'conn-mark-state)))
 
 (defun conn-last-thing-other-end ()
-  "`exchange-mark-and-point' avoiding activating the mark.
-
-With a prefix ARG `push-mark' without activating it."
   (interactive)
   (if (region-active-p)
       (conn-exchange-mark-command)
@@ -498,6 +496,7 @@ With a prefix ARG `push-mark' without activating it."
       (setf conn--popping-marks nil)
     (when conn--unpoped-marks
       (conn-push-jump-ring (car (last conn--unpoped-marks))))
+    (setq mark-ring (nconc mark-ring (nreverse conn--unpoped-marks)))
     (setf conn--unpoped-marks nil)
     (remove-hook 'post-command-hook 'conn--popping-marks-hook)))
 

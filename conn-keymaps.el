@@ -150,11 +150,13 @@
 
 (defvar-keymap conn-pop-mark-ring-repeat-map
   :repeat t
-  ">" 'conn-pop-mark-ring
-  "<" 'conn-unpop-mark-ring)
+  "z" 'conn-pop-mark-ring
+  "Z" 'conn-unpop-mark-ring)
 
 (define-keymap
   :keymap conn-goto-map
+  "z" 'conn-pop-mark-ring
+  "Z" 'conn-unpop-mark-ring
   "e" 'conn-previous-emacs-state
   "E" 'conn-next-emacs-state
   "O" 'conn-push-jump-ring
@@ -372,7 +374,7 @@
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
   "z" 'conn-set-mark-command
-  "Z" 'pop-to-mark-command)
+  "Z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
 
