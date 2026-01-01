@@ -32,12 +32,12 @@ state enters command state.
 ┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C copy   │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │  pop to   │  narrow  │   last   │   mark   │          │ ←defun   │ →defun   │ register │          │   redo   │                       ┃
-┃                      │  mark     │  prefix  │   thing  │   state  │          │          │          │  prefix  │          │          │                       ┃
+┃                      │  pop to   │  narrow  │   last   │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
+┃                      │  mark     │  prefix  │   thing  │   state  │          │          │          │ register │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
-┃                      │ z emacs   │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │   state   │   C-x    │   C-c    │   last   │   mark   │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
-┃                      │ other end │          │          │   thing  │   state  │          │          │   map    │   load   │          │                       ┃
+┃                      │ z         │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │   mark    │   C-x    │   C-c    │   last   │   edit   │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
+┃                      │   state   │          │          │   thing  │   map    │          │          │   map    │   load   │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                 edit map                  ┃
