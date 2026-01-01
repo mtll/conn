@@ -1226,7 +1226,7 @@ state.")
   (when-let* ((face (conn-state-get state :mode-line-face))
               (cookie (face-remap-add-relative 'mode-line face)))
     (conn-state-on-exit
-     (face-remap-remove-relative cookie)))
+      (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
 ;;;;; Read Thing State
@@ -1269,14 +1269,14 @@ state.")
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-on-exit
-   (conn-ring-delete (point) conn-emacs-state-ring #'=)
-   (let ((pt (conn--create-marker (point) nil t)))
-     (conn-ring-insert-front conn-emacs-state-ring pt)
-     (when conn-emacs-state-register
-       (if-let* ((marker (get-register conn-emacs-state-register))
-                 ((markerp marker)))
-           (set-marker marker (point) (current-buffer))
-         (set-register conn-emacs-state-register (copy-marker pt))))))
+    (conn-ring-delete (point) conn-emacs-state-ring #'=)
+    (let ((pt (conn--create-marker (point) nil t)))
+      (conn-ring-insert-front conn-emacs-state-ring pt)
+      (when conn-emacs-state-register
+        (if-let* ((marker (get-register conn-emacs-state-register))
+                  ((markerp marker)))
+            (set-marker marker (point) (current-buffer))
+          (set-register conn-emacs-state-register (copy-marker pt))))))
   (cl-call-next-method))
 
 ;;;;; Autopop State
@@ -1330,10 +1330,10 @@ command was a prefix command.")
                        (remove-hook 'prefix-command-preserve-state-hook preserve-state)
                        (conn-enter-state (conn-peek-state)))))))
     (conn-state-on-exit
-     (when (and (not conn-entering-recursive-stack)
-                (eq state (car conn--state-stack)))
-       (pop conn--state-stack))
-     (remove-hook 'pre-command-hook pre t))
+      (when (and (not conn-entering-recursive-stack)
+                 (eq state (car conn--state-stack)))
+        (pop conn--state-stack))
+      (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
 
@@ -1384,18 +1384,18 @@ command was a prefix command.")
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
   (conn-state-on-exit
-   (if (conn-mark-state-keep-mark-active-p)
-       (when (bound-and-true-p rectangle-mark-mode)
-         (conn-state-on-re-entry
-           (rectangle-mark-mode 1)))
-     (deactivate-mark))
-   (unless (or (null conn-record-mark-state)
-               (eq this-command 'keyboard-quit))
-     (unless conn--previous-mark-state
-       (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
-     (set-marker (nth 0 conn--previous-mark-state) (point))
-     (set-marker (nth 1 conn--previous-mark-state) (mark t))
-     (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
+    (if (conn-mark-state-keep-mark-active-p)
+        (when (bound-and-true-p rectangle-mark-mode)
+          (conn-state-on-re-entry
+            (rectangle-mark-mode 1)))
+      (deactivate-mark))
+    (unless (or (null conn-record-mark-state)
+                (eq this-command 'keyboard-quit))
+      (unless conn--previous-mark-state
+        (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
+      (set-marker (nth 0 conn--previous-mark-state) (point))
+      (set-marker (nth 1 conn--previous-mark-state) (mark t))
+      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
