@@ -21,8 +21,7 @@
 (require 'conn-states)
 (require 'conn-things)
 (eval-when-compile
-  (require 'cl-lib)
-  (require 'map))
+  (require 'cl-lib))
 
 (defvar outline-heading-end-regexp)
 (defvar treesit-defun-type-regexp)
@@ -2212,34 +2211,34 @@ updated.")
                                      slots
                                      docstring
                                      properties)
-    (pcase properties
-      ((map :update-method :default-update-handler)
-       `(progn
-          (defclass ,name ,(append superclasses '(conn-target-finder-base))
-            ,(append slots
-                     (list
-                      (pcase default-update-handler
-                        (`#',function
-                         `(default-update-handler
-                           :allocation :class
-                           :initform #',function))
-                        (`(,arglist . ,body)
-                         `(default-update-handler
-                           :allocation :class
-                           :initform (lambda ,arglist ,@body)))
-                        ('nil)
-                        (_ (error "Malformed default handler definition")))))
-            ,@(when docstring (list docstring)))
-          :autoload-end
-          ,(pcase update-method
-             (`((,state-var) . ,body)
-              `(cl-defmethod conn-target-finder-update ((,state-var ,name))
-                 ,@body))
-             (`#',function
-              `(cl-defmethod conn-target-finder-update ((state ,name))
-                 (,function state)))
-             ('nil)
-             (_ (error "Malformed update method definition"))))))))
+    (let ((update-method (alist-get :update-method properties))
+          (default-handler (alist-get :default-update-handler properties)))
+      `(progn
+         (defclass ,name ,(append superclasses '(conn-target-finder-base))
+           ,(append slots
+                    (list
+                     (pcase default-handler
+                       (`#',function
+                        `(default-update-handler
+                          :allocation :class
+                          :initform #',function))
+                       (`(,arglist . ,body)
+                        `(default-update-handler
+                          :allocation :class
+                          :initform (lambda ,arglist ,@body)))
+                       ('nil)
+                       (_ (error "Malformed default handler definition")))))
+           ,@(when docstring (list docstring)))
+         :autoload-end
+         ,(pcase update-method
+            (`((,state-var) . ,body)
+             `(cl-defmethod conn-target-finder-update ((,state-var ,name))
+                ,@body))
+            (`#',function
+             `(cl-defmethod conn-target-finder-update ((state ,name))
+                (,function state)))
+            ('nil)
+            (_ (error "Malformed update method definition")))))))
 
 (defmacro conn-define-target-finder (name superclasses slots &rest rest)
   "Define a target finder.

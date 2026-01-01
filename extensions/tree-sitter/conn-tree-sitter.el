@@ -24,8 +24,7 @@
 (require 'conn-dispatch)
 (require 'treesit)
 (eval-when-compile
-  (require 'cl-lib)
-  (require 'map))
+  (require 'cl-lib))
 
 (cl-defstruct (conn-ts--thing
                (:constructor conn--make-ts-thing))

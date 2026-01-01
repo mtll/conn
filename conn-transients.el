@@ -25,8 +25,6 @@
 (require 'kmacro)
 (require 'transient)
 (require 'text-property-search)
-(eval-when-compile
-  (require 'map))
 
 ;;;; Declarations
 
