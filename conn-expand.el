@@ -26,11 +26,6 @@
 
 ;;;; Expand Region
 
-(defcustom conn-expand-pulse-region t
-  "Pulse region on expansion when mark is not active"
-  :group 'conn
-  :type 'boolean)
-
 (defvar conn-expansion-functions nil
   "Functions which provide expansions for `conn-expand'.
 
@@ -46,7 +41,6 @@ potential expansions.  Functions may return invalid expansions
             :exit (ignore
                    conn-toggle-mark-command))
   "e" 'ignore
-  "v" 'conn-toggle-mark-command
   "z" 'conn-expand-exchange
   "j" 'conn-contract
   "h" 'conn-expand
@@ -80,16 +74,17 @@ potential expansions.  Functions may return invalid expansions
 
 (defun conn--expand-create-expansions ()
   (unless (conn--valid-expansions-p)
-    (setq conn--current-expansions-tick (buffer-chars-modified-tick)
-          conn--current-expansions
-          (compat-call sort
-                       (thread-first
-                         (mapcan #'funcall conn-expansion-functions)
-                         (conn--expand-filter-regions))
-                       :lessp (lambda (a b)
-                                (or (> (car a) (car b))
-                                    (< (cdr a) (cdr b))))
-                       :in-place t))))
+    (with-delayed-message (1 "Collecting expansions...")
+      (setq conn--current-expansions
+            (compat-call sort
+                         (thread-first
+                           (mapcan #'funcall conn-expansion-functions)
+                           (conn--expand-filter-regions))
+                         :lessp (lambda (a b)
+                                  (or (> (car a) (car b))
+                                      (< (cdr a) (cdr b))))
+                         :in-place t))
+      (setq conn--current-expansions-tick (buffer-chars-modified-tick)))))
 
 (defun conn-expand-exchange ()
   "Move point to the other end of the current expansion."
@@ -98,7 +93,7 @@ potential expansions.  Functions may return invalid expansions
       (exchange-point-and-mark)
     (conn-exchange-mark-command)))
 
-(defun conn-expand (arg)
+(defun conn-expand-subr (arg)
   "Expend region by semantic units.
 
 If the region is active only the `point' is moved.
@@ -106,36 +101,41 @@ Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
   (unless (or (region-active-p)
               (conn--valid-expansions-p))
-    (push-mark))
+    (push-mark nil t))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
     (dotimes (_ arg)
-      (cond ((and (region-active-p)
-                  (= (point) (region-beginning)))
-             (cl-loop for (beg . _end) in conn--current-expansions
-                      when (< beg (point)) return (goto-char beg)
-                      finally (user-error "No more expansions")))
-            ((and (region-active-p)
-                  (= (point) (region-end)))
-             (cl-loop for (_beg . end) in conn--current-expansions
-                      when (> end (point)) return (goto-char end)
-                      finally (user-error "No more expansions")))
-            (t
-             (cl-loop for (beg . end) in conn--current-expansions
-                      when (> (abs (- end beg))
-                              (abs (- (region-end) (region-beginning))))
-                      return (progn
-                               (goto-char
-                                (if (= (point) (region-beginning)) beg end))
-                               (push-mark
-                                (if (= (point) (region-beginning)) end beg)
-                                t))
-                      finally (user-error "No more expansions"))))))
-  (unless (or (region-active-p)
-              (not conn-expand-pulse-region)
-              executing-kbd-macro)
-    (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
+      (cl-loop for (beg . end) in conn--current-expansions
+               when (> (abs (- end beg))
+                       (abs (- (region-end) (region-beginning))))
+               return (progn
+                        (goto-char
+                         (if (= (point) (region-beginning)) beg end))
+                        (push-mark
+                         (if (= (point) (region-beginning)) end beg)
+                         t t))
+               finally (user-error "No more expansions")))))
+
+(defun conn-expand (arg)
+  (interactive "p")
+  (conn-expand-subr arg)
+  (unless conn-mark-state
+    (conn-push-state 'conn-mark-state)))
+
+(defun conn-contract-subr (arg)
+  (conn--expand-create-expansions)
+  (if (< arg 0)
+      (conn-expand (- arg))
+    (dotimes (_ arg)
+      (cl-loop for (beg . end) in (reverse conn--current-expansions)
+               when (or (> beg (region-beginning))
+                        (< end (region-end)))
+               return (progn
+                        (goto-char (if (= (point) (region-beginning)) beg end))
+                        (push-mark (if (= (point) (region-end)) beg end)
+                                   t t))
+               finally (user-error "No more contractions")))))
 
 (defun conn-contract (arg)
   "Contract region by semantic units.
@@ -144,33 +144,9 @@ If the region is active only the `point' is moved.
 Expansions and contractions are provided by functions in
 `conn-expansion-functions'."
   (interactive "p")
-  (conn--expand-create-expansions)
-  (if (< arg 0)
-      (conn-expand (- arg))
-    (dotimes (_ arg)
-      (cond ((and (region-active-p)
-                  (= (point) (region-beginning)))
-             (cl-loop for (beg . _end) in (reverse conn--current-expansions)
-                      when (> beg (point)) return (goto-char beg)
-                      finally (user-error "No more expansions")))
-            ((and (region-active-p)
-                  (= (point) (region-end)))
-             (cl-loop for (_beg . end) in (reverse conn--current-expansions)
-                      when (< end (point)) return (goto-char end)
-                      finally (user-error "No more expansions")))
-            ((cl-loop for (beg . end) in (reverse conn--current-expansions)
-                      when (or (> beg (region-beginning))
-                               (< end (region-end)))
-                      return (progn
-                               (goto-char (if (= (point) (region-beginning)) beg end))
-                               (push-mark (if (= (point) (region-end)) beg end)
-                                          t))
-                      finally (user-error "No more contractions"))))))
-  (unless (or (region-active-p)
-              (not conn-expand-pulse-region)
-              executing-kbd-macro)
-    (pulse-momentary-highlight-region
-     (region-beginning) (region-end) 'region)))
+  (conn-contract-subr arg)
+  (unless conn-mark-state
+    (conn-push-state 'conn-mark-state)))
 
 ;;;;; Bounds of expansion
 
@@ -186,7 +162,6 @@ Expansions and contractions are provided by functions in
   "j" 'conn-contract
   "l" 'conn-expand
   "h" 'conn-expand
-  "v" 'conn-toggle-mark-command
   "e" 'end
   "<mouse-3>" 'end
   "<mouse-1>" 'conn-expand
@@ -201,13 +176,12 @@ Expansions and contractions are provided by functions in
      "\n"
      "\\[conn-expand] expand; "
      "\\[conn-contract] contract; "
-     "\\[conn-toggle-mark-command] toggle mark; "
      "\\[end] finish"))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               arg)
   (let ((thing (conn-get-thing cmd)))
-    (conn-expand arg)
+    (conn-expand-subr (prefix-numeric-value arg))
     (conn-read-args
         (conn-expand-state
          :prompt "Expansion"
@@ -220,20 +194,15 @@ Expansions and contractions are provided by functions in
                                (conn-read-args-handle))
                               ('conn-contract
                                (ignore-error user-error
-                                 (conn-contract
+                                 (conn-contract-subr
                                   (prefix-numeric-value
                                    (conn-read-args-consume-prefix-arg))))
                                (conn-read-args-handle))
                               ('conn-expand
                                (ignore-error user-error
-                                 (conn-expand
+                                 (conn-expand-subr
                                   (prefix-numeric-value
                                    (conn-read-args-consume-prefix-arg))))
-                               (conn-read-args-handle))
-                              ('conn-toggle-mark-command
-                               (if mark-active
-                                   (deactivate-mark)
-                                 (activate-mark))
                                (conn-read-args-handle)))))
         ((bounds
           (oclosure-lambda (conn-anonymous-argument
