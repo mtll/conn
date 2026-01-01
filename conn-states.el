@@ -66,7 +66,7 @@ function may setup any other necessary state as well.")
   "Current conn state in buffer.")
 
 (defvar conn-next-state nil
-  "Bound during `conn-state-defer' forms to the next state to be entered.")
+  "Bound during `conn-state-on-exit' forms to the next state to be entered.")
 
 (defvar conn-previous-state nil
   "Bound during `conn-enter-state' to the state being exited.")
@@ -799,16 +799,16 @@ that has just been exited.")
           conn--state-deferred-ids nil)
     (funcall (car deferred) (cdr deferred))))
 
-(defmacro conn-state-defer (&rest body)
+(defmacro conn-state-on-exit (&rest body)
   "Defer evaluation of BODY until the current state is exited.
 
-Note that if a `conn-state-defer' form is evaluated multiple times in
+Note that if a `conn-state-on-exit' form is evaluated multiple times in
 one state then BODY will evaluated that many times when the state is
 exited.  If you want to ensure that BODY will be evaluated only once
-when the current state exits then use `conn-state-defer-once'.
+when the current state exits then use `conn-state-on-exit-once'.
 
-Note also that BODY maybe be run more than once if a buffer is cloned
-during the current state.  See also `conn--clone-buffer-setup'.
+BODY may be be run more than once if a buffer is cloned during the
+current state.  See also `conn--clone-buffer-setup'.
 
 When BODY is evaluated `conn-next-state' will be bound to the state that
 is being entered after the current state has exited or nil if
@@ -822,10 +822,10 @@ is being entered after the current state has exited or nil if
                (funcall (car ,rest) (cdr ,rest))))
            conn--state-deferred)))
 
-(defmacro conn-state-defer-once (&rest body)
-  "Like `conn-state-defer' but BODY will be evaluated only once per state.
+(defmacro conn-state-on-exit-once (&rest body)
+  "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
 
-For more information see `conn-state-defer'."
+For more information see `conn-state-on-exit'."
   (declare (indent 0)
            (debug (def-body)))
   (cl-with-gensyms (rest id)
@@ -923,7 +923,7 @@ Code that is run when a state is entered should be added as methods to
 this function.  The (conn-substate STATE) specializer is provided so
 that code can be run for every state inheriting from some parent state.
 
-To execute code when a state is exiting use `conn-state-defer'."
+To execute code when a state is exiting use `conn-state-on-exit'."
   (:method ((_state (conn-substate t))) "Noop" nil)
   (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
@@ -1224,8 +1224,8 @@ state.")
 (cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
   (when-let* ((face (conn-state-get state :mode-line-face))
               (cookie (face-remap-add-relative 'mode-line face)))
-    (conn-state-defer
-      (face-remap-remove-relative cookie)))
+    (conn-state-on-exit
+     (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
 ;;;;; Read Thing State
@@ -1267,15 +1267,15 @@ state.")
   (cl-call-next-method))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
-  (conn-state-defer
-    (conn-ring-delete (point) conn-emacs-state-ring #'=)
-    (let ((pt (conn--create-marker (point) nil t)))
-      (conn-ring-insert-front conn-emacs-state-ring pt)
-      (when conn-emacs-state-register
-        (if-let* ((marker (get-register conn-emacs-state-register))
-                  ((markerp marker)))
-            (set-marker marker (point) (current-buffer))
-          (set-register conn-emacs-state-register (copy-marker pt))))))
+  (conn-state-on-exit
+   (conn-ring-delete (point) conn-emacs-state-ring #'=)
+   (let ((pt (conn--create-marker (point) nil t)))
+     (conn-ring-insert-front conn-emacs-state-ring pt)
+     (when conn-emacs-state-register
+       (if-let* ((marker (get-register conn-emacs-state-register))
+                 ((markerp marker)))
+           (set-marker marker (point) (current-buffer))
+         (set-register conn-emacs-state-register (copy-marker pt))))))
   (cl-call-next-method))
 
 ;;;;; Autopop State
@@ -1328,11 +1328,11 @@ command was a prefix command.")
                          (add-hook 'pre-command-hook pre 99 t)
                        (remove-hook 'prefix-command-preserve-state-hook preserve-state)
                        (conn-enter-state (conn-peek-state)))))))
-    (conn-state-defer
-      (when (and (not conn-entering-recursive-stack)
-                 (eq state (car conn--state-stack)))
-        (pop conn--state-stack))
-      (remove-hook 'pre-command-hook pre t))
+    (conn-state-on-exit
+     (when (and (not conn-entering-recursive-stack)
+                (eq state (car conn--state-stack)))
+       (pop conn--state-stack))
+     (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
 
@@ -1382,19 +1382,19 @@ command was a prefix command.")
                                   (fboundp 'rectangle--pos-cols)
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
-  (conn-state-defer
-    (if (conn-mark-state-keep-mark-active-p)
-        (when (bound-and-true-p rectangle-mark-mode)
-          (conn-state-on-re-entry
-            (rectangle-mark-mode 1)))
-      (deactivate-mark))
-    (unless (or (null conn-record-mark-state)
-                (eq this-command 'keyboard-quit))
-      (unless conn--previous-mark-state
-        (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
-      (set-marker (nth 0 conn--previous-mark-state) (point))
-      (set-marker (nth 1 conn--previous-mark-state) (mark t))
-      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
+  (conn-state-on-exit
+   (if (conn-mark-state-keep-mark-active-p)
+       (when (bound-and-true-p rectangle-mark-mode)
+         (conn-state-on-re-entry
+           (rectangle-mark-mode 1)))
+     (deactivate-mark))
+   (unless (or (null conn-record-mark-state)
+               (eq this-command 'keyboard-quit))
+     (unless conn--previous-mark-state
+       (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
+     (set-marker (nth 0 conn--previous-mark-state) (point))
+     (set-marker (nth 1 conn--previous-mark-state) (mark t))
+     (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
