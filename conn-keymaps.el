@@ -172,15 +172,13 @@
   "," 'xref-go-back
   "." 'xref-go-forward)
 
-;;;;; Misc Maps
+;;;;; Global Bindings
 
 (defvar-keymap conn-indent-rigidly-map
   "l" 'indent-rigidly-right
   "j" 'indent-rigidly-left
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
-
-;;;;; Global Bindings
 
 (defvar-keymap conn-dispatch-cycle-map
   :repeat (:exit (ignore))
@@ -367,13 +365,13 @@
   "t" 'conn-transpose-things
   "v" 'conn-mark-last-command
   "V" 'conn-previous-mark-command
-  "b" 'conn-set-mark-command
+  "b" conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "z" 'conn-emacs-state-other-end
+  "z" 'conn-set-mark-command
   "Z" 'pop-to-mark-command)
 
 ;;;;;; Dispatch State
@@ -488,21 +486,5 @@
         'point
         :pretty-print ( :method (_) "position-registers")
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register))))
-
-;;;;;; Transpose State
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-transpose-state)
-  "i" 'conn-backward-line
-  "u" 'forward-symbol
-  "f" 'conn-dispatch)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
-  "TAB" 'repeat-dispatch
-  "C-w" 'restrict-windows
-  "SPC" 'scroll-up-command
-  "DEL" 'scroll-down-command
-  "C-o" 'other-window)
 
 (provide 'conn-keymaps)

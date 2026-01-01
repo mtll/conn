@@ -1584,8 +1584,22 @@ Exiting the recursive edit will resume the isearch."
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-transpose-state)
+  "i" 'conn-backward-line
+  "u" 'forward-symbol
+  "f" 'conn-dispatch)
+
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
+  "TAB" 'repeat-dispatch
+  "C-w" 'restrict-windows
+  "SPC" 'scroll-up-command
+  "DEL" 'scroll-down-command
+  "C-o" 'other-window)
 
 (oclosure-define (conn-transpose-command
                   (:parent conn-dispatch-transpose))
