@@ -1665,6 +1665,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            arglist
                            callback
                            &key
+                           interactive
                            command-handler
                            (display-handler #'conn--read-args-display-prompt)
                            around
@@ -1675,6 +1676,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            post
                            reference)
   (let ((arguments arglist)
+        (tc this-command)
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
         (local-exit nil))
@@ -1770,15 +1772,19 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (display-message))
                  (read-command))))
            (setq local-exit t)))
-      (apply
-       (catch 'conn-read-args-return
-         (unwind-protect
-             (if around (funcall around #'cont) (cont))
-           (unless local-exit
-             (mapc #'conn-argument-cancel arguments))
-           (unless executing-kbd-macro
-             (message nil)))
-         (cons callback (mapcar #'conn-argument-extract-value arguments)))))))
+      (let ((ret (apply
+                  (catch 'conn-read-args-return
+                    (unwind-protect
+                        (if around (funcall around #'cont) (cont))
+                      (unless local-exit
+                        (mapc #'conn-argument-cancel arguments))
+                      (unless executing-kbd-macro
+                        (message nil)))
+                    (cons callback
+                          (mapcar #'conn-argument-extract-value arguments))))))
+        (when interactive
+          (add-to-history 'conn-command-history (cons tc ret) 16 t))
+        ret))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.
@@ -1820,6 +1826,11 @@ calls an updater then an invalid command message is printed.
 Once the loop ends `conn-argument-extract-value' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
+
+INTERACTIVE if non-nil means that `conn-read-args' is being called to
+produce a list for the interactive form of a command.  This causes the
+current command to be added to `conn-command-history' with the args
+this form reads.
 
 OVERRIDING-MAP if non-nil should be a keymap which will be active during
 the read args loop and take precedence over the ARGUMENT keymaps.  Note

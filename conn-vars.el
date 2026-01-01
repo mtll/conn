@@ -170,6 +170,13 @@
 
 (defvar conn--last-thing-override nil)
 
+(defvar conn-command-history nil
+  "History of commands that read arguments with `conn-read-args'.
+
+See also `conn-repeat-last-complex-command'.")
+
+(defvar conn-repeating-command nil)
+
 ;;;;; Remaps
 
 (defmacro conn--without-conn-maps (&rest body)

@@ -78,16 +78,13 @@ execution."
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
 (defun conn-repeat-last-complex-command ()
-  "Repeat the last complex command.
-
-Complex commands are those that read arguments from terminal.  See
-`command-history' for more."
+  "Repeat the last conn operator."
   (interactive)
-  (if-let* ((last-repeatable-command (caar command-history))
-            (repeat-message-function 'ignore))
-      (repeat nil)
-    (user-error "No repeatable last command")))
-(put 'conn-repeat-last-complex-command 'repeat-continue t)
+  (unless conn-command-history
+    (user-error "No repeatable last command"))
+  (let ((conn-repeating-command t))
+    (setq this-command (caar conn-command-history))
+    (apply #'funcall-interactively (car conn-command-history))))
 
 ;;;;; Movement
 
@@ -456,6 +453,7 @@ If the mark is already active then deactivate it instead."
   "Mark the region defined by THING, ARG, and TRANSFORM"
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument t))
         (transform (conn-transform-argument)))
@@ -496,7 +494,9 @@ If the mark is already active then deactivate it instead."
       (setf conn--popping-marks nil)
     (when conn--unpoped-marks
       (conn-push-jump-ring (car (last conn--unpoped-marks))))
-    (setq mark-ring (nconc mark-ring (nreverse conn--unpoped-marks)))
+    (setq mark-ring (nconc mark-ring
+                           (mapcar #'copy-marker
+                                   (nreverse conn--unpoped-marks))))
     (setf conn--unpoped-marks nil)
     (remove-hook 'post-command-hook 'conn--popping-marks-hook)))
 
@@ -596,6 +596,7 @@ For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
@@ -672,6 +673,7 @@ for the meaning of prefix ARG."
                           check-bounds)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
@@ -758,6 +760,7 @@ for the meaning of prefix ARG."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -775,6 +778,7 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -1267,6 +1271,7 @@ For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
+                    :interactive t
                     :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg) (conn-replace-thing-argument))
@@ -1491,6 +1496,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
+                    :interactive t
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
@@ -1516,6 +1522,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
+                    :interactive t
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
@@ -1873,6 +1880,7 @@ If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-read-args (conn-transpose-state
+                    :interactive t
                     :prompt "Transpose"
                     :prefix current-prefix-arg
                     :reference conn-transpose-reference)
@@ -1921,24 +1929,31 @@ region after a `recursive-edit'."
   "z" 'append-next-kill
   "c" 'copy
   "d" 'delete
-  "." 'register)
+  "." 'register
+  "+" 'separator)
 
 (cl-defstruct (conn-kill-how-argument
                (:include conn-argument))
   (delete nil :type boolean)
   (append nil :type symbol)
-  (register nil :type (or char nil)))
+  (register nil :type (or char nil))
+  (separator nil :type (or string nil)))
 
-(cl-defsubst conn-kill-how-argument (&key delete append register)
+(cl-defsubst conn-kill-how-argument (&key delete
+                                          append
+                                          register
+                                          separator)
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq delete '(nil delete copy)))
   (cl-assert (memq append '(nil append prepend)))
   (cl-assert (not (and (eq delete 'delete)
                        (or append register))))
+  (cl-assert (not (and separator (null append))))
   (make-conn-kill-how-argument :delete delete
                                :append append
                                :register register
+                               :separator separator
                                :keymap conn-kill-how-map))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
@@ -1946,14 +1961,16 @@ region after a `recursive-edit'."
                                     updater)
   (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
                        (register (conn-kill-how-argument-register arg))
-                       (append (conn-kill-how-argument-append arg)))
+                       (append (conn-kill-how-argument-append arg))
+                       (separator (conn-kill-how-argument-separator arg)))
     (pcase cmd
       ('append-next-kill
        (setf delete (if (eq delete 'delete) nil delete)
              append (pcase append
                       ('nil 'append)
-                      ('prepend nil)
-                      (_ 'prepend)))
+                      ('append 'prepend)
+                      ('prepend 'repeat)
+                      (_ nil)))
        (funcall updater arg))
       ('delete
        (setf delete (if (eq delete 'delete) nil 'delete)
@@ -1968,11 +1985,21 @@ region after a `recursive-edit'."
              register (if register
                           nil
                         (register-read-with-preview "Register:")))
+       (funcall updater arg))
+      ('separator
+       (if (or (stringp separator)
+               (eq 'default separator))
+           (setf separator nil)
+         (setf separator
+               (let ((s (conn-with-input-method
+                          (read-string "Separator (RET for default): " nil
+                                       'conn--separator-history nil t))))
+                 (if (equal s "") 'default s))))
        (funcall updater arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-how-argument)
                                        sym)
-  (memq sym '(append-next-kill delete register copy)))
+  (memq sym '(append-next-kill delete register copy separator)))
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
   (list
@@ -1988,7 +2015,20 @@ region after a `recursive-edit'."
      "prepend"
      'face (when (eq 'prepend (conn-kill-how-argument-append arg))
              'eldoc-highlight-function-argument))
+    (propertize "|" 'face 'shadow)
+    (propertize
+     "on-repeat"
+     'face (when (eq 'repeat (conn-kill-how-argument-append arg))
+             'eldoc-highlight-function-argument))
     (propertize ")" 'face 'shadow))
+   (when (or (conn-kill-how-argument-append arg)
+             (conn-kill-how-argument-separator arg))
+     (concat
+      "\\[separator] "
+      (propertize
+       "separator"
+       'face (when (conn-kill-how-argument-separator arg)
+               'conn-argument-active-face))))
    (concat
     "\\[register] "
     (if-let* ((ts (conn-kill-how-argument-register arg)))
@@ -2010,7 +2050,8 @@ region after a `recursive-edit'."
 (cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument-delete arg)
         (conn-kill-how-argument-append arg)
-        (conn-kill-how-argument-register arg)))
+        (conn-kill-how-argument-register arg)
+        (conn-kill-how-argument-separator arg)))
 
 (defvar-keymap conn-kill-thing-argument-map
   "/" 'filename
@@ -2108,6 +2149,7 @@ region after a `recursive-edit'."
                         append
                         delete
                         register
+                        separator
                         fixup-whitespace
                         check-bounds)
   "Kill a region defined by CMD, ARG, and TRANSFORM.
@@ -2135,6 +2177,7 @@ If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
 hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
+                    :interactive t
                     :prompt "Thing"
                     :reference conn-kill-reference
                     :command-handler
@@ -2144,19 +2187,28 @@ hook, which see."
                         (conn-read-args-handle))))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
-        (`(,delete ,append ,register) (conn-kill-how-argument))
+        (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
         (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform append
-           delete register fixup check-bounds)))
+     (list thing arg transform append delete
+           register separator fixup check-bounds)))
   (cl-assert (not (and delete (or register append))))
   (when (and (null append)
              (fboundp 'repeat-is-really-this-command)
              (repeat-is-really-this-command))
     (setq append 'repeat))
   (cl-callf and fixup-whitespace (null transform))
-  (conn-kill-thing-do cmd arg transform
-                      append delete register
-                      fixup-whitespace check-bounds)
+  (conn-kill-thing-do cmd
+                      arg
+                      transform
+                      (pcase append
+                        ('repeat (when conn-repeating-command 'append))
+                        ('nil (eq last-command 'conn-kill-thing))
+                        (_ append))
+                      delete
+                      register
+                      separator
+                      fixup-whitespace
+                      check-bounds)
   (setq this-command 'conn-kill-thing))
 
 (cl-defgeneric conn-kill-fixup-whitespace (bounds))
@@ -2249,31 +2301,32 @@ hook, which see."
       (cl-rotatef beg end))
     (let ((last-command (if append 'kill-region last-command)))
       (when (and append separator)
-        (kill-append (conn-kill-separator-for-region separator)
+        (kill-append (conn-kill-separator-for-region beg end separator)
                      (eq append 'prepend)))
       (if delete-flag
           (kill-region beg end)
         (copy-region-as-kill beg end)))))
 
 (defun conn--kill-string (string &optional append register separator)
-  (if register
+  (let ((sep (conn-kill-separator-for-strings (list string) separator)))
+    (if register
+        (if append
+            (let ((reg (get-register register)))
+              (set-register
+               register
+               (cond ((not reg) string)
+                     ((stringp reg)
+                      (if (eq append 'prepend)
+                          (concat string sep reg)
+                        (concat reg sep string)))
+                     (t (user-error "Register does not contain text")))))
+          (set-register register string))
       (if append
-          (let ((reg (get-register register)))
-            (set-register
-             register
-             (cond ((not reg) string)
-                   ((stringp reg)
-                    (if (eq append 'prepend)
-                        (concat string separator reg)
-                      (concat reg separator string)))
-                   (t (user-error "Register does not contain text")))))
-        (set-register register string))
-    (if append
-        (progn
-          (when separator
-            (kill-append separator (eq append 'prepend)))
-          (kill-append string (eq append 'prepend)))
-      (kill-new string))))
+          (progn
+            (when sep
+              (kill-append sep (eq append 'prepend)))
+            (kill-append string (eq append 'prepend)))
+        (kill-new string)))))
 
 (cl-defgeneric conn-kill-thing-do (cmd
                                    arg
@@ -2282,6 +2335,7 @@ hook, which see."
                                    append
                                    delete
                                    register
+                                   separator
                                    fixup-whitespace
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
@@ -2297,6 +2351,7 @@ hook, which see."
                                   append
                                   _delete
                                   register
+                                  separator
                                   _fixup-whitespace
                                   _check-bounds)
   (if-let* ((fname (buffer-file-name
@@ -2311,7 +2366,7 @@ hook, which see."
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register)
+        (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
 
@@ -2322,6 +2377,7 @@ hook, which see."
                                   append
                                   _delete
                                   register
+                                  separator
                                   _fixup-whitespace
                                   _check-bounds)
   (require 'project)
@@ -2331,7 +2387,7 @@ hook, which see."
                       (current-buffer))))
             (str (expand-file-name (project-root (project-current)))))
       (progn
-        (conn--kill-string str append register)
+        (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
@@ -2342,6 +2398,7 @@ hook, which see."
                                   append
                                   delete
                                   _register
+                                  _separator
                                   _fixup-whitespace
                                   _check-bounds)
   (conn-read-args (conn-read-thing-state
@@ -2369,6 +2426,7 @@ hook, which see."
                                   _append
                                   _delete
                                   _register
+                                  _separator
                                   _fixup-whitespace
                                   _check-bounds)
   (conn-read-args (conn-read-thing-state
@@ -2425,15 +2483,13 @@ hook, which see."
              (propertize (format "<%s>" sep)
                          'face 'eldoc-highlight-function-argument)))))
 
-(defun conn-kill-separator-for-region (separator)
+(defun conn-kill-separator-for-region (beg end separator)
   (pcase separator
     ('nil)
     ((pred stringp) separator)
-    (_ (let ((beg (region-beginning))
-             (end (region-end)))
-         (save-excursion
-           (goto-char beg)
-           (if (search-forward "\n" end t) "\n" " "))))))
+    (_ (save-excursion
+         (goto-char beg)
+         (if (search-forward "\n" end t) "\n" " ")))))
 
 (defun conn-kill-separator-for-strings (strings separator)
   (pcase separator
@@ -2455,6 +2511,7 @@ hook, which see."
                                   append
                                   delete
                                   register
+                                  separator
                                   fixup-whitespace
                                   check-bounds)
   (let ((conn-dispatch-amalgamate-undo t)
@@ -2468,19 +2525,18 @@ hook, which see."
          (`(,dtform ,fixup-whitespace)
           (conn-dispatch-transform-and-fixup-argument
            fixup-whitespace))
-         (`(,delete ,append ,register)
+         (`(,delete ,append ,register ,separator)
           (conn-kill-how-argument
            :append (if (eq append 'repeat)
                        'append
                      append)
            :delete delete
-           :register register))
+           :register register
+           :separator separator))
          (repeat
           (conn-boolean-argument 'repeat-dispatch
                                  conn-dispatch-repeat-arg-map
                                  "repeat"))
-         (separator (when (not delete)
-                      (conn-separator-argument 'default)))
          (restrict-windows
           (conn-boolean-argument 'restrict-windows
                                  conn-dispatch-restrict-windows-map
@@ -2526,8 +2582,6 @@ hook, which see."
                                                  ,@transform
                                                  ,@(when check-bounds
                                                      (list 'conn-check-bounds)))))
-                    (goto-char beg)
-                    (push-mark end t)
                     (if delete
                         (delete-region beg end)
                       (push (cons append (funcall region-extract-function t))
@@ -2562,6 +2616,7 @@ hook, which see."
                                   append
                                   delete
                                   register
+                                  separator
                                   fixup-whitespace
                                   check-bounds)
   (if (eq delete 'copy)
@@ -2574,7 +2629,7 @@ hook, which see."
             bounds)
        (if delete
            (delete-region beg end)
-         (conn--kill-region beg end t append register))
+         (conn--kill-region beg end t append register separator))
        (when fixup-whitespace
          (goto-char beg)
          (funcall conn-kill-fixup-whitespace-function bounds))))))
@@ -2592,6 +2647,7 @@ hook, which see."
                                                _append
                                                delete
                                                register
+                                               _separator
                                                _fixup-whitespace
                                                _check-bounds)
   (if (bound-and-true-p rectangle-mark-mode)
@@ -2629,7 +2685,8 @@ hook, which see."
 
 (defvar-keymap conn-copy-how-map
   "z" 'append-next-kill
-  "." 'register)
+  "." 'register
+  "+" 'separator)
 
 (cl-defstruct (conn-copy-how-argument
                (:include conn-argument)
@@ -2640,28 +2697,43 @@ hook, which see."
                               &aux
                               (keymap conn-copy-how-map))))
   (append nil)
-  (register nil))
+  (register nil :type (or integer nil))
+  (separator nil :type (or string nil)))
 
 (cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
                                     cmd updater)
-  (pcase cmd
-    ('append-next-kill
-     (setf (conn-copy-how-argument-append arg)
-           (pcase (conn-copy-how-argument-append arg)
-             ('nil 'append)
-             ('prepend nil)
-             (_ 'prepend)))
-     (funcall updater arg))
-    ('register
-     (setf (conn-copy-how-argument-register arg)
-           (if (conn-copy-how-argument-register arg)
-               nil
-             (register-read-with-preview "Register:")))
-     (funcall updater arg))))
+  (cl-symbol-macrolet ((separator (conn-copy-how-argument-separator arg))
+                       (register (conn-copy-how-argument-register arg))
+                       (append (conn-copy-how-argument-append arg)))
+    (pcase cmd
+      ('append-next-kill
+       (setf append
+             (pcase append
+               ('nil 'append)
+               ('append 'prepend)
+               ('prepend 'repeat)
+               (_ nil)))
+       (funcall updater arg))
+      ('register
+       (setf register
+             (if register
+                 nil
+               (register-read-with-preview "Register:")))
+       (funcall updater arg))
+      ('separator
+       (if (or (stringp separator)
+               (eq 'default separator))
+           (setf separator nil)
+         (setf separator
+               (let ((s (conn-with-input-method
+                          (read-string "Separator (RET for default): " nil
+                                       'conn--separator-history nil t))))
+                 (if (equal s "") 'default s))))
+       (funcall updater arg)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-how-argument)
                                        sym)
-  (memq sym '(append-next-kill register)))
+  (memq sym '(append-next-kill register separator)))
 
 (cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
   (list
@@ -2677,7 +2749,20 @@ hook, which see."
      "prepend"
      'face (when (eq 'prepend (conn-copy-how-argument-append arg))
              'eldoc-highlight-function-argument))
+    (propertize "|" 'face 'shadow)
+    (propertize
+     "on-repeat"
+     'face (when (eq 'repeat (conn-copy-how-argument-append arg))
+             'eldoc-highlight-function-argument))
     (propertize ")" 'face 'shadow))
+   (when (or (conn-copy-how-argument-append arg)
+             (conn-copy-how-argument-separator arg))
+     (concat
+      "\\[separator] "
+      (propertize
+       "separator"
+       'face (when (conn-kill-how-argument-separator arg)
+               'conn-argument-active-face))))
    (concat
     "\\[register] "
     (if-let* ((ts (conn-copy-how-argument-register arg)))
@@ -2688,7 +2773,8 @@ hook, which see."
 
 (cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
   (list (conn-copy-how-argument-append arg)
-        (conn-copy-how-argument-register arg)))
+        (conn-copy-how-argument-register arg)
+        (conn-copy-how-argument-separator arg)))
 
 (defvar-keymap conn-copy-thing-argument-map
   "/" 'filename
@@ -2722,7 +2808,13 @@ hook, which see."
                                        (_cmd (eql copy-matching-lines)))
   t)
 
-(defun conn-copy-thing (thing arg &optional transform append register)
+(defun conn-copy-thing (thing
+                        arg
+                        &optional
+                        transform
+                        append
+                        register
+                        separator)
   "Copy a region defined by CMD, ARG, and TRANSFORM.
 
 For how the region is determined using CMD, ARG, and TRANSFORM see
@@ -2736,6 +2828,7 @@ If copying to a registers then append to the register.  If APPEND is
 \\='prepend then prepend to the previous kill or register instead."
   (interactive
    (conn-read-args (conn-copy-state
+                    :interactive t
                     :prompt "Thing"
                     :reference conn-copy-reference
                     :command-handler
@@ -2745,19 +2838,24 @@ If copying to a registers then append to the register.  If APPEND is
                         (conn-read-args-handle))))
        ((`(,thing ,arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
-        (`(,append ,register)
-         (conn-copy-how-argument
-          :register (when current-prefix-arg
-                      (register-read-with-preview "Register:")))))
-     (list thing arg transform append register)))
-  (conn-copy-thing-do thing arg transform append register))
+        (`(,append ,register ,separator) (conn-copy-how-argument)))
+     (list thing arg transform append register separator)))
+  (conn-copy-thing-do thing
+                      arg
+                      transform
+                      (if (eq append 'repeat)
+                          (when conn-repeating-command 'append)
+                        append)
+                      register
+                      separator))
 
 (cl-defgeneric conn-copy-thing-do (cmd
                                    arg
                                    &optional
                                    transform
                                    append
-                                   register)
+                                   register
+                                   separator)
   (declare (conn-anonymous-thing-property :copy-op)))
 
 (cl-defmethod conn-copy-thing-do (cmd
@@ -2765,10 +2863,11 @@ If copying to a registers then append to the register.  If APPEND is
                                   &optional
                                   transform
                                   append
-                                  register)
+                                  register
+                                  separator)
   (pcase (conn-bounds-of cmd arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (conn--kill-region beg end nil append register)
+     (conn--kill-region beg end nil append register separator)
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
 
@@ -2777,7 +2876,8 @@ If copying to a registers then append to the register.  If APPEND is
                                   &optional
                                   transform
                                   append
-                                  _register)
+                                  _register
+                                  _separator)
   (conn-read-args (conn-read-thing-state
                    :prompt "Copy Matching Lines In"
                    :prefix arg)
@@ -2795,7 +2895,8 @@ If copying to a registers then append to the register.  If APPEND is
                                   &optional
                                   transform
                                   append
-                                  register)
+                                  register
+                                  separator)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
@@ -2808,7 +2909,7 @@ If copying to a registers then append to the register.  If APPEND is
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register)
+        (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
 
@@ -2817,14 +2918,15 @@ If copying to a registers then append to the register.  If APPEND is
                                   &optional
                                   _transform
                                   append
-                                  register)
+                                  register
+                                  separator)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
                       (current-buffer))))
             (str (expand-file-name (project-root (project-current)))))
       (progn
-        (conn--kill-string str append register)
+        (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
@@ -2837,7 +2939,8 @@ If copying to a registers then append to the register.  If APPEND is
                                   &optional
                                   transform
                                   append
-                                  register)
+                                  register
+                                  separator)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
                    :prompt "Copy"
@@ -2849,7 +2952,7 @@ If copying to a registers then append to the register.  If APPEND is
                                conn-dispatch-repeat-arg-map
                                "repeat"))
        (append (conn-copy-how-argument :append append))
-       (separator (conn-separator-argument 'default))
+       (separator (conn-separator-argument separator))
        (restrict-windows
         (conn-boolean-argument 'restrict-windows
                                conn-dispatch-restrict-windows-map
@@ -2971,6 +3074,7 @@ TRANSFORM.  For how they are used to define the region see
 The regexp is read interactively."
   (interactive
    (conn-read-args (conn-how-many-state
+                    :interactive t
                     :reference conn-how-many-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
@@ -3038,6 +3142,7 @@ For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-comment-state
+                    :interactive t
                     :reference conn-comment-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-comment-thing-argument t))
@@ -3409,6 +3514,7 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
 `conn-duplicate-repeat-map' is setup after duplicating."
   (interactive
    (conn-read-args (conn-duplicate-state
+                    :interactive t
                     :prompt "Thing"
                     :reference conn-duplicate-reference)
        ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
@@ -3515,6 +3621,7 @@ For how the region is determined using CMD, ARG, and TRANSFORM see
 `conn-bounds-of' and `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-change-state
+                    :interactive t
                     :prompt "Thing"
                     :reference conn-change-reference)
        ((`(,thing ,arg) (conn-change-thing-argument))
@@ -3592,6 +3699,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 `whitespace-cleanup-region' on the region."
   (interactive
    (conn-read-args (conn-indent-state
+                    :interactive t
                     :prompt "Thing"
                     :reference conn-indent-reference)
        ((`(,thing ,arg) (conn-indent-thing-argument))
@@ -3639,6 +3747,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   "Push thing regions to narrow ring."
   (interactive
    (conn-read-args (conn-narrow-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
@@ -3763,6 +3872,7 @@ If INDIRECT is non-nil then narrow to the region in an indirect buffer.
 The region is added to `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
+                    :interactive t
                     :prompt "Thing"
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
@@ -3824,6 +3934,7 @@ If SUBREGIONS-P is non-nil then join the lines in each individual
 subregion."
   (interactive
    (conn-read-args (conn-join-lines-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
@@ -3861,6 +3972,7 @@ subregion."
                                     subregions)
   (interactive
    (conn-read-args (conn-join-lines-state
+                    :interactive t
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))

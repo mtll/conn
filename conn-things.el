@@ -1399,6 +1399,13 @@ not be delete.  The the value returned by each function is ignored.")
    (cons (min (point) (mark t))
          (max (point) (mark t)))))
 
+(cl-defmethod conn-bounds-of-last-do ((_cmd (eql kapply))
+                                      _arg
+                                      point)
+  (conn-make-bounds
+   'region nil
+   (cons (point) point)))
+
 ;;;; Bounds of Things in Region
 
 (cl-defgeneric conn-get-things-in-region (thing arg transforms beg end)
@@ -1458,7 +1465,14 @@ not be delete.  The the value returned by each function is ignored.")
                       (throw 'end nil))))
                 (push-bound)))))
         (conn-make-bounds
-         thing nil
+         (conn-anonymous-thing
+           thing
+           :bounds-op ( :method (_self _arg)
+                        (conn-make-bounds
+                         thing nil
+                         (bounds-of-thing-at-point thing)
+                         :direction 1)))
+         nil
          (cons things-beg things-end)
          :subregions (nreverse subregions))))))
 

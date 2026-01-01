@@ -344,7 +344,7 @@
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
-  "SPC" conn-edit-remap
+  "SPC" 'conn-set-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
   "`" 'conn-wincontrol-mru-window
@@ -373,7 +373,7 @@
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "z" 'conn-set-mark-command
+  "z" 'conn-last-thing-other-end
   "Z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
