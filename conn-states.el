@@ -856,7 +856,8 @@ For more information see `conn-state-on-exit'."
   (when-let* ((fn (gethash conn--state-stack conn--state-re-entry-functions)))
     (funcall fn)))
 
-(defvar conn-state-lighter-separator "→"
+(defvar conn-state-lighter-separator
+  (if (char-displayable-p ?→) "→" ">")
   "Separator string for state lighters in `conn-lighter'.")
 
 (defun conn--get-lighter ()
