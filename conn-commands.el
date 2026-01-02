@@ -465,7 +465,7 @@ If the mark is already active then deactivate it instead."
   "Mark the region defined by THING, ARG, and TRANSFORM"
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :interactive t
+                    :interactive 'conn-mark-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument t))
         (transform (conn-transform-argument)))
@@ -608,7 +608,7 @@ For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :interactive t
+                    :interactive 'conn-register-load-and-replace
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
@@ -685,7 +685,7 @@ for the meaning of prefix ARG."
                           check-bounds)
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :interactive t
+                    :interactive 'conn-yank-replace
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
@@ -772,7 +772,7 @@ for the meaning of prefix ARG."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :interactive t
+                    :interactive 'conn-rgrep-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -790,7 +790,7 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :interactive t
+                    :interactive 'conn-occur-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -1283,7 +1283,7 @@ For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
-                    :interactive t
+                    :interactive 'conn-replace
                     :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg) (conn-replace-thing-argument))
@@ -1508,7 +1508,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :interactive t
+                    :interactive 'conn-isearch-forward
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
@@ -1534,7 +1534,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :interactive t
+                    :interactive 'conn-isearch-backward
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
        ((`(,thing ,arg) (conn-isearch-thing-argument))
@@ -1892,7 +1892,7 @@ If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-read-args (conn-transpose-state
-                    :interactive t
+                    :interactive 'conn-transpose-things
                     :prompt "Transpose"
                     :prefix current-prefix-arg
                     :reference conn-transpose-reference)
@@ -2189,7 +2189,7 @@ If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
 hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
-                    :interactive t
+                    :interactive 'conn-kill-thing
                     :prompt "Thing"
                     :reference conn-kill-reference
                     :command-handler
@@ -2840,7 +2840,7 @@ If copying to a registers then append to the register.  If APPEND is
 \\='prepend then prepend to the previous kill or register instead."
   (interactive
    (conn-read-args (conn-copy-state
-                    :interactive t
+                    :interactive 'conn-copy-thing
                     :prompt "Thing"
                     :reference conn-copy-reference
                     :command-handler
@@ -3086,7 +3086,7 @@ TRANSFORM.  For how they are used to define the region see
 The regexp is read interactively."
   (interactive
    (conn-read-args (conn-how-many-state
-                    :interactive t
+                    :interactive 'conn-how-many-in-thing
                     :reference conn-how-many-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
@@ -3154,7 +3154,7 @@ For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-comment-state
-                    :interactive t
+                    :interactive 'conn-comment-thing
                     :reference conn-comment-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-comment-thing-argument t))
@@ -3526,7 +3526,7 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
 `conn-duplicate-repeat-map' is setup after duplicating."
   (interactive
    (conn-read-args (conn-duplicate-state
-                    :interactive t
+                    :interactive 'conn-duplicate-thing
                     :prompt "Thing"
                     :reference conn-duplicate-reference)
        ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
@@ -3633,7 +3633,7 @@ For how the region is determined using CMD, ARG, and TRANSFORM see
 `conn-bounds-of' and `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-change-state
-                    :interactive t
+                    :interactive 'conn-change-thing
                     :prompt "Thing"
                     :reference conn-change-reference)
        ((`(,thing ,arg) (conn-change-thing-argument))
@@ -3711,7 +3711,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 `whitespace-cleanup-region' on the region."
   (interactive
    (conn-read-args (conn-indent-state
-                    :interactive t
+                    :interactive 'conn-indent-thing
                     :prompt "Thing"
                     :reference conn-indent-reference)
        ((`(,thing ,arg) (conn-indent-thing-argument))
@@ -3759,7 +3759,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   "Push thing regions to narrow ring."
   (interactive
    (conn-read-args (conn-narrow-state
-                    :interactive t
+                    :interactive 'conn-thing-to-narrow-ring
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
@@ -3884,7 +3884,7 @@ If INDIRECT is non-nil then narrow to the region in an indirect buffer.
 The region is added to `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
-                    :interactive t
+                    :interactive 'conn-narrow-to-thing
                     :prompt "Thing"
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
@@ -3946,7 +3946,7 @@ If SUBREGIONS-P is non-nil then join the lines in each individual
 subregion."
   (interactive
    (conn-read-args (conn-join-lines-state
-                    :interactive t
+                    :interactive 'conn-join-lines
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
@@ -3984,7 +3984,7 @@ subregion."
                                     subregions)
   (interactive
    (conn-read-args (conn-join-lines-state
-                    :interactive t
+                    :interactive 'conn-shell-command-on-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))

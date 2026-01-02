@@ -1676,7 +1676,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                            post
                            reference)
   (let ((arguments arglist)
-        (tc this-command)
+        (interactive (and (eq this-command interactive)
+                          interactive))
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
         (local-exit nil))
@@ -1783,7 +1784,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (cons callback
                           (mapcar #'conn-argument-extract-value arguments))))))
         (when interactive
-          (add-to-history 'conn-command-history (cons tc ret) 16 t))
+          (add-to-history 'conn-command-history
+                          (cons interactive ret)
+                          16 t))
         ret))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
@@ -1827,10 +1830,10 @@ Once the loop ends `conn-argument-extract-value' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
-INTERACTIVE if non-nil means that `conn-read-args' is being called to
-produce a list for the interactive form of a command.  This causes the
-current command to be added to `conn-command-history' with the args
-this form reads.
+INTERACTIVE if non-nil should be a command and means that
+`conn-read-args' is being called to produce a list for the interactive
+form that command.  This causes the command, along with the arguments
+read, to be added to `conn-command-history' when the command is run.
 
 OVERRIDING-MAP if non-nil should be a keymap which will be active during
 the read args loop and take precedence over the ARGUMENT keymaps.  Note
