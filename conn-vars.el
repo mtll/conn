@@ -22,7 +22,17 @@
 (defvar conn-mode nil)
 (defvar conn-local-mode nil)
 (defvar conn-lighter " Conn")
-(defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
+
+(defvar conn-kill-fixup-whitespace-function
+  'conn-kill-fixup-whitespace
+  "Function to fixup whitespace after killing a region.
+
+The function will be called with a single argument, the `conn-bounds' of
+the region that has just been killed, and with the point at the position
+where the region was.
+
+This variable may also be nil in which case fixing up whitespace is
+disabled.")
 
 (defvar-keymap conn-goto-map)
 (defvar-keymap conn-default-thing-map)
