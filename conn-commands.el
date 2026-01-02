@@ -77,7 +77,7 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-(defun conn-repeat-last-complex-command (&optional arg)
+(defun conn-repeat (&optional arg)
   "Repeat the last conn operator."
   (interactive "P")
   (unless conn-command-history
@@ -1927,7 +1927,10 @@ region after a `recursive-edit'."
 
 (defvar conn-kill-reference
   (list (conn-reference-page "Kill"
-          "Kill some things."
+          "Kill some things.
+If append is set to COLLECT then the first invocation sets the place
+which is being killed to and further invocations with `conn-repeat'
+append to that place."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-kill-special-ref 3))
@@ -2036,7 +2039,7 @@ region after a `recursive-edit'."
                          'face (when (eq 'prepend append)
                                  'eldoc-highlight-function-argument))
              (propertize "|" 'face 'shadow)
-             (propertize "on-repeat"
+             (propertize "collect"
                          'face (when (eq 'repeat append)
                                  'eldoc-highlight-function-argument))
              (propertize ")" 'face 'shadow))
@@ -2174,7 +2177,10 @@ kill ring.
 
 If APPEND is non-nil then append the killed region to the previous kill.
 If killing to a registers then append to the register.  If APPEND is
-\\='prepend then prepend to the previous kill or register instead.
+\\='prepend then prepend to the previous kill or register instead.  If
+APPEND is \\='repeat then the first invocation sets the place which is
+being killed to and further invocations with `conn-repeat' append to
+that place.
 
 If DELETE is non-nil then delete the region without modifying the kill
 ring.  If DELETE is non-nil then an error is signaled if either APPEND
@@ -2680,7 +2686,10 @@ hook, which see."
 
 (defvar conn-copy-reference
   (list (conn-reference-page "Copy"
-          "Copy some things."
+          "Copy some things.
+If append is set to COLLECT then the first invocation sets the place
+which is being copied to and further invocations with `conn-repeat'
+append to that place."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-copy-special-ref 3))
@@ -2752,37 +2761,31 @@ hook, which see."
                        (register (conn-copy-how-argument-register arg))
                        (append (conn-copy-how-argument-append arg)))
     (list
-     (concat
-      "\\[append-next-kill] "
-      (propertize "(" 'face 'shadow)
-      (propertize
-       "append"
-       'face (when (eq 'append append)
-               'eldoc-highlight-function-argument))
-      (propertize "|" 'face 'shadow)
-      (propertize
-       "prepend"
-       'face (when (eq 'prepend append)
-               'eldoc-highlight-function-argument))
-      (propertize "|" 'face 'shadow)
-      (propertize
-       "on-repeat"
-       'face (when (eq 'repeat append)
-               'eldoc-highlight-function-argument))
-      (propertize ")" 'face 'shadow))
+     (concat "\\[append-next-kill] "
+             (propertize "(" 'face 'shadow)
+             (propertize "append"
+                         'face (when (eq 'append append)
+                                 'eldoc-highlight-function-argument))
+             (propertize "|" 'face 'shadow)
+             (propertize "prepend"
+                         'face (when (eq 'prepend append)
+                                 'eldoc-highlight-function-argument))
+             (propertize "|" 'face 'shadow)
+             (propertize "collect"
+                         'face (when (eq 'repeat append)
+                                 'eldoc-highlight-function-argument))
+             (propertize ")" 'face 'shadow))
      (when append
-       (concat
-        "\\[separator] "
-        (propertize
-         "separator"
-         'face (when separator 'conn-argument-active-face))))
-     (concat
-      "\\[register] "
-      (if-let* ((ts register))
-          (propertize
-           (format "register <%c>" ts)
-           'face 'eldoc-highlight-function-argument)
-        "register")))))
+       (concat "\\[separator] "
+               (propertize
+                "separator"
+                'face (when separator 'conn-argument-active-face))))
+     (concat "\\[register] "
+             (if-let* ((ts register))
+                 (propertize
+                  (format "register <%c>" ts)
+                  'face 'eldoc-highlight-function-argument)
+               "register")))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
   (list (conn-copy-how-argument-append arg)
@@ -2839,7 +2842,10 @@ kill ring.
 
 If APPEND is non-nil then append the copied region to the previous kill.
 If copying to a registers then append to the register.  If APPEND is
-\\='prepend then prepend to the previous kill or register instead."
+\\='prepend then prepend to the previous kill or register instead.  If
+APPEND is \\='repeat then the first invocation sets the place which is
+being copied to and further invocations with `conn-repeat' append to
+that place."
   (interactive
    (conn-read-args (conn-copy-state
                     :interactive 'conn-copy-thing

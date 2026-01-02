@@ -172,7 +172,7 @@
 (defvar conn-command-history nil
   "History of commands that read arguments with `conn-read-args'.
 
-See also `conn-repeat-last-complex-command'.")
+See also `conn-repeat'.")
 
 (defvar conn-command-history-max 32
   "Maximum number of elements to keep in `conn-command-history'.")

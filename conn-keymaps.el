@@ -310,7 +310,7 @@
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
-  "=" 'conn-repeat-last-complex-command
+  "=" 'conn-repeat
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
   "o" conn-forward-word-remap
