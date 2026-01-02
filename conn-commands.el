@@ -2021,15 +2021,19 @@ append to that place."
                                    (conn-kill-how-argument-separator arg))))
     (pcase cmd
       ('append
-       (setf delete (if (eq delete 'delete) nil delete))
-       (cl-call-next-method))
+       (cl-call-next-method)
+       (if append
+           (setf delete nil)
+         (setf separator nil)))
       ('delete
-       (setf register nil
-             append nil)
-       (cl-call-next-method))
+       (cl-call-next-method)
+       (when delete
+         (setf register nil
+               append nil)))
       ('register
-       (setf delete (if (eq delete 'delete) nil delete))
-       (cl-call-next-method))
+       (cl-call-next-method)
+       (when register
+         (setf delete nil)))
       ((and 'separator (guard append))
        (cl-call-next-method)))))
 

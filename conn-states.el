@@ -2190,11 +2190,14 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd updater)
-  (when (eq cmd (conn-read-argument-toggle-command arg))
-    (setf (conn-argument-value arg)
-          (funcall (conn-read-argument-reader-function arg)
-                   (conn-argument-value arg)))
-    (funcall updater arg)))
+  (condition-case err
+      (when (eq cmd (conn-read-argument-toggle-command arg))
+        (setf (conn-argument-value arg)
+              (funcall (conn-read-argument-reader-function arg)
+                       (conn-argument-value arg)))
+        (funcall updater arg))
+    (quit (conn-read-args-error "Quit"))
+    (error (conn-read-args-error (cadr err)))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-read-argument)
                                        sym)
