@@ -1535,30 +1535,31 @@ The duration of the message display is controlled by
                           'face 'error))))
     (unless (equal msg "") msg)))
 
-(defun conn--read-args-prompt (prompt arguments)
-  (substitute-command-keys
-   (concat
-    (propertize prompt 'face 'minibuffer-prompt)
-    " (arg: "
-    (propertize
-     (cond (conn--read-args-prefix-mag
-            (number-to-string
-             (* (if conn--read-args-prefix-sign -1 1)
-                conn--read-args-prefix-mag)))
-           (conn--read-args-prefix-sign "[-1]")
-           (t "[1]"))
-     'face 'read-multiple-choice-face)
-    "; \\[reference] reference"
-    "; \\[help] help"
-    ")"
-    (when-let* ((msg (conn--read-args-display-message)))
-      (concat ": " msg))
-    (when-let* ((args (flatten-tree
-                       (mapcar #'conn-argument-display arguments))))
-      (concat "\n" (string-join args "; "))))))
+(defun conn--read-args-prompt (prompt arguments keymap)
+  (let ((overriding-local-map keymap))
+    (substitute-command-keys
+     (concat
+      (propertize prompt 'face 'minibuffer-prompt)
+      " (arg: "
+      (propertize
+       (cond (conn--read-args-prefix-mag
+              (number-to-string
+               (* (if conn--read-args-prefix-sign -1 1)
+                  conn--read-args-prefix-mag)))
+             (conn--read-args-prefix-sign "[-1]")
+             (t "[1]"))
+       'face 'read-multiple-choice-face)
+      "; \\[reference] reference"
+      "; \\[help] help"
+      ")"
+      (when-let* ((msg (conn--read-args-display-message)))
+        (concat ": " msg))
+      (when-let* ((args (flatten-tree
+                         (mapcar #'conn-argument-display arguments))))
+        (concat "\n" (string-join args "; ")))))))
 
-(defun conn--read-args-display-prompt (prompt arguments)
-  (message (conn--read-args-prompt prompt arguments)))
+(defun conn--read-args-display-prompt (prompt arguments keymap)
+  (message (conn--read-args-prompt prompt arguments keymap)))
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
@@ -1698,6 +1699,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                           interactive))
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
+        (keymap (thread-last
+                  (mapcar #'conn-argument-compose-keymap arglist)
+                  (cons conn-read-args-map)
+                  (cons overriding-map)
+                  (delq nil)
+                  make-composed-keymap))
         (local-exit nil))
     (cl-labels
         ((continue-p ()
@@ -1711,7 +1718,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((inhibit-message conn-read-args-inhibit-message)
                  (message-log-max nil)
                  (scroll-conservatively 100))
-             (funcall display-handler prompt arguments))
+             (funcall display-handler prompt arguments keymap))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
            (catch 'conn-read-args-new-command
@@ -1737,15 +1744,16 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (setf conn--read-args-error-message
                          (format "Invalid Command <%s>" cmd)))))))
          (read-command ()
-           (let* ((keyseq (read-key-sequence nil))
-                  (cmd (key-binding keyseq t))
-                  keymap)
-             (while (arrayp cmd) ; keyboard macro
-               (setq cmd (key-binding cmd t)))
-             (when (and (null cmd)
-                        (eql help-char (aref keyseq (1- (length keyseq)))))
-               (setq cmd 'execute-extended-command
-                     keymap (key-binding (seq-subseq keyseq 0 -1))))
+           (let (keyseq cmd partial-keymap)
+             (conn-with-overriding-map keymap
+               (setq keyseq (read-key-sequence nil)
+                     cmd (key-binding keyseq t))
+               (while (arrayp cmd) ; keyboard macro
+                 (setq cmd (key-binding cmd t)))
+               (when (and (null cmd)
+                          (eql help-char (aref keyseq (1- (length keyseq)))))
+                 (setq cmd 'execute-extended-command
+                       partial-keymap (key-binding (seq-subseq keyseq 0 -1)))))
              (when cmd
                (when pre (funcall pre cmd))
                (pcase cmd
@@ -1765,7 +1773,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                                           ,@arguments)
                                       `(conn-read-args-command-handler
                                         ,@arguments))
-                                    keymap)))
+                                    partial-keymap)))
                     (update-args cmd)))
                  (_ (update-args cmd)))
                (when post (funcall post cmd))
@@ -1779,15 +1787,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn-reading-args t)
-                   (inhibit-message t)
-                   (emulation-mode-map-alists
-                    `(((,state . ,(thread-last
-                                    (mapcar #'conn-argument-compose-keymap arguments)
-                                    (cons conn-read-args-map)
-                                    (cons overriding-map)
-                                    (delq nil)
-                                    make-composed-keymap)))
-                      ,@emulation-mode-map-alists)))
+                   (inhibit-message t))
                (while (continue-p)
                  (unless executing-kbd-macro
                    (display-message))

@@ -82,12 +82,14 @@
   "#" 'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
-(defvar-keymap conn-isearch-map
-  "M-Y" 'conn-isearch-thing-to-search-string
-  "C-<return>" 'conn-isearch-exit-other-end
-  "M-'" 'conn-isearch-kapply-prefix
-  "C-," 'conn-dispatch-isearch
-  "C-'" 'conn-isearch-open-recursive-edit)
+(defun conn-setup-isearch-map ()
+  (define-keymap
+    :keymap isearch-mode-map
+    "C-w" 'conn-isearch-thing-to-search-string
+    "C-<return>" 'conn-isearch-exit-other-end
+    "M-'" 'conn-isearch-kapply-prefix
+    "C-," 'conn-dispatch-isearch
+    "C-'" 'conn-isearch-open-recursive-edit))
 
 ;;;;; Top-level Command State Maps
 
