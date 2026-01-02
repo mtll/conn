@@ -1020,6 +1020,20 @@ Currently selected window remains selected afterwards."
         (save-selected-window (window-swap-states nil window))
       (user-error "No other visible windows"))))
 
+;;;;; Minibuffer Commands
+
+(defun conn-yank-last-thing-to-minibuffer ()
+  "Yank the region of the last thing command.
+
+Yanks from the buffer in `minibuffer-selected-window'."
+  (interactive)
+  (insert-for-yank
+   (with-minibuffer-selected-window
+     (pcase (conn-bounds-of-last)
+       ((conn-bounds `(,beg . ,end))
+        (filter-buffer-substring beg end))
+       (_ (user-error "No last thing to yank"))))))
+
 ;;;; Thing Commands
 
 ;;;;; Replace
