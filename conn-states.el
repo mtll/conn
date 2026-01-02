@@ -1885,7 +1885,7 @@ echo area help message.
                       (pcase-lambda ,(mapcar #'car varlist) ,@body)
                       ,@keys)))
 
-;;;;; Loop Arguments
+;;;;; Argument Types
 
 (cl-defstruct (conn-argument
                ( :constructor conn-argument
@@ -1898,9 +1898,95 @@ echo area help message.
   (keymap nil :type keymap :read-only t)
   (reference nil :type (or list conn--reference-page)))
 
-(cl-defstruct (conn-composite-argument
-               (:include conn-argument)
-               (:constructor nil)))
+(cl-defgeneric conn-argument-cancel (argument)
+  ( :method (_arg) nil))
+
+(cl-defgeneric conn-argument-required-p (argument)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (_arg) nil)
+  ( :method ((arg conn-argument))
+    (and (conn-argument-required arg)
+         (not (conn-argument-set-flag arg)))))
+
+(cl-defgeneric conn-argument-update (argument form updater)
+  ( :method (_arg _form _update-fn) nil))
+
+(cl-defgeneric conn-argument-extract-value (argument)
+  "Extract ARGUMENT's value."
+  (declare (important-return-value t))
+  ( :method (arg) arg)
+  ( :method ((arg conn-argument))
+    (conn-argument-value arg)))
+
+(cl-defgeneric conn-argument-display (argument)
+  "Display string in `conn-read-args-message' for ARGUMENT.
+
+Return value should be a string or a list of strings, each of which will
+be displayed in the echo area during `conn-read-args'."
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (_arg) nil)
+  ( :method ((arg conn-argument))
+    (pcase (conn-argument-name arg)
+      ((and (pred stringp) str)
+       str)
+      ((and fn (pred functionp)
+            (let (and str (pred stringp))
+              (funcall fn arg)))
+       str))))
+
+(cl-defgeneric conn-argument-compose-keymap (argument)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (_arg) nil)
+  ( :method ((arg conn-argument))
+    (conn-argument-keymap arg)))
+
+(cl-defgeneric conn-argument-predicate (argument value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  ( :method (_arg _val) nil))
+
+(cl-defgeneric conn-argument-completion-annotation (argument value)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (&rest _) nil)
+  ( :method ((arg conn-argument) value)
+    (when-let* ((ann (conn-argument-annotation arg))
+                (_ (conn-argument-predicate arg value)))
+      (pcase ann
+        ((and (pred stringp) str)
+         (concat " (" str ")"))
+        ((and fn (pred functionp)
+              (let (and str (pred stringp))
+                (funcall fn arg)))
+         (concat " (" str ")"))))))
+
+(cl-defgeneric conn-argument-get-reference (arg)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (_arg) nil)
+  ( :method ((arg conn-argument))
+    (conn-argument-reference arg)))
+
+;;;;;; Read Args Command Handler
+
+(cl-defmethod conn-argument-completion-annotation ((arg (eql conn-read-args-command-handler))
+                                                   value)
+  (when (conn-argument-predicate arg value)
+    " (command)"))
+
+(cl-defmethod conn-argument-predicate ((_arg (eql conn-read-args-command-handler))
+                                       cmd)
+  (memq cmd '(backward-delete-arg
+              reset-arg
+              negative-argument
+              keyboard-quit
+              execute-extended-command
+              help)))
+
+;;;;;; Anonymous Argument
 
 (oclosure-define (conn-anonymous-argument
                   ;; (:predicate conn-anonymous-argument-p)
@@ -1934,154 +2020,99 @@ echo area help message.
 (defalias 'conn-anonymous-argument-reference
   'conn-anonymous-argument--reference)
 
-(cl-defgeneric conn-argument-cancel (argument)
-  ( :method (_arg) nil))
+(cl-defmethod conn-argument-required-p ((arg conn-anonymous-argument))
+  (and (conn-anonymous-argument-required arg)
+       (not (conn-anonymous-argument-set-flag arg))))
 
-(cl-defgeneric conn-argument-required-p (argument)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((arg conn-anonymous-argument))
-    (and (conn-anonymous-argument-required arg)
-         (not (conn-anonymous-argument-set-flag arg))))
-  ( :method ((arg conn-argument))
-    (and (conn-argument-required arg)
-         (not (conn-argument-set-flag arg))))
-  ( :method ((arg conn-composite-argument))
-    (cl-loop for a in (conn-composite-argument-value arg)
-             always (conn-argument-required-p a))))
+(cl-defmethod conn-argument-update ((arg conn-anonymous-argument)
+                                    form
+                                    updater)
+  (funcall arg arg form updater))
 
-(cl-defgeneric conn-argument-update (argument form updater)
-  ( :method (_arg _form _update-fn) nil)
-  ( :method ((arg conn-anonymous-argument) form updater)
-    (funcall arg arg form updater))
-  ( :method ((arg conn-composite-argument) form updater)
-    (cl-loop with done = nil
-             with ufn = (lambda (_)
-                          (funcall updater arg)
-                          (setf done t))
-             for a in (conn-argument-value arg)
-             until done
-             do (conn-argument-update a form ufn))))
+(cl-defmethod conn-argument-extract-value ((arg conn-anonymous-argument))
+  (conn-anonymous-argument-value arg))
 
-(cl-defgeneric conn-argument-extract-value (argument)
-  "Extract ARGUMENT's value."
-  (declare (important-return-value t))
-  ( :method (arg) arg)
-  ( :method ((arg conn-anonymous-argument))
-    (conn-anonymous-argument-value arg))
-  ( :method ((arg conn-argument))
-    (conn-argument-value arg))
-  ( :method ((arg conn-composite-argument))
-    (cl-loop for a in (conn-composite-argument-value arg)
-             collect (conn-argument-extract-value a))))
+(cl-defmethod conn-argument-display ((arg conn-anonymous-argument))
+  (pcase (conn-anonymous-argument-name arg)
+    ((and (pred stringp) str)
+     str)
+    ((and fn (pred functionp)
+          (let (and str (pred stringp))
+            (funcall fn arg)))
+     str)))
 
-(cl-defgeneric conn-argument-display (argument)
-  "Display string in `conn-read-args-message' for ARGUMENT.
+(cl-defmethod conn-argument-compose-keymap ((arg conn-anonymous-argument))
+  (conn-anonymous-argument-keymap arg))
 
-Return value should be a string or a list of strings, each of which will
-be displayed in the echo area during `conn-read-args'."
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((arg conn-anonymous-argument))
-    (pcase (conn-anonymous-argument-name arg)
-      ((and (pred stringp) str)
-       str)
-      ((and fn (pred functionp)
-            (let (and str (pred stringp))
-              (funcall fn arg)))
-       str)))
-  ( :method ((arg conn-argument))
-    (pcase (conn-argument-name arg)
-      ((and (pred stringp) str)
-       str)
-      ((and fn (pred functionp)
-            (let (and str (pred stringp))
-              (funcall fn arg)))
-       str)))
-  ( :method ((arg conn-composite-argument))
-    (cl-loop for a in (conn-composite-argument-value arg)
-             collect (conn-argument-display a))))
-
-(cl-defgeneric conn-argument-compose-keymap (argument)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((arg conn-anonymous-argument))
-    (conn-anonymous-argument-keymap arg))
-  ( :method ((arg conn-argument))
-    (conn-argument-keymap arg))
-  ( :method ((arg conn-composite-argument))
-    (make-composed-keymap
-     (cl-loop for a in (conn-composite-argument-value arg)
-              collect (conn-argument-compose-keymap a)))))
-
-(cl-defgeneric conn-argument-predicate (argument value)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg _val) nil)
-  ( :method ((arg conn-anonymous-argument) cmd)
-    (when-let* ((pred (conn-anonymous-argument--predicate arg)))
-      (funcall pred cmd)))
-  ( :method ((arg conn-composite-argument) cmd)
-    (cl-loop for a in (conn-composite-argument-value arg)
-             thereis (conn-argument-predicate a cmd))))
-
-(cl-defmethod conn-argument-predicate ((_arg (eql conn-read-args-command-handler))
+(cl-defmethod conn-argument-predicate ((arg conn-anonymous-argument)
                                        cmd)
-  (memq cmd '(backward-delete-arg
-              reset-arg
-              negative-argument
-              keyboard-quit
-              execute-extended-command
-              help)))
+  (when-let* ((pred (conn-anonymous-argument--predicate arg)))
+    (funcall pred cmd)))
 
-(cl-defgeneric conn-argument-completion-annotation (argument value)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (:method (&rest _) nil)
-  ( :method ((arg (eql conn-read-args-command-handler))
-             value)
-    (when (conn-argument-predicate arg value)
-      " (command)"))
-  ( :method ((arg conn-anonymous-argument) value)
-    (when-let* ((ann (conn-anonymous-argument--annotation arg))
-                (_ (conn-anonymous-argument--predicate arg value)))
-      (pcase ann
-        ((and (pred stringp) str)
-         (concat " (" str ")"))
-        ((and fn (pred functionp)
-              (let (and str (pred stringp))
-                (funcall fn arg)))
-         (concat " (" str ")")))))
-  ( :method ((arg conn-argument) value)
-    (when-let* ((ann (conn-argument-annotation arg))
-                (_ (conn-argument-predicate arg value)))
-      (pcase ann
-        ((and (pred stringp) str)
-         (concat " (" str ")"))
-        ((and fn (pred functionp)
-              (let (and str (pred stringp))
-                (funcall fn arg)))
-         (concat " (" str ")")))))
-  ( :method ((arg conn-composite-argument) value)
-    (cl-loop for a in (conn-composite-argument-value arg)
-             thereis (conn-argument-completion-annotation a value))))
+(cl-defmethod conn-argument-completion-annotation ((arg conn-anonymous-argument)
+                                                   value)
+  (when-let* ((ann (conn-anonymous-argument--annotation arg))
+              (_ (conn-anonymous-argument--predicate arg value)))
+    (pcase ann
+      ((and (pred stringp) str)
+       (concat " (" str ")"))
+      ((and fn (pred functionp)
+            (let (and str (pred stringp))
+              (funcall fn arg)))
+       (concat " (" str ")")))))
 
-(cl-defgeneric conn-argument-get-reference (arg)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (:method (_arg) nil)
-  ( :method ((arg conn-argument))
-    (conn-argument-reference arg))
-  ( :method ((arg conn-anonymous-argument))
-    (conn-anonymous-argument-reference arg))
-  ( :method ((arg conn-composite-argument))
-    (mapcar #'conn-argument-get-reference
-            (conn-composite-argument-value arg))))
+(cl-defmethod conn-argument-get-reference ((arg conn-anonymous-argument))
+  (conn-anonymous-argument-reference arg))
 
-;;;;; Boolean Argument
+;;;;;; Composite Argument
+
+(cl-defstruct (conn-composite-argument
+               (:include conn-argument)
+               (:constructor nil)))
+
+(cl-defmethod conn-argument-required-p ((arg conn-composite-argument))
+  (cl-loop for a in (conn-composite-argument-value arg)
+           always (conn-argument-required-p a)))
+
+(cl-defmethod conn-argument-update ((arg conn-composite-argument)
+                                    form
+                                    updater)
+  (cl-loop with done = nil
+           with ufn = (lambda (_)
+                        (funcall updater arg)
+                        (setf done t))
+           for a in (conn-argument-value arg)
+           until done
+           do (conn-argument-update a form ufn)))
+
+(cl-defmethod conn-argument-extract-value ((arg conn-composite-argument))
+  (cl-loop for a in (conn-composite-argument-value arg)
+           collect (conn-argument-extract-value a)))
+
+(cl-defmethod conn-argument-display ((arg conn-composite-argument))
+  (cl-loop for a in (conn-composite-argument-value arg)
+           collect (conn-argument-display a)))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-composite-argument))
+  (make-composed-keymap
+   (cl-loop for a in (conn-composite-argument-value arg)
+            collect (conn-argument-compose-keymap a))))
+
+(cl-defmethod conn-argument-predicate ((arg conn-composite-argument)
+                                       cmd)
+  (cl-loop for a in (conn-composite-argument-value arg)
+           thereis (conn-argument-predicate a cmd)))
+
+(cl-defmethod conn-argument-completion-annotation ((arg conn-composite-argument)
+                                                   value)
+  (cl-loop for a in (conn-composite-argument-value arg)
+           thereis (conn-argument-completion-annotation a value)))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-composite-argument))
+  (mapcar #'conn-argument-get-reference
+          (conn-composite-argument-value arg)))
+
+;;;;;; Boolean Argument
 
 (cl-defstruct (conn-boolean-argument
                (:include conn-argument)
