@@ -78,6 +78,7 @@
 (defun conn-consult-ripgrep-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-ripgrep-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -97,6 +98,7 @@
 (defun conn-consult-line-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-line-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -115,6 +117,7 @@
 (defun conn-consult-line-multi-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-line-multi-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -134,6 +137,7 @@
 (defun conn-consult-locate-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-locate-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -152,6 +156,7 @@
 (defun conn-consult-git-grep-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-git-grep-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))
@@ -171,6 +176,7 @@
 (defun conn-consult-find-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
+                    :interactive 'conn-consult-find-thing
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument)))

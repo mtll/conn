@@ -151,20 +151,23 @@
 
 (defvar-keymap conn-pop-mark-ring-repeat-map
   :repeat t
-  "z" 'conn-pop-mark-ring
-  "Z" 'conn-unpop-mark-ring)
+  "o" 'conn-pop-mark-ring
+  "u" 'conn-unpop-mark-ring)
+
+(defvar-keymap conn-pop-jump-ring-repeat-map
+  :repeat t
+  "<" 'conn-pop-jump-ring
+  ">" 'conn-unpop-jump-ring)
 
 (define-keymap
   :keymap conn-goto-map
-  "z" 'conn-pop-mark-ring
-  "Z" 'conn-unpop-mark-ring
+  "," 'conn-pop-jump-ring
+  "." 'conn-unpop-jump-ring
   "e" 'conn-previous-emacs-state
   "E" 'conn-next-emacs-state
   "O" 'conn-push-jump-ring
-  ">" 'conn-pop-mark-ring
-  "<" 'conn-unpop-mark-ring
-  "o" 'conn-pop-jump-ring
-  "u" 'conn-unpop-jump-ring
+  "o" 'conn-pop-mark-ring
+  "u" 'conn-unpop-mark-ring
   "i" 'previous-error
   "k" 'next-error
   "n" 'pop-global-mark
@@ -172,8 +175,8 @@
   "r" 'xref-find-references
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
-  "," 'xref-go-back
-  "." 'xref-go-forward)
+  "<" 'xref-go-back
+  ">" 'xref-go-forward)
 
 ;;;;; Global Bindings
 
@@ -302,6 +305,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "R" 'conn-replace
   "C" 'conn-copy-last-thing
   "#" 'eshell
   "$" 'project-eshell

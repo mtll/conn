@@ -70,12 +70,6 @@
   :type 'string
   :group 'conn-posframe)
 
-(defcustom conn-posframe-completion-bg-color
-  (face-attribute 'menu :background)
-  "Border color for conn posframes."
-  :type 'string
-  :group 'conn-posframe)
-
 (defcustom conn-posframe-timeout nil
   "Timeout for conn posframes."
   :type (or 'integer 'nil)
@@ -110,7 +104,7 @@
     (posframe-hide " *conn-list-posframe*")
     (remove-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
-;; Implementation from window.el
+;; Adapted from window.el
 (defun conn-posframe--next-buffers (&optional window)
   (let* ((window (window-normalize-window window t))
          (frame (window-frame window))
@@ -183,7 +177,7 @@
      found-buffers
      "\n")))
 
-;; Implementation from window.el
+;; Adapted from window.el
 (defun conn-posframe--previous-buffers (&optional window)
   (let* ((window (window-normalize-window window t))
          (frame (window-frame window))
@@ -285,7 +279,6 @@
        :string (concat header next "\n" current prev)
        :left-fringe 0
        :right-fringe 0
-       ;; :background-color conn-posframe-completion-bg-color
        :width conn-posframe-width
        :poshandler conn-posframe-buffer-poshandler
        :timeout conn-posframe-timeout
@@ -321,7 +314,6 @@
                (reverse (funcall tab-bar-tabs-function))))
      :left-fringe 0
      :right-fringe 0
-     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
@@ -362,7 +354,6 @@
               "\n")
      :left-fringe 0
      :right-fringe 0
-     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
@@ -389,7 +380,6 @@
                          "\n"))
      :left-fringe 0
      :right-fringe 0
-     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width

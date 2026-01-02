@@ -1437,6 +1437,22 @@ command was a prefix command.")
 
 ;;;; Read Args
 
+(defvar conn-read-args-ref-bindings
+  (conn-reference-quote
+    (("backward delete arg" backward-delete-arg)
+     ("reset arg" reset-arg)
+     ("completing-read available commands" help)
+     ("close quick reference" close)
+     ("next/previous page" next previous))))
+
+(defvar conn-read-args-reference-page
+  (conn-reference-page "Read Args"
+    :depth 50
+    "Interactively reading arguments for a command.
+"
+    (:eval (conn-quick-ref-to-cols
+            conn-read-args-ref-bindings 1))))
+
 (defvar conn-read-args-last-command nil
   "Last command read by `conn-read-args'.")
 
@@ -1456,7 +1472,7 @@ command was a prefix command.")
 (defvar conn--read-args-message-timeout nil)
 
 (defvar-keymap conn-read-args-map
-  "C-q" 'reference
+  "?" 'reference
   "C-h" 'help
   "<escape>" 'keyboard-quit
   "C-g" 'keyboard-quit
@@ -1532,7 +1548,9 @@ The duration of the message display is controlled by
            (conn--read-args-prefix-sign "[-1]")
            (t "[1]"))
      'face 'read-multiple-choice-face)
-    ", \\[reset-arg] reset)"
+    "; \\[reference] reference"
+    "; \\[help] help"
+    ")"
     (when-let* ((msg (conn--read-args-display-message)))
       (concat ": " msg))
     (when-let* ((args (flatten-tree
@@ -1734,8 +1752,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                  ('reference
                   (let ((arg-ref (mapcar #'conn-argument-get-reference
                                          arguments)))
-                    (when (or reference arg-ref)
-                      (apply #'conn-quick-reference reference arg-ref))))
+                    (apply #'conn-quick-reference
+                           reference
+                           conn-read-args-reference-page
+                           arg-ref)))
                  ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
                                     state
@@ -1786,7 +1806,8 @@ This skips executing the body of the `conn-read-args' form entirely."
         (when interactive
           (add-to-history 'conn-command-history
                           (cons interactive ret)
-                          16 t))
+                          conn-command-history-max
+                          t))
         ret))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)

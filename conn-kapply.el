@@ -492,7 +492,6 @@ The options provided are: \\<query-replace-map>
                    "Proceed with macro?\\<query-replace-map>\
  (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
          (pcase state
-           ;; TODO: add more options to recording query
            (:record
             (let ((hl (make-overlay (point) (point))))
               (overlay-put hl 'priority 2000)
@@ -566,7 +565,7 @@ Empty regions are those with a length of zero."
         (catch 'non-empty
           (while-let ((region (funcall iterator state)))
             (pcase region
-              ((and `(,beg ,end . ,_)
+              ((and `((,beg . ,end) . ,_)
                     (guard (/= beg end))
                     region)
                (throw 'non-empty region))))))

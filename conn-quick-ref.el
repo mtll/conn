@@ -95,8 +95,8 @@
                          collect row))))))
 
 (defvar-keymap conn-quick-ref-map
-  "C-q" 'next
-  "M-q" 'previous
+  "?" 'next
+  "M-?" 'previous
   "<escape>" 'close)
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
@@ -266,13 +266,14 @@
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (indent-region header-pos (point-max) 1)
-        (add-face-text-property
-         (point-min) (point-max)
-         `(:height ,conn-quick-ref-text-scale)
-         t)
-        (add-face-text-property
-         (point-min) header-pos
-         'conn-quick-ref-page-header t)))))
+        (add-face-text-property (point-min)
+                                (point-max)
+                                `(:height ,conn-quick-ref-text-scale)
+                                t)
+        (add-face-text-property (point-min)
+                                header-pos
+                                'conn-quick-ref-page-header
+                                t)))))
 
 (defun conn--quick-ref-parse-pages (pages)
   (cl-loop for p in pages

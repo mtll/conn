@@ -22,7 +22,6 @@
 (defvar conn-mode nil)
 (defvar conn-local-mode nil)
 (defvar conn-lighter " Conn")
-(defvar conn--last-bounds nil)
 (defvar conn-kill-fixup-whitespace-function 'conn-kill-fixup-whitespace)
 
 (defvar-keymap conn-goto-map)
@@ -174,6 +173,9 @@
   "History of commands that read arguments with `conn-read-args'.
 
 See also `conn-repeat-last-complex-command'.")
+
+(defvar conn-command-history-max 32
+  "Maximum number of elements to keep in `conn-command-history'.")
 
 (defvar conn-repeating-command nil)
 

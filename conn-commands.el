@@ -1038,6 +1038,8 @@ Currently selected window remains selected afterwards."
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
 
+(defvar conn--replace-bounds nil)
+
 (conn-define-state conn-replace-state (conn-read-thing-state)
   :lighter "REPLACE")
 
@@ -1176,8 +1178,8 @@ instances of from-string.")
 (cl-defgeneric conn-replace-do (thing
                                 arg
                                 transform
-                                from-string
-                                to-string
+                                from
+                                to
                                 &optional
                                 delimited
                                 backward
@@ -1187,8 +1189,8 @@ instances of from-string.")
 (cl-defmethod conn-replace-do ((thing (conn-thing t))
                                arg
                                transform
-                               from-string
-                               to-string
+                               from
+                               to
                                &optional
                                delimited
                                backward
@@ -1196,12 +1198,14 @@ instances of from-string.")
                                subregions-p)
   (pcase-let* (((and (conn-bounds `(,beg . ,end) transform)
                      bounds)
-                (or (conn-bounds-of 'conn-bounds-of nil)
+                (or conn--replace-bounds
                     (conn-bounds-of thing arg))))
     (deactivate-mark)
     (save-excursion
       (if-let* ((subregions (and subregions-p
-                                 (conn-bounds-get bounds :subregions transform))))
+                                 (conn-bounds-get bounds
+                                                  :subregions
+                                                  transform))))
           (let* ((regions
                   (conn--merge-overlapping-regions
                    (cl-loop for bound in subregions
@@ -1220,13 +1224,14 @@ instances of from-string.")
                       (_
                        (prog1
                            (cl-loop for (beg . end) in regions
-                                    collect (filter-buffer-substring beg end method))
+                                    collect (filter-buffer-substring
+                                             beg end method))
                          (cl-loop for (beg . end) in regions
                                   do (delete-region beg end))))))))
-            (perform-replace from-string to-string t regexp-flag
-                             delimited nil nil beg end backward t))
-        (perform-replace from-string to-string t regexp-flag
-                         delimited nil nil beg end backward)))))
+            (perform-replace from to t regexp-flag delimited
+                             nil nil beg end backward t))
+        (perform-replace from to t regexp-flag delimited
+                         nil nil beg end backward)))))
 
 (cl-defmethod conn-replace-do ((_thing (eql project))
                                _arg
@@ -1303,7 +1308,8 @@ For more information about how the replacement is carried out see
                    (ignore-errors
                      (conn-transform-bounds (conn-bounds-of thing arg)
                                             transform)))
-                  (subregions (and subregions-p bounds
+                  (subregions (and subregions-p
+                                   bounds
                                    (conn-bounds-get bounds :subregions)))
                   (`(,from ,to)
                    (conn--replace-read-args
@@ -1318,6 +1324,7 @@ For more information about how the replacement is carried out see
                       (and bounds (list (conn-bounds bounds))))
                     nil
                     delimited-flag)))
+       (setq conn--replace-bounds bounds)
        (list thing
              arg
              transform
@@ -1327,15 +1334,17 @@ For more information about how the replacement is carried out see
              backward
              regexp-flag
              (and subregions-p subregions t)))))
-  (conn-replace-do thing
-                   arg
-                   transform
-                   from
-                   to
-                   delimited
-                   backward
-                   regexp-flag
-                   subregions-p))
+  (unwind-protect
+      (conn-replace-do thing
+                       arg
+                       transform
+                       from
+                       to
+                       delimited
+                       backward
+                       regexp-flag
+                       subregions-p)
+    (setq conn--replace-bounds nil)))
 
 ;;;;; Isearch
 
@@ -1996,7 +2005,7 @@ region after a `recursive-edit'."
                           nil
                         (register-read-with-preview "Register:")))
        (funcall updater arg))
-      ('separator
+      ((and 'separator (guard append))
        (if (or (stringp separator)
                (eq 'default separator))
            (setf separator nil)
@@ -2012,56 +2021,49 @@ region after a `recursive-edit'."
   (memq sym '(append-next-kill delete register copy separator)))
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
-  (list
-   (concat
-    "\\[append-next-kill] "
-    (propertize "(" 'face 'shadow)
-    (propertize
-     "append"
-     'face (when (eq 'append (conn-kill-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize "|" 'face 'shadow)
-    (propertize
-     "prepend"
-     'face (when (eq 'prepend (conn-kill-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize "|" 'face 'shadow)
-    (propertize
-     "on-repeat"
-     'face (when (eq 'repeat (conn-kill-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize ")" 'face 'shadow))
-   (when (or (conn-kill-how-argument-append arg)
-             (conn-kill-how-argument-separator arg))
-     (concat
-      "\\[separator] "
-      (propertize
-       "separator"
-       'face (when (conn-kill-how-argument-separator arg)
-               'conn-argument-active-face))))
-   (concat
-    "\\[register] "
-    (if-let* ((ts (conn-kill-how-argument-register arg)))
-        (propertize
-         (format "register <%c>" ts)
-         'face 'eldoc-highlight-function-argument)
-      "register"))
-   (concat
-    "\\[delete] "
-    (propertize
-     "delete"
-     'face (if (eq (conn-kill-how-argument-delete arg) 'delete)
-               'eldoc-highlight-function-argument)))
-   (when (eq (conn-kill-how-argument-delete arg) 'copy)
-     (concat
-      "\\[copy] "
-      (propertize "copy" 'face 'conn-argument-active-face)))))
+  (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
+                       (register (conn-kill-how-argument-register arg))
+                       (append (conn-kill-how-argument-append arg))
+                       (separator (conn-kill-how-argument-separator arg)))
+    (list
+     (concat "\\[append-next-kill] "
+             (propertize "(" 'face 'shadow)
+             (propertize "append"
+                         'face (when (eq 'append append)
+                                 'eldoc-highlight-function-argument))
+             (propertize "|" 'face 'shadow)
+             (propertize "prepend"
+                         'face (when (eq 'prepend append)
+                                 'eldoc-highlight-function-argument))
+             (propertize "|" 'face 'shadow)
+             (propertize "on-repeat"
+                         'face (when (eq 'repeat append)
+                                 'eldoc-highlight-function-argument))
+             (propertize ")" 'face 'shadow))
+     (when append
+       (concat "\\[separator] "
+               (propertize
+                "separator"
+                'face (when separator 'conn-argument-active-face))))
+     (concat "\\[register] "
+             (if-let* ((ts register))
+                 (propertize (format "register <%c>" ts)
+                             'face 'eldoc-highlight-function-argument)
+               "register"))
+     (concat "\\[delete] "
+             (propertize "delete"
+                         'face (when (eq 'delete delete)
+                                 'eldoc-highlight-function-argument)))
+     (when (eq 'copy delete)
+       (concat "\\[copy] "
+               (propertize "copy" 'face 'conn-argument-active-face))))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
   (list (conn-kill-how-argument-delete arg)
         (conn-kill-how-argument-append arg)
         (conn-kill-how-argument-register arg)
-        (conn-kill-how-argument-separator arg)))
+        (when (conn-kill-how-argument-append arg)
+          (conn-kill-how-argument-separator arg))))
 
 (defvar-keymap conn-kill-thing-argument-map
   "/" 'filename
@@ -2730,7 +2732,7 @@ hook, which see."
                  nil
                (register-read-with-preview "Register:")))
        (funcall updater arg))
-      ('separator
+      ((and 'separator (guard append))
        (if (or (stringp separator)
                (eq 'default separator))
            (setf separator nil)
@@ -2746,45 +2748,47 @@ hook, which see."
   (memq sym '(append-next-kill register separator)))
 
 (cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
-  (list
-   (concat
-    "\\[append-next-kill] "
-    (propertize "(" 'face 'shadow)
-    (propertize
-     "append"
-     'face (when (eq 'append (conn-copy-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize "|" 'face 'shadow)
-    (propertize
-     "prepend"
-     'face (when (eq 'prepend (conn-copy-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize "|" 'face 'shadow)
-    (propertize
-     "on-repeat"
-     'face (when (eq 'repeat (conn-copy-how-argument-append arg))
-             'eldoc-highlight-function-argument))
-    (propertize ")" 'face 'shadow))
-   (when (or (conn-copy-how-argument-append arg)
-             (conn-copy-how-argument-separator arg))
+  (cl-symbol-macrolet ((separator (conn-copy-how-argument-separator arg))
+                       (register (conn-copy-how-argument-register arg))
+                       (append (conn-copy-how-argument-append arg)))
+    (list
      (concat
-      "\\[separator] "
+      "\\[append-next-kill] "
+      (propertize "(" 'face 'shadow)
       (propertize
-       "separator"
-       'face (when (conn-kill-how-argument-separator arg)
-               'conn-argument-active-face))))
-   (concat
-    "\\[register] "
-    (if-let* ((ts (conn-copy-how-argument-register arg)))
+       "append"
+       'face (when (eq 'append append)
+               'eldoc-highlight-function-argument))
+      (propertize "|" 'face 'shadow)
+      (propertize
+       "prepend"
+       'face (when (eq 'prepend append)
+               'eldoc-highlight-function-argument))
+      (propertize "|" 'face 'shadow)
+      (propertize
+       "on-repeat"
+       'face (when (eq 'repeat append)
+               'eldoc-highlight-function-argument))
+      (propertize ")" 'face 'shadow))
+     (when append
+       (concat
+        "\\[separator] "
         (propertize
-         (format "register <%c>" ts)
-         'face 'eldoc-highlight-function-argument)
-      "register"))))
+         "separator"
+         'face (when separator 'conn-argument-active-face))))
+     (concat
+      "\\[register] "
+      (if-let* ((ts register))
+          (propertize
+           (format "register <%c>" ts)
+           'face 'eldoc-highlight-function-argument)
+        "register")))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
   (list (conn-copy-how-argument-append arg)
         (conn-copy-how-argument-register arg)
-        (conn-copy-how-argument-separator arg)))
+        (when (conn-copy-how-argument-append arg)
+          (conn-copy-how-argument-separator arg))))
 
 (defvar-keymap conn-copy-thing-argument-map
   "/" 'filename
