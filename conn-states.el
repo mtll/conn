@@ -1789,7 +1789,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    ;; the keys in keymap even though it is in
                    ;; `overriding-terminal-local-map'
                    (emulation-mode-map-alists
-                    `(((t . ,keymap))
+                    `(((,state . ,keymap))
                       ,@emulation-mode-map-alists))
                    (inhibit-message t))
                (while (continue-p)
@@ -1900,7 +1900,7 @@ echo area help message.
 
 (cl-defstruct (conn-composite-argument
                (:include conn-argument)
-               (:constructor conn-composite-argument (value))))
+               (:constructor nil)))
 
 (oclosure-define (conn-anonymous-argument
                   ;; (:predicate conn-anonymous-argument-p)
@@ -1954,7 +1954,15 @@ echo area help message.
 (cl-defgeneric conn-argument-update (argument form updater)
   ( :method (_arg _form _update-fn) nil)
   ( :method ((arg conn-anonymous-argument) form updater)
-    (funcall arg arg form updater)))
+    (funcall arg arg form updater))
+  ( :method ((arg conn-composite-argument) form updater)
+    (cl-loop with done = nil
+             with ufn = (lambda (_)
+                          (funcall updater arg)
+                          (setf done t))
+             for a in (conn-argument-value arg)
+             until done
+             do (conn-argument-update a form ufn))))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   "Extract ARGUMENT's value."
@@ -2075,17 +2083,12 @@ be displayed in the echo area during `conn-read-args'."
 
 ;;;;; Boolean Argument
 
-(defface conn-argument-active-face
-  '((t (:inherit eldoc-highlight-function-argument)))
-  "Face for active arguments"
-  :group 'conn-faces)
-
 (cl-defstruct (conn-boolean-argument
                (:include conn-argument)
                ( :constructor conn-boolean-argument
-                 (toggle-command
+                 (name
+                  toggle-command
                   keymap
-                  name
                   &optional
                   value
                   annotation)))
@@ -2124,7 +2127,6 @@ be displayed in the echo area during `conn-read-args'."
                   keymap
                   (format-function #'conn-format-cycling-argument)
                   required
-                  name
                   annotation
                   &aux
                   (value (car choices)))))
@@ -2133,16 +2135,18 @@ be displayed in the echo area during `conn-read-args'."
   (format-function #'identity :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
-                                    _cmd updater)
-  (pcase (memq (conn-cycling-argument-value arg)
-               (conn-cycling-argument-choices arg))
-    (`(,_ ,next . ,_)
-     (setf (conn-cycling-argument-value arg) next)
-     (funcall updater arg))
-    (`(,_ . nil)
-     (setf (conn-cycling-argument-value arg)
-           (car (conn-cycling-argument-choices arg)))
-     (funcall updater arg))))
+                                    cmd
+                                    updater)
+  (when (eq cmd (conn-cycling-argument-cycling-command arg))
+    (pcase (memq (conn-cycling-argument-value arg)
+                 (conn-cycling-argument-choices arg))
+      (`(,_ ,next . ,_)
+       (setf (conn-cycling-argument-value arg) next)
+       (funcall updater arg))
+      (`(,_ . nil)
+       (setf (conn-cycling-argument-value arg)
+             (car (conn-cycling-argument-choices arg)))
+       (funcall updater arg)))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
                                        sym)
@@ -2156,14 +2160,15 @@ be displayed in the echo area during `conn-read-args'."
          (format (conn-cycling-argument-format-function arg))
          result)
      (cl-loop
-      (let* ((choice (pop choices))
-             (str (funcall format choice)))
+      (when-let* ((choice (pop choices))
+                  (str (funcall format choice)))
         (when (eq choice (conn-cycling-argument-value arg))
           (cl-callf propertize str 'face 'conn-argument-active-face))
         (cl-callf concat result str)
-        (if choices
-            (cl-callf concat result (propertize "|" 'face 'shadow))
-          (cl-return)))))
+        (when (car choices)
+          (cl-callf concat result (propertize "|" 'face 'shadow))))
+      (unless choices
+        (cl-return result))))
    (propertize ")" 'face 'shadow)))
 
 ;;;;;; Read Argument
@@ -2175,8 +2180,8 @@ be displayed in the echo area during `conn-read-args'."
                   toggle-command
                   keymap
                   reader-function
-                  format-function
                   &optional
+                  format-function
                   value
                   annotation)))
   (reader-function nil :type function :read-only t)
@@ -2196,16 +2201,16 @@ be displayed in the echo area during `conn-read-args'."
   (eq sym (conn-read-argument-toggle-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
-  (let ((v (funcall (conn-read-argument-format-function arg)
-                    (conn-argument-value arg))))
-    (concat
-     (format "\\[%s] " (conn-read-argument-toggle-command arg))
-     (propertize
-      (concat
-       (conn-read-argument-name arg)
-       (when (and v (not (string-empty-p v)))
-         (concat ": " v)))
-      'face (when (and v (not (string-empty-p v)))
-              'conn-argument-active-face)))))
+  (concat
+   (format "\\[%s] " (conn-read-argument-toggle-command arg))
+   (or (and-let* ((fn (conn-read-argument-format-function arg))
+                  (str (funcall fn
+                                (conn-read-argument-name arg)
+                                (conn-argument-value arg)))
+                  (_ (not (string-empty-p str))))
+         str)
+       (propertize (conn-read-argument-name arg)
+                   'face (when (conn-argument-value arg)
+                           'conn-argument-active-face)))))
 
 (provide 'conn-states)

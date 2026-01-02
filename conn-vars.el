@@ -169,6 +169,13 @@ disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
+;;;;; Faces
+
+(defface conn-argument-active-face
+  '((t (:inherit eldoc-highlight-function-argument)))
+  "Face for active arguments"
+  :group 'conn-faces)
+
 ;;;;; Mark Variables
 
 (defvar conn-this-command-start (make-marker)

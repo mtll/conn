@@ -211,13 +211,13 @@ Interactively defaults to the current value of `sort-fold-case'."
        ((`(,thing ,arg) (conn-sort-things-argument))
         (transform (conn-transform-argument))
         (reverse
-         (conn-boolean-argument 'reverse
-                                conn-sort-reverse-map
-                                "reverse"))
+         (conn-boolean-argument "reverse"
+                                'reverse
+                                conn-sort-reverse-map))
         (fold-case
-         (conn-boolean-argument 'sort-fold-case
+         (conn-boolean-argument "fold case"
+                                'sort-fold-case
                                 conn-sort-fold-case-map
-                                "fold case"
                                 (bound-and-true-p sort-fold-case))))
      (list thing arg transform reverse fold-case)))
   (conn-sort-things-do thing arg transform reverse fold-case))

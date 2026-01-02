@@ -148,8 +148,8 @@
 
 (defvar-keymap conn-pop-to-mark-command-repeat-map
   :repeat t
-  "o" 'conn-pop-jump-ring
-  "u" 'conn-unpop-jump-ring)
+  "," 'conn-pop-jump-ring
+  "." 'conn-unpop-jump-ring)
 
 (defvar-keymap conn-pop-mark-ring-repeat-map
   :repeat t

@@ -220,9 +220,9 @@
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
-        (conn-boolean-argument 'restrict-windows
-                               conn-dispatch-restrict-windows-map
-                               "this-win"))
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-dispatch-restrict-windows-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform
@@ -608,9 +608,9 @@
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
-        (conn-boolean-argument 'restrict-windows
-                               conn-dispatch-restrict-windows-map
-                               "this-win"))
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-dispatch-restrict-windows-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform

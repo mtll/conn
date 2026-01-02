@@ -222,10 +222,14 @@
        (if (conn-read-args-consume-prefix-arg)
            (read-string "Padding: ")
          " ")))
-   (lambda (val)
-     (when val
-       (propertize (format "<%s>" val)
-                   'face 'conn-argument-active-face)))))
+   (lambda (name val)
+     (concat
+      name
+      (when val
+        (concat
+         " "
+         (propertize (format "<%s>" val)
+                     'face 'conn-argument-active-face)))))))
 
 ;;;;;; Perform Surround
 
@@ -561,9 +565,9 @@
                    :prompt "Adjust Surrounding")
       ((`(,thing ,arg) (conn-change-surround-argument))
        (transform (conn-transform-argument))
-       (at-end (conn-boolean-argument 'other-end
+       (at-end (conn-boolean-argument "At End"
+                                      'other-end
                                       conn-adjust-other-end-map
-                                      "At End"
                                       t)))
     (with-undo-amalgamate
       (atomic-change-group

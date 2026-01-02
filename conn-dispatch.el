@@ -567,25 +567,28 @@ themselves once the selection process has concluded."
   (and (cl-call-next-method)
        (funcall conn--dispatch-thing-predicate sym)))
 
-(defvar-keymap conn-dispatch-separator-argument-map
-  "TAB" 'separator)
+(defvar-keymap conn-separator-argument-map
+  "+" 'separator)
 
 (defvar conn-separator-history nil)
 
-(defun conn-dispatch-separator-argument (&optional initial-value)
+(defun conn-separator-argument (&optional initial-value)
+  (cl-assert (or (null initial-value)
+                 (stringp initial-value)
+                 (eq 'default initial-value)))
   (conn-read-argument
    "separator"
    'separator
-   conn-dispatch-separator-argument-map
+   conn-separator-argument-map
    (lambda (val)
-     (if (eq val 'default)
-         (read-string "Separator: " nil 'conn-separator-history)
-       'default))
-   (lambda (val)
-     (propertize (cond ((eq val 'default) "default")
-                       ((string-empty-p val) "")
-                       (t (format "<%s>" val)))
-                 'face (when val 'conn-argument-active-face)))
+     (if (or (stringp val)
+             (eq 'default val))
+         nil
+       (let ((s (conn-with-input-method
+                  (read-string "Separator (RET for default): " nil
+                               'conn-separator-history nil t))))
+         (if (equal s "") 'default s))))
+   nil
    initial-value))
 
 ;;;;;; Dispatch Quick Ref
@@ -3315,7 +3318,7 @@ exchanges the point and mark."))
                    :prompt "Copy Thing")
       ((`(,fthing ,farg) (conn-thing-argument))
        (ftransform (conn-transform-argument))
-       (separator (conn-dispatch-separator-argument 'default)))
+       (separator (conn-separator-argument 'default)))
     (let ((str (pcase (conn-bounds-of fthing farg)
                  ((conn-bounds `(,beg . ,end) ftransform)
                   (conn-dispatch-action-pulse beg end)
@@ -3599,11 +3602,11 @@ the string after the region selected by dispatch."))
        (fixup (conn-fixup-whitespace-argument
                (not (region-active-p))))
        (check-bounds
-        (conn-boolean-argument 'check-bounds
+        (conn-boolean-argument "check bounds"
+                               'check-bounds
                                conn-check-bounds-argument-map
-                               "check bounds"
                                t))
-       (separator (conn-dispatch-separator-argument 'default)))
+       (separator (conn-separator-argument 'default)))
     (let* ((cg (conn--action-buffer-change-group))
            (str (progn
                   (conn-kill-thing thing arg transform
@@ -3681,9 +3684,9 @@ the string after the region selected by dispatch."))
                             (fixup (conn-fixup-whitespace-argument
                                     (not (region-active-p))))
                             (check-bounds
-                             (conn-boolean-argument 'check-bounds
+                             (conn-boolean-argument "check bounds"
+                                                    'check-bounds
                                                     conn-check-bounds-argument-map
-                                                    "check bounds"
                                                     t)))
                          (progn
                            (conn-kill-thing thing arg transform
@@ -4471,13 +4474,13 @@ INITIAL-ARG is the initial value of the prefix argument during
                             (posframe-hide " *conn-list-posframe*"))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
-       (other-end (conn-boolean-argument 'dispatch-other-end
-                                         conn-dispatch-other-end-map
-                                         "other-end"))
+       (other-end (conn-boolean-argument "other-end"
+                                         'dispatch-other-end
+                                         conn-dispatch-other-end-map))
        (restrict-windows
-        (conn-boolean-argument 'restrict-windows
-                               conn-dispatch-restrict-windows-map
-                               "this-win"))
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-dispatch-restrict-windows-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform
@@ -4516,13 +4519,13 @@ INITIAL-ARG is the initial value of the prefix argument during
         ((`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument))
          (other-end
-          (conn-boolean-argument 'dispatch-other-end
-                                 conn-dispatch-other-end-map
-                                 "other-end"))
+          (conn-boolean-argument "other-end"
+                                 'dispatch-other-end
+                                 conn-dispatch-other-end-map))
          (restrict-windows
-          (conn-boolean-argument 'restrict-windows
-                                 conn-dispatch-restrict-windows-map
-                                 "this-win"))
+          (conn-boolean-argument "this-win"
+                                 'restrict-windows
+                                 conn-dispatch-restrict-windows-map))
          (`(,action ,repeat) (conn-dispatch-action-argument)))
       (conn-dispatch-setup
        action thing arg transform
@@ -4656,9 +4659,9 @@ for the dispatch."
       ((`(,thing ,arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat
-        (conn-boolean-argument 'repeat-dispatch
+        (conn-boolean-argument "repeat"
+                               'repeat-dispatch
                                conn-dispatch-repeat-arg-map
-                               "repeat"
                                subregions-p)))
     (let (ovs subregions)
       (unwind-protect

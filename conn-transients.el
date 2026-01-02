@@ -475,12 +475,12 @@ before each iteration."
       ((`(,thing ,arg) (conn-replace-thing-argument))
        (transform (conn-transform-argument))
        (subregions (conn-subregions-argument (use-region-p)))
-       (regexp (conn-boolean-argument 'regexp
-                                      conn-regexp-argument-map
-                                      "regexp"))
-       (delimited (conn-boolean-argument 'delimited
-                                         conn-delimited-argument-map
-                                         "word delimited")))
+       (regexp (conn-boolean-argument "regexp"
+                                      'regexp
+                                      conn-regexp-argument-map))
+       (delimited (conn-boolean-argument "word delimited"
+                                         'delimited
+                                         conn-delimited-argument-map)))
     (conn-kapply-macro
      (alist-get :kmacro args)
      (conn-kapply-match-iterator thing

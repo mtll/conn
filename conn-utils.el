@@ -222,6 +222,16 @@ See `quail-add-unread-command-events'."
              collect (cons 'no-record e) into evs
              finally (cl-callf2 nconc evs unread-command-events))))
 
+(defun conn-argument-format-register (name register)
+  (concat
+   name
+   (when register
+     (concat
+      " "
+      (propertize
+       (concat "<" (char-to-string register) ">")
+       'face 'conn-argument-active-face)))))
+
 ;;;;; Buffer Properties
 
 (defvar-local conn--buffer-properties nil)
