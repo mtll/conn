@@ -689,8 +689,7 @@ for the meaning of prefix ARG."
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim-always))
         (transform (conn-transform-argument))
-        (swap (conn-boolean-argument
-               'conn-copy-thing nil "swap"))
+        (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
         (register (conn-read-argument
                    "register"
                    'register
@@ -1920,9 +1919,9 @@ region after a `recursive-edit'."
                     :reference conn-transpose-reference)
        ((`(,thing ,arg) (conn-transpose-thing-argument t))
         (at-point-and-mark (conn-boolean-argument
+                            "transpose at point and mark"
                             'transpose-at-point-and-mark
-                            conn-transpose-point-and-mark-argument-map
-                            "transpose at point and mark")))
+                            conn-transpose-point-and-mark-argument-map)))
      (list thing arg at-point-and-mark)))
   (when conn--recursive-edit-transpose
     (user-error "Recursive call to conn-transpose-things"))
@@ -2663,17 +2662,15 @@ append to that place."
   (cl-assert (memq append '(nil append prepend)))
   (cl-assert (not (and separator (null append))))
   (conn--copy-how-argument
-   (conn-cycling-argument
-    '(nil append prepend repeat)
-    'append
-    :keymap conn-append-argument-map)
-   (conn-read-argument
-    "register"
-    'register
-    conn-register-argument-map
-    (lambda (_) (register-read-with-preview "Register:"))
-    #'conn-argument-format-register
-    register)
+   (conn-cycling-argument '(nil append prepend repeat)
+                          'append
+                          :keymap conn-append-argument-map)
+   (conn-read-argument "register"
+                       'register
+                       conn-register-argument-map
+                       (lambda (_) (register-read-with-preview "Register:"))
+                       #'conn-argument-format-register
+                       register)
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
