@@ -1988,10 +1988,8 @@ append to that place."
                                           separator)
   (declare (important-return-value t)
            (side-effect-free t))
-  (cl-assert (memq delete '(nil delete copy)))
   (cl-assert (memq append '(nil append prepend)))
-  (cl-assert (not (and (eq delete 'delete)
-                       (or append register))))
+  (cl-assert (not (and delete (or append register))))
   (cl-assert (not (and separator (null append))))
   (conn--kill-how-argument
    (conn-boolean-argument "delete"
@@ -2029,7 +2027,8 @@ append to that place."
        (cl-call-next-method)
        (when delete
          (setf register nil
-               append nil)))
+               append nil
+               separator nil)))
       ('register
        (cl-call-next-method)
        (when register
