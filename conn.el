@@ -150,7 +150,8 @@
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
-        (setq conn--input-method current-input-method)
+        (setq conn--input-method current-input-method
+              conn--active-major-mode-maps (conn--derived-mode-all-parents major-mode))
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
     (if (eq query-replace-read-from-default

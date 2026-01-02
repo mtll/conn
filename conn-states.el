@@ -901,7 +901,6 @@ If BUFFER is nil then use the current buffer."
             conn--major-mode-map nil
             conn--minor-mode-maps nil)
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
-          conn--active-major-mode-maps (conn--derived-mode-all-parents major-mode)
           conn--major-mode-map `((conn-local-mode
                                   . ,(make-composed-keymap
                                       (mapcar (lambda (mode)

@@ -85,7 +85,7 @@
 (defun conn-setup-isearch-map ()
   (define-keymap
     :keymap isearch-mode-map
-    "C-w" 'conn-isearch-thing-to-search-string
+    "C-t" 'conn-isearch-thing-to-search-string
     "C-<return>" 'conn-isearch-exit-other-end
     "M-'" 'conn-isearch-kapply-prefix
     "C-," 'conn-dispatch-isearch
@@ -251,6 +251,16 @@
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
    (make-sparse-keymap))
  "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
+
+;;;;; Minibuffer
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'minibuffer-mode)
+  "M-Y" 'conn-yank-last-thing-to-minibuffer)
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-command-state 'minibuffer-mode)
+  "M-Y" 'conn-yank-last-thing-to-minibuffer)
 
 ;;;;; State Keymaps
 

@@ -46,7 +46,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
-  "<conn-edit-map> SPC" 'conn-one-emacs-state
+  "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state)
 
@@ -171,8 +171,6 @@
   ";" 'conn-wincontrol
   "/" (conn-remap-key conn-undo-keys t)
   "?" (conn-remap-key conn-undo-redo-keys t)
-  "DEL" 'conn-scroll-down
-  "SPC" 'conn-scroll-up
   "W" 'widen
   "<escape>" 'conn-pop-state
   "J" 'outline-promote
