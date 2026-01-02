@@ -715,38 +715,36 @@ for the meaning of prefix ARG."
              (register-val-insert (get-register register))
              (when swap (set-register register str)))
          (goto-char beg)
-         (conn--without-conn-maps
-           (if swap
-               (let ((str (filter-buffer-substring beg end t)))
-                 (yank)
-                 (kill-new str))
-             (let ((cg (prepare-change-group)))
-               (delete-region beg end)
+         (if swap
+             (let ((str (filter-buffer-substring beg end t)))
                (yank)
-               (set-transient-map
-                conn-yank-pop-repeat-map
-                t
-                (lambda () (undo-amalgamate-change-group cg))
-                (concat
-                 (format "%s yank pop; %s yank unpop; %s yank with completion"
-                         (propertize
-                          (key-description
-                           (where-is-internal 'yank-pop
-                                              (list conn-yank-pop-repeat-map)
-                                              t))
-                          'face 'help-key-binding)
-                         (propertize
-                          (key-description
-                           (where-is-internal 'conn-yank-unpop
-                                              (list conn-yank-pop-repeat-map)
-                                              t))
-                          'face 'help-key-binding)
-                         (propertize
-                          (key-description
-                           (where-is-internal 'conn-yank-with-completion
-                                              (list conn-yank-pop-repeat-map)
-                                              t))
-                          'face 'help-key-binding))))))))))))
+               (kill-new str))
+           (let ((cg (prepare-change-group)))
+             (delete-region beg end)
+             (yank)
+             (set-transient-map
+              conn-yank-pop-repeat-map
+              t
+              (lambda () (undo-amalgamate-change-group cg))
+              (format "%s yank pop; %s yank unpop; %s yank with completion"
+                      (propertize
+                       (key-description
+                        (where-is-internal 'yank-pop
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding)
+                      (propertize
+                       (key-description
+                        (where-is-internal 'conn-yank-unpop
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding)
+                      (propertize
+                       (key-description
+                        (where-is-internal 'conn-yank-with-completion
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding))))))))))
 
 (defun conn-yank-replace-rectangle ()
   "Delete the current rectangle and `yank-rectangle'."

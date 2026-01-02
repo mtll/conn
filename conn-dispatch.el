@@ -3812,7 +3812,6 @@ it."))
                     (action-doc-string
                      "Copy text in region selected by dispatch to point."))
       ()
-    "Copies the selected thing to point."
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
       (let (str)
@@ -4486,13 +4485,7 @@ INITIAL-ARG is the initial value of the prefix argument during
      :other-end other-end
      :restrict-windows restrict-windows)))
 
-(defun conn-dispatch-thing-at-point (action
-                                     thing
-                                     arg
-                                     transform
-                                     repeat
-                                     other-end
-                                     restrict-windows)
+(defun conn-dispatch-thing-at-point ()
   "Dispatch on matches for a thing at point.
 
 Interactively reads the argument `conn-dispatch-setup'.  After reading
@@ -4502,30 +4495,7 @@ regions matching the contents of the region at point.
 
 INITIAL-ARG is the initial value of the prefix argument during
 `conn-read-args'.  Interactively the current prefix argument."
-  (interactive
-   (conn-read-args (conn-dispatch-thingatpt-state
-                    :interactive 'conn-dispatch-thing-at-point
-                    :prefix current-prefix-arg
-                    :command-handler #'conn-dispatch-command-handler
-                    :prompt "Dispatch"
-                    :reference conn-dispatch-reference
-                    :pre (lambda (_)
-                           (when (and (bound-and-true-p conn-posframe-mode)
-                                      (fboundp 'posframe-hide))
-                             (posframe-hide " *conn-list-posframe*"))))
-       ((`(,thing ,arg) (conn-dispatch-target-argument))
-        (transform (conn-dispatch-transform-argument))
-        (other-end
-         (conn-boolean-argument 'dispatch-other-end
-                                conn-dispatch-other-end-map
-                                "other-end"))
-        (restrict-windows
-         (conn-boolean-argument 'restrict-windows
-                                conn-dispatch-restrict-windows-map
-                                "this-win"))
-        (`(,action ,repeat) (conn-dispatch-action-argument)))
-     (list action thing arg transform repeat
-           other-end restrict-windows)))
+  (interactive)
   (cl-letf ((conn--dispatch-action-always-prompt t)
             ((symbol-function 'conn-get-target-finder)))
     (advice-add 'conn-get-target-finder :override
@@ -4534,11 +4504,31 @@ INITIAL-ARG is the initial value of the prefix argument during
                     ((conn-bounds `(,beg . ,end))
                      (conn-dispatch-focus-thing-at-point
                       :string (buffer-substring-no-properties beg end))))))
-    (conn-dispatch-setup
-     action thing arg transform
-     :repeat repeat
-     :other-end other-end
-     :restrict-windows restrict-windows)))
+    (conn-read-args (conn-dispatch-thingatpt-state
+                     :prefix current-prefix-arg
+                     :command-handler #'conn-dispatch-command-handler
+                     :prompt "Dispatch"
+                     :reference conn-dispatch-reference
+                     :pre (lambda (_)
+                            (when (and (bound-and-true-p conn-posframe-mode)
+                                       (fboundp 'posframe-hide))
+                              (posframe-hide " *conn-list-posframe*"))))
+        ((`(,thing ,arg) (conn-dispatch-target-argument))
+         (transform (conn-dispatch-transform-argument))
+         (other-end
+          (conn-boolean-argument 'dispatch-other-end
+                                 conn-dispatch-other-end-map
+                                 "other-end"))
+         (restrict-windows
+          (conn-boolean-argument 'restrict-windows
+                                 conn-dispatch-restrict-windows-map
+                                 "this-win"))
+         (`(,action ,repeat) (conn-dispatch-action-argument)))
+      (conn-dispatch-setup
+       action thing arg transform
+       :repeat repeat
+       :other-end other-end
+       :restrict-windows restrict-windows))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
