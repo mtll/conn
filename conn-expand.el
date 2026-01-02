@@ -172,40 +172,42 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               arg)
-  (let ((thing (conn-get-thing cmd)))
-    (push-mark nil t)
-    (conn-expand-subr (prefix-numeric-value arg))
-    (conn-read-args
-        (conn-expand-state
-         :prompt "Expansion"
-         :prefix arg
-         :display-handler #'conn--read-expand-display
-         :command-handler (lambda (command)
-                            (pcase command
-                              ('conn-expand-exchange
-                               (conn-expand-exchange)
-                               (conn-read-args-handle))
-                              ('conn-contract
-                               (ignore-error user-error
-                                 (conn-contract-subr
-                                  (prefix-numeric-value
-                                   (conn-read-args-consume-prefix-arg))))
-                               (conn-read-args-handle))
-                              ('conn-expand
-                               (ignore-error user-error
-                                 (conn-expand-subr
-                                  (prefix-numeric-value
-                                   (conn-read-args-consume-prefix-arg))))
-                               (conn-read-args-handle)))))
-        ((bounds
-          (oclosure-lambda (conn-anonymous-argument
-                            (required t))
-              (_self command updater)
-            (pcase command
-              ((or 'end 'exit-recursive-edit)
-               (funcall updater
-                        (conn-argument (cons (region-beginning)
-                                             (region-end)))))))))
-      (conn-make-bounds thing arg bounds))))
+  (save-excursion
+    (let ((thing (conn-get-thing cmd)))
+      (push-mark nil t)
+      (conn-expand-subr (prefix-numeric-value arg))
+      (conn-read-args
+          (conn-expand-state
+           :prompt "Expansion"
+           :prefix arg
+           :display-handler #'conn--read-expand-display
+           :command-handler (lambda (command)
+                              (pcase command
+                                ('conn-expand-exchange
+                                 (conn-expand-exchange)
+                                 (conn-read-args-handle))
+                                ('conn-contract
+                                 (ignore-error user-error
+                                   (conn-contract-subr
+                                    (prefix-numeric-value
+                                     (conn-read-args-consume-prefix-arg))))
+                                 (conn-read-args-handle))
+                                ('conn-expand
+                                 (ignore-error user-error
+                                   (conn-expand-subr
+                                    (prefix-numeric-value
+                                     (conn-read-args-consume-prefix-arg))))
+                                 (conn-read-args-handle)))))
+          ((bounds
+            (oclosure-lambda (conn-anonymous-argument
+                              (required t))
+                (_self command updater)
+              (pcase command
+                ((or 'end 'exit-recursive-edit)
+                 (funcall updater
+                          (conn-argument (cons (region-beginning)
+                                               (region-end)))))))))
+        (deactivate-mark)
+        (conn-make-bounds thing arg bounds)))))
 
 (provide 'conn-expand)

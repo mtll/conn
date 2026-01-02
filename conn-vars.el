@@ -285,6 +285,7 @@ See also `conn-repeat'.")
 (conn-define-remap-keymap conn-search-remap
     "Conn Search Map"
   [conn-search-map]
+  conn-search-map
   (:without-conn-maps "M-s"))
 
 (conn-define-remap-keymap conn-goto-remap

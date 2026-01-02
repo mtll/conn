@@ -1535,31 +1535,30 @@ The duration of the message display is controlled by
                           'face 'error))))
     (unless (equal msg "") msg)))
 
-(defun conn--read-args-prompt (prompt arguments keymap)
-  (let ((overriding-local-map keymap))
-    (substitute-command-keys
-     (concat
-      (propertize prompt 'face 'minibuffer-prompt)
-      " (arg: "
-      (propertize
-       (cond (conn--read-args-prefix-mag
-              (number-to-string
-               (* (if conn--read-args-prefix-sign -1 1)
-                  conn--read-args-prefix-mag)))
-             (conn--read-args-prefix-sign "[-1]")
-             (t "[1]"))
-       'face 'read-multiple-choice-face)
-      "; \\[reference] reference"
-      "; \\[help] help"
-      ")"
-      (when-let* ((msg (conn--read-args-display-message)))
-        (concat ": " msg))
-      (when-let* ((args (flatten-tree
-                         (mapcar #'conn-argument-display arguments))))
-        (concat "\n" (string-join args "; ")))))))
+(defun conn--read-args-prompt (prompt arguments)
+  (substitute-command-keys
+   (concat
+    (propertize prompt 'face 'minibuffer-prompt)
+    " (arg: "
+    (propertize
+     (cond (conn--read-args-prefix-mag
+            (number-to-string
+             (* (if conn--read-args-prefix-sign -1 1)
+                conn--read-args-prefix-mag)))
+           (conn--read-args-prefix-sign "[-1]")
+           (t "[1]"))
+     'face 'read-multiple-choice-face)
+    "; \\[reference] reference"
+    "; \\[help] help"
+    ")"
+    (when-let* ((msg (conn--read-args-display-message)))
+      (concat ": " msg))
+    (when-let* ((args (flatten-tree
+                       (mapcar #'conn-argument-display arguments))))
+      (concat "\n" (string-join args "; "))))))
 
-(defun conn--read-args-display-prompt (prompt arguments keymap)
-  (message (conn--read-args-prompt prompt arguments keymap)))
+(defun conn--read-args-display-prompt (prompt arguments)
+  (message (conn--read-args-prompt prompt arguments)))
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
@@ -1718,7 +1717,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((inhibit-message conn-read-args-inhibit-message)
                  (message-log-max nil)
                  (scroll-conservatively 100))
-             (funcall display-handler prompt arguments keymap))
+             (funcall display-handler prompt arguments))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
            (catch 'conn-read-args-new-command
@@ -1787,6 +1786,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn-reading-args t)
+                   ;; Hack so that `substitute-command-keys' will find
+                   ;; the keys in keymap even though it is in
+                   ;; `overriding-terminal-local-map'
+                   (emulation-mode-map-alists
+                    `(((t . ,keymap))
+                      ,@emulation-mode-map-alists))
                    (inhibit-message t))
                (while (continue-p)
                  (unless executing-kbd-macro
