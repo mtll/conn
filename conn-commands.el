@@ -2109,16 +2109,18 @@ append to that place."
                ( :constructor conn-transform-and-fixup-argument
                  (&aux
                   (transform (conn-transform-argument))
-                  (fixup-whitespace (conn-fixup-whitespace-argument
-                                     (unless (region-active-p)
-                                       conn-kill-fixup-whitespace-default)))
+                  (fixup-whitespace (when conn-kill-fixup-whitespace-function
+                                      (conn-fixup-whitespace-argument
+                                       (unless (region-active-p)
+                                         conn-kill-fixup-whitespace-default))))
                   (value (list transform fixup-whitespace))))
                ( :constructor conn-dispatch-transform-and-fixup-argument
                  (&optional
                   initial-fixup-whitespace
                   &aux
-                  (fixup-whitespace (conn-fixup-whitespace-argument
-                                     initial-fixup-whitespace))
+                  (fixup-whitespace (when conn-kill-fixup-whitespace-function
+                                      (conn-fixup-whitespace-argument
+                                       initial-fixup-whitespace)))
                   (transform (conn-dispatch-transform-argument))
                   (value (list transform fixup-whitespace)))))
   (transform nil :type list)
