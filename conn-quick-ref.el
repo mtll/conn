@@ -337,13 +337,22 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-minibuffer (buffer hide-p &optional _)
+(defun conn--quick-ref-minibuffer (buffer hide-p &optional restore)
   (let (inhibit-message
-        message-log-max
-        (max-mini-window-height 1.0))
+        message-log-max)
     (if hide-p
-        (message nil)
-      (with-current-buffer buffer
-        (message "%s" (buffer-string))))))
+        (when restore (funcall restore))
+      (prog1
+          (or restore
+              (let ((mh max-mini-window-height)
+                    (rs resize-mini-windows))
+                (setq max-mini-window-height 1.0
+                      resize-mini-windows t)
+                (lambda ()
+                  (setq max-mini-window-height mh
+                        resize-mini-windows rs)
+                  (message nil))))
+        (with-current-buffer buffer
+          (message "%s" (buffer-string)))))))
 
 (provide 'conn-quick-ref)
