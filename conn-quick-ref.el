@@ -261,7 +261,7 @@
                   (propertize (format "[%s/%s] " pg-num pg-count)
                               'face 'minibuffer-prompt)
                   (propertize title 'face 'bold)
-                  " — \\[next] Next; \\[previous] Previous; \\[close] Close"
+                  " — \\[next] Next; \\[previous] Previous; \\[close] Close "
                   "\n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)

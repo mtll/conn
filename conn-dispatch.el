@@ -1593,7 +1593,7 @@ Target overlays may override this default by setting the
      (lambda (prompt) (conn-dispatch-read-char prompt 'label))
      (cl-loop for (_ . c) in conn-target-count
               sum c into count
-              finally return (format "Label [%s]" count))
+              finally return (format "[%s]" count))
      (conn-dispatch-prompt-p))))
 
 ;;;;; Dispatch Loop
