@@ -1585,7 +1585,7 @@ Target overlays may override this default by setting the
               (cl-call-next-method)))
         (conn-dispatch-select-mode -1)))))
 
-(cl-defmethod conn-target-finder-select (_target-finder)
+(cl-defmethod conn-target-finder-select (target-finder)
   (conn-with-dispatch-labels
       (labels (conn-dispatch-get-labels))
     (conn-label-select
@@ -1593,7 +1593,9 @@ Target overlays may override this default by setting the
      (lambda (prompt) (conn-dispatch-read-char prompt 'label))
      (cl-loop for (_ . c) in conn-target-count
               sum c into count
-              finally return (format "[%s]" count))
+              finally return (conn-target-finder-prompt-string
+                              target-finder
+                              (format "[%s]" count)))
      (conn-dispatch-prompt-p))))
 
 ;;;;; Dispatch Loop
@@ -2301,6 +2303,11 @@ updated.")
                                       _arg)
   (conn-dispatch-read-n-chars :string-length 2))
 
+(cl-defgeneric conn-target-finder-prompt-string (target-finder prompt)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (_target-finder prompt) prompt))
+
 (cl-defgeneric conn-target-finder-update (target-finder))
 
 (cl-defmethod conn-target-finder-update (target-finder)
@@ -2480,6 +2487,12 @@ to the key binding for that target."
         (if (oref state regex-p)
             (conn-make-re-target-overlays string predicate len thing)
           (conn-make-string-target-overlays string predicate len thing))))))
+
+(cl-defmethod conn-target-finder-prompt-string ((target-finder conn-dispatch-string-targets)
+                                                prompt)
+  (if-let* ((str (oref target-finder string)))
+      (concat str " " prompt)
+    prompt))
 
 (cl-defmethod conn-target-finder-save-state ((target-finder conn-dispatch-string-targets))
   (cons (let ((str (oref target-finder string)))
