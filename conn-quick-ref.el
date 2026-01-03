@@ -338,7 +338,9 @@
            finally return (mapcar #'nreverse cols)))
 
 (defun conn--quick-ref-minibuffer (buffer hide-p &optional _)
-  (let (inhibit-message message-log-max)
+  (let (inhibit-message
+        message-log-max
+        (max-mini-window-height 1.0))
     (if hide-p
         (message nil)
       (with-current-buffer buffer

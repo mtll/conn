@@ -133,7 +133,7 @@
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
-  "C-q" 'conn-wincontrol-quick-ref
+  "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "," conn-thing-remap
   "-" 'conn-wincontrol-invert-argument

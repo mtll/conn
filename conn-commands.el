@@ -1673,19 +1673,7 @@ Exiting the recursive edit will resume the isearch."
   (user-error "Not repeating transpose"))
 
 (defvar-keymap conn-transpose-repeat-map
-  "0" 'digit-argument
-  "1" 'digit-argument
-  "2" 'digit-argument
-  "3" 'digit-argument
-  "4" 'digit-argument
-  "5" 'digit-argument
-  "6" 'digit-argument
-  "7" 'digit-argument
-  "8" 'digit-argument
-  "9" 'digit-argument
-  "-" 'negative-argument
-  "C-q" 'conn-transpose-repeat-help
-  "C-l" 'recenter-top-bottom
+  "M-?" 'conn-transpose-repeat-help
   "q" 'conn-transpose-repeat
   "Q" 'conn-transpose-repeat-inverse)
 
@@ -1694,7 +1682,17 @@ Exiting the recursive edit will resume the isearch."
   (advice-add 'conn-transpose-repeat-inverse :override repeat-inverse)
   (set-transient-map
    conn-transpose-repeat-map
-   t
+   (lambda ()
+     (pcase this-command
+       ((or 'recenter-top-bottom 'reposition-window
+            'universal-argument 'digit-argument 'negative-argument
+            'undo 'undo-only 'undo-redo)
+        t)
+       ((let mc (lookup-key conn-transpose-repeat-map
+                            (this-command-keys-vector)))
+        (when (and mc (symbolp mc))
+          (setq mc (or (command-remapping mc) mc)))
+        (and mc (eq this-command mc)))))
    (lambda ()
      (advice-remove 'conn-transpose-repeat repeat)
      (advice-remove 'conn-transpose-repeat-inverse repeat-inverse))
@@ -1710,6 +1708,13 @@ Exiting the recursive edit will resume the isearch."
                                         (list conn-transpose-repeat-map)
                                         t)))
       (format "; %s other direction"
+              (propertize
+               (key-description key)
+               'face 'help-key-binding)))
+    (when-let* ((key (where-is-internal 'conn-transpose-repeat-help
+                                        (list conn-transpose-repeat-map)
+                                        t)))
+      (format "; %s help"
               (propertize
                (key-description key)
                'face 'help-key-binding))))))
@@ -3155,7 +3160,7 @@ additional duplicates.
   :group 'conn)
 
 (defvar-keymap conn-duplicate-repeat-map
-  "C-q" 'conn-duplicate-repeat-help
+  "M-?" 'conn-duplicate-repeat-help
   "TAB" 'conn-duplicate-indent-repeat
   "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat

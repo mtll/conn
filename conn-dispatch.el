@@ -514,7 +514,8 @@ themselves once the selection process has concluded."
       "C-M-s" 'isearch-regexp-forward
       "C-v" 'scroll-up-command
       "M-v" 'scroll-down-command
-      "C-q" 'help
+      "C-q" 'quoted-insert
+      "?" 'help
       "C-g" 'keyboard-quit
       "C-w" 'restrict-windows
       "RET" 'ignore
@@ -540,8 +541,6 @@ themselves once the selection process has concluded."
   "State for reading a dispatch command.")
 
 (conn-define-state conn-dispatch-thingatpt-state (conn-dispatch-state))
-
-(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (defvar-keymap conn-dispatch-transform-map
   "a" 'conn-dispatch-bounds-anchored
@@ -674,11 +673,13 @@ themselves once the selection process has concluded."
       ("goto window" conn-goto-window)
       ("scroll up" scroll-up-command)
       ("scroll down" scroll-down-command)
-      ("restrict" restrict-windows)))
+      ("restrict to selected" restrict-windows)))
     (((:heading "Misc")
+      ("toggle repeat" repeat-dispatch)
       ("at mouse click" act)
       ("undo" undo))
      (""
+      ("toggle other end" dispatch-other-end)
       ("isearch forward" isearch-forward)
       ("isearch forward regexp" isearch-forward-regexp)))))
 
@@ -1510,7 +1511,8 @@ Target overlays may override this default by setting the
                       (mapc #'conn-label-redisplay ,var))
                     (conn-dispatch-handle)))
                 ( :message -50 (keymap)
-                  (when-let* ((binding
+                  (when-let* ((_ conn-dispatch-hide-labels)
+                              (binding
                                (where-is-internal 'toggle-labels keymap t)))
                     (concat
                      (propertize (key-description binding)
@@ -1518,8 +1520,7 @@ Target overlays may override this default by setting the
                      " "
                      (propertize
                       "hide labels"
-                      'face (when conn-dispatch-hide-labels
-                              'eldoc-highlight-function-argument)))))
+                      'face 'eldoc-highlight-function-argument))))
                 (:keymap conn-label-toggle-map)
                 (let ((fn (make-symbol "cleanup")))
                   (fset fn (lambda (&rest _)
@@ -1698,7 +1699,8 @@ depths will be sorted before greater depths.
                       (cl-callf not conn-dispatch-repeating)
                       (conn-dispatch-handle)))
                   ( :message -51 (keymap)
-                    (when-let* ((binding
+                    (when-let* ((_ repeat)
+                                (binding
                                  (where-is-internal 'repeat-dispatch keymap t)))
                       (concat
                        (propertize (key-description binding)
@@ -1706,7 +1708,7 @@ depths will be sorted before greater depths.
                        " "
                        (propertize
                         "repeat"
-                        'face (when repeat 'conn-argument-active-face)))))
+                        'face 'conn-argument-active-face))))
                   (catch 'dispatch-undo
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
@@ -4367,12 +4369,19 @@ it."))
       ( :message -95 (_)
         (propertize (conn-action-pretty-print action t)
                     'face 'conn-argument-active-face))
+      ( :message -90 (keymap)
+        (when-let* ((binding (where-is-internal 'help keymap t)))
+          (concat
+           (propertize (key-description binding)
+                       'face 'help-key-binding)
+           " help")))
       ( :message 0 (_keymap)
         (conn-target-finder-message-prefixes
          conn-dispatch-target-finder))
       (unless conn-dispatch-no-other-end
         ( :message 10 (keymap)
-          (when-let* ((binding
+          (when-let* ((_ conn-dispatch-other-end)
+                      (binding
                        (where-is-internal 'dispatch-other-end keymap t)))
             (concat
              (propertize (key-description binding)
@@ -4380,24 +4389,19 @@ it."))
              " "
              (propertize
               "other end"
-              'face (when conn-dispatch-other-end
-                      'conn-argument-active-face))))))
+              'face 'conn-argument-active-face)))))
       ( :message 15 (keymap)
-        (when-let* (((or (length> conn-targets 1)
-                         (advice-function-member-p 'conn--dispatch-restrict-windows
-                                                   conn-target-window-predicate)))
-                    (binding
-                     (where-is-internal 'restrict-windows keymap t)))
+        (when-let* ((_ (advice-function-member-p
+                        'conn--dispatch-restrict-windows
+                        conn-target-window-predicate))
+                    (binding (where-is-internal 'restrict-windows keymap t)))
           (concat
            (propertize (key-description binding)
                        'face 'help-key-binding)
            " "
            (propertize
             "this win"
-            'face (when (advice-function-member-p
-                         'conn--dispatch-restrict-windows
-                         conn-target-window-predicate)
-                    'eldoc-highlight-function-argument)))))
+            'face 'eldoc-highlight-function-argument))))
       ( :handler (cmd)
         (pcase cmd
           ('universal-argument

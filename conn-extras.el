@@ -273,7 +273,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)
   "'" 'conn-kapply-prefix
-  "C-q" 'conn-dired-quick-ref
+  "?" 'conn-dired-quick-ref
   "<conn-dired-search-map> s" 'dired-do-isearch
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
   "<conn-dired-search-map> q" 'dired-do-find-regexp
@@ -531,7 +531,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
   ";" 'conn-wincontrol
   "h" 'conn-wincontrol-one-command
-  "C-q" 'conn-diff-quick-ref
+  "?" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
   "DEL" 'diff-hunk-kill
@@ -579,7 +579,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
-  "C-q" 'conn-magit-quick-ref
+  "M-?" 'magit-dispatch
+  "?" 'conn-magit-quick-ref
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
   "i" 'magit-section-backward
@@ -744,7 +745,7 @@
   "M-DEL" 'ibuffer-unmark-all-marks
   "'" 'conn-kapply-prefix
   "f" 'conn-ibuffer-dispatch-state
-  "C-q" 'conn-ibuffer-quick-ref
+  "?" 'conn-ibuffer-quick-ref
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -879,7 +880,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
-  "C-q" 'conn-bookmark-bmenu-quick-ref
+  "?" 'conn-bookmark-bmenu-quick-ref
   "x" (conn-remap-key "C-x" t)
   "c" (conn-remap-key "C-c" t)
   "`" 'conn-wincontrol-mru-window
@@ -1018,7 +1019,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
-  "C-q" 'conn-info-quick-ref
+  "?" 'conn-info-quick-ref
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward

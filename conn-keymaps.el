@@ -156,6 +156,11 @@
   "<" 'xref-go-back
   ">" 'xref-go-forward)
 
+(defvar-keymap conn-mark-ring-repeat-map
+  :repeat t
+  "o" 'conn-pop-mark-ring
+  "u" 'conn-unpop-mark-ring)
+
 (define-keymap
   :keymap conn-goto-map
   "," 'conn-pop-jump-ring
