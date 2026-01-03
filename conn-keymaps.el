@@ -151,15 +151,10 @@
   "," 'conn-pop-jump-ring
   "." 'conn-unpop-jump-ring)
 
-(defvar-keymap conn-pop-mark-ring-repeat-map
+(defvar-keymap conn-xref-repeat-map
   :repeat t
-  "o" 'conn-pop-mark-ring
-  "u" 'conn-unpop-mark-ring)
-
-(defvar-keymap conn-pop-jump-ring-repeat-map
-  :repeat t
-  "<" 'conn-pop-jump-ring
-  ">" 'conn-unpop-jump-ring)
+  "<" 'xref-go-back
+  ">" 'xref-go-forward)
 
 (define-keymap
   :keymap conn-goto-map

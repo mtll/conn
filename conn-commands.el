@@ -1944,7 +1944,8 @@ region after a `recursive-edit'."
           "Kill some things.
 If append is set to COLLECT then the first invocation sets the place
 which is being killed to and further invocations with `conn-repeat'
-append to that place."
+append to that place.
+"
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-kill-special-ref 3))

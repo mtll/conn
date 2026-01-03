@@ -535,7 +535,7 @@
 
 ;;;; Quick Ref
 
-(defun conn--quick-ref-posframe (buffer hide-p)
+(defun conn--quick-ref-posframe (buffer hide-p &optional _)
   (if hide-p
       (posframe-hide buffer)
     (posframe-show buffer

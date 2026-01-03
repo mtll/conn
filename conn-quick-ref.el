@@ -289,16 +289,17 @@
 (defun conn-quick-reference (&rest pages)
   (when-let* ((pages (conn--quick-ref-parse-pages
                       (flatten-tree pages))))
-    (let ((buf (get-buffer-create " *conn-quick-ref*"))
-          (display-function conn-quick-ref-display-function)
-          (inhibit-message t)
-          (pg-count (length pages))
-          (pg-num 0))
+    (let* ((buf (get-buffer-create " *conn-quick-ref*"))
+           (display-function conn-quick-ref-display-function)
+           (inhibit-message t)
+           (pg-count (length pages))
+           (pg-num 0)
+           (state nil))
       (conn-quick-ref-insert-page (car pages)
                                   buf
                                   (1+ pg-num)
                                   pg-count)
-      (funcall display-function buf nil)
+      (setq state (funcall display-function buf nil))
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
@@ -313,7 +314,7 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (funcall display-function buf nil))
+                  (setq state (funcall display-function buf nil state)))
                  ('previous
                   (setq pages (nconc (last pages) (butlast pages))
                         pg-num (mod (1- pg-num) pg-count))
@@ -321,13 +322,13 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (funcall display-function buf nil))
+                  (setq state (funcall display-function buf nil state)))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
                  (_
                   (conn-add-unread-events (this-single-command-raw-keys))
                   (cl-return))))))
-        (funcall display-function buf t)))))
+        (funcall display-function buf t state)))))
 
 (defun conn-quick-ref-to-cols (list col-count)
   (cl-loop with cols = (cl-loop repeat col-count collect nil)
@@ -336,7 +337,7 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-minibuffer (buffer hide-p)
+(defun conn--quick-ref-minibuffer (buffer hide-p &optional _)
   (let (inhibit-message message-log-max)
     (if hide-p
         (message nil)

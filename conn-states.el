@@ -1791,7 +1791,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (emulation-mode-map-alists
                     `(((,state . ,keymap))
                       ,@emulation-mode-map-alists))
-                   (inhibit-message t))
+                   (inhibit-message t)
+                   (minibuffer-message-clear-timeout nil))
                (while (continue-p)
                  (unless executing-kbd-macro
                    (display-message))
