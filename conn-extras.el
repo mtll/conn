@@ -579,7 +579,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
-  "M-?" 'magit-dispatch
   "?" 'conn-magit-quick-ref
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch

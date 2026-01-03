@@ -776,26 +776,20 @@ themselves once the selection process has concluded."
   ( :method (_)))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-next)))
-  (condition-case _
-      (progn
-        (conn-dispatch-cycle-ring-next)
-        (if (bound-and-true-p conn-posframe-mode)
-            (conn-posframe--dispatch-ring-display-subr)
-          (conn-read-args-message "%s" (conn-describe-dispatch
-                                        (conn-ring-head conn-dispatch-ring))))
-        (conn-read-args-handle))
-    (user-error (conn-read-args-error "Dispatch ring empty"))))
+  (conn-dispatch-cycle-ring-next)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-read-args-message "%s" (conn-describe-dispatch
+                                  (conn-ring-head conn-dispatch-ring))))
+  (conn-read-args-handle))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
-  (condition-case _
-      (progn
-        (conn-dispatch-cycle-ring-previous)
-        (if (bound-and-true-p conn-posframe-mode)
-            (conn-posframe--dispatch-ring-display-subr)
-          (conn-read-args-message "%s" (conn-describe-dispatch
-                                        (conn-ring-head conn-dispatch-ring))))
-        (conn-read-args-handle))
-    (user-error (conn-read-args-error "Dispatch ring empty"))))
+  (conn-dispatch-cycle-ring-previous)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-read-args-message "%s" (conn-describe-dispatch
+                                  (conn-ring-head conn-dispatch-ring))))
+  (conn-read-args-handle))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
   (conn-dispatch-ring-remove-stale)
