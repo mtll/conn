@@ -533,6 +533,17 @@ arguments even when the region is active then set this variable to nil."
 
 ;;;;;; Subregions
 
+(defvar conn-subregions-argument-reference
+  (conn-reference-page "Subregions"
+    :depth 70
+    (:heading "Subregions Argument")
+    "If this argument is non-nil then operate on the subregions defined by
+the thing command. By default the subregions of a thing command are the
+individual things that are moved over. For example the subregions of
+`forward-word' with a prefix argument of 3 are the 3 regions containing
+the 3 individual words, as opposed to the single region containing all 3
+words."))
+
 (defvar-keymap conn-subregions-map
   "/" 'toggle-subregions)
 
@@ -542,10 +553,12 @@ arguments even when the region is active then set this variable to nil."
                  (&optional
                   value
                   &aux
-                  (keymap conn-subregions-map)))))
+                  (keymap conn-subregions-map)
+                  (reference conn-subregions-argument-reference)))))
 
 (cl-defmethod conn-argument-update ((arg conn-subregions-argument)
-                                    cmd updater)
+                                    cmd
+                                    updater)
   (if (eq cmd 'toggle-subregions)
       (progn
         (cl-callf not (conn-argument-value arg))
@@ -576,15 +589,6 @@ arguments even when the region is active then set this variable to nil."
           (propertize "subregions"
                       'face (when (conn-argument-value arg)
                               'conn-argument-active-face))))
-
-(defvar conn-subregions-argument-reference
-  (conn-reference-page "Subregions"
-    "If this argument is non-nil then operate on the subregions defined by
-the thing command. By default the subregions of a thing command are the
-individual things that are moved over. For example the subregions of
-`forward-word' with a prefix argument of 3 are the 3 regions containing
-the 3 individual words, as opposed to the single region containing all 3
-words."))
 
 ;;;;;; Fixup Whitespace Argument
 

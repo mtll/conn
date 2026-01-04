@@ -1767,12 +1767,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                (when pre (funcall pre cmd))
                (pcase cmd
                  ('reference
-                  (let ((arg-ref (mapcar #'conn-argument-get-reference
-                                         arguments)))
-                    (apply #'conn-quick-reference
-                           reference
-                           conn-read-args-reference-page
-                           arg-ref)))
+                  (apply #'conn-quick-reference
+                         reference
+                         conn-read-args-reference-page
+                         (mapcar #'conn-argument-get-reference
+                                 arguments)))
                  ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
                                     state
