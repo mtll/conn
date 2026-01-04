@@ -683,7 +683,6 @@
       string)))
 
 (defun conn-ts--thing-forward (thing arg)
-  (interactive "p")
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end))
      (goto-char (if (> arg 0) end beg)))
@@ -692,7 +691,6 @@
                      (point) (point))))))
 
 (defun conn-ts--thing-forward-flat (thing arg)
-  (interactive "p")
   (pcase (thread-first
            (conn-bounds-of thing arg :flat t)
            (conn-bounds-get :subregions)
