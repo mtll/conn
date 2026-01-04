@@ -43,7 +43,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "," conn-thing-remap
-  "c" 'conn-things-in-region
+  "h" 'conn-things-in-region
   "@" 'kmacro-start-macro
   "#" 'kmacro-call-macro)
 
@@ -85,6 +85,7 @@
 (defun conn-setup-isearch-map ()
   (define-keymap
     :keymap isearch-mode-map
+    "C-w" 'conn-isearch-restrict-to-thing
     "C-t" 'conn-isearch-thing-to-search-string
     "C-<return>" 'conn-isearch-exit-other-end
     "M-'" 'conn-isearch-kapply-prefix
@@ -299,7 +300,6 @@
   ";" 'comment
   "i" 'conn-backward-line
   "k" 'forward-line
-  "h" 'conn-expand
   "," conn-thing-remap
   "p" conn-thing-inner-remap
   "e" 'end-of-buffer)

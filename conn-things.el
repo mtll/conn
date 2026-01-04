@@ -734,7 +734,7 @@ words."))
   "?" 'reference
   "C-h" 'help
   "," conn-thing-remap
-  "c" 'conn-things-in-region)
+  "h" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
