@@ -1403,30 +1403,20 @@ For more information about how the replacement is carried out see
 
 Exiting the recursive edit will resume the isearch."
   (interactive)
-  (save-selected-window
-    (with-isearch-suspended
-     (atomic-change-group
-       (recursive-edit)))))
+  ;; Binding these to nil prevents `with-isearch-suspended' from
+  ;; defaulting to the previous search if this is called before a
+  ;; search string has been entered.
+  (let (regexp-search-ring
+        search-ring)
+    (save-selected-window
+      (with-isearch-suspended
+       (atomic-change-group
+         (recursive-edit))))))
 
-(cl-defgeneric conn-isearch-in-thing-do (thing
-                                         arg
-                                         transform
-                                         &key
-                                         backward
-                                         regexp
-                                         subregions-p)
-  (declare (conn-anonymous-thing-property :isearch-in-op)))
-
-(cl-defmethod conn-isearch-in-thing-do ((thing (conn-thing t))
-                                        arg
-                                        transform
-                                        &key
-                                        backward
-                                        regexp
-                                        subregions-p)
+(defun conn-isearch-restrict-to-thing-subr (thing arg transform subregions)
   (let* ((bounds (conn-bounds-of thing arg))
          (regions
-          (if-let* ((sr (and subregions-p
+          (if-let* ((sr (and subregions
                              (conn-bounds-get bounds :subregions transform))))
               (conn--merge-overlapping-regions
                (cl-loop for bound in sr collect (conn-bounds bound))
@@ -1463,10 +1453,51 @@ Exiting the recursive edit will resume the isearch."
                                        in-regions-p)))
       (add-hook 'isearch-mode-end-hook cleanup nil t))
     (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
-                  `((isearch-message-prefix . ,prefix)))
-    (if backward
-        (isearch-backward regexp t)
-      (isearch-forward regexp t))))
+                  `((name . conn-isearch-restrict)
+                    (isearch-message-prefix . ,prefix)))))
+
+(defun conn-isearch-restrict-to-thing ()
+  (interactive)
+  ;; Binding these to nil prevents `with-isearch-suspendedseparator' from
+  ;; defaulting to the previous search if this is called before a
+  ;; search string has been entered.
+  (let (regexp-search-ring
+        search-ring)
+    (with-isearch-suspended
+     (conn-read-args (conn-isearch-state
+                      :prompt "Isearch in Thing"
+                      :reference conn-isearch-reference)
+         ((`(,thing ,arg) (conn-isearch-thing-argument))
+          (subregions (conn-subregions-argument (use-region-p)))
+          (transform (conn-transform-argument)))
+       (conn-isearch-restrict-to-thing-subr thing
+                                            arg
+                                            subregions
+                                            transform)))))
+
+(cl-defgeneric conn-isearch-in-thing-do (thing
+                                         arg
+                                         transform
+                                         &key
+                                         backward
+                                         regexp
+                                         subregions-p)
+  (declare (conn-anonymous-thing-property :isearch-in-op)))
+
+(cl-defmethod conn-isearch-in-thing-do ((thing (conn-thing t))
+                                        arg
+                                        transform
+                                        &key
+                                        backward
+                                        regexp
+                                        subregions-p)
+  (conn-isearch-restrict-to-thing-subr thing
+                                       arg
+                                       transform
+                                       subregions-p)
+  (if backward
+      (isearch-backward regexp t)
+    (isearch-forward regexp t)))
 
 (cl-defmethod conn-isearch-in-thing-do ((_thing (eql multi-buffer))
                                         arg
@@ -2569,6 +2600,9 @@ hook, which see."
                                   separator
                                   fixup-whitespace
                                   check-bounds)
+  ;; Binding these to nil prevents `with-isearch-suspended' from
+  ;; defaulting to the previous search if this is called before a
+  ;; search string has been entered.
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds `(,beg . ,end)
                        `(,@transform
