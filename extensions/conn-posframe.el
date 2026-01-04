@@ -254,10 +254,10 @@
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-list-posframe fn))))
     (let* ((header (conn--with-work-buffer
-                     (insert (when (fboundp 'nerd-icons-faicon)
-                               (concat conn-posframe--padding
-                                       (nerd-icons-faicon "nf-fa-buffer")
-                                       conn-posframe--padding))
+                     (insert conn-posframe--padding
+                             (if (fboundp 'nerd-icons-faicon)
+                                 (concat (nerd-icons-faicon "nf-fa-buffer")
+                                         conn-posframe--padding))
                              "Buffers\n")
                      (add-face-text-property (point-min) (point-max)
                                              'conn-posframe-header 'append)
@@ -362,28 +362,39 @@
 
 (defun conn-posframe--dispatch-ring-display-subr ()
   (let ((ring (conn-ring-list conn-dispatch-ring)))
-    (posframe-show
-     " *conn-list-posframe*"
-     :string (concat
-              (propertize "Dispatch Ring\n"
-                          'face 'conn-posframe-header)
-              (mapconcat 'conn-describe-dispatch
-                         (reverse (take (min 4 (floor (length (cdr ring)) 2))
-                                        (cdr ring)))
-                         "\n")
-              (when (length> ring 2) "\n")
-              (propertize (concat (conn-describe-dispatch (car ring)) "\n")
-                          'face 'conn-posframe-highlight)
-              (mapconcat 'conn-describe-dispatch
-                         (take (min 4 (ceiling (length (cdr ring)) 2))
-                               (reverse (cdr ring)))
-                         "\n"))
-     :left-fringe 0
-     :right-fringe 0
-     :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-timeout
-     :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color)))
+    (cl-flet ((describe (d)
+                (concat conn-posframe--padding
+                        (conn-describe-dispatch d)
+                        conn-posframe--padding)))
+      (posframe-show
+       " *conn-list-posframe*"
+       :string (concat
+                (conn--with-work-buffer
+                  (insert conn-posframe--padding
+                          (when (fboundp 'nerd-icons-faicon)
+                            (concat (nerd-icons-faicon "nf-fa-buffer")
+                                    conn-posframe--padding))
+                          "Dispatch Ring\n")
+                  (add-face-text-property (point-min) (point-max)
+                                          'conn-posframe-header 'append)
+                  (buffer-string))
+                (mapconcat #'describe
+                           (reverse (take (min 4 (floor (length (cdr ring)) 2))
+                                          (cdr ring)))
+                           "\n")
+                (when (length> ring 2) "\n")
+                (propertize (concat (describe (car ring)) "\n")
+                            'face 'conn-posframe-highlight)
+                (mapconcat #'describe
+                           (take (min 4 (ceiling (length (cdr ring)) 2))
+                                 (reverse (cdr ring)))
+                           "\n"))
+       :left-fringe 0
+       :right-fringe 0
+       :poshandler conn-posframe-tab-poshandler
+       :timeout conn-posframe-timeout
+       :border-width conn-posframe-border-width
+       :border-color conn-posframe-border-color))))
 
 (defun conn-posframe--dispatch-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
