@@ -144,7 +144,7 @@ Expansions and contractions are provided by functions in
 
 (conn-define-state conn-expand-state (conn-mode-line-face-state)
   "State for expanding."
-  :lighter "↔"
+  :lighter "EXPAND"
   :mode-line-face 'conn-read-thing-mode-line-face)
 
 (define-keymap
@@ -160,44 +160,43 @@ Expansions and contractions are provided by functions in
   "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
-(defun conn--read-expand-display (prompt args)
-  (message
-   (substitute-command-keys
-    (concat
-     (conn--read-args-prompt prompt args)
-     "\n"
-     "\\[conn-expand] expand; "
-     "\\[conn-contract] contract; "
-     "\\[end] finish"))))
-
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               arg)
-  (save-excursion
-    (let ((thing (conn-get-thing cmd)))
+  (cl-flet ((command-handler (command)
+              (condition-case err
+                  (pcase command
+                    ('conn-expand-exchange
+                     (conn-expand-exchange)
+                     (conn-read-args-handle))
+                    ('conn-contract
+                     (conn-contract-subr
+                      (prefix-numeric-value
+                       (conn-read-args-consume-prefix-arg)))
+                     (conn-read-args-handle))
+                    ('conn-expand
+                     (conn-expand-subr
+                      (prefix-numeric-value
+                       (conn-read-args-consume-prefix-arg)))
+                     (conn-read-args-handle)))
+                (user-error
+                 (conn-read-args-error (error-message-string err)))))
+            (display (prompt args)
+              (message
+               (substitute-command-keys
+                (concat
+                 (conn--read-args-prompt prompt args)
+                 "\n"
+                 "\\[conn-expand] expand; "
+                 "\\[conn-contract] contract; "
+                 "\\[end] finish")))))
+    (save-excursion
       (push-mark nil t)
       (conn-expand-subr (prefix-numeric-value arg))
-      (conn-read-args
-          (conn-expand-state
-           :prompt "Expansion"
-           :prefix arg
-           :display-handler #'conn--read-expand-display
-           :command-handler (lambda (command)
-                              (pcase command
-                                ('conn-expand-exchange
-                                 (conn-expand-exchange)
-                                 (conn-read-args-handle))
-                                ('conn-contract
-                                 (ignore-error user-error
-                                   (conn-contract-subr
-                                    (prefix-numeric-value
-                                     (conn-read-args-consume-prefix-arg))))
-                                 (conn-read-args-handle))
-                                ('conn-expand
-                                 (ignore-error user-error
-                                   (conn-expand-subr
-                                    (prefix-numeric-value
-                                     (conn-read-args-consume-prefix-arg))))
-                                 (conn-read-args-handle)))))
+      (conn-read-args (conn-expand-state
+                       :prompt "Expansion"
+                       :prefix arg
+                       :display-handler #'display
+                       :command-handler #'command-handler)
           ((bounds
             (oclosure-lambda (conn-anonymous-argument
                               (required t))
@@ -208,6 +207,6 @@ Expansions and contractions are provided by functions in
                           (conn-argument (cons (region-beginning)
                                                (region-end)))))))))
         (deactivate-mark)
-        (conn-make-bounds thing arg bounds)))))
+        (conn-make-bounds cmd arg bounds)))))
 
 (provide 'conn-expand)
