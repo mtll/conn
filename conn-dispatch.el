@@ -502,7 +502,7 @@ themselves once the selection process has concluded."
       :keymap map
       "C-\\" 'toggle-input-method
       "C-M-\\" 'set-input-method
-      "C-z" 'dispatch-other-end
+      "C-z" 'other-end
       "DEL" 'restart
       "<backspace>" 'restart
       "C-r" 'recursive-edit
@@ -546,7 +546,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-dispatch-thingatpt-state (conn-dispatch-state))
 
-(defvar-keymap conn-dispatch-transform-map
+(defvar-keymap conn-dispatch-transform-argument-map
   "a" 'conn-dispatch-bounds-anchored
   "b" 'conn-dispatch-bounds-between
   "x" 'conn-bounds-trim
@@ -554,7 +554,7 @@ themselves once the selection process has concluded."
   "X" 'conn-transform-reset)
 
 (defun conn-dispatch-transform-argument (&optional value)
-  (conn-transform-argument value :keymap conn-dispatch-transform-map))
+  (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))
 
 (defvar conn--dispatch-thing-predicate nil)
 
@@ -652,7 +652,7 @@ themselves once the selection process has concluded."
       ("describe" conn-dispatch-ring-describe-head)))
     (((:heading "Select")
       ("toggle repeat" repeat-dispatch)
-      ("toggle other end" dispatch-other-end)
+      ("toggle other end" other-end)
       ("restrict matches to the selected window" restrict-windows)))))
 
 (defun conn-dispatch-reference ()
@@ -667,7 +667,7 @@ themselves once the selection process has concluded."
       ("undo" undo))
      (""
       ("act at mouse click" act)
-      ("toggle other end" dispatch-other-end)))))
+      ("toggle other end" other-end)))))
 
 (defun conn-dispatch-select-target-reference ()
   (conn-reference-page "Target Finder"
@@ -676,7 +676,7 @@ themselves once the selection process has concluded."
       ("retarget" retarget)
       ("always retarget" always-retarget)
       ("change target finder" change-target-finder)
-      (:keymap conn-label-toggle-map)
+      (:keymap conn-toggle-label-argument-map)
       ("toggle hide labels" toggle-labels))
      ((:heading "Window Commands")
       ("goto window" conn-goto-window)
@@ -702,7 +702,7 @@ themselves once the selection process has concluded."
 
 ;;;;;; Action
 
-(defvar-keymap conn-dispatch-action-map
+(defvar-keymap conn-dispatch-repeat-argument-map
   "TAB" 'repeat-dispatch)
 
 (cl-defstruct (conn-dispatch-action-argument
@@ -713,7 +713,7 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-action-argument ()
   (setq conn--dispatch-thing-predicate #'always)
   (make-conn-dispatch-action-argument
-   :keymap conn-dispatch-action-map))
+   :keymap conn-dispatch-repeat-argument-map))
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
   (let* ((action (conn-dispatch-action-argument-value arg))
@@ -1514,7 +1514,7 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
-(defvar-keymap conn-label-toggle-map
+(defvar-keymap conn-toggle-label-argument-map
   "SPC" 'toggle-labels)
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
@@ -1544,7 +1544,7 @@ Target overlays may override this default by setting the
                      (propertize
                       "hide labels"
                       'face 'eldoc-highlight-function-argument))))
-                (:keymap conn-label-toggle-map)
+                (:keymap conn-toggle-label-argument-map)
                 (let ((fn (make-symbol "cleanup")))
                   (fset fn (lambda (&rest _)
                              (unwind-protect
@@ -2116,7 +2116,7 @@ the meaning of depth."
   (setq dispatch-quit-flag t)
   (throw 'dispatch-exit nil))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql dispatch-other-end)))
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql other-end)))
   (unless conn-dispatch-no-other-end
     (cl-callf not conn-dispatch-other-end)
     (conn-dispatch-handle-and-redisplay nil)))
@@ -2473,7 +2473,7 @@ to the key binding for that target."
   ()
   :abstract t)
 
-(defvar-keymap conn-dispatch-retargetable-map
+(defvar-keymap conn-dispatch-retargeting-argument-map
   "M-f" 'always-retarget
   "C-f" 'retarget)
 
@@ -2484,7 +2484,7 @@ to the key binding for that target."
   (declare (important-return-value t)))
 
 (cl-defmethod conn-target-finder-keymaps ((_ conn-dispatch-retargetable-mixin))
-  conn-dispatch-retargetable-map)
+  conn-dispatch-retargeting-argument-map)
 
 (cl-defmethod conn-target-finder-message-prefixes ((state conn-dispatch-retargetable-mixin))
   (nconc
@@ -4433,7 +4433,7 @@ it."))
         ( :message 10 (keymap)
           (when-let* ((_ conn-dispatch-other-end)
                       (binding
-                       (where-is-internal 'dispatch-other-end keymap t)))
+                       (where-is-internal 'other-end keymap t)))
             (concat
              (propertize (key-description binding)
                          'face 'help-key-binding)
@@ -4503,10 +4503,7 @@ it."))
             (let ((inhibit-message conn-read-args-inhibit-message))
               (message nil))))))))
 
-(defvar-keymap conn-dispatch-other-end-map
-  "z" 'dispatch-other-end)
-
-(defvar-keymap conn-dispatch-restrict-windows-map
+(defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)
 
 (defun conn-dispatch ()
@@ -4530,12 +4527,12 @@ INITIAL-ARG is the initial value of the prefix argument during
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
        (other-end (conn-boolean-argument "other-end"
-                                         'dispatch-other-end
-                                         conn-dispatch-other-end-map))
+                                         'other-end
+                                         conn-other-end-argument-map))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-dispatch-restrict-windows-map))
+                               conn-restrict-windows-argument-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform
@@ -4575,12 +4572,12 @@ INITIAL-ARG is the initial value of the prefix argument during
          (transform (conn-dispatch-transform-argument))
          (other-end
           (conn-boolean-argument "other-end"
-                                 'dispatch-other-end
-                                 conn-dispatch-other-end-map))
+                                 'other-end
+                                 conn-other-end-argument-map))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-dispatch-restrict-windows-map))
+                                 conn-restrict-windows-argument-map))
          (`(,action ,repeat) (conn-dispatch-action-argument)))
       (conn-dispatch-setup
        action thing arg transform
@@ -4702,9 +4699,6 @@ for the dispatch."
 
 ;;;;; Dispatch Bounds
 
-(defvar-keymap conn-dispatch-repeat-arg-map
-  "TAB" 'repeat-dispatch)
-
 (defun conn--dispatch-bounds (bounds &optional subregions-p)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
@@ -4716,7 +4710,7 @@ for the dispatch."
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
-                               conn-dispatch-repeat-arg-map
+                               conn-dispatch-repeat-argument-map
                                subregions-p)))
     (let (ovs subregions)
       (unwind-protect

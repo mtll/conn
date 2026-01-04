@@ -1867,7 +1867,7 @@ Exiting the recursive edit will resume the isearch."
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-dispatch-restrict-windows-map)))
+                                 conn-restrict-windows-argument-map)))
       (deactivate-mark)
       (conn-dispatch-setup
        (oclosure-lambda (conn-action
@@ -2519,14 +2519,14 @@ hook, which see."
          (repeat
           (conn-boolean-argument "repeat"
                                  'repeat-dispatch
-                                 conn-dispatch-repeat-arg-map))
+                                 conn-dispatch-repeat-argument-map))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-dispatch-restrict-windows-map)))
+                                 conn-restrict-windows-argument-map)))
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
-          (when (eq cmd 'dispatch-other-end)
+          (when (eq cmd 'other-end)
             (setq append (pcase append
                            ('nil 'append)
                            ('prepend nil)
@@ -2534,7 +2534,7 @@ hook, which see."
             (conn-dispatch-handle)))
         ( :message 10 (keymap)
           (when-let* ((binding
-                       (where-is-internal 'dispatch-other-end keymap t)))
+                       (where-is-internal 'other-end keymap t)))
             (concat
              (propertize (key-description binding)
                          'face 'help-key-binding)
@@ -2897,7 +2897,7 @@ that place."
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
-                               conn-dispatch-repeat-arg-map))
+                               conn-dispatch-repeat-argument-map))
        (`(,append ,register ,separator)
         (conn-copy-how-argument
          :append (if (eq append 'repeat) nil append)
@@ -2906,10 +2906,10 @@ that place."
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-dispatch-restrict-windows-map)))
+                               conn-restrict-windows-argument-map)))
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
-        (when (eq cmd 'dispatch-other-end)
+        (when (eq cmd 'other-end)
           (setq append (pcase append
                          ('nil 'append)
                          ('prepend nil)
@@ -2917,7 +2917,7 @@ that place."
           (conn-dispatch-handle)))
       ( :message 10 (keymap)
         (when-let* ((binding
-                     (where-is-internal 'dispatch-other-end keymap t)))
+                     (where-is-internal 'other-end keymap t)))
           (concat
            (propertize (key-description binding)
                        'face 'help-key-binding)

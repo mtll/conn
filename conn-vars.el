@@ -39,6 +39,7 @@ disabled.")
 (defvar-keymap conn-default-region-map)
 (defvar-keymap conn-default-edit-map)
 (defvar-keymap conn-search-map)
+(defvar-keymap conn-other-end-argument-map)
 
 ;;;; Custom Variables
 

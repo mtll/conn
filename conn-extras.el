@@ -225,7 +225,7 @@
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-dispatch-restrict-windows-map))
+                               conn-restrict-windows-argument-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform
@@ -613,7 +613,7 @@
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-dispatch-restrict-windows-map))
+                               conn-restrict-windows-argument-map))
        (`(,action ,repeat) (conn-dispatch-action-argument)))
     (conn-dispatch-setup
      action thing arg transform

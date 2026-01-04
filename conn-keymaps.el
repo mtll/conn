@@ -25,6 +25,8 @@
 (require 'conn-commands)
 (require 'conn-dispatch)
 
+;;;; Keymaps
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
   "z" 'conn-exchange-mark-command
@@ -47,7 +49,9 @@
   "@" 'kmacro-start-macro
   "#" 'kmacro-call-macro)
 
-;;;; Keymaps
+(define-keymap
+  :keymap conn-other-end-argument-map
+  "z" 'other-end)
 
 ;;;;; Repeat Map
 

@@ -209,14 +209,14 @@
 
 ;;;;;; Padding Arg
 
-(defvar-keymap conn-surround-padding-map
+(defvar-keymap conn-surround-padding-argument-map
   "TAB" 'conn-padding-flag)
 
 (defun conn-surround-padding-argument ()
   (conn-read-argument
    "padding"
    'conn-padding-flag
-   conn-surround-padding-map
+   conn-surround-padding-argument-map
    (lambda (val)
      (unless val
        (if (conn-read-args-consume-prefix-arg)
@@ -556,9 +556,6 @@
 
 ;;;; Adjust Surround
 
-(defvar-keymap conn-adjust-other-end-map
-  "z" 'other-end)
-
 (defun conn-adjust-surround ()
   (interactive)
   (conn-read-args (conn-change-surround-state
@@ -567,7 +564,7 @@
        (transform (conn-transform-argument))
        (at-end (conn-boolean-argument "At End"
                                       'other-end
-                                      conn-adjust-other-end-map
+                                      conn-other-end-argument-map
                                       t)))
     (with-undo-amalgamate
       (atomic-change-group
