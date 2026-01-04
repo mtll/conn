@@ -75,16 +75,10 @@
 (add-hook 'conn-mode-hook #'conn--consult-setup-jump-advice)
 
 ;;;###autoload
-(defun conn-consult-ripgrep-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-ripgrep-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-ripgrep-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (setq this-command 'consult-ripgrep)
      (consult-ripgrep
@@ -96,16 +90,10 @@
      (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
-(defun conn-consult-line-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-line-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-line-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (setq this-command 'consult-line)
      (consult-line
@@ -116,16 +104,10 @@
      (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
-(defun conn-consult-line-multi-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-line-multi-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-line-multi-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (setq this-command 'consult-line-multi)
      (consult-line-multi
@@ -137,16 +119,10 @@
      (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
-(defun conn-consult-locate-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-locate-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-locate-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (consult-locate
       (when (and (< (- end beg) 1000)
@@ -156,16 +132,10 @@
      (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
-(defun conn-consult-git-grep-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-git-grep-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-git-grep-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (setq this-command 'consult-git-grep)
      (consult-git-grep
@@ -177,16 +147,10 @@
      (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
-(defun conn-consult-find-thing (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-consult-find-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+(defun conn-consult-find-thing ()
+  (interactive)
+  (pcase (conn-bounds-of-last)
+    ((conn-bounds `(,beg . ,end))
      (deactivate-mark)
      (setq this-command 'consult-find)
      (consult-find

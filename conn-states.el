@@ -784,20 +784,20 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(defvar-local conn--state-deferred (list 'conn--state-deferred-default)
+(defvar-local conn--state-exit-functions (list 'conn--state-exit-default)
   "Code to be run when the current state is exited.")
 
-(defvar-local conn--state-deferred-ids nil)
+(defvar-local conn--state-exit-functions-ids nil)
 
-(defun conn--state-deferred-default (_)
+(defun conn--state-exit-default (_)
   (when conn-current-state
     (set (cl-shiftf conn-current-state nil) nil)))
 
-(defun conn--run-deferred ()
-  (let ((deferred conn--state-deferred))
-    (setq conn--state-deferred (list 'conn--state-deferred-default)
-          conn--state-deferred-ids nil)
-    (funcall (car deferred) (cdr deferred))))
+(defun conn--run-exit-fns ()
+  (let ((fns conn--state-exit-functions))
+    (setq conn--state-exit-functions (list 'conn--state-exit-default)
+          conn--state-exit-functions-ids nil)
+    (funcall (car fns) (cdr fns))))
 
 (defmacro conn-state-on-exit (&rest body)
   "Defer evaluation of BODY until the current state is exited.
@@ -820,7 +820,7 @@ is being entered after the current state has exited or nil if
              (unwind-protect
                  ,(macroexp-progn body)
                (funcall (car ,rest) (cdr ,rest))))
-           conn--state-deferred)))
+           conn--state-exit-functions)))
 
 (defmacro conn-state-on-exit-once (&rest body)
   "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
@@ -829,20 +829,22 @@ For more information see `conn-state-on-exit'."
   (declare (indent 0)
            (debug (def-body)))
   (cl-with-gensyms (rest id)
-    `(unless (memq ',id conn--state-deferred-ids)
-       (push ',id conn--state-deferred-ids)
+    `(unless (memq ',id conn--state-exit-functions-ids)
+       (push ',id conn--state-exit-functions-ids)
        (push (lambda (,rest)
                (unwind-protect
                    ,(macroexp-progn body)
                  (funcall (car ,rest) (cdr ,rest))))
-             conn--state-deferred))))
+             conn--state-exit-functions))))
 
 (defconst conn--state-re-entry-functions
   (make-hash-table :test 'eq
                    :weakness 'key))
 
 (defmacro conn-state-on-re-entry (&rest body)
-  "Execute BODY when the current state is re-entered."
+  "Defer evaluation of BODY until the current state is re-entered.
+
+BODY will never be evaluated if the state is not re-entered."
   (declare (indent 0))
   (cl-with-gensyms (next)
     `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
@@ -935,7 +937,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (conn--run-deferred))
+              (conn--run-exit-fns))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties)
             (conn--setup-state-keymaps)

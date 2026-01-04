@@ -211,12 +211,13 @@
                 (insert-ref-string (str)
                   (let (beg)
                     (with-current-buffer ref-buffer
-                      (setq beg (point))
-                      (insert str "\n")
-                      (goto-char beg)
-                      (while (search-forward "\n" nil 'move-to-end)
-                        (replace-match " \n"))
-                      (goto-char (point-max))))))
+                      (with-silent-modifications
+                        (setq beg (point))
+                        (insert str "\n")
+                        (goto-char beg)
+                        (while (search-forward "\n" nil 'move-to-end)
+                          (replace-match " \n"))
+                        (goto-char (point-max)))))))
       (with-current-buffer keymap-buffer
         (conn--where-is-with-remaps
           (while definition
@@ -249,11 +250,10 @@
                           title
                           definition)
                page)
-              (keymap-buffer (current-buffer)))
+              (keymap-buffer (current-buffer))
+              (header-pos nil))
     (with-current-buffer buffer
-      (special-mode)
-      (let (buffer-read-only
-            header-pos)
+      (with-silent-modifications
         (delete-region (point-min) (point-max))
         (insert
          (substitute-command-keys
@@ -262,9 +262,10 @@
                               'face 'minibuffer-prompt)
                   (propertize title 'face 'bold)
                   " — \\[next] Next; \\[previous] Previous; \\[close] Close "
-                  "\n")))
-        (setq header-pos (point))
-        (conn--format-ref-page definition keymap-buffer)
+                  "\n"))))
+      (setq header-pos (point))
+      (conn--format-ref-page definition keymap-buffer)
+      (with-silent-modifications
         (indent-region header-pos (point-max) 1)
         (add-face-text-property (point-min)
                                 (point-max)
@@ -295,6 +296,7 @@
            (pg-count (length pages))
            (pg-num 0)
            (state nil))
+      (with-current-buffer buf (special-mode))
       (conn-quick-ref-insert-page (car pages)
                                   buf
                                   (1+ pg-num)

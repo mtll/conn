@@ -247,7 +247,7 @@ to reflect that the label is no longer active and nil should be
 returned."
   (declare (important-return-value t)))
 
-(cl-defgeneric conn-label-completed-p (label))
+(cl-defgeneric conn-label-partial-p (label))
 
 (cl-defgeneric conn-label-redisplay (label)
   "Redisplay LABEL."
@@ -289,9 +289,12 @@ returned."
       (set-window-parameter window 'conn-label-string (substring string 1))
       label)))
 
-(cl-defmethod conn-label-completed-p ((label conn-window-label))
-  (length= (window-parameter (conn-window-label-window label)
-                             'conn-label-string) 0))
+(cl-defmethod conn-label-partial-p ((label conn-window-label))
+  (not (or (string-empty-p (window-parameter (conn-window-label-window label)
+                                             'conn-label-string))
+           (eq (window-parameter (conn-window-label-window label)
+                                 'conn-label-string)
+               (conn-window-label-string label)))))
 
 (defvar conn-label-select-always-prompt nil)
 
@@ -335,8 +338,8 @@ themselves once the selection process has concluded."
         (while-no-input
           (mapc #'conn-label-redisplay candidates)))
        ((and `(,it . nil)
-             (guard (not prompt-flag))
-             (guard (conn-label-completed-p it)))
+             (guard (not (or prompt-flag
+                             (conn-label-partial-p it)))))
         (cl-return (conn-label-payload it))))
      (while-no-input
        (mapc #'conn-label-redisplay candidates))
@@ -443,26 +446,27 @@ themselves once the selection process has concluded."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
-  (cond
-   ((null windows) nil)
-   (t (conn-with-window-labels
-          (labels (funcall conn-window-label-function windows))
-        (conn-with-dispatch-event-handlers
-          ( :handler (cmd)
-            (when (or (and (eq cmd 'act)
-                           (mouse-event-p last-input-event))
-                      (eq 'dispatch-mouse-repeat
-                          (event-basic-type last-input-event)))
-              (let* ((posn (event-start last-input-event))
-                     (win (posn-window posn)))
-                (when (not (posn-area posn))
-                  (:return win)))))
-          (conn-label-select
-           labels
-           (lambda (prompt)
-             (conn-dispatch-read-char prompt 'label))
-           nil
-           always-prompt))))))
+  (let (conn-label-select-always-prompt)
+    (cond
+     ((null windows) nil)
+     (t (conn-with-window-labels
+            (labels (funcall conn-window-label-function windows))
+          (conn-with-dispatch-event-handlers
+            ( :handler (cmd)
+              (when (or (and (eq cmd 'act)
+                             (mouse-event-p last-input-event))
+                        (eq 'dispatch-mouse-repeat
+                            (event-basic-type last-input-event)))
+                (let* ((posn (event-start last-input-event))
+                       (win (posn-window posn)))
+                  (when (not (posn-area posn))
+                    (:return win)))))
+            (conn-label-select
+             labels
+             (lambda (prompt)
+               (conn-dispatch-read-char prompt 'label))
+             nil
+             always-prompt)))))))
 
 ;;;; Dispatch State
 
@@ -501,7 +505,7 @@ themselves once the selection process has concluded."
       "C-z" 'dispatch-other-end
       "DEL" 'restart
       "<backspace>" 'restart
-      "R" 'recursive-edit
+      "C-r" 'recursive-edit
       "<mouse-1>" 'act
       "<mouse-3>" 'undo
       "C-/" 'undo
@@ -568,8 +572,6 @@ themselves once the selection process has concluded."
 
 (defvar-keymap conn-separator-argument-map
   "+" 'separator)
-
-(defvar conn-separator-history nil)
 
 (defun conn-separator-argument (&optional initial-value)
   (cl-assert (or (null initial-value)
@@ -638,8 +640,8 @@ themselves once the selection process has concluded."
       conn-dispatch-register-load
       conn-dispatch-register-load-replace)
      ("take/replace"
-      conn-dispatch-take
-      conn-dispatch-take-replace))))
+      conn-dispatch-grab
+      conn-dispatch-replace))))
 
 (defvar conn-dispatch-command-reference
   (conn-reference-page "Misc Commands"
@@ -661,27 +663,39 @@ themselves once the selection process has concluded."
   (list conn-dispatch-command-reference
         conn-dispatch-thing-reference))
 
-(defun conn-dispatch-select-reference ()
+(defun conn-dispatch-select-action-reference ()
   (conn-reference-page "Selection Commands"
     (:splice conn-dispatch-action-reference)
+    (((:heading "Action Commands")
+      ("toggle repeat" repeat-dispatch)
+      ("at mouse click" act))
+     (""
+      ("undo" undo)
+      ("toggle other end" dispatch-other-end)))))
+
+(defun conn-dispatch-select-target-reference ()
+  (conn-reference-page "Target Finder"
+    (:splice (oref conn-dispatch-target-finder reference))
     (((:heading "Targeting Commands")
       ("retarget" retarget)
       ("always retarget" always-retarget)
-      ("change target finder" change-target-finder)
-      ("recursive edit" recursive-edit))
+      ("change target finder" change-target-finder))
      ((:heading "Window Commands")
       ("goto window" conn-goto-window)
       ("scroll up" scroll-up-command)
       ("scroll down" scroll-down-command)
-      ("restrict to selected" restrict-windows)))
-    (((:heading "Misc")
-      ("toggle repeat" repeat-dispatch)
-      ("at mouse click" act)
-      ("undo" undo))
-     (""
-      ("toggle other end" dispatch-other-end)
-      ("isearch forward" isearch-forward)
-      ("isearch forward regexp" isearch-forward-regexp)))))
+      ("restrict to selected" restrict-windows)))))
+
+(defvar conn-dispatch-select-misc-reference
+  (conn-reference-page "Misc"
+    :depth 50
+    (:heading "Miscellaneous Commands")
+    ((("isearch forward" isearch-forward)
+      ("isearch forward regexp" isearch-forward-regexp)
+      ("recursive edit" recursive-edit))
+     (("quoted insert" quoted-insert)
+      ("toggle input method" toggle-input-method)
+      ("set input method" set-input-method)))))
 
 ;;;;;; Action
 
@@ -1990,7 +2004,10 @@ the meaning of depth."
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
   (conn-with-overriding-map conn-dispatch-read-char-map
-    (conn-quick-reference (conn-dispatch-select-reference)))
+    (conn-quick-reference
+     (conn-dispatch-select-action-reference)
+     (conn-dispatch-select-target-reference)
+     conn-dispatch-select-misc-reference))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
@@ -2148,8 +2165,10 @@ the meaning of depth."
     (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
     label))
 
-(cl-defmethod conn-label-completed-p ((label conn-dispatch-label))
-  (length= (conn-dispatch-label-narrowed-string label) 0))
+(cl-defmethod conn-label-partial-p ((label conn-dispatch-label))
+  (not (or (string-empty-p (conn-dispatch-label-narrowed-string label))
+           (eq (conn-dispatch-label-narrowed-string label)
+               (conn-dispatch-label-string label)))))
 
 (cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
   (pcase-let (((cl-struct conn-dispatch-label
@@ -2191,7 +2210,9 @@ the meaning of depth."
                     :initform nil)
    (default-update-handler :allocation :class)
    (window-predicate :initform #'always
-                     :initarg :window-predicate))
+                     :initarg :window-predicate)
+   (reference :initform nil
+              :initarg :reference))
   :abstract t)
 
 (defvar conn-dispatch-post-update-functions nil
@@ -2537,8 +2558,6 @@ to the key binding for that target."
                   (concat string))))
             (conn-cleanup-targets))
           (conn-dispatch-call-update-handlers state 0))))))
-
-(defvar conn-read-string-target-history nil)
 
 (defvar-keymap conn-dispatch-read-string-target-keymap
   "M-e" 'read-string)
@@ -2926,7 +2945,13 @@ contain targets."
                   (goto-char beg)
                   (pcase (ignore-errors (conn-bounds-of thing nil))
                     ((conn-bounds `(,tbeg . ,_tend))
-                     (= beg tbeg)))))))
+                     (= beg tbeg)))))
+   :reference (conn-reference-quote
+                ((:heading "Thing With Prefix")
+                 (:eval (string-fill
+                         (format "Read a prefix string of %s characters for a %s target."
+                                 prefix-length thing)
+                         72))))))
 
 (conn-define-target-finder conn-dispatch-things-with-prefix-targets
     ()
@@ -3160,7 +3185,7 @@ contain targets."
   (action-thing-predicate :type function)
   (action-always-retarget :type boolean)
   (action-always-prompt :type boolean)
-  (action-doc-string :type string))
+  (action-reference :type string))
 
 (defalias 'conn-action-no-history 'conn-action--action-no-history)
 (defalias 'conn-action-auto-repeat 'conn-action--action-auto-repeat)
@@ -3170,11 +3195,11 @@ contain targets."
 (defalias 'conn-action-thing-predicate 'conn-action--action-thing-predicate)
 (defalias 'conn-action-always-retarget 'conn-action--action-always-retarget)
 (defalias 'conn-action-always-prompt 'conn-action--action-always-prompt)
-(defalias 'conn-action-doc-string 'conn-action--action-doc-string)
+(defalias 'conn-action-reference 'conn-action--action-reference)
 
 (defun conn-action-get-reference (action)
   (when-let* ((doc-string (and action
-                               (conn-action-doc-string action))))
+                               (conn-action-reference action))))
     (conn-reference-quote
       ((:heading (concat "Current Action: "
                          (conn-action-pretty-print action)))
@@ -3274,7 +3299,7 @@ contain targets."
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-goto
                     (action-description "Goto")
-                    (action-doc-string
+                    (action-reference
                      "Goes to and marks the selected thing.  If other-end is non-nil then
 exchanges the point and mark."))
       ()
@@ -3305,7 +3330,7 @@ exchanges the point and mark."))
   (oclosure-lambda (conn-dispatch-push-button
                     (action-description "Push Button")
                     (action-no-history t)
-                    (action-doc-string
+                    (action-reference
                      "Push the selected button."))
       ()
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
@@ -3347,7 +3372,7 @@ exchanges the point and mark."))
                            (not
                             (buffer-local-value 'buffer-read-only
                                                 (window-buffer win)))))
-                        (action-doc-string
+                        (action-reference
                          "Copy the current region to the region selected by dispatch.  By default
 this action copies the current region before the region selected by
 dispatch but if OTHER-END is non-nil then it copies the current region
@@ -3402,7 +3427,7 @@ after the region selected by dispatch."))
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win)))))
-                      (action-doc-string
+                      (action-reference
                        "Copy the current region to the region selected, replacing it."))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3435,7 +3460,7 @@ after the region selected by dispatch."))
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win)))))
-                    (action-doc-string
+                    (action-reference
                      "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it."))
       ()
@@ -3467,7 +3492,7 @@ selected by dispatch with it."))
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win)))))
-                    (action-doc-string
+                    (action-reference
                      "Select a string from the kill list and replace the region selected by
 dispatch with it."))
       ()
@@ -3506,7 +3531,7 @@ dispatch with it."))
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win)))))
-                    (action-doc-string
+                    (action-reference
                      "Yank the most recent kill to the region selected by dispatch.  By
 default this action inserts the text before the region selected by
 dispatch but if OTHER-END is non-nil then it inserts the text after the
@@ -3561,7 +3586,7 @@ region selected by dispatch."))
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win)))))
-                      (action-doc-string
+                      (action-reference
                        "Select a string from the kill ring and insert it at the region selected
 by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
@@ -3637,7 +3662,7 @@ the string after the region selected by dispatch."))
                            (not
                             (buffer-local-value 'buffer-read-only
                                                 (window-buffer win)))))
-                        (action-doc-string
+                        (action-reference
                          "Delete a thing at point and insert it at the region selected
 by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
@@ -3707,7 +3732,7 @@ the string after the region selected by dispatch."))
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win)))))
-                      (action-doc-string
+                      (action-reference
                        "Delete a thing at point and replace a region selected by dispatch with
 it."))
         ()
@@ -3742,7 +3767,7 @@ it."))
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: "))
-                    (action-doc-string
+                    (action-reference
                      "Load register at point selected by dispatch."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3772,7 +3797,7 @@ it."))
   (declare (conn-dispatch-action t))
   (oclosure-lambda (conn-dispatch-register-load-replace
                     (register (register-read-with-preview "Register: "))
-                    (action-doc-string
+                    (action-reference
                      "Replace region selected by dispatch with contents of register."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3820,7 +3845,7 @@ it."))
   (oclosure-lambda (conn-dispatch-copy-from
                     (action-description "Copy From")
                     (action-opoint (copy-marker (point) t))
-                    (action-doc-string
+                    (action-reference
                      "Copy text in region selected by dispatch to point."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3863,7 +3888,7 @@ it."))
   (conn-thread<-
     (conn-dispatch-copy-from-replace--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-take-replace-copy action))))
+    (:-> (conn-dispatch-replace-copy action))))
 
 (defun conn-dispatch-copy-from-replace ()
   (declare (conn-dispatch-action t))
@@ -3879,7 +3904,7 @@ it."))
                            (action-description "Copy From and Replace")
                            (action-opoint (copy-marker (point) t))
                            (action-change-group cg)
-                           (action-doc-string
+                           (action-reference
                             "Replace current region with text in region selected by dispatch."))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -3906,28 +3931,28 @@ it."))
   (conn--action-accept-change-group
    (conn-dispatch-copy-from-replace--action-change-group action)))
 
-(oclosure-define (conn-dispatch-take-replace
+(oclosure-define (conn-dispatch-replace
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-replace-copy (action-opoint)))
+                  (:copier conn-dispatch-replace-copy (action-opoint)))
   (action-opoint :type marker)
   (action-change-group))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-replace))
   (not (thread-first
-         (conn-dispatch-take-replace--action-opoint action)
+         (conn-dispatch-replace--action-opoint action)
          marker-buffer
          buffer-live-p)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-replace))
+  (set-marker (conn-dispatch-replace--action-opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
+(cl-defmethod conn-action-copy ((action conn-dispatch-replace))
   (conn-thread<-
-    (conn-dispatch-take-replace--action-opoint action)
+    (conn-dispatch-replace--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-take-replace-copy action))))
+    (:-> (conn-dispatch-replace-copy action))))
 
-(defun conn-dispatch-take-replace ()
+(defun conn-dispatch-replace ()
   (declare (conn-dispatch-action t))
   (conn-read-args (conn-copy-state
                    :prompt "Replace Thing")
@@ -3937,8 +3962,8 @@ it."))
       ((conn-bounds `(,rbeg . ,rend) rtransform)
        (let ((cg (conn--action-buffer-change-group)))
          (delete-region rbeg rend)
-         (oclosure-lambda (conn-dispatch-take-replace
-                           (action-description "Take From and Replace")
+         (oclosure-lambda (conn-dispatch-replace
+                           (action-description "Grab From and Replace")
                            (action-change-group cg)
                            (action-opoint (copy-marker rbeg t))
                            (action-window-predicate
@@ -3965,39 +3990,39 @@ it."))
                  (yank)))))))
       (_ (error "No region to replace")))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--action-opoint action) nil)
+(cl-defmethod conn-cancel-action ((action conn-dispatch-replace))
+  (set-marker (conn-dispatch-replace--action-opoint action) nil)
   (conn--action-cancel-change-group
-   (conn-dispatch-take-replace--action-change-group action)))
+   (conn-dispatch-replace--action-change-group action)))
 
-(cl-defmethod conn-accept-action ((action conn-dispatch-take-replace))
+(cl-defmethod conn-accept-action ((action conn-dispatch-replace))
   (conn--action-accept-change-group
-   (conn-dispatch-take-replace--action-change-group action)))
+   (conn-dispatch-replace--action-change-group action)))
 
-(oclosure-define (conn-dispatch-take
+(oclosure-define (conn-dispatch-grab
                   (:parent conn-action)
-                  (:copier conn-dispatch-take-copy (action-opoint)))
+                  (:copier conn-dispatch-grab-copy (action-opoint)))
   (action-opoint :type marker))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-grab))
   (not (thread-first
-         (conn-dispatch-take--action-opoint action)
+         (conn-dispatch-grab--action-opoint action)
          marker-buffer
          buffer-live-p)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--action-opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-grab))
+  (set-marker (conn-dispatch-grab--action-opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-take))
+(cl-defmethod conn-action-copy ((action conn-dispatch-grab))
   (conn-thread<-
-    (conn-dispatch-take--action-opoint action)
+    (conn-dispatch-grab--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-take-copy action))))
+    (:-> (conn-dispatch-grab-copy action))))
 
-(defun conn-dispatch-take ()
+(defun conn-dispatch-grab ()
   (declare (conn-dispatch-action t))
-  (oclosure-lambda (conn-dispatch-take
-                    (action-description "Take From")
+  (oclosure-lambda (conn-dispatch-grab
+                    (action-description "Grab From")
                     (action-opoint (copy-marker (point) t))
                     (action-window-predicate
                      (lambda (win)
@@ -4020,8 +4045,8 @@ it."))
       (with-current-buffer (marker-buffer action-opoint)
         (yank)))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--action-opoint action) nil))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-grab))
+  (set-marker (conn-dispatch-grab--action-opoint action) nil))
 
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
@@ -4740,7 +4765,7 @@ for the dispatch."
                                 (action-window-predicate
                                  (let ((win (selected-window)))
                                    (lambda (window) (eq win window))))
-                                (action-doc-string
+                                (action-reference
                                  "Bounds between the previous region and this region."))
                   ()
                 (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)

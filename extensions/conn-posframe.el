@@ -514,11 +514,12 @@
 (cl-defmethod conn-label-payload ((label conn-posframe-window-label))
   (conn-posframe-window-label-window label))
 
-(cl-defmethod conn-label-completed-p ((label conn-posframe-window-label))
-  (pcase-let (((cl-struct conn-posframe-window-label bufname)
+(cl-defmethod conn-label-partial-p ((label conn-posframe-window-label))
+  (pcase-let (((cl-struct conn-posframe-window-label bufname string)
                label))
     (with-current-buffer bufname
-      (string-empty-p (buffer-string)))))
+      (not (or (= 0 (buffer-size))
+               (= (length string) (buffer-size)))))))
 
 (cl-defmethod conn-label-narrow ((label conn-posframe-window-label) prefix-char)
   (pcase-let (((cl-struct conn-posframe-window-label bufname overlay)

@@ -471,10 +471,10 @@
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from
   "F" 'conn-dispatch-copy-from-replace
-  "s" 'conn-dispatch-send
-  "S" 'conn-dispatch-send-replace
-  "d" 'conn-dispatch-take
-  "D" 'conn-dispatch-take-replace
+  "g" 'conn-dispatch-grab
+  "r" 'conn-dispatch-replace
+  "d" 'conn-dispatch-send
+  "D" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
@@ -497,10 +497,10 @@
                               (conn-push-state 'conn-emacs-state))))
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point
-  "g y" (conn-anonymous-thing
-          'point
-          :pretty-print ( :method (_) "global-mark-ring")
-          :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
+  "S-SPC" (conn-anonymous-thing
+            'point
+            :pretty-print ( :method (_) "global-mark-ring")
+            :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
         'point
         :pretty-print ( :method (_) "position-registers")

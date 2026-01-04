@@ -501,13 +501,12 @@ The options provided are: \\<query-replace-map>
                   (cl-loop
                    for val = (funcall iterator state)
                    until (or (null val)
-                             (progn
-                               (recenter nil)
-                               (move-overlay hl
-                                             (region-beginning)
-                                             (region-end)
-                                             (current-buffer))
-                               (y-or-n-p (format "Record here?"))))
+                             (pcase val
+                               (`((,beg . ,end) . _)
+                                (recenter nil)
+                                (move-overlay hl beg end (current-buffer))
+                                (y-or-n-p (format "Record here?")))
+                               (_ (error "Malformed region"))))
                    finally return val)
                 (delete-overlay hl))))
            (:next
@@ -676,7 +675,9 @@ current buffer."
                  (error "Could not pop to buffer %s" buffer)))
              (goto-char beg)
              (setf conn--last-thing-command (list 'kapply nil))
-             (set-marker conn--last-thing-command-pos end))
+             (if conn--last-thing-command-pos
+                 (set-marker conn--last-thing-command-pos end)
+               (setf conn--last-thing-command-pos (copy-marker end))))
             ('nil)
             (_ (error "Invalid region %s" region)))))
        region))
@@ -817,10 +818,6 @@ Changes will be undone if an error is signaled during macro application."
                       (cl-return (save-buffer '(16))))
                      ('skip (cl-return))
                      ('quit (setq quit-flag t))
-                     ('edit
-                      (let (executing-kbd-macro defining-kbd-macro)
-                        (recursive-edit))
-                      (cl-return))
                      ('automatic
                       (set-window-configuration wconf)
                       (setq automatic t)

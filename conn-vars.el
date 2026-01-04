@@ -176,6 +176,12 @@ disabled.")
   "Face for active arguments"
   :group 'conn-faces)
 
+;;;;; History Variables
+
+(defvar conn-separator-history nil)
+
+(defvar conn-read-string-target-history nil)
+
 ;;;;; Mark Variables
 
 (defvar conn-this-command-start (make-marker)

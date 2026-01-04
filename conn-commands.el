@@ -566,9 +566,6 @@ With arg N, insert N newlines."
 
 ;;;;; Register Setting and Loading
 
-(defvar conn--separator-history nil
-  "History var for `conn-set-register-separator'.")
-
 (defvar-keymap conn-register-argument-map
   "." 'register)
 
@@ -578,7 +575,7 @@ With arg N, insert N newlines."
    (list (read-string "Separator: "
                       (let ((reg (get-register register-separator)))
                         (when (stringp reg) reg))
-                      conn--separator-history nil t)))
+                      conn-separator-history nil t)))
   (set-register register-separator string))
 
 ;; register-load from consult
@@ -601,11 +598,6 @@ for the meaning of prefix ARG."
                                        arg
                                        transform
                                        register)
-  "Do what I mean with a REG.
-
-For a window configuration, restore it.  For a number or text, insert it.
-For a location, jump to it.  See `jump-to-register' and `insert-register'
-for the meaning of prefix ARG."
   (interactive
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-register-load-and-replace
@@ -986,7 +978,8 @@ determine which window to display the buffer in."
   "Prompt for window and swap current window and other window."
   (interactive
    (list (conn-prompt-for-window
-          (delq (selected-window) (conn--get-windows nil 'nomini 'visible)))))
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
   (unless (eq window (selected-window))
     (if window
         (window-swap-states nil window)
@@ -2189,12 +2182,7 @@ hook, which see."
    (conn-read-args (conn-kill-state
                     :interactive 'conn-kill-thing
                     :prompt "Thing"
-                    :reference conn-kill-reference
-                    :command-handler
-                    (lambda (cmd)
-                      (when (eq cmd 'conn-set-register-separator)
-                        (call-interactively #'conn-set-register-separator)
-                        (conn-read-args-handle))))
+                    :reference conn-kill-reference)
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
@@ -2581,20 +2569,18 @@ hook, which see."
                                   separator
                                   fixup-whitespace
                                   check-bounds)
-  (if (eq delete 'copy)
-      (conn-copy-thing-do cmd arg transform append register)
-    (pcase (conn-bounds-of cmd arg)
-      ((and (conn-bounds `(,beg . ,end)
-                         `(,@transform
-                           ,@(when check-bounds
-                               (list 'conn-check-bounds))))
-            bounds)
-       (if delete
-           (delete-region beg end)
-         (conn--kill-region beg end t append register separator))
-       (when fixup-whitespace
-         (goto-char beg)
-         (funcall conn-kill-fixup-whitespace-function bounds))))))
+  (pcase (conn-bounds-of cmd arg)
+    ((and (conn-bounds `(,beg . ,end)
+                       `(,@transform
+                         ,@(when check-bounds
+                             (list 'conn-check-bounds))))
+          bounds)
+     (if delete
+         (delete-region beg end)
+       (conn--kill-region beg end t append register separator))
+     (when fixup-whitespace
+       (goto-char beg)
+       (funcall conn-kill-fixup-whitespace-function bounds)))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line))
                                   &rest _)
@@ -2761,12 +2747,7 @@ that place."
    (conn-read-args (conn-copy-state
                     :interactive 'conn-copy-thing
                     :prompt "Thing"
-                    :reference conn-copy-reference
-                    :command-handler
-                    (lambda (cmd)
-                      (when (eq cmd 'conn-set-register-separator)
-                        (call-interactively #'conn-set-register-separator)
-                        (conn-read-args-handle))))
+                    :reference conn-copy-reference)
        ((`(,thing ,arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
         (`(,append ,register ,separator) (conn-copy-how-argument)))
