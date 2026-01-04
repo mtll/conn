@@ -644,22 +644,19 @@ themselves once the selection process has concluded."
       conn-dispatch-replace))))
 
 (defvar conn-dispatch-command-reference
-  (conn-reference-page "Misc Commands"
+  (conn-reference-page "Other Commands"
     (((:heading "History:")
-      ("next/prev"
-       conn-dispatch-cycle-ring-next
-       conn-dispatch-cycle-ring-previous))
+      ("previous dispatch" conn-dispatch-cycle-ring-previous)
+      ("next dispatch" conn-dispatch-cycle-ring-next))
      ((:heading "Last Dispatch:")
       ("repeat" conn-repeat-last-dispatch)
       ("describe" conn-dispatch-ring-describe-head)))
-    (((:heading "Other Args")
-      ("dispatch repeatedly" repeat-dispatch)
-      ("exchange point and mark after selecting THING"
-       dispatch-other-end)
-      ("restrict matches to the selected window"
-       restrict-windows)))))
+    (((:heading "Select")
+      ("toggle repeat" repeat-dispatch)
+      ("toggle other end" dispatch-other-end)
+      ("restrict matches to the selected window" restrict-windows)))))
 
-(defvar conn-dispatch-reference
+(defun conn-dispatch-reference ()
   (list conn-dispatch-command-reference
         conn-dispatch-thing-reference))
 
@@ -668,9 +665,9 @@ themselves once the selection process has concluded."
     (:splice conn-dispatch-action-reference)
     (((:heading "Action Commands")
       ("toggle repeat" repeat-dispatch)
-      ("at mouse click" act))
+      ("undo" undo))
      (""
-      ("undo" undo)
+      ("act at mouse click" act)
       ("toggle other end" dispatch-other-end)))))
 
 (defun conn-dispatch-select-target-reference ()
@@ -688,16 +685,21 @@ themselves once the selection process has concluded."
       ("scroll down" scroll-down-command)
       ("restrict to selected" restrict-windows)))))
 
+(defvar conn-misc-reference-list
+  (conn-reference-quote
+    (("isearch forward" isearch-forward)
+     ("isearch forward regexp" isearch-forward-regexp)
+     ("recursive edit" recursive-edit)
+     ("quoted insert" quoted-insert)
+     ("toggle input method" toggle-input-method)
+     ("set input method" set-input-method))))
+
 (defvar conn-dispatch-select-misc-reference
   (conn-reference-page "Misc"
     :depth 50
     (:heading "Miscellaneous Commands")
-    ((("isearch forward" isearch-forward)
-      ("isearch forward regexp" isearch-forward-regexp)
-      ("recursive edit" recursive-edit))
-     (("quoted insert" quoted-insert)
-      ("toggle input method" toggle-input-method)
-      ("set input method" set-input-method)))))
+    (:eval (conn-quick-ref-to-cols
+            conn-misc-reference-list 2))))
 
 ;;;;;; Action
 
@@ -792,30 +794,42 @@ themselves once the selection process has concluded."
   ( :method (_)))
 
 (cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-next)))
-  (conn-dispatch-cycle-ring-next)
-  (if (bound-and-true-p conn-posframe-mode)
-      (conn-posframe--dispatch-ring-display-subr)
-    (conn-read-args-message "%s" (conn-describe-dispatch
-                                  (conn-ring-head conn-dispatch-ring))))
-  (conn-read-args-handle))
-
-(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
-  (conn-dispatch-cycle-ring-previous)
-  (if (bound-and-true-p conn-posframe-mode)
-      (conn-posframe--dispatch-ring-display-subr)
-    (conn-read-args-message "%s" (conn-describe-dispatch
-                                  (conn-ring-head conn-dispatch-ring))))
-  (conn-read-args-handle))
-
-(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
-  (conn-dispatch-ring-remove-stale)
-  (if-let* ((head (conn-ring-head conn-dispatch-ring)))
+  (condition-case err
       (progn
+        (conn-dispatch-cycle-ring-next)
         (if (bound-and-true-p conn-posframe-mode)
             (conn-posframe--dispatch-ring-display-subr)
-          (conn-read-args-message "%s" (conn-describe-dispatch head)))
+          (conn-read-args-message "%s" (conn-describe-dispatch
+                                        (conn-ring-head conn-dispatch-ring))))
         (conn-read-args-handle))
-    (conn-read-args-error "Dispatch ring empty")))
+    (user-error
+     (conn-read-args-error (error-message-string err)))))
+
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
+  (condition-case err
+      (progn
+        (conn-dispatch-cycle-ring-previous)
+        (if (bound-and-true-p conn-posframe-mode)
+            (conn-posframe--dispatch-ring-display-subr)
+          (conn-read-args-message "%s" (conn-describe-dispatch
+                                        (conn-ring-head conn-dispatch-ring))))
+        (conn-read-args-handle))
+    (user-error
+     (conn-read-args-error (error-message-string err)))))
+
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
+  (condition-case err
+      (progn
+        (conn-dispatch-ring-remove-stale)
+        (if-let* ((head (conn-ring-head conn-dispatch-ring)))
+            (progn
+              (if (bound-and-true-p conn-posframe-mode)
+                  (conn-posframe--dispatch-ring-display-subr)
+                (conn-read-args-message "%s" (conn-describe-dispatch head)))
+              (conn-read-args-handle))
+          (conn-read-args-error "Dispatch ring empty")))
+    (user-error
+     (conn-read-args-error (error-message-string err)))))
 
 ;;;;; Bounds of Dispatch
 
@@ -4505,7 +4519,7 @@ INITIAL-ARG is the initial value of the prefix argument during
                    :command-handler #'conn-dispatch-command-handler
                    :prefix current-prefix-arg
                    :prompt "Dispatch"
-                   :reference conn-dispatch-reference
+                   :reference (conn-dispatch-reference)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
@@ -4549,7 +4563,7 @@ INITIAL-ARG is the initial value of the prefix argument during
                      :prefix current-prefix-arg
                      :command-handler #'conn-dispatch-command-handler
                      :prompt "Dispatch"
-                     :reference conn-dispatch-reference
+                     :reference (conn-dispatch-reference)
                      :pre (lambda (_)
                             (when (and (bound-and-true-p conn-posframe-mode)
                                        (fboundp 'posframe-hide))
