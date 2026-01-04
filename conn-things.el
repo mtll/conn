@@ -1557,7 +1557,7 @@ Only the background color is used."
                                desc)
                              'face 'eldoc-highlight-function-argument))
                ")"
-               (when-let* ((msg (conn--read-args-display-message)))
+               (when-let* ((msg (conn--read-args-display-prefix-arg)))
                  (concat ": " msg))
                "\n\\[select] select; "
                "\\[select-other-end] select other end; "
