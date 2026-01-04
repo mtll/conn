@@ -2025,7 +2025,8 @@ append to that place.
                           'delete
                           conn-delete-argument-map
                           delete)
-   (conn-cycling-argument '(nil append prepend repeat)
+   (conn-cycling-argument "append"
+                          '(nil append prepend repeat)
                           'append
                           :keymap conn-append-argument-map)
    (conn-read-argument "register"
@@ -2688,7 +2689,8 @@ append to that place."
   (cl-assert (memq append '(nil append prepend)))
   (cl-assert (not (and separator (null append))))
   (conn--copy-how-argument
-   (conn-cycling-argument '(nil append prepend repeat)
+   (conn-cycling-argument "append"
+                          '(nil append prepend repeat)
                           'append
                           :keymap conn-append-argument-map)
    (conn-read-argument "register"

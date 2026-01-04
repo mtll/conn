@@ -1705,7 +1705,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (cons overriding-map)
                   (delq nil)
                   make-composed-keymap))
-        (local-exit nil))
+        (local-exit nil)
+        (quit-event (car (last (current-input-mode)))))
     (cl-labels
         ((continue-p ()
            (cl-loop for arg in arguments
@@ -1746,7 +1747,7 @@ This skips executing the body of the `conn-read-args' form entirely."
          (read-command ()
            (let (keyseq cmd partial-keymap)
              (conn-with-overriding-map keymap
-               (setq keyseq (read-key-sequence nil)
+               (setq keyseq (read-key-sequence-vector nil)
                      cmd (key-binding keyseq t))
                (while (arrayp cmd) ; keyboard macro
                  (setq cmd (key-binding cmd t)))
@@ -1754,6 +1755,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                           (eql help-char (aref keyseq (1- (length keyseq)))))
                  (setq cmd 'execute-extended-command
                        partial-keymap (key-binding (seq-subseq keyseq 0 -1)))))
+             (when (eql (aref keyseq 0) quit-event)
+               (keyboard-quit))
              (when cmd
                (when pre (funcall pre cmd))
                (pcase cmd
@@ -1833,9 +1836,9 @@ is desired.
 The arg reading loop continues while `conn-argument-required-p' returns
 non-nil for at least one argument.
 
-The loop then prompts the user for a command via `read-key-sequence'.
-If a PRE function was given then it is called with the command that has
-been read.
+The loop then prompts the user for a command via
+`read-key-sequence-vector'.  If a PRE function was given then it is
+called with the command that has been read.
 
 Then the default command handler and the COMMAND-HANDLER function, if
 provided, are called with the current command.  If the command handler
@@ -2155,7 +2158,8 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defstruct (conn-cycling-argument
                (:include conn-argument)
                ( :constructor conn-cycling-argument
-                 (choices
+                 (name
+                  choices
                   cycling-command
                   &key
                   keymap
@@ -2187,23 +2191,34 @@ be displayed in the echo area during `conn-read-args'."
   (eq sym (conn-cycling-argument-cycling-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-cycling-argument))
-  (concat
-   (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
-   (propertize "(" 'face 'shadow)
-   (let ((choices (conn-cycling-argument-choices arg))
-         (format (conn-cycling-argument-format-function arg))
-         result)
-     (cl-loop
-      (when-let* ((choice (pop choices))
-                  (str (funcall format choice)))
-        (when (eq choice (conn-cycling-argument-value arg))
-          (cl-callf propertize str 'face 'conn-argument-active-face))
-        (cl-callf concat result str)
-        (when (car choices)
-          (cl-callf concat result (propertize "|" 'face 'shadow))))
-      (unless choices
-        (cl-return result))))
-   (propertize ")" 'face 'shadow)))
+  (cl-symbol-macrolet ((choices (conn-cycling-argument-choices arg))
+                       (name (conn-cycling-argument-name arg))
+                       (formatter (conn-cycling-argument-format-function arg))
+                       (value (conn-cycling-argument-value arg)))
+    (concat
+     (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
+     (cond
+      ((> (seq-count #'identity choices) 3)
+       (if value
+           (propertize (funcall formatter value)
+                       'face 'conn-argument-active-face)
+         name))
+      (value
+       (concat
+        (propertize "(" 'face 'shadow)
+        (let ((cs choices)
+              result)
+          (cl-loop
+           (when-let* ((choice (pop cs))
+                       (str (funcall formatter choice)))
+             (when (eq choice value)
+               (cl-callf propertize str 'face 'conn-argument-active-face))
+             (cl-callf concat result str)
+             (when (car cs)
+               (cl-callf concat result (propertize "|" 'face 'shadow))))
+           (unless cs (cl-return result))))
+        (propertize ")" 'face 'shadow)))
+      (t name)))))
 
 ;;;;;; Read Argument
 

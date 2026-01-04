@@ -1877,7 +1877,8 @@ the meaning of depth."
                       (propertize conn--read-args-error-message
                                   'face 'error)))
          (keymap (make-composed-keymap conn--dispatch-event-handler-maps
-                                       conn-dispatch-read-char-map)))
+                                       conn-dispatch-read-char-map))
+         (quit-event (car (last (current-input-mode)))))
     (cl-flet ((read-ev (prompt &optional seconds)
                 (with-current-buffer (or conn-dispatch-input-buffer
                                          (current-buffer))
@@ -1900,15 +1901,14 @@ the meaning of depth."
                        (read-event prompt t seconds)))))))
       (if seconds
           (cl-loop
-           (if-let* ((ev (read-ev (unless inhibit-message
-                                    (concat prompt
-                                            ": "
-                                            prompt-suffix
-                                            (when prompt-suffix " ")
-                                            error-msg))
-                                  seconds)))
-               (when (characterp ev) (cl-return ev))
-             (cl-return)))
+           (when-let* ((ev (read-ev (unless inhibit-message
+                                      (concat prompt
+                                              ": "
+                                              prompt-suffix
+                                              (when prompt-suffix " ")
+                                              error-msg))
+                                    seconds)))
+             (cl-return (and (characterp ev) ev))))
         (cl-loop
          (pcase (let ((scroll-conservatively 100))
                   (conn-with-overriding-map keymap
@@ -1922,13 +1922,17 @@ the meaning of depth."
                                 error-msg))
                       (read-key-sequence-vector)
                       (key-binding t))))
+           ((guard (eql quit-event
+                        (aref (this-command-keys-vector) 0)))
+            (keyboard-quit))
            ('restart (cl-return 8))
            ('ignore)
            ('quoted-insert
-            (let (input-method-function)
-              (cl-return
-               (read-char (propertize "Quoted Char: "
-                                      'face 'minibuffer-prompt)))))
+            (let ((char (read-quoted-char
+                         (propertize "Quoted Char: "
+                                     'face 'minibuffer-prompt))))
+              (unless (eq char quit-event)
+                (cl-return char))))
            ('dispatch-character-event
             (setq conn--read-args-error-message nil
                   conn--dispatch-must-prompt nil)
@@ -4628,7 +4632,7 @@ This command must be bound to a mouse key."
 Calling a bound dispatch with a prefix arg inverts the value of repeat
 for the dispatch."
   (interactive)
-  (let* ((key-seq (read-key-sequence
+  (let* ((key-seq (read-key-sequence-vector
                    (format "Bind last dispatch to key in %s: "
                            conn-current-state)))
          (binding (key-binding key-seq)))
