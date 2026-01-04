@@ -589,8 +589,7 @@ themselves once the selection process has concluded."
                   (read-string "Separator (RET for default): " nil
                                'conn-separator-history nil t))))
          (if (equal s "") 'default s))))
-   nil
-   initial-value))
+   :value initial-value))
 
 ;;;;;; Dispatch Quick Ref
 

@@ -222,14 +222,14 @@
        (if (conn-read-args-consume-prefix-arg)
            (read-string "Padding: ")
          " ")))
-   (lambda (name val)
-     (concat
-      name
-      (when val
-        (concat
-         " "
-         (propertize (format "<%s>" val)
-                     'face 'conn-argument-active-face)))))))
+   :formatter (lambda (name val)
+                (concat
+                 name
+                 (when val
+                   (concat
+                    " "
+                    (propertize (format "<%s>" val)
+                                'face 'conn-argument-active-face)))))))
 
 ;;;;;; Perform Surround
 

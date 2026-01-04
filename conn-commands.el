@@ -616,8 +616,8 @@ for the meaning of prefix ARG."
                    'register
                    conn-register-argument-map
                    (lambda (_) (register-read-with-preview "Register:"))
-                   #'conn-argument-format-register
-                   (register-read-with-preview "Register:"))))
+                   :formatter #'conn-argument-format-register
+                   :value (register-read-with-preview "Register:"))))
      (list thing arg transform register)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -694,7 +694,7 @@ for the meaning of prefix ARG."
                    'register
                    conn-register-argument-map
                    (lambda (_) (register-read-with-preview "Register:"))
-                   #'conn-argument-format-register))
+                   :formatter #'conn-argument-format-register))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform swap register check-bounds)))
   (pcase (conn-bounds-of thing arg)
@@ -1591,9 +1591,10 @@ Exiting the recursive edit will resume the isearch."
        ((`(,thing ,arg) (conn-isearch-thing-argument))
         (subregions (conn-subregions-argument (use-region-p)))
         (transform (conn-transform-argument))
-        (regexp (conn-boolean-argument "regexp"
-                                       'regexp
-                                       conn-regexp-argument-map)))
+        (regexp (conn-boolean-argument
+                 "regexp"
+                 'regexp
+                 conn-regexp-argument-map)))
      (list thing arg transform regexp subregions)))
   (conn-isearch-in-thing-do thing
                             arg
@@ -2040,7 +2041,7 @@ append to that place.
                        'register
                        conn-register-argument-map
                        (lambda (_) (register-read-with-preview "Register:"))
-                       #'conn-argument-format-register)
+                       :formatter #'conn-argument-format-register)
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
@@ -2704,8 +2705,8 @@ append to that place."
                        'register
                        conn-register-argument-map
                        (lambda (_) (register-read-with-preview "Register:"))
-                       #'conn-argument-format-register
-                       register)
+                       :formatter #'conn-argument-format-register
+                       :value register)
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-copy-how-argument)

@@ -2133,7 +2133,8 @@ be displayed in the echo area during `conn-read-args'."
                   keymap
                   &optional
                   value
-                  annotation)))
+                  annotation
+                  reference)))
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
@@ -2168,14 +2169,15 @@ be displayed in the echo area during `conn-read-args'."
                   cycling-command
                   &key
                   keymap
-                  (format-function #'conn-format-cycling-argument)
+                  (formatter #'conn-format-cycling-argument)
                   required
                   annotation
+                  reference
                   &aux
                   (value (car choices)))))
   (choices nil :type list :read-only t)
   (cycling-command nil :type symbol :read-only t)
-  (format-function #'identity :type function :read-only t))
+  (formatter #'identity :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
@@ -2198,7 +2200,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-display ((arg conn-cycling-argument))
   (cl-symbol-macrolet ((choices (conn-cycling-argument-choices arg))
                        (name (conn-cycling-argument-name arg))
-                       (formatter (conn-cycling-argument-format-function arg))
+                       (formatter (conn-cycling-argument-formatter arg))
                        (value (conn-cycling-argument-value arg)))
     (concat
      (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
@@ -2233,13 +2235,14 @@ be displayed in the echo area during `conn-read-args'."
                  (name
                   toggle-command
                   keymap
-                  reader-function
-                  &optional
-                  format-function
+                  reader
+                  &key
+                  formatter
                   value
+                  reference
                   annotation)))
-  (reader-function nil :type function :read-only t)
-  (format-function nil :type function :read-only t)
+  (reader nil :type function :read-only t)
+  (formatter nil :type function :read-only t)
   (toggle-command nil :type symbol :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
@@ -2247,7 +2250,7 @@ be displayed in the echo area during `conn-read-args'."
   (condition-case err
       (when (eq cmd (conn-read-argument-toggle-command arg))
         (setf (conn-argument-value arg)
-              (funcall (conn-read-argument-reader-function arg)
+              (funcall (conn-read-argument-reader arg)
                        (conn-argument-value arg)))
         (funcall updater arg))
     (quit (conn-read-args-error "Quit"))
@@ -2260,7 +2263,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
   (concat
    (format "\\[%s] " (conn-read-argument-toggle-command arg))
-   (or (and-let* ((fn (conn-read-argument-format-function arg))
+   (or (and-let* ((fn (conn-read-argument-formatter arg))
                   (str (funcall fn
                                 (conn-read-argument-name arg)
                                 (conn-argument-value arg)))

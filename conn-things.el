@@ -592,6 +592,12 @@ words."))
 
 ;;;;;; Fixup Whitespace Argument
 
+(defvar conn-fixup-whitepace-argument-reference
+  (conn-reference-page "Fixup Whitespace"
+    :depth 70
+    (:heading "Fixup Whitespace Argument")
+    "Attempt to fixup whitespace around the killed region."))
+
 (defvar-keymap conn-fixup-whitespace-argument-map
   "q" 'fixup-whitespace)
 
@@ -601,7 +607,8 @@ words."))
                  (&optional
                   value
                   &aux
-                  (keymap conn-fixup-whitespace-argument-map)))))
+                  (keymap conn-fixup-whitespace-argument-map)
+                  (reference conn-fixup-whitepace-argument-reference)))))
 
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
                                     cmd updater)
