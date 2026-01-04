@@ -17,8 +17,8 @@ jobs:
         ignore_warnings:
           - true
         include:
-          - emacs_version: snapshot
-            ignore_warnings: false
+          - emacs_version: 30.2
+            ignore_warnings: true
     steps:
     - uses: actions/checkout@v2
     - uses: purcell/setup-emacs@master

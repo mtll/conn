@@ -421,11 +421,13 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
         (funcall pred conn-this-command-start)))))
 
 (defun conn-set-last-thing-command (thing arg pt)
-  (when conn--last-thing-override
-    (set-marker (car conn--last-thing-override) nil))
-  (setq conn--last-thing-override
-        (cons (and pt (set-marker (make-marker) pt))
-              (cons thing arg))))
+  (let ((marker (if-let* ((mk (car conn--last-thing-override))
+                          (_ (markerp mk)))
+                    mk
+                  (make-marker))))
+    (setq conn--last-thing-override
+          (cons (set-marker marker pt)
+                (cons thing arg)))))
 
 (defun conn-set-jump-command (command &optional predicate)
   "Register COMMAND as a jump command.

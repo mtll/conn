@@ -1354,7 +1354,12 @@ command was a prefix command.")
 
 (defvar conn--mark-state-rmm nil)
 
-(defvar-local conn-record-mark-state t)
+(defvar-local conn-record-mark-state t
+  "Record the region in mark state history when mark state exits.
+
+`conn-mark-state' sets this to `t' when entering.  To prevent the region
+in the current mark state from being recorded set this to nil after
+entering mark state.")
 
 (conn-define-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
@@ -1385,6 +1390,7 @@ command was a prefix command.")
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
   (conn-state-on-exit
+    (conn-set-last-thing-command 'region nil nil)
     (if (conn-mark-state-keep-mark-active-p)
         (when (bound-and-true-p rectangle-mark-mode)
           (conn-state-on-re-entry

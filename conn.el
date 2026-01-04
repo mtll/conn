@@ -146,6 +146,7 @@
                                 (when fn (apply fn args))))
                           `((name . conn-replace-default)))
           (setq query-replace-read-from-default #'conn-replace-read-default))
+        (add-hook 'post-command-hook #'conn--thing-post-command-hook 95 t)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -165,6 +166,7 @@
     (kill-local-variable 'conn-lighter)
     (conn--clear-overlays)
     (setq cursor-type t)
+    (remove-hook 'post-command-hook #'conn--thing-post-command-hook t)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
@@ -193,8 +195,7 @@
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'pre-command-hook #'conn--thing-pre-command-hook)
-          (add-hook 'post-command-hook #'conn--thing-post-command-hook)
-          (add-hook 'post-command-hook #'conn--jump-post-command-hook))
+          (add-hook 'post-command-hook #'conn--jump-post-command-hook 90))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
       (advice-remove 'xref--push-markers #'conn--xref-push-markers-ad)
       (advice-remove 'query-replace-read-from-suggestions
@@ -204,7 +205,6 @@
       (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
       (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
       (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-      (remove-hook 'pre-command-hook #'conn--thing-pre-command-hook)
       (remove-hook 'post-command-hook #'conn--thing-post-command-hook)
       (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
 
