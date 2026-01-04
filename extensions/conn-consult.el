@@ -221,6 +221,43 @@
                          (not (if isearch-forward (eobp) (bobp))))
                do (forward-char (if isearch-forward 1 -1))))))
 
+(defun conn--consult-grep-iterator (candidates)
+  (let ((files nil)
+        (curr-file nil))
+    (dolist (cand candidates)
+      (when cand
+        (let* ((file-end (next-single-property-change 0 'face cand))
+               (line-end (next-single-property-change (1+ file-end) 'face cand))
+               (matches (consult--point-placement cand (1+ line-end) 'consult-grep-context))
+               (file (expand-file-name (substring-no-properties cand 0 file-end)))
+               (line (string-to-number (substring-no-properties cand (+ 1 file-end) line-end))))
+          (push (cl-list* line (or (car matches) 0) (cdr matches))
+                (alist-get file files nil nil #'equal)))))
+    (pcase-dolist (`(,file . ,_) files)
+      (cl-assert (not (and-let* ((buf (get-file-buffer file)))
+                        (buffer-modified-p buf)))))
+    (lambda (state)
+      (pcase state
+        (:cleanup (mapcar #'delete-overlay curr-file))
+        ((or :next :record)
+         (if curr-file
+             (conn-kapply-consume-region (pop curr-file))
+           (pcase (pop files)
+             ('nil)
+             ((and `(,file . ,locs)
+                   (let buf (find-file-noselect file)))
+              (with-current-buffer buf
+                (without-restriction
+                  (save-excursion
+                    (pcase-dolist (`(,line ,col (,bo . ,eo)) locs)
+                      (ignore-errors
+                        (goto-char (point-min))
+                        (forward-line (1- line))
+                        (let ((pt (min (+ (point) col) (pos-eol))))
+                          (push (conn-kapply-make-region (+ pt bo) (+ pt eo))
+                                curr-file)))))))
+              (conn-kapply-consume-region (pop curr-file))))))))))
+
 (provide 'conn-consult)
 
 (with-eval-after-load 'embark
@@ -255,16 +292,7 @@
 
   (defun conn-kapply-grep-candidates (cands)
     (conn-regions-kapply-prefix
-     (conn-kapply-region-iterator
-      (mapcar (lambda (cand)
-                (pcase-let ((`(,line-marker (,beg . ,end) . _)
-                             (consult--grep-position cand 'find-file-noselect)))
-                  (prog1
-                      (conn-kapply-make-region (+ line-marker beg)
-                                               (+ line-marker end)
-                                               (marker-buffer line-marker))
-                    (set-marker line-marker nil))))
-              cands))))
+     (conn--consult-grep-iterator cands)))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
