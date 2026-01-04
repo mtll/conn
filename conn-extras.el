@@ -133,7 +133,10 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
                                       _arg)
-  (conn-dispatch-headings))
+  (conn-dispatch-headings
+   :reference (conn-reference-quote
+                ((:heading "Heading Targets")
+                 "Hides buffer regions outside heading lines."))))
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler

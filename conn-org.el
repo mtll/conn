@@ -152,7 +152,10 @@
   (conn-dispatch-regexp-targets
    :regexp org-link-any-re
    :fixed-length 0
-   :window-predicate #'conn--org-window-p))
+   :window-predicate #'conn--org-window-p
+   :reference (conn-reference-quote
+                ((:heading "Org Link Targets")
+                 "Dispatch on org links."))))
 
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
@@ -160,7 +163,9 @@
                                       _arg)
   (conn-all-things-targets
    :thing 'org-paragraph
-   :window-predicate #'conn--org-window-p))
+   :window-predicate #'conn--org-window-p
+   :reference (conn-reference-quote
+                ((:heading "Org Paragraph Targets")))))
 
 (conn-register-thing-commands
  'org-paragraph 'conn-continuous-thing-handler
@@ -235,7 +240,9 @@
                                       _arg)
   (conn-all-things-targets
    :thing 'org-heading
-   :window-predicate #'conn--org-window-p))
+   :window-predicate #'conn--org-window-p
+   :reference (conn-reference-quote
+                ((:heading "Org Heading Targets")))))
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler

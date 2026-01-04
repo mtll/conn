@@ -4837,11 +4837,18 @@ for the dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun))
                                       _arg)
-  (conn-dispatch-all-defuns))
+  (conn-dispatch-all-defuns
+   :reference (conn-reference-quote
+                ((:heading "Defun Targets")
+                 "Dispatch on defuns.  Hides buffer regions outside defun definition
+lines."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line))
                                       _arg)
-  (conn-dispatch-visual-line-targets))
+  (conn-dispatch-visual-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Visual Lines Targets")
+                 "Dispatch on visual lines."))))
 
 (conn-register-thing-commands 'dispatch nil 'conn-dispatch)
 
@@ -4859,39 +4866,69 @@ for the dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence))
                                       _arg)
-  (conn-all-things-targets :thing 'sentence))
+  (conn-all-things-targets
+   :thing 'sentence
+   :reference (conn-reference-quote
+                ((:heading "Sentence Targets")
+                 "Dispatch on sentences."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph))
                                       _arg)
-  (conn-all-things-targets :thing 'paragraph))
+  (conn-all-things-targets
+   :thing 'paragraph
+   :reference (conn-reference-quote
+                ((:heading "Paragraph Targets")
+                 "Dispatch on paragraphs."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       _arg)
   (conn-dispatch-read-with-timeout
-   :timeout conn-read-string-timeout))
+   :timeout conn-read-string-timeout
+   :reference (conn-reference-quote
+                ((:heading "String Targets")
+                 "Display on matches for a string read with a timeout.  Other end puts
+point at the end of a match."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line))
                                       _arg)
-  (conn-dispatch-line-targets))
+  (conn-dispatch-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Line Targets")
+                 "Dispatch on a line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column))
                                       _arg)
-  (conn-dispatch-column-targets))
+  (conn-dispatch-column-targets
+   :reference (conn-reference-quote
+                ((:heading "Column Targets")
+                 "Dispatch on a column.  Bounds are from point to selected column."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line))
                                       _arg)
-  (conn-dispatch-line-targets))
+  (conn-dispatch-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Outer Line Targets")
+                 "Dispatch on an outer line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line))
                                       _arg)
-  (conn-dispatch-inner-line-targets))
+  (conn-dispatch-inner-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Inner Line Targets")
+                 "Dispatch on an inner line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line))
                                       _arg)
-  (conn-dispatch-end-of-inner-line-targets))
+  (conn-dispatch-end-of-inner-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Inner Line Targets")
+                 "Dispatch on an outer line.  Other end defaults to non-nil."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line-dwim))
                                       _arg)
-  (conn-dispatch-end-of-inner-line-targets))
+  (conn-dispatch-end-of-inner-line-targets
+   :reference (conn-reference-quote
+                ((:heading "Inner Line Targets")
+                 "Dispatch on an outer line.  Other end defaults to non-nil."))))
 
 (provide 'conn-dispatch)
