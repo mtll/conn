@@ -231,7 +231,7 @@
                (matches (consult--point-placement cand (1+ line-end) 'consult-grep-context))
                (file (expand-file-name (substring-no-properties cand 0 file-end)))
                (line (string-to-number (substring-no-properties cand (+ 1 file-end) line-end))))
-          (push (cl-list* line (or (car matches) 0) (cdr matches))
+          (push (cons line matches)
                 (alist-get file files nil nil #'equal)))))
     (pcase-dolist (`(,file . ,_) files)
       (cl-assert (not (and-let* ((buf (get-file-buffer file)))
@@ -249,7 +249,8 @@
               (with-current-buffer buf
                 (without-restriction
                   (save-excursion
-                    (pcase-dolist (`(,line ,col (,bo . ,eo)) locs)
+                    (pcase-dolist (`(,line ,(or col 0) (,bo . ,eo))
+                                   locs)
                       (ignore-errors
                         (goto-char (point-min))
                         (forward-line (1- line))
