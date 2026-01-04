@@ -394,8 +394,8 @@
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "z" 'conn-last-thing-other-end
-  "Z" 'conn-exchange-mark-command)
+  "Z" 'conn-last-thing-other-end
+  "z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
 

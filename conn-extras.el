@@ -40,8 +40,7 @@
         'pdf-view-mode))
 
 (conn-define-state conn-special-state ()
-  :lighter "S"
-  :pop-alternate 'conn-emacs-state)
+  :lighter "S")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)

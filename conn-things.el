@@ -1380,13 +1380,6 @@ not be delete.  The the value returned by each function is ignored.")
     (goto-char point)
     (conn-bounds-of cmd arg)))
 
-(cl-defmethod conn-bounds-of-last-do ((cmd (conn-thing isearch))
-                                      _arg
-                                      point)
-  (conn-make-bounds
-   cmd nil
-   (cons point (point))))
-
 (cl-defmethod conn-bounds-of-last-do ((cmd (conn-thing region))
                                       _arg
                                       _point)
@@ -1394,13 +1387,6 @@ not be delete.  The the value returned by each function is ignored.")
    cmd nil
    (cons (min (point) (mark t))
          (max (point) (mark t)))))
-
-(cl-defmethod conn-bounds-of-last-do ((_cmd (eql kapply))
-                                      _arg
-                                      point)
-  (conn-make-bounds
-   'region nil
-   (cons (point) point)))
 
 ;;;; Bounds of Things in Region
 
@@ -1694,6 +1680,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'region nil
+ 'yank
  'conn-mark-last-command
  'conn-exchange-mark-command
  'conn-mark-thing
@@ -1721,7 +1708,9 @@ Only the background color is used."
  'recursive-edit-thing nil
  'recursive-edit 'exit-recursive-edit)
 
-(conn-register-thing 'isearch)
+(conn-register-thing
+ 'isearch
+ :parent 'region)
 
 (conn-register-thing-commands
  'isearch nil

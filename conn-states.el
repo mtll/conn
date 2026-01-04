@@ -230,7 +230,12 @@ See also `conn-declare-state-property'."
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
-PROPERTY.  If no parent has that property either than nil is returned."
+PROPERTY.  If no parent has that property either than nil is returned.
+
+If NO-INHERIT is non-nil or if PROPERTY is a static property then
+STATE's parents are not checked.
+
+DEFAULT is a value to return if PROPERTY is not found."
   (declare (compiler-macro conn-state-get--cmacro)
            (side-effect-free t)
            (important-return-value t)
@@ -784,6 +789,9 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
+(defvar-local conn-pop-alternate-default 'conn-emacs-state
+  "Default state to enter if the state is popped in the base state.")
+
 (defvar-local conn--state-exit-functions (list 'conn--state-exit-default)
   "Code to be run when the current state is exited.")
 
@@ -980,7 +988,7 @@ current state does not have a :pop-alternate property then push
         (pop conn--state-stack))
     (conn-push-state
      (conn-state-get conn-current-state :pop-alternate
-                     t 'conn-command-state))))
+                     t conn-pop-alternate-default))))
 
 (defun conn-peek-state ()
   "Returns the next state in the state stack."
@@ -1156,6 +1164,12 @@ can only be changed by redefining a state and are not inherited.
 
 (eval-and-compile
   (conn-declare-state-property
+   :pop-alternate
+   "The state to enter if the defined state is the base state and the state
+stack is popped."
+   t)
+
+  (conn-declare-state-property
    :no-keymap
    "Do not allow a keymap to be created for this state"
    t)
@@ -1186,7 +1200,6 @@ For use in buffers that should not have any other state."
 
 (conn-define-state conn-command-state ()
   "A state for editing commands."
-  :pop-alternate 'conn-emacs-state
   :lighter "C"
   :suppress-input-method t
   :cursor 'box
@@ -1207,6 +1220,7 @@ For use in buffers that should not have any other state."
 
 By default `conn-emacs-state' does not bind anything except
 `conn-pop-state'."
+  :pop-alternate 'conn-command-state
   :lighter "E"
   :cursor '(bar . 4))
 

@@ -147,6 +147,13 @@ See also `conn-kapply-make-region'."
                  (overlay-buffer ov))
       (delete-overlay ov))))
 
+(cl-defmethod conn-bounds-of-last-do ((_cmd (eql kapply))
+                                      _arg
+                                      point)
+  (conn-make-bounds
+   'region nil
+   (cons (point) point)))
+
 (defun conn-kapply-macro (applier iterator pipeline)
   "Apply a keyboard macro on a set of regions.
 
