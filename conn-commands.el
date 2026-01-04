@@ -1087,13 +1087,6 @@ Yanks from the buffer in `minibuffer-selected-window'."
 (defvar-keymap conn-backward-argument-map
   "z" 'backward)
 
-(defvar conn-query-flag t
-  "Default value for conn-query-flag.
-
-If flag is t then `conn-replace' and `conn-regexp-replace'
-will query before replacing from-string, otherwise just replace all
-instances of from-string.")
-
 (defvar-keymap conn-replace-from-map
   "C-M-;" 'conn-replace-insert-separator)
 

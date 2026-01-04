@@ -227,12 +227,18 @@
     (dolist (cand candidates)
       (when cand
         (let* ((file-end (next-single-property-change 0 'face cand))
-               (line-end (next-single-property-change (1+ file-end) 'face cand))
-               (matches (consult--point-placement cand (1+ line-end) 'consult-grep-context))
-               (file (expand-file-name (substring-no-properties cand 0 file-end)))
-               (line (string-to-number (substring-no-properties cand (+ 1 file-end) line-end))))
+               (line-end (next-single-property-change (1+ file-end)
+                                                      'face
+                                                      cand))
+               (matches (consult--point-placement cand
+                                                  (1+ line-end)
+                                                  'consult-grep-context))
+               (file (expand-file-name
+                      (substring-no-properties cand 0 file-end)))
+               (line (string-to-number
+                      (substring-no-properties cand (+ 1 file-end) line-end))))
           (push (cons line matches)
-                (alist-get file files nil nil #'equal)))))
+                (alist-get file files nil nil #'file-equal-p)))))
     (pcase-dolist (`(,file . ,_) files)
       (cl-assert (not (and-let* ((buf (get-file-buffer file)))
                         (buffer-modified-p buf)))))
@@ -240,12 +246,11 @@
       (pcase state
         (:cleanup (mapcar #'delete-overlay curr-file))
         ((or :next :record)
-         (if curr-file
-             (conn-kapply-consume-region (pop curr-file))
+         (unless curr-file
            (pcase (pop files)
-             ('nil)
              ((and `(,file . ,locs)
-                   (let buf (find-file-noselect file)))
+                   (let (and buf (pred identity))
+                     (find-file-noselect file)))
               (with-current-buffer buf
                 (without-restriction
                   (save-excursion
@@ -255,9 +260,10 @@
                         (goto-char (point-min))
                         (forward-line (1- line))
                         (let ((pt (min (+ (point) col) (pos-eol))))
-                          (push (conn-kapply-make-region (+ pt bo) (+ pt eo))
-                                curr-file)))))))
-              (conn-kapply-consume-region (pop curr-file))))))))))
+                          (push (conn-kapply-make-region (+ pt bo)
+                                                         (+ pt eo))
+                                curr-file))))))))))
+         (conn-kapply-consume-region (pop curr-file)))))))
 
 (provide 'conn-consult)
 
