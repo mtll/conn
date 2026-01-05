@@ -127,11 +127,18 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
+(defface conn-kapply-region-face
+  '((t (:inherit lazy-highlight)))
+  "Face for kapply regions."
+  :group 'conn-faces)
+
 (defun conn-kapply-make-region (beg end &optional buffer)
   "Create a region from BEG to END in BUFFER for a kapply iterator.
 
 See also `conn-kapply-consume-region'."
-  (make-overlay beg end buffer t))
+  (let ((ov (make-overlay beg end buffer t)))
+    (overlay-put ov 'face 'conn-kapply-region-face)
+    ov))
 
 (defun conn-kapply-consume-region (ov)
   "Consume overlay OV and return a region for kapply pipeline functions.
@@ -509,37 +516,38 @@ The options provided are: \\<query-replace-map>
                    for val = (funcall iterator state)
                    until (or (null val)
                              (pcase val
-                               (`((,beg . ,end) . _)
+                               (`((,beg . ,end) . ,_)
                                 (recenter nil)
                                 (move-overlay hl beg end (current-buffer))
                                 (y-or-n-p (format "Record here?")))
-                               (_ (error "Malformed region"))))
+                               (_ (error "Malformed kapply region %s" val))))
                    finally return val)
                 (delete-overlay hl))))
            (:next
-            (let ((res (funcall iterator state)))
-              (if conn--kapply-automatic-flag
-                  res
-                (save-window-excursion
-                  (cl-loop
-                   (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                   (pcase (let ((executing-kbd-macro nil)
-                                (defining-kbd-macro nil))
-                            (message "%s" msg)
-                            (lookup-key query-replace-map (vector (read-event))))
-                     ('act (cl-return res))
-                     ('skip (setq res (funcall iterator state)))
-                     ('exit (cl-return))
-                     ('recenter (recenter nil))
-                     ('quit (signal 'quit nil))
-                     ('automatic
-                      (setq conn--kapply-automatic-flag t)
-                      (cl-return res))
-                     ('help
-                      (with-output-to-temp-buffer "*Help*"
-                        (princ
-                         (substitute-command-keys
-                          "Specify how to proceed with keyboard macro execution.
+            (pcase (funcall iterator state)
+              ('nil)
+              ((and res `((,beg . ,end) . ,buf)
+                    (guard (not conn--kapply-automatic-flag)))
+               (save-window-excursion
+                 (cl-loop
+                  (move-overlay hl beg end buf)
+                  (pcase (let ((executing-kbd-macro nil)
+                               (defining-kbd-macro nil))
+                           (message "%s" msg)
+                           (lookup-key query-replace-map (vector (read-event))))
+                    ('act (cl-return res))
+                    ('skip (setq res (funcall iterator state)))
+                    ('exit (cl-return))
+                    ('recenter (recenter nil))
+                    ('quit (signal 'quit nil))
+                    ('automatic
+                     (setq conn--kapply-automatic-flag t)
+                     (cl-return res))
+                    ('help
+                     (with-output-to-temp-buffer "*Help*"
+                       (princ
+                        (substitute-command-keys
+                         "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Proceed with this iteration normally and continue to the next.
 \\[skip]	Skip this iteration and got to the next.
@@ -547,9 +555,10 @@ Possibilities: \\<query-replace-map>
 \\[quit]	End this kapply by signaling a quit.
 \\[recenter]	Redisplay the screen, then ask again.
 \\[automatic]	Apply keyboard macro to rest."))
-                        (with-current-buffer standard-output
-                          (help-mode))))
-                     (_ (ding t))))))))
+                       (with-current-buffer standard-output
+                         (help-mode))))
+                    (_ (ding t))))))
+              (res (error "Malformed kapply region %s" res))))
            (:cleanup
             (delete-overlay hl)
             (funcall iterator state))
