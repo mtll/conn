@@ -3669,21 +3669,17 @@ If CLEANUP-WHITESPACE is non-nil then also run
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
                               _arg)
-  (when conn-narrow-ring
-    (let ((subregions nil)
-          (beg most-positive-fixnum)
-          (end most-negative-fixnum))
-      (pcase-dolist ((and bound `(,b . ,e))
-                     (conn-ring-list conn-narrow-ring))
-        (cl-callf max end e)
-        (cl-callf min beg b)
-        (push (conn-make-bounds 'region nil bound)
-              subregions))
-      (when subregions
-        (conn-make-bounds
-         'narrow-ring nil
-         (cons beg end)
-         :subregions subregions)))))
+  (cl-loop for (beg . end) in conn-narrow-ring
+           minimize beg into narrow-beg
+           maximize end into narrow-end
+           collect (conn-make-bounds
+                    'restriction nil
+                    (cons beg end))
+           into narrowings
+           finally return (conn-make-bounds
+                           'narrow-ring nil
+                           (cons narrow-beg narrow-end)
+                           :subregions narrowings)))
 
 (defun conn-thing-to-narrow-ring (thing
                                   arg

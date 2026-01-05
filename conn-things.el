@@ -235,37 +235,38 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 (defalias 'conn-anonymous-thing-parent 'conn--anonymous-thing-parent)
 (defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
-(defun conn--anonymous-thing-parse-properties (properties)
-  (cl-loop
-   with known = (get 'conn-anonymous-thing :known-properties)
-   with seen = nil
-   for (key val) on properties by #'cddr
-   if (when-let* ((fn (alist-get key known)))
-        (cl-assert (not (memq fn seen)) nil
-                   "Duplicate method in anonymous thing definition")
-        (push fn seen))
-   collect (let ((method-expander
-                  (lambda (args &rest body)
-                    (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-                      (`#'(lambda ,args . ,body)
-                       (let ((parsed-body (macroexp-parse-body body))
-                             (cnm (gensym "thing--cnm")))
-                         `#'(lambda ,(cons cnm args)
-                              ,@(car parsed-body)
-                              ,(macroexpand-all
-                                `(cl-flet ((cl-call-next-method ,cnm))
-                                   ,@(cdr parsed-body))))))
-                      (result (error "Unexpected macroexpansion result :%S"
-                                     result))))))
-             `(cons ',(car seen)
-                    ,(macroexpand-all
-                      val
-                      (cons (cons :method method-expander)
-                            macroexpand-all-environment))))
-   into methods
-   else collect `(cons ,key ,val) into props
-   finally return (cons (cons 'list methods)
-                        (cons 'list props))))
+(eval-and-compile
+  (defun conn--anonymous-thing-parse-properties (properties)
+    (cl-loop
+     with known = (get 'conn-anonymous-thing :known-properties)
+     with seen = nil
+     for (key val) on properties by #'cddr
+     if (when-let* ((fn (alist-get key known)))
+          (cl-assert (not (memq fn seen)) nil
+                     "Duplicate method in anonymous thing definition")
+          (push fn seen))
+     collect (let ((method-expander
+                    (lambda (args &rest body)
+                      (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                        (`#'(lambda ,args . ,body)
+                         (let ((parsed-body (macroexp-parse-body body))
+                               (cnm (gensym "thing--cnm")))
+                           `#'(lambda ,(cons cnm args)
+                                ,@(car parsed-body)
+                                ,(macroexpand-all
+                                  `(cl-flet ((cl-call-next-method ,cnm))
+                                     ,@(cdr parsed-body))))))
+                        (result (error "Unexpected macroexpansion result :%S"
+                                       result))))))
+               `(cons ',(car seen)
+                      ,(macroexpand-all
+                        val
+                        (cons (cons :method method-expander)
+                              macroexpand-all-environment))))
+     into methods
+     else collect `(cons ,key ,val) into props
+     finally return (cons (cons 'list methods)
+                          (cons 'list props)))))
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing inheriting from PARENT."
@@ -644,6 +645,13 @@ current buffer."))
       "fixup"))))
 
 ;;;;;; Check Bounds Argument
+
+(defvar conn-check-bounds-functions nil
+  "Abnormal hook to check the bounds of a region before deleting it.
+
+Each function in the hook is called with a single argument, a
+`conn-bounds' struct, and should signal an error if the region should
+not be delete.  The the value returned by each function is ignored.")
 
 (defvar conn-check-bounds-argument-reference
   (conn-reference-page "Check Bounds"
@@ -1240,13 +1248,6 @@ the point is within the region then the entire region is returned.")))
 
 ;;;;;; Check Bounds
 
-(defvar conn-check-bounds-functions nil
-  "Abnormal hook to check the bounds of a region before deleting it.
-
-Each function in the hook is called with a single argument, a
-`conn-bounds' struct, and should signal an error if the region should
-not be delete.  The the value returned by each function is ignored.")
-
 (defun conn-check-bounds (bounds)
   "Run `conn-check-bounds-functions' with BOUNDS."
   (run-hook-with-args 'conn-check-bounds-functions bounds)
@@ -1693,20 +1694,6 @@ Only the background color is used."
  'narrow-ring nil
  'conn-cycle-narrowings
  'conn-narrow-ring-prefix)
-
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
-                              _arg)
-  (cl-loop for (beg . end) in conn-narrow-ring
-           minimize beg into narrow-beg
-           maximize end into narrow-end
-           collect (conn-make-bounds
-                    'narrowing nil
-                    (cons beg end))
-           into narrowings
-           finally return (conn-make-bounds
-                           'narrowing nil
-                           (cons narrow-beg narrow-end)
-                           :subregions narrowings)))
 
 (conn-register-thing
  'comment

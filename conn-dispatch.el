@@ -475,6 +475,8 @@ themselves once the selection process has concluded."
   "Face for mode-line in a dispatch state."
   :group 'conn-faces)
 
+(defvar conn-dispatch-target-finder nil)
+
 (defvar conn-dispatch-ring)
 
 (defvar conn--dispatch-must-prompt nil)
@@ -524,8 +526,10 @@ themselves once the selection process has concluded."
       "C-w" 'restrict-windows
       "RET" 'ignore
       "<return>" 'ignore
-      "M-TAB" 'repeat-dispatch)
-    map))
+      "M-TAB" 'repeat-dispatch)))
+
+(defvar-keymap conn-toggle-label-argument-map
+  "SPC" 'toggle-labels)
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
@@ -1111,8 +1115,6 @@ Optionally the overlay may have an associated THING."
 
 ;;;;; Dispatch Labels
 
-(defvar conn-dispatch-target-finder nil)
-
 (defvar conn-dispatch-label-function 'conn-dispatch-simple-labels
   "Function responsible for labeling all `conn-targets'.
 
@@ -1513,9 +1515,6 @@ Target overlays may override this default by setting the
      (setq conn--dispatch-label-state state)
      labels)
     (labels labels)))
-
-(defvar-keymap conn-toggle-label-argument-map
-  "SPC" 'toggle-labels)
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
