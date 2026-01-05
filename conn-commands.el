@@ -1959,8 +1959,6 @@ region after a `recursive-edit'."
 
 ;;;;; Kill
 
-(defvar conn-check-bounds-default t)
-
 (defvar conn-kill-special-ref
   (conn-reference-quote
     (("copy filename" filename)
@@ -2126,9 +2124,7 @@ append to that place.
                  (&aux
                   (transform (conn-transform-argument))
                   (fixup-whitespace (when conn-kill-fixup-whitespace-function
-                                      (conn-fixup-whitespace-argument
-                                       (unless (region-active-p)
-                                         conn-kill-fixup-whitespace-default))))
+                                      (conn-fixup-whitespace-argument)))
                   (value (list transform fixup-whitespace))))
                ( :constructor conn-dispatch-transform-and-fixup-argument
                  (&optional
@@ -2163,17 +2159,6 @@ append to that place.
                   valid)
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
              (funcall updater arg))))))
-
-(defun conn-check-bounds-argument ()
-  (when (cl-loop for h on conn-check-bounds-functions
-                 thereis (pcase h
-                           ('t (default-value 'conn-check-bounds-functions))
-                           ('nil)
-                           (_ t)))
-    (conn-boolean-argument "check bounds"
-                           'check-bounds
-                           conn-check-bounds-argument-map
-                           conn-check-bounds-default)))
 
 (defun conn-kill-thing (cmd
                         arg

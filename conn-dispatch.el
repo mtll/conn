@@ -3652,8 +3652,8 @@ the string after the region selected by dispatch."))
                    :prompt "Send Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (fixup (conn-fixup-whitespace-argument
-               (not (region-active-p))))
+       (fixup (when conn-kill-fixup-whitespace-function
+                (conn-fixup-whitespace-argument)))
        (check-bounds
         (conn-boolean-argument "check bounds"
                                'check-bounds

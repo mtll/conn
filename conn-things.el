@@ -596,24 +596,37 @@ words."))
   (conn-reference-page "Fixup Whitespace"
     :depth 70
     (:heading "Fixup Whitespace Argument")
-    "Attempt to fixup whitespace around the killed region."))
+    "Attempt to fixup whitespace around the killed region.  If toggled with a
+prefix argument then set the default value of fixup whitespace in the
+current buffer."))
 
 (defvar-keymap conn-fixup-whitespace-argument-map
   "q" 'fixup-whitespace)
 
+(defvar conn-fixup-whitespace-default t)
+
 (cl-defstruct (conn-fixup-whitespace-argument
                (:include conn-argument)
-               ( :constructor conn-fixup-whitespace-argument
+               ( :constructor conn--fixup-whitespace-argument
                  (&optional
                   value
                   &aux
                   (keymap conn-fixup-whitespace-argument-map)
                   (reference conn-fixup-whitepace-argument-reference)))))
 
+(cl-defsubst conn-fixup-whitespace-argument (&optional value)
+  (unless (and (region-active-p) (null value))
+    (conn--fixup-whitespace-argument
+     (or value
+         (and conn-kill-fixup-whitespace-function
+              conn-fixup-whitespace-default)))))
+
 (cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
                                     cmd updater)
   (when (eq cmd 'fixup-whitespace)
     (cl-callf null (conn-argument-value arg))
+    (when (conn-read-args-consume-prefix-arg)
+      (setq-local conn-fixup-whitespace-default (conn-argument-value arg)))
     (funcall updater arg)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
@@ -632,8 +645,44 @@ words."))
 
 ;;;;;; Check Bounds Argument
 
+(defvar conn-check-bounds-argument-reference
+  (conn-reference-page "Check Bounds"
+    :depth 70
+    (:heading "Check Bounds Argument")
+    "Toggle running `conn-check-bounds-functions' to ensure that the region
+being killed is valid.  With a prefix argument set the default value for
+check bounds in the current buffer."))
+
 (defvar-keymap conn-check-bounds-argument-map
   "!" 'check-bounds)
+
+(defvar conn-check-bounds-default t)
+
+(cl-defstruct (conn-check-bounds-argument
+               (:include conn-boolean-argument)
+               ( :constructor conn--check-bounds-argument
+                 (&optional
+                  value
+                  &key
+                  (name "check bounds")
+                  (toggle-command 'check-bounds)
+                  (keymap conn-check-bounds-argument-map)
+                  (reference conn-check-bounds-argument-reference)))))
+
+(cl-defsubst conn-check-bounds-argument (&optional value)
+  (when (cl-loop for h on conn-check-bounds-functions
+                 thereis (pcase h
+                           ('t (default-value 'conn-check-bounds-functions))
+                           ('nil)
+                           (_ t)))
+    (conn--check-bounds-argument (or value conn-check-bounds-default))))
+
+(cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
+                                    _cmd
+                                    _updater)
+  (cl-call-next-method)
+  (when (conn-read-args-consume-prefix-arg)
+    (setq-local conn-check-bounds-default (conn-argument-value arg))))
 
 ;;;;;; Thing Transform Argument
 
