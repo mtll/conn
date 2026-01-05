@@ -582,7 +582,7 @@ With arg N, insert N newlines."
    (list (read-string "Separator: "
                       (let ((reg (get-register register-separator)))
                         (when (stringp reg) reg))
-                      conn-separator-history nil t)))
+                      'conn-separator-history nil t)))
   (set-register register-separator string))
 
 ;; register-load from consult
@@ -633,7 +633,7 @@ for the meaning of prefix ARG."
   (interactive (list (register-read-with-preview "Clear register: ")))
   (set-register register nil))
 
-;;;;; Killing and Yanking
+;;;;; Yanking
 
 (defvar-keymap conn-yank-pop-repeat-map
   "C-y" 'conn-yank-with-completion
