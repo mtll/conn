@@ -487,7 +487,10 @@ If the mark is already active then deactivate it instead."
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' and push `conn-mark-state' if mark is activated."
   (interactive "P")
-  (exchange-point-and-mark arg)
+  (static-if (version<= emacs-version "31")
+      (exchange-point-and-mark (xor arg (not (region-active-p))))
+    (let ((exchange-point-and-mark-highlight-region t))
+      (exchange-point-and-mark (xor arg (not (region-active-p))))))
   (when (and (region-active-p)
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
@@ -564,12 +567,7 @@ If the mark is already active then deactivate it instead."
   "Insert a newline, leave point before it and indent the new line.
 With arg N, insert N newlines."
   (interactive "p")
-  (open-line N)
-  (indent-according-to-mode)
-  (save-excursion
-    (dotimes (_ N)
-      (forward-line 1)
-      (indent-according-to-mode))))
+  (save-excursion (newline-and-indent N)))
 
 ;;;;; Register Setting and Loading
 
@@ -1162,93 +1160,117 @@ Yanks from the buffer in `minibuffer-selected-window'."
             (query-replace-read-from prompt regexp-flag))
         (query-replace-read-from prompt regexp-flag)))))
 
-(defun conn--replace-read-args (prompt
+(defun conn--replace-read-args (&optional
                                 regexp-flag
-                                &optional
+                                backward
                                 regions
-                                noerror
-                                delimited-flag)
-  (unless noerror
-    (barf-if-buffer-read-only))
-  (deactivate-mark)
-  (conn-with-region-emphasis regions
-    (let* ((from (conn--replace-read-from prompt
-                                          regions
-                                          regexp-flag
-                                          delimited-flag))
-           (to (if (consp from)
-                   (prog1 (cdr from) (setq from (car from)))
-                 (query-replace-read-to from prompt regexp-flag))))
-      (list from to))))
+                                delimited)
+  (let ((prompt (concat "Replace"
+                        (when backward " backward")
+                        (when delimited " word"))))
+    (deactivate-mark)
+    (conn-with-region-emphasis regions
+      (let* ((from (conn--replace-read-from
+                    prompt
+                    (or regions
+                        (list (cons (point-min) (point-max))))
+                    regexp-flag
+                    delimited))
+             (to (if (consp from)
+                     (prog1 (cdr from) (setq from (car from)))
+                   (query-replace-read-to from prompt regexp-flag))))
+        (list from to)))))
 
 (cl-defgeneric conn-replace-do (thing
                                 arg
                                 transform
-                                from
-                                to
                                 &optional
                                 delimited
                                 backward
                                 regexp-flag
-                                subregions-p))
+                                subregions-p
+                                from
+                                to))
 
 (cl-defmethod conn-replace-do ((thing (conn-thing t))
                                arg
                                transform
-                               from
-                               to
                                &optional
                                delimited
                                backward
                                regexp-flag
-                               subregions-p)
-  (pcase-let* (((and (conn-bounds `(,beg . ,end) transform)
+                               subregions-p
+                               from
+                               to)
+  (pcase-let* (((and (conn-bounds (and region `(,beg . ,end))
+                                  transform)
                      bounds)
-                (or conn--replace-bounds
-                    (conn-bounds-of thing arg))))
+                (conn-bounds-of thing arg))
+               (subregions
+                (and-let* ((_ subregions-p)
+                           (sr (conn-bounds-get bounds
+                                                :subregions
+                                                transform)))
+                  (conn--merge-overlapping-regions
+                   (mapcar #'conn-bounds sr)
+                   t))))
+    (when (or (null from) (null to))
+      (pcase-setq `(,from . ,to)
+                  (conn--replace-read-args regexp-flag
+                                           backward
+                                           (or subregions (list region))
+                                           delimited)))
     (deactivate-mark)
     (save-excursion
-      (if-let* ((subregions (and subregions-p
-                                 (conn-bounds-get bounds
-                                                  :subregions
-                                                  transform))))
-          (let* ((regions
-                  (conn--merge-overlapping-regions
-                   (cl-loop for bound in subregions
-                            collect (conn-bounds bound))
-                   t))
-                 (region-extract-function
+      (if subregions
+          (let* ((region-extract-function
                   (lambda (method)
                     (pcase method
                       ('nil
-                       (cl-loop for (beg . end) in regions
+                       (cl-loop for (beg . end) in subregions
                                 collect (buffer-substring beg end)))
                       ('delete-only
-                       (cl-loop for (beg . end) in regions
+                       (cl-loop for (beg . end) in subregions
                                 do (delete-region beg end)))
-                      ('bounds regions)
+                      ('bounds subregions)
                       (_
                        (prog1
-                           (cl-loop for (beg . end) in regions
+                           (cl-loop for (beg . end) in subregions
                                     collect (filter-buffer-substring
                                              beg end method))
-                         (cl-loop for (beg . end) in regions
+                         (cl-loop for (beg . end) in subregions
                                   do (delete-region beg end))))))))
             (perform-replace from to t regexp-flag delimited
                              nil nil beg end backward t))
         (perform-replace from to t regexp-flag delimited
-                         nil nil beg end backward)))))
+                         nil nil beg end backward))))
+  (conn-push-command-history 'conn-replace
+                             thing
+                             arg
+                             transform
+                             delimited
+                             backward
+                             regexp-flag
+                             subregions-p
+                             from
+                             to))
 
-(cl-defmethod conn-replace-do ((_thing (eql project))
-                               _arg
-                               _transform
-                               from
-                               to
+(cl-defmethod conn-replace-do ((thing (eql project))
+                               arg
+                               transform
                                &optional
                                delimited
-                               _backward
+                               backward
                                regexp-flag
-                               _subregions-p)
+                               subregions-p
+                               from
+                               to)
+  (when (or (null from) (null to))
+    (pcase-setq `(,from . ,to)
+                (conn--replace-read-args regexp-flag
+                                         backward
+                                         nil
+                                         delimited)))
   (let ((mstart (make-hash-table :test 'eq)))
     (fileloop-initialize
      (project-files (project-current t))
@@ -1260,18 +1282,33 @@ Yanks from the buffer in `minibuffer-selected-window'."
                         nil multi-query-replace-map
                         (gethash (current-buffer) mstart (point-min))
                         (point-max)))))
-  (fileloop-continue))
+  (fileloop-continue)
+  (conn-push-command-history 'conn-replace
+                             thing
+                             arg
+                             transform
+                             delimited
+                             backward
+                             regexp-flag
+                             subregions-p
+                             from
+                             to))
+
+(cl-defmethod conn-replace-do ((_thing (eql widen))
+                               &rest _)
+  (without-restriction
+    (cl-call-next-method)))
 
 (defun conn-replace (thing
                      arg
                      transform
-                     from
-                     to
                      &optional
                      delimited
                      backward
                      regexp-flag
-                     subregions-p)
+                     subregions-p
+                     from
+                     to)
   "Replace FROM with TO in a region defined by THING, ARG, and TRANSFORM.
 
 For how the region is determined using THING, ARG, and TRANSFORM see
@@ -1292,7 +1329,6 @@ For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
-                    :interactive 'conn-replace
                     :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg) (conn-replace-thing-argument))
@@ -1302,7 +1338,7 @@ For more information about how the replacement is carried out see
          (conn-boolean-argument "regexp"
                                 'regexp
                                 conn-regexp-argument-map))
-        (delimited-flag
+        (delimited
          (conn-boolean-argument "word delimited"
                                 'delimited
                                 conn-delimited-argument-map))
@@ -1310,47 +1346,22 @@ For more information about how the replacement is carried out see
          (conn-boolean-argument "backward"
                                 'backward
                                 conn-backward-argument-map)))
-     (pcase-let* ((bounds
-                   (ignore-errors
-                     (conn-transform-bounds (conn-bounds-of thing arg)
-                                            transform)))
-                  (subregions (and subregions-p
-                                   bounds
-                                   (conn-bounds-get bounds :subregions)))
-                  (`(,from ,to)
-                   (conn--replace-read-args
-                    (concat "Replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    regexp-flag
-                    (if (and subregions-p subregions)
-                        (cl-loop for bound in subregions
-                                 collect (conn-bounds bound))
-                      (and bounds (list (conn-bounds bounds))))
-                    nil
-                    delimited-flag)))
-       (setq conn--replace-bounds bounds)
-       (list thing
-             arg
-             transform
-             from
-             to
-             delimited-flag
-             backward
-             regexp-flag
-             (and subregions-p subregions t)))))
-  (unwind-protect
-      (conn-replace-do thing
-                       arg
-                       transform
-                       from
-                       to
-                       delimited
-                       backward
-                       regexp-flag
-                       subregions-p)
-    (setq conn--replace-bounds nil)))
+     (list thing
+           arg
+           transform
+           delimited
+           backward
+           regexp-flag
+           subregions-p)))
+  (conn-replace-do thing
+                   arg
+                   transform
+                   delimited
+                   backward
+                   regexp-flag
+                   subregions-p
+                   from
+                   to))
 
 ;;;;; Isearch
 
@@ -2070,11 +2081,11 @@ append to that place.
                        (register (conn-kill-how-argument-register arg))
                        (append (conn-kill-how-argument-append arg))
                        (separator (conn-kill-how-argument-separator arg)))
-    (list (conn-argument-display append)
-          (when (conn-argument-value append)
-            (conn-argument-display separator))
-          (conn-argument-display register)
-          (conn-argument-display delete))))
+    (mapcar #'conn-argument-display
+            (list append
+                  (and (conn-argument-value append) separator)
+                  register
+                  delete))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
   (unless (conn-argument-value (conn-kill-how-argument-append arg))
@@ -3818,7 +3829,8 @@ The region is added to `conn-narrow-ring'."
      (list thing arg transform indirect)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (unless (and (<= beg (point) end)
+     (unless (and (mark t)
+                  (<= beg (point) end)
                   (<= beg (mark t) end))
        (deactivate-mark))
      (if indirect
@@ -3829,30 +3841,6 @@ The region is added to `conn-narrow-ring'."
        (conn--narrow-to-region beg end t)
        (when (called-interactively-p 'interactive)
          (message "Buffer narrowed"))))))
-
-;;;;;; Bounds of Narrow Ring
-
-(conn-register-thing 'narrowing)
-
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrowing))
-                              _arg)
-  (cl-loop for (beg . end) in conn-narrow-ring
-           minimize beg into narrow-beg
-           maximize end into narrow-end
-           collect (conn-make-bounds
-                    'narrowing nil
-                    (cons beg end))
-           into narrowings
-           finally return (conn-make-bounds
-                           'narrowing nil
-                           (cons narrow-beg narrow-end)
-                           :subregions narrowings)))
-
-(conn-register-thing-commands
- 'narrowing nil
- 'narrow-to-region 'widen
- 'conn-narrow-to-thing
- 'conn-narrow-ring-prefix)
 
 ;;;;; Join Lines
 

@@ -1678,12 +1678,35 @@ Only the background color is used."
  'start-kbd-macro
  'end-kbd-macro)
 
+(conn-register-thing 'restriction
+                     :parent 'buffer)
+
+(conn-register-thing-commands
+ 'restriction nil
+ 'narrow-to-region
+ 'widen
+ 'conn-narrow-to-thing)
+
 (conn-register-thing 'narrow-ring)
 
 (conn-register-thing-commands
  'narrow-ring nil
  'conn-cycle-narrowings
  'conn-narrow-ring-prefix)
+
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
+                              _arg)
+  (cl-loop for (beg . end) in conn-narrow-ring
+           minimize beg into narrow-beg
+           maximize end into narrow-end
+           collect (conn-make-bounds
+                    'narrowing nil
+                    (cons beg end))
+           into narrowings
+           finally return (conn-make-bounds
+                           'narrowing nil
+                           (cons narrow-beg narrow-end)
+                           :subregions narrowings)))
 
 (conn-register-thing
  'comment

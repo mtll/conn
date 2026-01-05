@@ -445,6 +445,12 @@ to the jump ring."
     (or mark-active
         (conn-push-jump-ring isearch-opoint))))
 
+(defun conn-push-command-history (command &rest args)
+  (add-to-history 'conn-command-history
+                  (cons command args)
+                  conn-command-history-max
+                  t))
+
 ;;;;; Region Utils
 
 (defmacro conn-with-region-emphasis (regions &rest body)
