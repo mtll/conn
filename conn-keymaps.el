@@ -76,7 +76,7 @@
     :keymap isearch-mode-map
     "C-w" 'conn-isearch-restrict-to-thing
     "C-t" 'conn-isearch-thing-to-search-string
-    "C-<return>" 'conn-isearch-exit-other-end
+    "C-z" 'conn-isearch-exit-other-end
     "M-'" 'conn-isearch-kapply-prefix
     "C-," 'conn-dispatch-isearch
     "C-'" 'conn-isearch-open-recursive-edit))
