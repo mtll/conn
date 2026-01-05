@@ -64,10 +64,10 @@
   :type 'integer
   :group 'conn-posframe)
 
-(defcustom conn-posframe-border-color
-  "#000000"
+(defface conn-posframe-border
+  '((((background light)) (:background "#000000"))
+    (((background dark)) (:background "#999999")))
   "Border color for conn posframes."
-  :type 'string
   :group 'conn-posframe)
 
 (defcustom conn-posframe-timeout nil
@@ -283,7 +283,7 @@
        :poshandler conn-posframe-buffer-poshandler
        :timeout conn-posframe-timeout
        :border-width conn-posframe-border-width
-       :border-color conn-posframe-border-color
+       :border-color (face-background 'conn-posframe-border)
        :lines-truncate t))
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
@@ -317,7 +317,7 @@
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color)
+     :border-color (face-background 'conn-posframe-border))
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-kmacro-display (&rest _)
@@ -357,7 +357,7 @@
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color)
+     :border-color (face-background 'conn-posframe-border))
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--dispatch-ring-display-subr ()
@@ -394,7 +394,7 @@
        :poshandler conn-posframe-tab-poshandler
        :timeout conn-posframe-timeout
        :border-width conn-posframe-border-width
-       :border-color conn-posframe-border-color))))
+       :border-color (face-background 'conn-posframe-border)))))
 
 (defun conn-posframe--dispatch-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
@@ -554,7 +554,7 @@
                    :left-fringe 0
                    :right-fringe 0
                    :border-width conn-posframe-border-width
-                   :border-color conn-posframe-border-color
+                   :border-color (face-background 'conn-posframe-border)
                    :poshandler conn-posframe-buffer-poshandler)))
 
 (provide 'conn-posframe)

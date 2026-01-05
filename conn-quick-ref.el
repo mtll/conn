@@ -38,7 +38,7 @@
   "Face for key not found errors."
   :group 'conn-quick-ref)
 
-(defface conn-quick-ref-page-header
+(defface conn-quick-ref-page-header-face
   '((t ( :extend t
          :box nil
          :inherit header-line
@@ -273,7 +273,7 @@
                                 t)
         (add-face-text-property (point-min)
                                 header-pos
-                                'conn-quick-ref-page-header
+                                'conn-quick-ref-page-header-face
                                 t)))))
 
 (defun conn--quick-ref-parse-pages (pages)
