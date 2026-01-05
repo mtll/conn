@@ -28,21 +28,6 @@
 ;;;; Keymaps
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-mark-state)
-  "z" 'conn-exchange-mark-command
-  "p" conn-thing-inner-remap
-  "@" 'append-next-kill
-  "TAB" 'indent-rigidly
-  "Y" 'conn-completing-yank-replace
-  "y" 'conn-yank-replace
-  "*" 'calc-grab-region
-  "v" 'rectangle-mark-mode
-  "V" 'undefined
-  "g" 'conn-surround
-  "RET" 'conn-duplicate-thing
-  "SPC" 'conn-push-mark-command)
-
-(define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "," conn-thing-remap
   "h" 'conn-things-in-region
@@ -274,6 +259,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
   "<remap> <conn-pop-state>" 'conn-pop-mark-state
+  "DEL" 'kill-region
   "e" 'conn-emacs-state
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
