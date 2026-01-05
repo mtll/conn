@@ -66,9 +66,3 @@
 
 (provide 'conn-expand-region)
 
-;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
-;; indent-tabs-mode: nil
-;; End:
-;;; conn-expand-region.el ends here
-

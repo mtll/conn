@@ -269,9 +269,3 @@
             "<remap> <sp-remove-active-pair-overlay>" 'keyboard-quit)
 
 (provide 'conn-smartparens)
-
-;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
-;; indent-tabs-mode: nil
-;; End:
-;;; conn-smartparens.el ends here

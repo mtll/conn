@@ -1148,11 +1148,4 @@
   "<escape>" 'undefined
   "M-j" 'undefined)
 
-;;; Footer
-;; Local Variables:
-;; outline-regexp: "^;;;;* [^    \n]"
-;; indent-tabs-mode: nil
-;; End:
-;;; conn.el ends here
-
 (provide 'conn-extras)

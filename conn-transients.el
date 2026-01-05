@@ -1244,9 +1244,3 @@ A zero means repeat until error."
     'conn-kapply-match-suffix
     '(conn-kapply-compilation)
     t))
-
-;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
-;; indent-tabs-mode: nil
-;; End:
-;;; conn-transients.el ends here

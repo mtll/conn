@@ -333,9 +333,3 @@
     "'" 'conn-kapply-grep-candidates)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))
-
-;; Local Variables:
-;; outline-regexp: ";;;;* [^    \n]"
-;; indent-tabs-mode: nil
-;; End:
-;;; conn-consult.el ends here
