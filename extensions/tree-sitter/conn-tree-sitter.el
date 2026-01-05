@@ -132,12 +132,8 @@
                     form capt
                     (lambda (node)
                       (save-excursion
-                        (save-match-data
-                          (goto-char (treesit-node-start node))
-                          (not
-                           (eql (treesit-node-end node)
-                                (re-search-forward
-                                 pat (treesit-node-end node) nil))))))))
+                        (goto-char (treesit-node-start node))
+                        (not (looking-at-p pat))))))
                   ((and form `(:not-kind-eq? ,capt ,type))
                    (make-predicate
                     form capt
