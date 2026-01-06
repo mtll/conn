@@ -609,29 +609,29 @@ A zero means repeat until error."
          conn-kapply-pulse-region
          ,@(conn-transient-kapply-pipeline-args args))))))
 
-(transient-define-suffix conn-kapply-highlights (args)
-  "Apply keyboard macro on regions of text with a specified text property."
-  :transient 'transient--do-exit
-  :key "h"
-  :description "Highlights"
-  (interactive (list (transient-args transient-current-command)))
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim)))
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds `(,beg . ,end))
-       (conn-kapply-macro
-        (alist-get :kmacro args)
-        (conn-kapply-highlight-iterator
-         (or beg (point-min))
-         (or end (point-max))
-         (or (alist-get :order args)
-             'conn--nnearest-first)
-         (alist-get :read-patterns args))
-        `(conn-kapply-relocate-to-region
-          conn-kapply-open-invisible
-          conn-kapply-pulse-region
-          ,@(conn-transient-kapply-pipeline-args args)))))))
+;; (transient-define-suffix conn-kapply-highlights (args)
+;;   "Apply keyboard macro on regions of text with a specified text property."
+;;   :transient 'transient--do-exit
+;;   :key "h"
+;;   :description "Highlights"
+;;   (interactive (list (transient-args transient-current-command)))
+;;   (conn-read-args (conn-read-thing-state
+;;                    :prompt "Thing")
+;;       ((`(,thing ,arg) (conn-thing-argument-dwim)))
+;;     (pcase (conn-bounds-of thing arg)
+;;       ((conn-bounds `(,beg . ,end))
+;;        (conn-kapply-macro
+;;         (alist-get :kmacro args)
+;;         (conn-kapply-highlight-iterator
+;;          (or beg (point-min))
+;;          (or end (point-max))
+;;          (or (alist-get :order args)
+;;              'conn--nnearest-first)
+;;          (alist-get :read-patterns args))
+;;         `(conn-kapply-relocate-to-region
+;;           conn-kapply-open-invisible
+;;           conn-kapply-pulse-region
+;;           ,@(conn-transient-kapply-pipeline-args args)))))))
 
 (transient-define-suffix conn-kapply-occur (args)
   "Apply keyboard macro on regions of text with a specified text property."

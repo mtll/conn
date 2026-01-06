@@ -1151,10 +1151,6 @@ can only be changed by redefining a state and are not inherited.
  "State lighter to display in the mode line state stack display.")
 
 (conn-declare-state-property
- :dispable-mark-cursor
- "If non-nil do not display the mark cursor.")
-
-(conn-declare-state-property
  :suppress-input-method
  "If non-nil suppress the current input method while the state is active.")
 
@@ -1460,9 +1456,11 @@ entering mark state.")
 
 (defvar conn-read-args-ref-bindings
   (conn-reference-quote
-    (("backward delete arg" backward-delete-arg)
+    ((:keymap conn-read-args-map)
+     ("backward delete arg" backward-delete-arg)
      ("reset arg" reset-arg)
      ("completing-read available commands" help)
+     (:keymap conn-quick-ref-map)
      ("close quick reference" close)
      ("next/previous page" next previous))))
 
@@ -1493,6 +1491,16 @@ entering mark state.")
 (defvar conn--read-args-message-timeout nil)
 
 (defvar-keymap conn-read-args-map
+  "0" 'digit-argument
+  "1" 'digit-argument
+  "2" 'digit-argument
+  "3" 'digit-argument
+  "4" 'digit-argument
+  "5" 'digit-argument
+  "6" 'digit-argument
+  "7" 'digit-argument
+  "8" 'digit-argument
+  "9" 'digit-argument
   "?" 'reference
   "C-h" 'help
   "<escape>" 'keyboard-quit
@@ -2091,7 +2099,7 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defstruct (conn-composite-argument
                (:include conn-argument)
-               (:constructor nil)))
+               (:constructor conn-composite-argument (value))))
 
 (cl-defmethod conn-argument-required-p ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
@@ -2101,12 +2109,14 @@ be displayed in the echo area during `conn-read-args'."
                                     form
                                     updater)
   (cl-loop with done = nil
-           with ufn = (lambda (_)
-                        (funcall updater arg)
-                        (setf done t))
-           for a in (conn-argument-value arg)
+           for as on (conn-argument-value arg)
            until done
-           do (conn-argument-update a form ufn)))
+           do (conn-argument-update (car as)
+                                    form
+                                    (lambda (a)
+                                      (setf (car as) a
+                                            done t)
+                                      (funcall updater arg)))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
@@ -2171,7 +2181,7 @@ be displayed in the echo area during `conn-read-args'."
 ;;;;;; Cycling Argument
 
 (defun conn-format-cycling-argument (choice)
-  (format "%s" choice))
+  (format "%s" (or (car-safe choice) choice)))
 
 (cl-defstruct (conn-cycling-argument
                (:include conn-argument)
@@ -2205,6 +2215,10 @@ be displayed in the echo area during `conn-read-args'."
              (car (conn-cycling-argument-choices arg)))
        (funcall updater arg)))))
 
+(cl-defmethod conn-argument-extract-value ((arg conn-cycling-argument))
+  (let ((val (conn-argument-value arg)))
+    (or (cdr-safe val) val)))
+
 (cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
                                        sym)
   (eq sym (conn-cycling-argument-cycling-command arg)))
@@ -2213,7 +2227,7 @@ be displayed in the echo area during `conn-read-args'."
   (cl-symbol-macrolet ((choices (conn-cycling-argument-choices arg))
                        (name (conn-cycling-argument-name arg))
                        (formatter (conn-cycling-argument-formatter arg))
-                       (value (conn-cycling-argument-value arg)))
+                       (value (car-safe (conn-cycling-argument-value arg))))
     (concat
      (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
      (cond

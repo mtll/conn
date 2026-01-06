@@ -187,7 +187,6 @@
           (curr nil))
       (while-let ((sexp (ignore-errors (read (current-buffer)))))
         (pcase sexp
-          ('nil)
           ((pred consp)
            (when curr (push (nreverse curr) queries))
            (setf curr (list sexp)))

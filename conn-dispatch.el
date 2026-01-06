@@ -1971,6 +1971,9 @@ the meaning of depth."
   (declare (indent 0))
   (cl-with-gensyms (select-mode)
     `(progn
+       (unless (conn-substate-p conn-current-state
+                                'conn-dispatch-targets-state)
+         (error "Trying to suspend dispatch when state not active"))
        (conn-target-finder-suspend conn-dispatch-target-finder)
        (conn-cleanup-labels)
        (pcase-let ((`(,conn-target-window-predicate
@@ -1999,7 +2002,8 @@ the meaning of depth."
          (unwind-protect
              (progn
                (if ,select-mode (conn-dispatch-select-mode -1))
-               ,(macroexp-progn body))
+               (conn-without-recursive-stack
+                 ,@body))
            (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)

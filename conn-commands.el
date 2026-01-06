@@ -1055,7 +1055,8 @@ Yanks from the buffer in `minibuffer-selected-window'."
   :lighter "REPLACE")
 
 (defvar-keymap conn-replace-thing-argument-map
-  "p" 'project)
+  "p" 'project
+  "'" 'kapply)
 
 (cl-defstruct (conn-replace-thing-argument
                (:include conn-thing-argument)
@@ -1074,6 +1075,10 @@ Yanks from the buffer in `minibuffer-selected-window'."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        (_cmd (eql project)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                       (_cmd (eql kapply)))
   t)
 
 (defvar-keymap conn-regexp-argument-map
@@ -1179,7 +1184,7 @@ Yanks from the buffer in `minibuffer-selected-window'."
              (to (if (consp from)
                      (prog1 (cdr from) (setq from (car from)))
                    (query-replace-read-to from prompt regexp-flag))))
-        (list from to)))))
+        (cons from to)))))
 
 (cl-defgeneric conn-replace-do (thing
                                 arg

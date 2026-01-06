@@ -77,7 +77,7 @@
     "C-w" 'conn-isearch-restrict-to-thing
     "C-t" 'conn-isearch-thing-to-search-string
     "C-z" 'conn-isearch-exit-other-end
-    "M-'" 'conn-isearch-kapply-prefix
+    "M-'" 'conn-kapply-on-isearch
     "C-," 'conn-dispatch-isearch
     "C-'" 'conn-isearch-open-recursive-edit))
 
@@ -126,7 +126,7 @@
 (define-keymap
   :keymap conn-search-map
   "f" 'conn-dispatch-thing-at-point
-  "h '" 'conn-kapply-hightlight-prefix
+  "h '" 'conn-kapply-on-highlights
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward
   "o" 'occur
@@ -358,7 +358,7 @@
   "|" 'conn-shell-command-on-thing
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
-  "'" 'conn-kapply-prefix
+  "'" 'conn-kapply-on-things
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
   "a" 'execute-extended-command

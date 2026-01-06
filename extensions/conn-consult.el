@@ -293,17 +293,17 @@
                     (conn-kapply-make-region pt pt (marker-buffer marker))
                   (set-marker marker nil))))
             cands)))
-      (conn-regions-kapply-prefix
+      (conn-kapply-on-iterator
        (conn-kapply-region-iterator regions))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
-    (conn-regions-kapply-prefix
+    (conn-kapply-on-iterator
      (conn--consult-grep-iterator cands)))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
-    (conn-regions-kapply-prefix
+    (conn-kapply-on-iterator
      (conn-kapply-region-iterator
       (mapcar (lambda (cand)
                 (pcase (car (get-text-property 0 'consult-location cand))
