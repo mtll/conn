@@ -1439,21 +1439,20 @@ finishing showing the buffers that were visited."))
       (when-let* ((msg (conn--read-args-display-prefix-arg)))
         (concat ": " msg))))
     (when-let* ((args (flatten-tree
-                       (mapcar #'conn-argument-display arguments)))
-                (objs (seq-partition
-                       (mapcar #'substitute-command-keys args)
-                       3)))
-      (let ((flen (length (car objs)))
-            (llen (length (car (last objs)))))
-        (when (< llen flen)
-          (cl-callf nconc (car (last objs))
-            (make-list (- flen llen) ""))))
-      (with-work-buffer
-        (insert "\n")
-        (make-vtable :objects objs
-                     :separator-width 2
-                     :use-header-line nil)
-        (buffer-substring (point-min) (1- (point-max))))))))
+                       (mapcar #'conn-argument-display arguments))))
+      (cl-loop with objs = (make-list 3 nil)
+               with rows = (ceiling (length args) 3)
+               for i from 0 below (* 3 rows)
+               for arg = (pop args)
+               do (push (if arg (substitute-command-keys arg) "")
+                        (nth (mod i rows) objs))
+               finally return
+               (with-work-buffer
+                 (insert "\n")
+                 (make-vtable :objects (mapcar #'nreverse objs)
+                              :separator-width 3
+                              :use-header-line nil)
+                 (buffer-substring (point-min) (1- (point-max)))))))))
 
 ;;;; Commands
 

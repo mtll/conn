@@ -2240,10 +2240,12 @@ be displayed in the echo area during `conn-read-args'."
   (eq sym (conn-cycling-argument-cycling-command arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-cycling-argument))
-  (cl-symbol-macrolet ((choices (conn-cycling-argument-choices arg))
-                       (name (conn-cycling-argument-name arg))
-                       (formatter (conn-cycling-argument-formatter arg))
-                       (value (car-safe (conn-cycling-argument-value arg))))
+  (let ((choices (conn-cycling-argument-choices arg))
+        (name (conn-cycling-argument-name arg))
+        (formatter (conn-cycling-argument-formatter arg))
+        (value (if (consp (conn-cycling-argument-value arg))
+                   (car (conn-cycling-argument-value arg))
+                 (conn-cycling-argument-value arg))))
     (concat
      (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
      (cond
