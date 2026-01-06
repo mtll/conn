@@ -138,7 +138,7 @@
                         rows)
                     (while (seq-find 'identity curr)
                       (cl-loop for col in curr
-                               collect (or (car col) "-") into row
+                               collect (or (car col) "") into row
                                collect (cdr col) into next
                                finally do (progn
                                             (push row rows)

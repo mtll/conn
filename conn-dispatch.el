@@ -536,7 +536,8 @@ themselves once the selection process has concluded."
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face)
 
-(cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state)))
+(cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state))
+                                        &optional _type)
   (if (or defining-kbd-macro executing-kbd-macro)
       (error "Dispatch not available in keyboard macros")
     (cl-call-next-method)))

@@ -231,7 +231,7 @@ region."
          (setq matches (funcall sort-function matches))
          (conn-kapply-consume-region (pop matches)))))))
 
-(defun conn-kapply-region-iterator (regions &optional sort-function)
+(defun conn-kapply-region-iterator (regions &optional _sort-function)
   "Create an iterator over REGIONS.
 
 REGIONS must be a list of overlays.  See `conn-kapply-make-region'.
@@ -241,10 +241,10 @@ iterating over them.  SORT-FUNCTION should take a list of overlays."
   (declare (important-return-value t))
   (unless regions
     (user-error "No regions for kapply."))
-  (when sort-function
-    (setq regions (funcall sort-function regions)))
   (lambda (state)
     (pcase state
+      (:backward (cl-callf nreverse regions))
+      (:any-order (cl-callf conn--nnearest-first regions))
       (:cleanup
        (mapc #'delete-overlay regions))
       ((or :record :next)
@@ -961,10 +961,19 @@ When kapply finishes restore the restrictions in each buffer."
    `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region))))
 
-(defun conn-kapply-with-state (iterator conn-state)
+(defun conn-kapply-with-state (iterator &optional conn-state)
   "Begin each macro iteration in a recursive stack containing CONN-STATE."
   (declare (important-return-value t)
            (side-effect-free t))
+  (unless conn-state
+    (cl-loop for state in conn--state-stack
+             when (and state
+                       (not (conn-substate-p state 'conn-autopop-state)))
+             return (setq conn-state state))
+    (when (null conn-state)
+      (error "Could not determine a state to kapply in")))
+  (when (conn-substate-p conn-state 'conn-autopop-state)
+    (error "Cannot kapply in an autopop state"))
   (add-function
    :around (var iterator)
    (let (buffer-stacks)
@@ -976,7 +985,7 @@ When kapply finishes restore the restrictions in each buffer."
               (with-current-buffer buf
                 (setq conn--state-stack stack
                       conn-lighter nil)
-                (conn-enter-state (car stack))
+                (conn-enter-state (car stack) :pop-recurse)
                 (conn-update-lighter))))
            ((and (or :record :next)
                  (guard ret))
@@ -1431,7 +1440,14 @@ finishing showing the buffers that were visited."))
         (concat ": " msg))))
     (when-let* ((args (flatten-tree
                        (mapcar #'conn-argument-display arguments)))
-                (objs (seq-partition (mapcar #'substitute-command-keys args) 3)))
+                (objs (seq-partition
+                       (mapcar #'substitute-command-keys args)
+                       3)))
+      (let ((flen (length (car objs)))
+            (llen (length (car (last objs)))))
+        (when (< llen flen)
+          (cl-callf nconc (car (last objs))
+            (make-list (- flen llen) ""))))
       (with-work-buffer
         (insert "\n")
         (make-vtable :objects objs
@@ -1452,33 +1468,33 @@ finishing showing the buffers that were visited."))
                                    (restrictions t)
                                    (windows t)
                                    empty)
-  (conn-protected-let* ((it iterator (and it (funcall it :cleanup))))
-    (conn-read-args (conn-kapply-state
-                     :prompt "Kapply on Regions"
-                     :command-handler #'conn-kapply-command-handler
-                     :display-handler #'conn-kapply-display-handle)
-        ((applier (conn-kapply-macro-argument))
-         (pipeline
-          (conn-composite-argument
-           (or pipeline
-               (nconc (list (conn-kapply-other-end-argument other-end)
-                            (conn-kapply-ibuffer-argument ibuffer)
-                            (conn-kapply-query-argument query)
-                            (conn-kapply-excursions-argument excursions)
-                            (conn-kapply-restrictions-argument restrictions)
-                            (conn-kapply-empty-argument empty)
-                            (conn-kapply-window-conf-argument windows)
-                            (conn-kapply-undo-argument))
-                      (ensure-list extra))))))
-      (conn-kapply-macro
-       applier
-       (cl-shiftf it nil)
-       `(conn-kapply-relocate-to-region
-         conn-kapply-open-invisible
-         conn-kapply-pulse-region
-         ,(lambda (it)
-            (conn-kapply-with-state it conn-current-state))
-         ,@pipeline)))))
+  (conn-read-args (conn-kapply-state
+                   :prompt "Kapply"
+                   :command-handler #'conn-kapply-command-handler
+                   :display-handler #'conn-kapply-display-handle)
+      ((_ (conn-protected-argument iterator
+            (funcall iterator :cleanup)))
+       (applier (conn-kapply-macro-argument))
+       (pipeline
+        (conn-composite-argument
+         (or pipeline
+             (nconc (list (conn-kapply-other-end-argument other-end)
+                          (conn-kapply-ibuffer-argument ibuffer)
+                          (conn-kapply-query-argument query)
+                          (conn-kapply-excursions-argument excursions)
+                          (conn-kapply-restrictions-argument restrictions)
+                          (conn-kapply-empty-argument empty)
+                          (conn-kapply-window-conf-argument windows)
+                          (conn-kapply-undo-argument))
+                    (ensure-list extra))))))
+    (conn-kapply-macro
+     applier
+     iterator
+     `(conn-kapply-relocate-to-region
+       conn-kapply-open-invisible
+       conn-kapply-pulse-region
+       conn-kapply-with-state
+       ,@pipeline))))
 
 (cl-defmethod conn-replace-do ((_thing (eql 'kapply))
                                _arg
@@ -1522,13 +1538,39 @@ finishing showing the buffers that were visited."))
          (conn-thing-argument-dwim-rectangle t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (conn-kapply-on-iterator
-   (conn-kapply-region-iterator
-    (cl-loop for b in (conn-bounds-get
-                       (conn-bounds-of thing arg)
-                       :subregions transform)
-             for (beg . end) = (conn-bounds b)
-             collect (conn-kapply-make-region beg end)))))
+  (pcase (conn-bounds-of thing arg)
+    ((and bounds (conn-bounds-get :subregions transform))
+     (when conn-mark-state (conn-pop-state))
+     (deactivate-mark)
+     (conn-kapply-on-iterator
+      (conn-kapply-region-iterator
+       (cl-loop for b in (or subregions (list bounds))
+                for (beg . end) = (conn-bounds b)
+                collect (conn-kapply-make-region beg end)))))))
+
+(defun conn-kapply-count-iterator (&optional count)
+  (interactive "P")
+  (conn-read-args (conn-kapply-state
+                   :prompt "Kapply with Count"
+                   :prefix count
+                   :command-handler #'conn-kapply-command-handler
+                   :display-handler #'conn-kapply-display-handle)
+      ((applier (conn-kapply-macro-argument))
+       (pipeline (conn-composite-argument
+                  (list (conn-kapply-query-argument)
+                        (conn-kapply-excursions-argument t)
+                        (conn-kapply-restrictions-argument t)
+                        (conn-kapply-window-conf-argument t)
+                        (conn-kapply-undo-argument)))))
+    (conn-kapply-macro
+     (lambda (iterator)
+       (funcall applier iterator (or conn-read-args-last-prefix 0)))
+     (conn-kapply-infinite-iterator)
+     `(conn-kapply-relocate-to-region
+       conn-kapply-open-invisible
+       conn-kapply-pulse-region
+       conn-kapply-with-state
+       ,@pipeline))))
 
 (defvar-keymap conn-restrict-argument-map
   "v" 'restrict)
@@ -1542,20 +1584,16 @@ finishing showing the buffers that were visited."))
                     :command-handler #'conn-kapply-command-handler
                     :display-handler #'conn-kapply-display-handle)
        ((applier (conn-kapply-macro-argument))
-        (restrict (conn-cycling-argument
-                   "restrict"
-                   '(nil 'after 'before)
-                   'restrict
-                   :keymap conn-restrict-argument-map))
-        (order (conn-cycling-argument
-                "order"
-                '((nil . conn--nnearest-first)
-                  ("forward" . identity)
-                  ("backward" . nreverse))
-                'kapply-order
-                :keymap conn-kapply-order-argument-map))
+        (restrict (unless (or (bound-and-true-p multi-isearch-file-list)
+                              (bound-and-true-p multi-isearch-buffer-list))
+                    (conn-cycling-argument
+                     "restrict"
+                     '(nil 'after 'before)
+                     'restrict
+                     :keymap conn-restrict-argument-map)))
         (pipeline (conn-composite-argument
-                   (list (conn-kapply-ibuffer-argument t)
+                   (list (conn-kapply-order-argument)
+                         (conn-kapply-ibuffer-argument t)
                          (conn-kapply-query-argument)
                          (conn-kapply-excursions-argument t)
                          (conn-kapply-restrictions-argument t)
@@ -1575,7 +1613,6 @@ finishing showing the buffers that were visited."))
                             (remq (current-buffer) multi-isearch-buffer-list)
                             (list (current-buffer)))))
                   (t (conn--isearch-matches (current-buffer) restrict)))))
-       (setq matches (funcall order matches))
        (conn-kapply-macro
         applier
         (conn-kapply-region-iterator
@@ -1584,38 +1621,36 @@ finishing showing the buffers that were visited."))
         `(conn-kapply-relocate-to-region
           conn-kapply-open-invisible
           conn-kapply-pulse-region
-          ,(lambda (it)
-             (conn-kapply-with-state it conn-current-state))
+          conn-kapply-with-state
           ,@pipeline)))))
   (isearch-done))
 
 (defvar-keymap conn-read-pattern-map
   "p" 'read-pattern)
 
+(defun conn--kapply-highlights-read-patterns ()
+  (when (and (boundp 'hi-lock-interactive-patterns)
+             (boundp 'hi-lock-interactive-lighters))
+    (mapcar (lambda (regexp)
+              (alist-get regexp
+                         hi-lock-interactive-lighters
+                         nil nil #'equal))
+            (completing-read-multiple
+             "Regexps for kapply: "
+             (mapcar (lambda (pattern)
+                       (thread-first
+                         (rassq pattern hi-lock-interactive-lighters)
+                         car
+                         (or (car pattern))
+                         (cons pattern)))
+                     hi-lock-interactive-patterns)
+             nil t nil nil))))
+
 (defun conn-read-patterns-argument ()
-  (cl-flet
-      ((read-pats (it)
-         (when (and (boundp 'hi-lock-interactive-patterns)
-                    (boundp 'hi-lock-interactive-lighters))
-           (funcall
-            it
-            (cons :patterns
-                  (mapcar
-                   (lambda (regexp)
-                     (alist-get regexp
-                                hi-lock-interactive-lighters
-                                nil nil #'equal))
-                   (completing-read-multiple
-                    "Regexps for kapply: "
-                    (mapcar (lambda (pattern)
-                              (thread-first
-                                (rassq pattern hi-lock-interactive-lighters)
-                                car
-                                (or (car pattern))
-                                (cons pattern)))
-                            hi-lock-interactive-patterns)
-                    nil t nil nil)))))
-         it))
+  (cl-flet ((read-pats (it)
+              (funcall it `(:patterns
+                            . (conn--kapply-highlights-read-patterns)))
+              it))
     (oclosure-lambda (conn-anonymous-argument
                       (name
                        (lambda (arg)
@@ -1650,6 +1685,24 @@ finishing showing the buffers that were visited."))
   (conn-kapply-on-iterator
    (conn-kapply-highlight-iterator (point-min) (point-max))
    :extra (conn-read-patterns-argument)))
+
+(defun conn-kapply-on-occur ()
+  (interactive)
+  (conn-kapply-on-iterator
+   (conn-kapply-region-iterator
+    (save-excursion
+      (goto-char (point-min))
+      (cl-loop for match = (text-property-search-forward 'occur-target)
+               while match
+               nconc (pcase (prop-match-value match)
+                       ((and pt (guard (markerp pt)))
+                        (list (conn-kapply-make-region
+                               pt pt (marker-buffer pt))))
+                       (regs
+                        (cl-loop
+                         for (beg . end) in regs
+                         collect (conn-kapply-make-region
+                                  beg end (marker-buffer beg))))))))))
 
 ;;;;; Dispatch Kapply
 

@@ -741,7 +741,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
              ,@body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
-           (conn-enter-state (car ,stack))
+           (conn-enter-state (car ,stack) :pop-recurse)
            (conn-update-lighter))))))
 
 (defmacro conn-without-recursive-stack (&rest body)
@@ -756,13 +756,13 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
              (if-let* ((tail (memq nil conn--state-stack)))
                  (progn
                    (setq conn--state-stack (cdr tail))
-                   (conn-enter-state (cadr tail))
+                   (conn-enter-state (cadr tail) :pop-recurse)
                    (conn-update-lighter))
                (error "Not in a recursive state"))
              ,@body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
-           (conn-enter-state (car ,stack))
+           (conn-enter-state (car ,stack) :recurse)
            (conn-update-lighter))))))
 
 ;;;;; Cl-Generic Specializers
@@ -783,7 +783,7 @@ These match if the argument is a substate of STATE."
 
 ;;;;; Enter/Exit Functions
 
-(defvar conn-state-entry-functions nil
+(defvar conn-state-entry-hook nil
   "Hook run when a state is entered.
 
 When this hook is run `conn-previous-state' will be bound to the state
@@ -797,17 +797,17 @@ that has just been exited.")
 
 (defvar-local conn--state-exit-functions-ids nil)
 
-(defun conn--state-exit-default (_)
+(defun conn--state-exit-default (_type _)
   (when conn-current-state
     (set (cl-shiftf conn-current-state nil) nil)))
 
-(defun conn--run-exit-fns ()
+(defun conn--run-exit-fns (type)
   (let ((fns conn--state-exit-functions))
     (setq conn--state-exit-functions (list 'conn--state-exit-default)
           conn--state-exit-functions-ids nil)
-    (funcall (car fns) (cdr fns))))
+    (funcall (car fns) type (cdr fns))))
 
-(defmacro conn-state-on-exit (&rest body)
+(defmacro conn-state-on-exit (type &rest body)
   "Defer evaluation of BODY until the current state is exited.
 
 Note that if a `conn-state-on-exit' form is evaluated multiple times in
@@ -821,28 +821,32 @@ current state.  See also `conn--clone-buffer-setup'.
 When BODY is evaluated `conn-next-state' will be bound to the state that
 is being entered after the current state has exited or nil if
 `conn-local-mode' is being exited or a cloned buffer is being setup."
-  (declare (indent 0)
+  (declare (indent 1)
            (debug (def-body)))
+  (when (eql ?_ (string-to-char (symbol-name type)))
+    (setq type (gensym)))
   (cl-with-gensyms (rest)
-    `(push (lambda (,rest)
+    `(push (lambda (,type ,rest)
              (unwind-protect
                  ,(macroexp-progn body)
-               (funcall (car ,rest) (cdr ,rest))))
+               (funcall (car ,rest) ,type (cdr ,rest))))
            conn--state-exit-functions)))
 
-(defmacro conn-state-on-exit-once (&rest body)
+(defmacro conn-state-on-exit-once (type &rest body)
   "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
 
 For more information see `conn-state-on-exit'."
-  (declare (indent 0)
+  (declare (indent 1)
            (debug (def-body)))
+  (when (eql ?_ (string-to-char (symbol-name type)))
+    (setq type (gensym)))
   (cl-with-gensyms (rest id)
     `(unless (memq ',id conn--state-exit-functions-ids)
        (push ',id conn--state-exit-functions-ids)
-       (push (lambda (,rest)
+       (push (lambda (,type ,rest)
                (unwind-protect
                    ,(macroexp-progn body)
-                 (funcall (car ,rest) (cdr ,rest))))
+                 (funcall (car ,rest) ,type (cdr ,rest))))
              conn--state-exit-functions))))
 
 (defconst conn--state-re-entry-functions
@@ -926,7 +930,7 @@ If BUFFER is nil then use the current buffer."
         (let ((c (conn-state-get conn-current-state :cursor nil t)))
           (if (functionp c) (funcall c) c))))
 
-(cl-defgeneric conn-enter-state (state)
+(cl-defgeneric conn-enter-state (state &optional type)
   "Enter STATE.
 
 Code that is run when a state is entered should be added as methods to
@@ -934,10 +938,13 @@ this function.  The (conn-substate STATE) specializer is provided so
 that code can be run for every state inheriting from some parent state.
 
 To execute code when a state is exiting use `conn-state-on-exit'."
-  (:method ((_state (conn-substate t))) "Noop" nil)
-  (:method (state) (error "Attempting to enter unknown state: %s" state)))
+  ( :method ((_state (conn-substate t)) &optional _)
+    "Noop" nil)
+  ( :method (state &optional _)
+    (error "Attempting to enter unknown state: %s" state)))
 
-(cl-defmethod conn-enter-state :around ((state (conn-substate t)))
+(cl-defmethod conn-enter-state :around ((state (conn-substate t))
+                                        &optional type)
   (unless (symbol-value state)
     (when (conn-state-get state :abstract)
       (error "Attempting to enter abstract state %s" state))
@@ -945,7 +952,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (conn--run-exit-fns))
+              (conn--run-exit-fns type))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties)
             (conn--setup-state-keymaps)
@@ -960,18 +967,18 @@ To execute code when a state is exiting use `conn-state-on-exit'."
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
       (run-hook-wrapped
-       'conn-state-entry-functions
+       'conn-state-entry-hook
        (lambda (fn)
          (condition-case err
              (funcall fn)
            (error
-            (remove-hook 'conn-state-entry-functions fn)
-            (message "Error in conn-state-entry-functions: %s" (car err)))))))))
+            (remove-hook 'conn-state-entry-hook fn)
+            (message "Error in conn-state-entry-hook: %s" (car err)))))))))
 
 (defun conn-push-state (state)
   "Enter STATE and push it to the state stack."
   (unless (symbol-value state)
-    (conn-enter-state state)
+    (conn-enter-state state :push)
     (push state conn--state-stack)))
 
 (defun conn-pop-state ()
@@ -984,7 +991,7 @@ current state does not have a :pop-alternate property then push
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (progn
-        (conn-enter-state state)
+        (conn-enter-state state :pop)
         (pop conn--state-stack))
     (conn-push-state
      (conn-state-get conn-current-state :pop-alternate
@@ -1002,8 +1009,7 @@ current state does not have a :pop-alternate property then push
   (prog1 conn--state-stack
     (unwind-protect
         (progn
-          (let ((conn-entering-recursive-stack t))
-            (conn-enter-state state))
+          (conn-enter-state state :recurse)
           (push nil conn--state-stack)
           (push state conn--state-stack)
           ;; Ensure the lighter gets updates even if we haven't changed state
@@ -1019,7 +1025,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
                thereis (eq cons cookie))
       (progn
         (setq conn--state-stack cookie)
-        (conn-enter-state (car conn--state-stack))
+        (conn-enter-state (car conn--state-stack) :pop-recurse)
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
         (conn-update-lighter))
@@ -1233,10 +1239,11 @@ Causes the mode-line face to be remapped to the face specified by the
  "Used by `conn-mode-line-face-state'.  Face for the mode line in the
 state.")
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
+(cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state))
+                                &optional _type)
   (when-let* ((face (conn-state-get state :mode-line-face))
               (cookie (face-remap-add-relative 'mode-line face)))
-    (conn-state-on-exit
+    (conn-state-on-exit _type
       (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
@@ -1272,14 +1279,16 @@ state.")
     conn-emacs-state-at-mark
     conn-emacs-state))
 
-(cl-defmethod conn-enter-state ((_state (eql conn-emacs-state)))
+(cl-defmethod conn-enter-state ((_state (eql conn-emacs-state))
+                                &optional _type)
   (when (memq this-command conn-emacs-state-preserve-prefix-commands)
     (run-hooks 'prefix-command-preserve-state-hook)
     (prefix-command-update))
   (cl-call-next-method))
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
-  (conn-state-on-exit
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state))
+                                &optional _type)
+  (conn-state-on-exit _exit-type
     (conn-ring-delete (point) conn-emacs-state-ring #'=)
     (let ((pt (conn--create-marker (point) nil t)))
       (conn-ring-insert-front conn-emacs-state-ring pt)
@@ -1312,7 +1321,8 @@ popped and nil otherwise.  The default value is `always'.  Note that the
 function is not called and the state stays active if the previous
 command was a prefix command.")
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
+(cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
+                                &optional _type)
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
         (preserve-state (make-symbol "preserve-state"))
@@ -1338,11 +1348,12 @@ command was a prefix command.")
                      (if (or (cl-shiftf prefix-command nil)
                              (not (funcall pred)))
                          (add-hook 'pre-command-hook pre 99 t)
-                       (remove-hook 'prefix-command-preserve-state-hook preserve-state)
-                       (conn-enter-state (conn-peek-state)))))))
-    (conn-state-on-exit
-      (when (and (not conn-entering-recursive-stack)
-                 (eq state (car conn--state-stack)))
+                       (remove-hook 'prefix-command-preserve-state-hook
+                                    preserve-state)
+                       (conn-enter-state (conn-peek-state) :autopop))))))
+    (conn-state-on-exit exit-type
+      (when (or (eq exit-type :push)
+                (eq exit-type :autopop))
         (pop conn--state-stack))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
@@ -1389,19 +1400,20 @@ entering mark state.")
   (interactive)
   (setq deactivate-mark t))
 
-(defun conn-mark-state-keep-mark-active-p ()
+(defun conn-mark-state-keep-mark-active-p (exit-type)
   "When non-nil keep the mark active when exiting `conn-mark-state'."
   (or (conn-substate-p conn-next-state 'conn-emacs-state)
-      conn-entering-recursive-stack))
+      (eq exit-type :recurse)))
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state)))
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
+                                &optional _type)
   (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
                                   (fboundp 'rectangle--pos-cols)
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
-  (conn-state-on-exit
+  (conn-state-on-exit exit-type
     (conn-set-last-thing-command 'region nil nil)
-    (if (conn-mark-state-keep-mark-active-p)
+    (if (conn-mark-state-keep-mark-active-p exit-type)
         (when (bound-and-true-p rectangle-mark-mode)
           (conn-state-on-re-entry
             (rectangle-mark-mode 1)))
@@ -1480,6 +1492,8 @@ entering mark state.")
 
 (defvar conn-reading-args nil
   "Non-nil during `conn-read-args'.")
+
+(defvar conn-read-args-last-prefix nil)
 
 (defvar conn--read-args-prefix-mag nil)
 (defvar conn--read-args-prefix-sign nil)
@@ -1826,18 +1840,20 @@ This skips executing the body of the `conn-read-args' form entirely."
                (while (continue-p)
                  (unless executing-kbd-macro
                    (display-message))
-                 (read-command))))
+                 (read-command))
+               (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))
            (setq local-exit t)))
-      (let ((ret (apply
-                  (catch 'conn-read-args-return
-                    (unwind-protect
-                        (if around (funcall around #'cont) (cont))
-                      (unless local-exit
-                        (mapc #'conn-argument-cancel arguments))
-                      (unless executing-kbd-macro
-                        (message nil)))
-                    (cons callback
-                          (mapcar #'conn-argument-extract-value arguments))))))
+      (let* ((conn-read-args-last-prefix nil)
+             (ret (apply
+                   (catch 'conn-read-args-return
+                     (unwind-protect
+                         (if around (funcall around #'cont) (cont))
+                       (unless local-exit
+                         (mapc #'conn-argument-cancel arguments))
+                       (unless executing-kbd-macro
+                         (message nil)))
+                     (cons callback
+                           (mapcar #'conn-argument-extract-value arguments))))))
         (when interactive
           (add-to-history 'conn-command-history
                           (cons interactive ret)
@@ -2298,5 +2314,19 @@ be displayed in the echo area during `conn-read-args'."
        (propertize (conn-read-argument-name arg)
                    'face (when (conn-argument-value arg)
                            'conn-argument-active-face)))))
+
+;;;;; Protected Argument
+
+(cl-defstruct (conn-protected-argument
+               (:constructor conn--protected-argument (value cleanup)))
+  (value nil :type t)
+  (cleanup nil :type function))
+
+(defmacro conn-protected-argument (value &rest cleanup-body)
+  (declare (indent 1))
+  `(conn--protected-argument ,value (lambda () ,@cleanup-body)))
+
+(cl-defmethod conn-argument-cancel ((arg conn-protected-argument))
+  (funcall (conn-protected-argument-cleanup arg)))
 
 (provide 'conn-states)

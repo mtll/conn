@@ -897,7 +897,7 @@ If ARG is non-nil move down ARG lines before opening line."
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (conn-push-state 'conn-emacs-state)
-  (conn-state-on-exit
+  (conn-state-on-exit _exit-type
     (overwrite-mode -1))
   (if arg
       (binary-overwrite-mode 1)

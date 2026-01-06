@@ -103,7 +103,7 @@
            finally do (setq conn--previous-mark-state mstate))
   (setq conn--state-stack nil)
   (let (conn-next-state)
-    (conn--run-exit-fns))
+    (conn--run-exit-fns :clone))
   (or (run-hook-with-args-until-success 'conn-setup-state-hook)
       (conn-push-state 'conn-emacs-state)))
 
@@ -162,7 +162,7 @@
                        'conn-replace-default))
     (setq conn--state-stack nil)
     (let (conn-next-state)
-      (conn--run-exit-fns))
+      (conn--run-exit-fns :exit))
     (kill-local-variable 'conn-lighter)
     (conn--clear-overlays)
     (setq cursor-type t)

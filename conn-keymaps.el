@@ -71,6 +71,10 @@
   "#" 'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-command-state 'occur-mode)
+  "<conn-edit-map> '" 'conn-kapply-on-occur)
+
 (defun conn-setup-isearch-map ()
   (define-keymap
     :keymap isearch-mode-map
@@ -92,7 +96,7 @@
   :keymap conn-default-edit-map
   "=" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
-  "'" 'conn-kapply-on-thing-prefix
+  "'" 'conn-kapply-count-iterator
   "+" 'indent-relative-first-indent-point
   ";" 'conn-comment-thing
   "_" 'indent-relative
@@ -258,7 +262,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
-  "<remap> <conn-pop-state>" 'conn-pop-mark-state
   "DEL" 'kill-region
   "e" 'conn-emacs-state
   "TAB" 'indent-rigidly
