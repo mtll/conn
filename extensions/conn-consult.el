@@ -29,7 +29,6 @@
   (require 'cl-lib)
   (require 'subr-x))
 
-(declare-function conn-regions-kapply-prefix "conn-transient")
 (declare-function consult-imenu "consult-imenu")
 
 (defgroup conn-consult nil

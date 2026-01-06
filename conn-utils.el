@@ -409,6 +409,9 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
                                 (conn--create-marker location))))))
   (when msg (message "Jump ring pushed")))
 
+(defun conn--jump-pre-command-hook ()
+  (set-marker conn-this-command-start (point) (current-buffer)))
+
 (defun conn--jump-post-command-hook ()
   (when-let* ((_ (marker-position conn-this-command-start))
               (pred (function-get this-command :conn-jump-command)))
@@ -419,15 +422,6 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
           (conn-push-jump-ring conn-this-command-start))
       (ignore-errors
         (funcall pred conn-this-command-start)))))
-
-(defun conn-set-last-thing-command (thing arg pt)
-  (let ((marker (if-let* ((mk (car conn--last-thing-override))
-                          (_ (markerp mk)))
-                    mk
-                  (make-marker))))
-    (setq conn--last-thing-override
-          (cons (set-marker marker pt)
-                (cons thing arg)))))
 
 (defun conn-set-jump-command (command &optional predicate)
   "Register COMMAND as a jump command.

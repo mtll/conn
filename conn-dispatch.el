@@ -3341,8 +3341,7 @@ exchanges the point and mark."))
                                 end
                               beg))
                (push-mark nil t)
-               (goto-char beg)
-               (conn-set-last-thing-command thing arg pt)))
+               (goto-char beg)))
             (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-push-button
@@ -4087,8 +4086,7 @@ it."))
       (unless (= pt (point))
         (unless (region-active-p)
           (push-mark nil t))
-        (goto-char pt))
-      (conn-set-last-thing-command 'region nil nil))))
+        (goto-char pt)))))
 
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))

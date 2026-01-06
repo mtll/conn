@@ -187,7 +187,7 @@
   :keymap (conn-get-state-map 'conn-paren-state)
   :suppress t
   "SPC" 'conn-set-mark-command
-  "v" 'conn-mark-last-command
+  "v" 'conn-mark-thing
   ;; "z"
   "`" 'conn-wincontrol-mru-window
   "e" 'conn-pop-state

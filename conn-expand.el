@@ -180,15 +180,18 @@ Expansions and contractions are provided by functions in
                      (conn-read-args-handle)))
                 (user-error
                  (conn-read-args-error (error-message-string err)))))
-            (display (prompt args)
-              (message
-               (substitute-command-keys
-                (concat
-                 (conn--read-args-prompt prompt args)
-                 "\n"
-                 "\\[conn-expand] expand; "
-                 "\\[conn-contract] contract; "
-                 "\\[end] finish")))))
+            (display (prompt args &optional teardown)
+              (if teardown
+                  (unless executing-kbd-macro
+                    (message nil))
+                (message
+                 (substitute-command-keys
+                  (concat
+                   (conn--read-args-prompt prompt args)
+                   "\n"
+                   "\\[conn-expand] expand; "
+                   "\\[conn-contract] contract; "
+                   "\\[end] finish"))))))
     (save-excursion
       (push-mark nil t)
       (conn-expand-subr (prefix-numeric-value arg))

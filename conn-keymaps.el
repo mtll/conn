@@ -250,11 +250,11 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'minibuffer-mode)
-  "M-Y" 'conn-yank-last-thing-to-minibuffer)
+  "C-t" 'conn-yank-thing-to-minibuffer)
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-command-state 'minibuffer-mode)
-  "M-Y" 'conn-yank-last-thing-to-minibuffer)
+  "C-t" 'conn-yank-thing-to-minibuffer)
 
 ;;;;; State Keymaps
 
@@ -271,7 +271,7 @@
   "*" 'calc-grab-region
   "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
-  "V" 'undefined
+  "V" 'conn-mark-thing
   "g" 'conn-surround
   "RET" 'conn-duplicate-thing
   "SPC" 'conn-push-mark-command)
@@ -311,7 +311,6 @@
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "R" 'conn-replace
-  "C" 'conn-copy-last-thing
   "#" 'eshell
   "$" 'project-eshell
   "F" 'conn-bind-last-dispatch-to-key
@@ -375,7 +374,7 @@
   "q" 'conn-yank-replace
   "<" 'point-to-register
   "t" 'conn-transpose-things
-  "v" 'conn-mark-last-command
+  "v" 'conn-mark-thing
   "V" 'conn-previous-mark-command
   "b" conn-edit-remap
   "d" 'conn-kill-thing
@@ -383,7 +382,6 @@
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
-  "Z" 'conn-last-thing-other-end
   "z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State

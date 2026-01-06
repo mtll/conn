@@ -419,28 +419,6 @@ The command to be stored is read from `command-history'."
     (rectangle-mark-mode)
     (conn-push-state 'conn-mark-state)))
 
-(defun conn-mark-last-command ()
-  "Mark the region defined by the most recent thing command.
-
-If no region is found then push a mark at point and activate it."
-  (interactive)
-  (pcase (conn-bounds-of-last)
-    ((and bounds (conn-bounds `(,beg . ,end)))
-     (push-mark (pcase (conn-bounds-get bounds :direction)
-                  (1 beg)
-                  (-1 end)
-                  (_ (if (= (point) beg) end beg)))
-                nil t)
-     (goto-char (pcase (conn-bounds-get bounds :direction)
-                  (1 end)
-                  (-1 beg)
-                  (_ (if (= (point) beg) beg end))))
-     (conn-push-state 'conn-mark-state))
-    (_
-     (activate-mark)
-     ;; (push-mark nil nil t)
-     (conn-push-state 'conn-mark-state))))
-
 (defun conn-set-mark-command ()
   "Push a mark at point and activate it.
 
@@ -494,14 +472,6 @@ If the mark is already active then deactivate it instead."
   (when (and (region-active-p)
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
-
-(defun conn-last-thing-other-end ()
-  (interactive)
-  (if (region-active-p)
-      (conn-exchange-mark-command)
-    (pcase (conn-bounds-of-last)
-      ((conn-bounds `(,beg . ,end))
-       (goto-char (if (= (point) end) beg end))))))
 
 (defun conn-push-mark-command ()
   "Set mark at point and push old mark on mark ring."
@@ -853,21 +823,6 @@ Interactively ARG is the prefix argument."
   (interactive)
   (conn-push-state 'conn-command-state))
 
-(defun conn-emacs-state-other-end ()
-  "Exchange point and mark then enter `conn-emacs-state'."
-  (interactive)
-  (pcase (conn-bounds-of-last)
-    ((and bounds (conn-bounds `(,beg . ,end)))
-     (cond ((= (point) beg)
-            (goto-char end))
-           ((= (point) end)
-            (goto-char beg))
-           ((eql 1 (conn-bounds-get bounds :direction))
-            (goto-char beg))
-           (t (goto-char end)))
-     (conn-push-state 'conn-emacs-state))
-    (_ (user-error "No last thing command"))))
-
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
 
@@ -1019,17 +974,18 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Minibuffer Commands
 
-(defun conn-yank-last-thing-to-minibuffer ()
-  "Yank the region of the last thing command.
-
-Yanks from the buffer in `minibuffer-selected-window'."
+(defun conn-yank-thing-to-minibuffer ()
   (interactive)
   (insert-for-yank
    (with-minibuffer-selected-window
-     (pcase (conn-bounds-of-last)
-       ((conn-bounds `(,beg . ,end))
-        (filter-buffer-substring beg end))
-       (_ (user-error "No last thing to yank"))))))
+     (conn-read-args (conn-read-thing-state
+                      :prompt "Thing")
+         ((`(,thing ,arg) (conn-thing-argument t))
+          (transform (conn-transform-argument)))
+       (pcase (conn-bounds-of thing arg)
+         ((conn-bounds `(,beg . ,end) transform)
+          (filter-buffer-substring beg end))
+         (_ (user-error "No last thing to yank")))))))
 
 ;;;; Thing Commands
 
@@ -1109,20 +1065,6 @@ Yanks from the buffer in `minibuffer-selected-window'."
                           'face 'minibuffer-prompt
                           'separator t)))))
 
-(defun conn-replace-read-default ()
-  (pcase (conn-bounds-of-last)
-    ((conn-bounds `(,beg . ,end))
-     (when (and (< (- end beg) 60)
-                (<= end (save-excursion
-                          (goto-char beg)
-                          (pos-eol)))
-                (not (use-region-p)))
-       (buffer-substring-no-properties beg end)))))
-
-(defun conn-replace-read-regexp-default ()
-  (when-let* ((default (conn-replace-read-default)))
-    (regexp-quote default)))
-
 (defvar conn--replace-reading nil)
 
 (defun conn--replace-read-from ( prompt
@@ -1151,18 +1093,9 @@ Yanks from the buffer in `minibuffer-selected-window'."
                               (isearch-no-upper-case-p from-string regexp-flag)))
                       from-string)))
     (minibuffer-with-setup-hook
-        (lambda ()
-          (setq-local conn--replace-reading t)
-          (thread-last
-            (current-local-map)
-            (make-composed-keymap conn-replace-from-map)
-            (use-local-map)))
+        (lambda () (setq-local conn--replace-reading t))
       (if regexp-flag
-          (let ((query-replace-read-from-regexp-default
-                 (if-let* ((def (conn-replace-read-regexp-default)))
-                     def
-                   query-replace-read-from-regexp-default)))
-            (query-replace-read-from prompt regexp-flag))
+          (query-replace-read-from prompt regexp-flag)
         (query-replace-read-from prompt regexp-flag)))))
 
 (defun conn--replace-read-args (&optional
@@ -1807,15 +1740,6 @@ Exiting the recursive edit will resume the isearch."
                                         _at-point-and-mark)
   (user-error "Invalid transpose thing"))
 
-(cl-defmethod conn-transpose-things-do ((_cmd (eql conn-mark-last-command))
-                                        _arg
-                                        _at-point-and-mark)
-  (pcase (conn-bounds-of-last)
-    ((and bounds (conn-bounds `(,beg . ,end)))
-     (push-mark (if (eql 1 (conn-bounds-get bounds :direction)) beg end) nil t)
-     (goto-char (if (eql 1 (conn-bounds-get bounds :direction)) end beg))))
-  (cl-call-next-method))
-
 (cl-defmethod conn-transpose-things-do ((cmd (conn-thing isearch))
                                         arg
                                         _at-point-and-mark)
@@ -1834,15 +1758,15 @@ Exiting the recursive edit will resume the isearch."
   (pulse-momentary-highlight-region (region-beginning) (region-end))
   (let ((bounds1 (cons (region-beginning) (region-end)))
         (buf (current-buffer))
-        (conn--recursive-edit-transpose t)
-        (use-region nil))
+        (conn--recursive-edit-transpose t))
     (conn-with-recursive-stack 'conn-command-state
       (unwind-protect
           (progn
             (conn-bounds-of-recursive-edit-mode 1)
             (recursive-edit))
-        (conn-bounds-of-recursive-edit-mode -1))
-      (setq use-region (use-region-p)))
+        (conn-bounds-of-recursive-edit-mode -1)))
+    (unless (region-active-p)
+      (user-error "No region to transpose"))
     (conn--dispatch-transpose-subr
      buf
      (car bounds1)
@@ -1853,11 +1777,9 @@ Exiting the recursive edit will resume the isearch."
      nil nil
      (current-buffer)
      (point)
-     (let ((bounds2 (if use-region
-                        (conn-make-bounds
-                         'region nil
-                         (cons (region-beginning) (region-end)))
-                      (conn-bounds-of-last))))
+     (let ((bounds2 (conn-make-bounds
+                     'region nil
+                     (cons (region-beginning) (region-end)))))
        (conn-anonymous-thing
          'region
          :bounds-op ( :method (_self _arg) bounds2)))
@@ -2969,18 +2891,6 @@ that place."
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))))))
-
-(defun conn-copy-last-thing ()
-  "Copy the thing just moved over or the active region."
-  (interactive)
-  (if (region-active-p)
-      (progn
-        (pulse-momentary-highlight-region (region-beginning) (region-end))
-        (copy-region-as-kill (region-beginning) (region-end) t))
-    (pcase (conn-bounds-of-last)
-      ((conn-bounds `(,beg . ,end))
-       (pulse-momentary-highlight-region beg end)
-       (copy-region-as-kill beg end)))))
 
 ;;;;; How Many
 

@@ -63,33 +63,6 @@
       (unless (= pt (point))
         (conn-push-jump-ring pt)))))
 
-(defun conn--read-regexp-suggestions-ad (&rest app)
-  (pcase (conn-bounds-of-last)
-    ((and (conn-bounds `(,beg . ,end))
-          (app conn-bounds-thing (app conn-thing-all-parents ps)))
-     (if (> 1000 (abs (- beg end)))
-         (let ((str (buffer-substring-no-properties beg end)))
-           `(,str
-             ,@(when (or (memq 'symbol ps)
-                         (memq 'sexp ps))
-                 (list (rx symbol-start (literal str) symbol-end)
-                       (rx word-start (literal str) word-end)))
-             ,@(when (memq 'word ps)
-                 (list (rx word-start (literal str) word-end)
-                       (rx symbol-start (literal str) symbol-end)))
-             ,@(apply app)))
-       (apply app)))
-    (_ (apply app))))
-
-(defun conn--read-from-suggestions-ad (&rest app)
-  (pcase (conn-bounds-of-last)
-    ((conn-bounds `(,beg . ,end))
-     (if (> 1000 (abs (- beg end)))
-         (let ((str (buffer-substring-no-properties beg end)))
-           (cons str (apply app)))
-       (apply app)))
-    (_ (apply app))))
-
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
@@ -138,15 +111,6 @@
                 (conn-make-ring 8
                                 :cleanup (lambda (mk) (set-marker mk nil))
                                 :copier #'conn--copy-mark)))
-        (if query-replace-read-from-default
-            (add-function :around
-                          (local 'query-replace-read-from-default)
-                          (lambda (fn &rest args)
-                            (or (conn-replace-read-default)
-                                (when fn (apply fn args))))
-                          `((name . conn-replace-default)))
-          (setq query-replace-read-from-default #'conn-replace-read-default))
-        (add-hook 'post-command-hook #'conn--thing-post-command-hook 95 t)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -155,18 +119,12 @@
               conn--active-major-mode-maps (conn--derived-mode-all-parents major-mode))
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (if (eq query-replace-read-from-default
-            #'conn-replace-read-default)
-        (setq query-replace-read-from-default nil)
-      (remove-function (local 'query-replace-read-from-default)
-                       'conn-replace-default))
     (setq conn--state-stack nil)
     (let (conn-next-state)
       (conn--run-exit-fns :exit))
     (kill-local-variable 'conn-lighter)
     (conn--clear-overlays)
     (setq cursor-type t)
-    (remove-hook 'post-command-hook #'conn--thing-post-command-hook t)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
@@ -187,25 +145,17 @@
         (progn
           (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
           (advice-add 'xref--push-markers :after #'conn--xref-push-markers-ad)
-          (advice-add 'query-replace-read-from-suggestions :around
-                      #'conn--read-from-suggestions-ad)
-          (advice-add 'read-regexp-suggestions :around
-                      #'conn--read-regexp-suggestions-ad)
           (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-          (add-hook 'pre-command-hook #'conn--thing-pre-command-hook)
+          (add-hook 'pre-command-hook #'conn--jump-pre-command-hook)
           (add-hook 'post-command-hook #'conn--jump-post-command-hook 90))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
       (advice-remove 'xref--push-markers #'conn--xref-push-markers-ad)
-      (advice-remove 'query-replace-read-from-suggestions
-                     #'conn--read-from-suggestions-ad)
-      (advice-remove 'read-regexp-suggestions
-                     #'conn--read-regexp-suggestions-ad)
       (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
       (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
       (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-      (remove-hook 'post-command-hook #'conn--thing-post-command-hook)
+      (remove-hook 'pre-command-hook #'conn--jump-pre-command-hook)
       (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
 
 (define-minor-mode conn-emacs-state-operators-mode
@@ -217,7 +167,7 @@
   :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-emacs-state-operators-mode)
   "C-w" 'conn-kill-thing
   "M-w" 'conn-copy-thing
-  "C-t" 'conn-transpose-things)
+  "M-t" 'conn-transpose-things)
 
 (provide 'conn)
 

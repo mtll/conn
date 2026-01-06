@@ -853,22 +853,24 @@ For more information see `conn-state-on-exit'."
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-on-re-entry (&rest body)
+(defmacro conn-state-on-re-entry (type &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
 
 BODY will never be evaluated if the state is not re-entered."
-  (declare (indent 0))
+  (declare (indent 1))
+  (when (eql ?_ (string-to-char (symbol-name type)))
+    (setq type (gensym)))
   (cl-with-gensyms (next)
     `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
        (setf (gethash conn--state-stack conn--state-re-entry-functions)
-             (lambda ()
+             (lambda (,type)
                (unwind-protect
                    ,(macroexp-progn body)
-                 (when ,next (funcall ,next))))))))
+                 (when ,next (funcall ,next ,type))))))))
 
-(defun conn--run-re-entry-fns ()
+(defun conn--run-re-entry-fns (type)
   (when-let* ((fn (gethash conn--state-stack conn--state-re-entry-functions)))
-    (funcall fn)))
+    (funcall fn type)))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
@@ -962,7 +964,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (conn--run-re-entry-fns))
+            (conn--run-re-entry-fns type))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
@@ -1412,10 +1414,9 @@ entering mark state.")
                                   (rectangle--pos-cols (point) (mark)))
         conn-record-mark-state t)
   (conn-state-on-exit exit-type
-    (conn-set-last-thing-command 'region nil nil)
     (if (conn-mark-state-keep-mark-active-p exit-type)
         (when (bound-and-true-p rectangle-mark-mode)
-          (conn-state-on-re-entry
+          (conn-state-on-re-entry _type
             (rectangle-mark-mode 1)))
       (deactivate-mark))
     (unless (or (null conn-record-mark-state)
@@ -1603,8 +1604,11 @@ The duration of the message display is controlled by
                        (mapcar #'conn-argument-display arguments))))
       (concat "\n" (string-join args "; "))))))
 
-(defun conn--read-args-display-prompt (prompt arguments)
-  (message (conn--read-args-prompt prompt arguments)))
+(defun conn--read-args-display-prompt (prompt arguments &optional teardown)
+  (if teardown
+      (unless executing-kbd-macro
+        (message nil))
+    (message (conn--read-args-prompt prompt arguments))))
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
@@ -1846,12 +1850,11 @@ This skips executing the body of the `conn-read-args' form entirely."
       (let* ((conn-read-args-last-prefix nil)
              (ret (apply
                    (catch 'conn-read-args-return
-                     (unwind-protect
-                         (if around (funcall around #'cont) (cont))
+                     (conn--unwind-protect-all
+                       (if around (funcall around #'cont) (cont))
                        (unless local-exit
                          (mapc #'conn-argument-cancel arguments))
-                       (unless executing-kbd-macro
-                         (message nil)))
+                       (funcall display-handler nil nil t))
                      (cons callback
                            (mapcar #'conn-argument-extract-value arguments))))))
         (when interactive
@@ -2211,11 +2214,14 @@ be displayed in the echo area during `conn-read-args'."
                   required
                   annotation
                   reference
+                  display-prefix
                   &aux
                   (value (car choices)))))
+  (display-prefix nil :type (or nil string))
   (choices nil :type list :read-only t)
   (cycling-command nil :type symbol :read-only t)
-  (formatter #'identity :type function :read-only t))
+  (formatter #'conn-format-cycling-argument
+             :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
@@ -2256,6 +2262,7 @@ be displayed in the echo area during `conn-read-args'."
          name))
       (value
        (concat
+        (conn-cycling-argument-display-prefix arg)
         (propertize "(" 'face 'shadow)
         (let ((cs choices)
               result)

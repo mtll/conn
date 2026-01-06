@@ -80,28 +80,6 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
   "Place a mark where point used to be."
   (unless (= beg (point)) beg))
 
-(defun conn--thing-pre-command-hook ()
-  (set-marker conn-this-command-start (point) (current-buffer)))
-
-(defun conn--thing-post-command-hook ()
-  (unless conn--last-thing-command-pos
-    (setf conn--last-thing-command-pos (make-marker)))
-  (cond (conn--last-thing-override
-         (pcase-let ((`(,mk . ,thing+arg) conn--last-thing-override))
-           (setf conn--last-thing-command thing+arg)
-           (set-marker conn--last-thing-command-pos
-                       (and (markerp mk)
-                            (marker-position mk)))
-           (when (markerp mk) (set-marker mk nil)))
-         (setf conn--last-thing-override nil))
-        ((and (conn-thing-command-p this-command)
-              (eq (current-buffer)
-                  (marker-buffer conn-this-command-start)))
-         (set-marker conn--last-thing-command-pos
-                     (marker-position conn-this-command-start))
-         (setf conn--last-thing-command
-               (cons this-command current-prefix-arg)))))
-
 ;;;; Thing Types
 
 (cl-defstruct (conn-bounds
@@ -1306,12 +1284,6 @@ the point is within the region then the entire region is returned.")))
          (pt (point)))
     (conn-make-bounds cmd arg (cons (min pt mk) (max pt mk)))))
 
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-mark-last-command))
-                              _arg)
-  (if (region-active-p)
-      (cl-call-next-method)
-    (conn-bounds-of-last)))
-
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
                               _arg)
   (unless conn--previous-mark-state
@@ -1383,60 +1355,6 @@ the point is within the region then the entire region is returned.")))
       bounds)))
 
 (conn-register-thing 'conn-thing-at-isearch)
-
-;;;;; Bounds of Last
-
-(defvar-local conn--bounds-of-last-cache nil)
-
-(defun conn-bounds-of-last ()
-  (if (region-active-p)
-      (progn
-        (setf conn--bounds-of-last-cache nil)
-        (conn-bounds-of 'region nil))
-    (cdr
-     (if (and conn--bounds-of-last-cache
-              (eq conn--last-thing-command
-                  (caar conn--bounds-of-last-cache))
-              (eql (buffer-chars-modified-tick)
-                   (cdar conn--bounds-of-last-cache)))
-         conn--bounds-of-last-cache
-       (pcase conn--last-thing-command
-         (`(,command . ,arg)
-          (setf conn--bounds-of-last-cache
-                (cons (cons conn--last-thing-command
-                            (buffer-chars-modified-tick))
-                      (conn-bounds-of-last-do
-                       command arg
-                       (marker-position conn--last-thing-command-pos))))))))))
-
-(defun conn-last-command-thing ()
-  (if conn--bounds-of-last-cache
-      (cons (caaar conn--bounds-of-last-cache)
-            (cdaar conn--bounds-of-last-cache))
-    (cons (car conn--last-thing-command)
-          (cdr conn--last-thing-command))))
-
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-mark-last-command))
-                              _arg)
-  (pcase (conn-bounds-of-last)
-    ((conn-bounds bds)
-     (conn-make-bounds 'region nil bds))))
-
-(cl-defgeneric conn-bounds-of-last-do (cmd arg point)
-  (declare (conn-anonymous-thing-property :bounds-of-last-op)))
-
-(cl-defmethod conn-bounds-of-last-do (cmd arg point)
-  (save-excursion
-    (goto-char point)
-    (conn-bounds-of cmd arg)))
-
-(cl-defmethod conn-bounds-of-last-do ((cmd (conn-thing region))
-                                      _arg
-                                      _point)
-  (conn-make-bounds
-   cmd nil
-   (cons (min (point) (mark t))
-         (max (point) (mark t)))))
 
 ;;;; Bounds of Things in Region
 
@@ -1740,7 +1658,6 @@ Only the background color is used."
 (conn-register-thing-commands
  'region nil
  'yank
- 'conn-mark-last-command
  'conn-exchange-mark-command
  'conn-mark-thing
  'conn-previous-mark-command

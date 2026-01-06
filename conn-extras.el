@@ -274,7 +274,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)
-  "'" 'conn-kapply-prefix
   "?" 'conn-dired-quick-ref
   "<conn-dired-search-map> s" 'dired-do-isearch
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
@@ -744,7 +743,6 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
   "C-M-<backspace>" 'ibuffer-unmark-all
   "M-DEL" 'ibuffer-unmark-all-marks
-  "'" 'conn-kapply-prefix
   "f" 'conn-ibuffer-dispatch-state
   "?" 'conn-ibuffer-quick-ref
   "h" 'conn-wincontrol-one-command
@@ -1097,7 +1095,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
-  "'" 'conn-kapply-prefix
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -1117,7 +1114,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
-  "'" 'conn-kapply-prefix
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer

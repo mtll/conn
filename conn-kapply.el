@@ -27,7 +27,6 @@
   (require 'cl-lib))
 
 (declare-function conn--kmacro-display "conn-transient")
-(declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function project-files "project")
 (declare-function ibuffer-unmark-all-marks "ibuffer")
 
@@ -154,13 +153,6 @@ See also `conn-kapply-make-region'."
                  (overlay-buffer ov))
       (delete-overlay ov))))
 
-(cl-defmethod conn-bounds-of-last-do ((_cmd (eql kapply))
-                                      _arg
-                                      point)
-  (conn-make-bounds
-   'region nil
-   (cons (point) point)))
-
 (defun conn-kapply-macro (applier iterator pipeline)
   "Apply a keyboard macro on a set of regions.
 
@@ -283,40 +275,31 @@ buffer.
 
 REGEXP-FLAG means to treat the from string as a regexp for the purpose
 of highlighting."
-  (let ((default (conn-replace-read-default)))
-    (conn-with-region-emphasis bounds
-      (minibuffer-with-setup-hook
-          (minibuffer-lazy-highlight-setup
-           :case-fold case-fold-search
-           :filter (lambda (mb me)
-                     (or (null bounds)
-                         (cl-loop for (beg . end) in bounds
-                                  when (<= beg mb me end) return t)))
-           :highlight query-replace-lazy-highlight
-           :regexp regexp-flag
-           :regexp-function (or replace-regexp-function
-                                (and replace-char-fold
-                                     (not regexp-flag)
-                                     #'char-fold-to-regexp))
-           :transform (lambda (string)
-                        (when (and case-fold-search search-upper-case)
-                          (setq isearch-case-fold-search
-                                (isearch-no-upper-case-p string regexp-flag)))
-                        string))
-        (if regexp-flag
-            (read-regexp (format-prompt prompt default)
-                         (when default (regexp-quote default))
-                         'minibuffer-history)
-          (let ((from (read-string
-                       (format-prompt prompt default)
-                       nil nil
-                       (if default
-                           (delete-dups
-                            (cons default (query-replace-read-from-suggestions)))
-                         (query-replace-read-from-suggestions))
-                       t)))
-            (or (and (length= from 0) default)
-                from)))))))
+  (conn-with-region-emphasis bounds
+    (minibuffer-with-setup-hook
+        (minibuffer-lazy-highlight-setup
+         :case-fold case-fold-search
+         :filter (lambda (mb me)
+                   (or (null bounds)
+                       (cl-loop for (beg . end) in bounds
+                                when (<= beg mb me end) return t)))
+         :highlight query-replace-lazy-highlight
+         :regexp regexp-flag
+         :regexp-function (or replace-regexp-function
+                              (and replace-char-fold
+                                   (not regexp-flag)
+                                   #'char-fold-to-regexp))
+         :transform (lambda (string)
+                      (when (and case-fold-search search-upper-case)
+                        (setq isearch-case-fold-search
+                              (isearch-no-upper-case-p string regexp-flag)))
+                      string))
+      (if regexp-flag
+          (read-regexp prompt nil 'minibuffer-history)
+        (read-string
+         prompt nil nil
+         (query-replace-read-from-suggestions)
+         t)))))
 
 (cl-defgeneric conn-kapply-match-iterator (thing
                                            arg
@@ -1133,10 +1116,12 @@ The iterator must be the first argument in ARGLIST.
   "M-n" 'kmacro-cycle-ring-next
   "M-p" 'kmacro-cycle-ring-previous
   "." 'register
-  "a" 'apply
-  "Z" 'append
+  "p" 'apply
+  "a" 'append
   "r" 'step-edit
-  "e" 'record)
+  "e" 'record
+  "c" 'kmacro-set-counter
+  "f" 'kmacro-set-format)
 
 ;;;;; Applier Argument
 
@@ -1292,17 +1277,11 @@ finishing showing the buffers that were visited."))
                ( :constructor conn-kapply-undo-argument
                  (&aux
                   (name "merge undo")
+                  (display-prefix "merge undo ")
                   (choices '(buffer-atomic buffer iteration nil))
                   (cycling-command 'kapply-undo)
                   (keymap conn-kapply-undo-argument-map)
-                  (formatter #'conn-kapply-undo-formatter)
                   (value (car choices))))))
-
-(defun conn-kapply-undo-formatter (cmd)
-  (pcase cmd
-    ('buffer-atomic "atomic")
-    ('buffer "buffer")
-    ('iteration "iteration")))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kapply-undo-argument))
   (pcase (conn-argument-value arg)
@@ -1321,7 +1300,7 @@ finishing showing the buffers that were visited."))
                  (&optional
                   (value t)
                   &aux
-                  (name "excursions")
+                  (name "save excursions")
                   (toggle-command 'save-excursions)
                   (keymap conn-kapply-excursions-argument-map)))))
 
@@ -1340,7 +1319,7 @@ finishing showing the buffers that were visited."))
                  (&optional
                   (value t)
                   &aux
-                  (name "restrictions")
+                  (name "save restrictions")
                   (toggle-command 'save-restrictions)
                   (keymap conn-kapply-restrictions-argument-map)))))
 
@@ -1359,7 +1338,7 @@ finishing showing the buffers that were visited."))
                  (&optional
                   (value t)
                   &aux
-                  (name "window conf")
+                  (name "save window conf")
                   (toggle-command 'save-window-conf)
                   (keymap conn-kapply-window-conf-argument-map)))))
 
@@ -1404,55 +1383,86 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Command Handler
 
+;; TODO: macro counter and format
+
 (cl-defgeneric conn-kapply-command-handler (cmd)
   (:method (_) nil))
 
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-next)))
   (let ((this-command 'kmacro-cycle-ring-next))
-    (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))))
+    (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
+    (conn-read-args-handle)))
 
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-previous)))
   (let ((this-command 'kmacro-cycle-ring-previous))
-    (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))))
+    (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
+    (conn-read-args-handle)))
+
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter)))
+  (condition-case _
+      (kmacro-set-counter
+       (prefix-numeric-value
+        (conn-read-args-consume-prefix-arg)))
+    (quit nil))
+  (conn-read-args-handle))
+
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-format)))
+  (condition-case _
+      (kmacro-set-format (read-string "Macro Counter Format: "))
+    (quit nil))
+  (conn-read-args-handle))
 
 ;;;;; Display Handler
 
-(defun conn-kapply-display-handle (prompt arguments)
-  (message
-   (concat
-    (substitute-command-keys
+(defun conn-kapply-display-handle (prompt arguments &optional teardown)
+  (if teardown
+      (unless executing-kbd-macro
+        (message nil))
+    (message
+     "%s"
      (concat
-      "\\<conn-read-args-map>"
-      (propertize prompt 'face 'minibuffer-prompt)
-      " (arg: "
-      (propertize
-       (cond (conn--read-args-prefix-mag
-              (number-to-string
-               (* (if conn--read-args-prefix-sign -1 1)
-                  conn--read-args-prefix-mag)))
-             (conn--read-args-prefix-sign "[-1]")
-             (t "[1]"))
-       'face 'read-multiple-choice-face)
-      "; \\[reference] reference"
-      "; \\[help] help"
-      ")"
-      (when-let* ((msg (conn--read-args-display-prefix-arg)))
-        (concat ": " msg))))
-    (when-let* ((args (flatten-tree
-                       (mapcar #'conn-argument-display arguments))))
-      (cl-loop with objs = (make-list 3 nil)
-               with rows = (ceiling (length args) 3)
-               for i from 0 below (* 3 rows)
-               for arg = (pop args)
-               do (push (if arg (substitute-command-keys arg) "")
-                        (nth (mod i rows) objs))
-               finally return
-               (with-work-buffer
-                 (insert "\n")
-                 (make-vtable :objects (mapcar #'nreverse objs)
-                              :separator-width 3
-                              :use-header-line nil)
-                 (buffer-substring (point-min) (1- (point-max)))))))))
+      (substitute-command-keys
+       (concat
+        "\\<conn-read-args-map>"
+        (propertize prompt 'face 'minibuffer-prompt)
+        " (arg: "
+        (propertize
+         (cond (conn--read-args-prefix-mag
+                (number-to-string
+                 (* (if conn--read-args-prefix-sign -1 1)
+                    conn--read-args-prefix-mag)))
+               (conn--read-args-prefix-sign "[-1]")
+               (t "[1]"))
+         'face 'read-multiple-choice-face)
+        "; \\[reference] reference"
+        "; \\[help] help"
+        ")"
+        (when-let* ((msg (conn--read-args-display-prefix-arg)))
+          (concat ": " msg))))
+      (when-let* ((args (flatten-tree
+                         (list
+                          (concat "\\[kmacro-set-format] format "
+                                  (propertize
+                                   kmacro-counter-format
+                                   'face 'read-multiple-choice-face))
+                          (concat "\\[kmacro-set-counter] counter "
+                                  (propertize
+                                   (format "%d" (or kmacro-initial-counter-value 0))
+                                   'face 'read-multiple-choice-face))
+                          (mapcar #'conn-argument-display arguments)))))
+        (cl-loop with rows = (ceiling (length args) 3)
+                 with objs = (make-list rows nil)
+                 for i from 0 below (* 3 rows)
+                 for arg = (pop args)
+                 do (push (if arg (substitute-command-keys arg) "")
+                          (nth (mod i rows) objs))
+                 finally return
+                 (with-work-buffer
+                   (insert "\n")
+                   (make-vtable :objects (mapcar #'nreverse objs)
+                                :separator-width 3
+                                :use-header-line nil)
+                   (buffer-substring (point-min) (1- (point-max))))))))))
 
 ;;;; Commands
 
@@ -1480,9 +1490,9 @@ finishing showing the buffers that were visited."))
              (nconc (list (conn-kapply-other-end-argument other-end)
                           (conn-kapply-ibuffer-argument ibuffer)
                           (conn-kapply-query-argument query)
+                          (conn-kapply-empty-argument empty)
                           (conn-kapply-excursions-argument excursions)
                           (conn-kapply-restrictions-argument restrictions)
-                          (conn-kapply-empty-argument empty)
                           (conn-kapply-window-conf-argument windows)
                           (conn-kapply-undo-argument))
                     (ensure-list extra))))))
@@ -1702,6 +1712,28 @@ finishing showing the buffers that were visited."))
                          for (beg . end) in regs
                          collect (conn-kapply-make-region
                                   beg end (marker-buffer beg))))))))))
+
+(defun conn-kapply-on-compilation ()
+  (interactive)
+  (conn-kapply-on-iterator
+   (conn-kapply-region-iterator
+    (save-excursion
+      (goto-char (point-min))
+      (cl-loop for match = (text-property-search-forward 'compilation-message)
+               while match
+               collect (pcase (compilation--message->loc (prop-match-value match))
+                         (`(,col ,line (,file . ,_) . ,_)
+                          (with-current-buffer
+                              (let ((name (apply #'expand-file-name file)))
+                                (or (get-file-buffer name)
+                                    (find-file-noselect name)))
+                            (goto-char (point-min))
+                            (save-excursion
+                              (forward-line (1- line))
+                              (forward-char (1- col))
+                              (conn-kapply-make-region
+                               (point)
+                               (line-end-position)))))))))))
 
 ;;;;; Dispatch Kapply
 
