@@ -1663,7 +1663,7 @@ finishing showing the buffers that were visited."))
 (defun conn-read-patterns-argument ()
   (cl-flet ((read-pats (it)
               (funcall it `(:patterns
-                            . (conn--kapply-highlights-read-patterns)))
+                            . ,(conn--kapply-highlights-read-patterns)))
               it)
             (name (arg)
               (concat "\\[read-pattern] "
