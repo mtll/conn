@@ -783,7 +783,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (list
-   (concat "\\[repeat-dispatch] "
+   (concat (substitute-command-keys "\\[repeat-dispatch] ")
            (propertize
             "repeat"
             'face (when (conn-dispatch-action-argument-repeat arg)
@@ -3323,8 +3323,8 @@ contain targets."
   (oclosure-lambda (conn-dispatch-goto
                     (action-description "Goto")
                     (action-reference
-                     "Goes to and marks the selected thing.  If other-end is non-nil then
-exchanges the point and mark."))
+                     "Goes to the start of the selected thing.  If other-end is non-nil then
+goes to the end of the thing."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
