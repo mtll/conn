@@ -490,6 +490,16 @@ If the mark is already active then deactivate it instead."
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
 
+(defun conn-exchange-and-mark-command ()
+  (interactive)
+  (static-if (version<= emacs-version "31")
+      (exchange-point-and-mark (region-active-p))
+    (let ((exchange-point-and-mark-highlight-region t))
+      (exchange-point-and-mark (region-active-p))))
+  (when (and (region-active-p)
+             (not conn-mark-state))
+    (conn-push-state 'conn-mark-state)))
+
 (defun conn-push-mark-command ()
   "Set mark at point and push old mark on mark ring."
   (interactive)
@@ -3631,7 +3641,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
                     :interactive 'conn-indent-thing-rigidly
                     :prompt "Thing"
                     :reference conn-indent-reference)
-       ((`(,thing ,arg) (conn-indent-thing-argument))
+       ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)

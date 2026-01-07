@@ -224,7 +224,7 @@ region."
          (setq matches (funcall sort-function matches))
          (conn-kapply-consume-region (pop matches)))))))
 
-(defun conn-kapply-region-iterator (regions &optional _sort-function)
+(defun conn-kapply-region-iterator (regions)
   "Create an iterator over REGIONS.
 
 REGIONS must be a list of overlays.  See `conn-kapply-make-region'.
