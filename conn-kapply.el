@@ -1541,13 +1541,18 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-on-things (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :prompt "Thing"
+                    :prompt (if (region-active-p)
+                                "Things in Regions"
+                              "Thing")
                     :interactive 'conn-kapply-on-things)
-       ((`(,thing ,arg)
-         (conn-thing-argument-dwim-rectangle t))
+       ((`(,thing ,arg) (conn-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
+  (pcase (if (region-active-p)
+             (conn-get-things-in-region thing arg transform
+                                        (region-beginning)
+                                        (region-end))
+           (conn-bounds-of thing arg))
     ((and bounds (conn-bounds-get :subregions transform))
      (when conn-mark-state (conn-pop-state))
      (deactivate-mark)

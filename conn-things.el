@@ -1426,6 +1426,14 @@ the point is within the region then the entire region is returned.")))
          (cons things-beg things-end)
          :subregions (nreverse subregions))))))
 
+(cl-defmethod conn-get-things-in-region ((thing (conn-thing region))
+                                         arg
+                                         transforms
+                                         _beg
+                                         _end)
+  (conn-transform-bounds (conn-bounds-of thing arg)
+                         transforms))
+
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-things-in-region))
