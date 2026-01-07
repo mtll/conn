@@ -564,7 +564,7 @@ words."))
   t)
 
 (cl-defmethod conn-argument-display ((arg conn-subregions-argument))
-  (concat "\\[toggle-subregions] "
+  (concat (substitute-command-keys "\\[toggle-subregions] ")
           (propertize "subregions"
                       'face (when (conn-argument-value arg)
                               'conn-argument-active-face))))
@@ -615,7 +615,7 @@ current buffer."))
 (cl-defmethod conn-argument-display ((arg conn-fixup-whitespace-argument))
   (substitute-command-keys
    (concat
-    "\\[fixup-whitespace] "
+    (substitute-command-keys "\\[fixup-whitespace] ")
     (if-let* ((ts (conn-argument-value arg)))
         (propertize
          "fixup"

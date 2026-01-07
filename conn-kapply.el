@@ -18,6 +18,7 @@
 ;;; Code
 
 (require 'kmacro)
+(require 'mule-util)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-states)
@@ -1290,16 +1291,18 @@ finishing showing the buffers that were visited."))
     ('per-iteration #'conn-kapply-per-iteration-undo)))
 
 (cl-defmethod conn-argument-display ((arg conn-kapply-undo-argument))
-  (concat "\\[kapply-undo] merge undo"
-          (when-let* ((val (conn-argument-value arg)))
-            (concat " "
-                    (propertize "(" 'face 'shadow)
-                    (propertize (format "%s" val)
-                                'face 'conn-argument-active-face)
-                    (propertize (concat "|"
-                                        (truncate-string-ellipsis)
-                                        ")")
-                                'face 'shadow)))))
+  (apply #'concat
+         (conn-key-bind-string 'kapply-undo)
+         " merge undo"
+         (when-let* ((val (conn-argument-value arg)))
+           (list " "
+                 (propertize "(" 'face 'shadow)
+                 (propertize (format "%s" val)
+                             'face 'conn-argument-active-face)
+                 (propertize (concat "|"
+                                     (truncate-string-ellipsis)
+                                     ")")
+                             'face 'shadow)))))
 
 ;;;;; Save Excursions Argument
 
@@ -1431,50 +1434,35 @@ finishing showing the buffers that were visited."))
       (message nil)
     (message
      "%s"
-     (concat
-      (substitute-command-keys
-       (concat
-        "\\<conn-read-args-map>"
-        (propertize prompt 'face 'minibuffer-prompt)
-        " (arg: "
-        (propertize
-         (cond (conn--read-args-prefix-mag
-                (number-to-string
-                 (* (if conn--read-args-prefix-sign -1 1)
-                    conn--read-args-prefix-mag)))
-               (conn--read-args-prefix-sign "[-1]")
-               (t "[1]"))
-         'face 'read-multiple-choice-face)
-        "; \\[reference] reference"
-        "; \\[help] help"
-        ")"
-        (when-let* ((msg (conn--read-args-display-prefix-arg)))
-          (concat ": " msg))))
-      (when-let* ((args (flatten-tree
-                         (list
-                          (concat "\\[kmacro-set-format] format "
-                                  (propertize
-                                   kmacro-counter-format
-                                   'face 'read-multiple-choice-face))
-                          (concat "\\[kmacro-set-counter] counter "
-                                  (propertize
-                                   (format "%d"
-                                           (or kmacro-initial-counter-value 0))
-                                   'face 'read-multiple-choice-face))
-                          (mapcar #'conn-argument-display arguments)))))
-        (cl-loop with rows = (ceiling (length args) 3)
-                 with objs = (make-list rows nil)
-                 for i from 0 below (* 3 rows)
-                 for arg = (pop args)
-                 do (push (if arg (substitute-command-keys arg) "")
-                          (nth (mod i rows) objs))
-                 finally return
-                 (with-work-buffer
-                   (insert "\n")
-                   (make-vtable :objects (mapcar #'nreverse objs)
-                                :separator-width 3
-                                :use-header-line nil)
-                   (buffer-substring (point-min) (1- (point-max))))))))))
+     (let* ((args
+             (flatten-tree
+              (cl-loop for arg in arguments
+                       collect (conn-argument-display arg))))
+            (format
+             (concat (substitute-command-keys
+                      "\\[kmacro-set-format] format ")
+                     (propertize
+                      kmacro-counter-format
+                      'face 'read-multiple-choice-face)))
+            (counter
+             (concat (substitute-command-keys
+                      "\\[kmacro-set-counter] counter ")
+                     (propertize
+                      (format "%d"
+                              (or kmacro-initial-counter-value 0))
+                      'face 'read-multiple-choice-face)))
+            (to-display (nconc (list format counter) args))
+            (prompt-line (conn-read-args-prompt-line prompt)))
+       (if (length> to-display 4)
+           (with-work-buffer
+             (insert prompt-line "\n")
+             (conn-to-vtable (nconc (list format counter) args)
+                             3 (current-buffer)
+                             :separator-width 3
+                             :use-header-line nil)
+             (buffer-substring (point-min) (1- (point-max))))
+         (concat prompt-line "\n"
+                 (string-join to-display "; ")))))))
 
 ;;;; Commands
 
@@ -1484,16 +1472,16 @@ finishing showing the buffers that were visited."))
                                    extra
                                    other-end
                                    query
+                                   empty
                                    (ibuffer t)
                                    (excursions t)
                                    (restrictions t)
-                                   (windows t)
-                                   empty)
+                                   (windows t))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
                    :command-handler #'conn-kapply-command-handler
                    :display-handler #'conn-kapply-display-handle)
-      ((_ (conn-protected-argument iterator
+      ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (applier (conn-kapply-macro-argument))
        (pipeline

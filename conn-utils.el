@@ -625,6 +625,22 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;;; Misc Utils
 
+(defun conn-to-vtable (list max-cols buffer &rest keys)
+  (cl-loop with rows = (ceiling (length list) max-cols)
+           with objs = (make-list rows nil)
+           for i from 0 below (* max-cols rows)
+           do (push (or (pop list) "") (nth (mod i rows) objs))
+           finally (with-current-buffer buffer
+                     (apply #'make-vtable
+                            :objects (mapcar #'nreverse objs)
+                            keys))))
+
+(defun conn-key-bind-string (command &optional buffer keymap face)
+  (propertize
+   (with-current-buffer (or buffer (current-buffer))
+     (key-description (where-is-internal command keymap t)))
+   'face (or face 'help-key-binding)))
+
 (defun conn--create-marker (pos &optional buffer insertion-type)
   "Create marker at POS in BUFFER."
   (let ((marker (make-marker)))

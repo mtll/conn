@@ -1579,30 +1579,32 @@ The duration of the message display is controlled by
                           'face 'error))))
     (unless (equal msg "") msg)))
 
+(defun conn-read-args-prompt-line (prompt)
+  (substitute-command-keys
+   (concat
+    "\\<conn-read-args-map>"
+    (propertize prompt 'face 'minibuffer-prompt)
+    " (arg: "
+    (propertize
+     (cond (conn--read-args-prefix-mag
+            (number-to-string
+             (* (if conn--read-args-prefix-sign -1 1)
+                conn--read-args-prefix-mag)))
+           (conn--read-args-prefix-sign "[-1]")
+           (t "[1]"))
+     'face 'read-multiple-choice-face)
+    "; \\[reference] reference"
+    "; \\[help] help"
+    ")"
+    (when-let* ((msg (conn--read-args-display-prefix-arg)))
+      (concat ": " msg)))))
+
 (defun conn--read-args-prompt (prompt arguments)
   (concat
-   (substitute-command-keys
-    (concat
-     "\\<conn-read-args-map>"
-     (propertize prompt 'face 'minibuffer-prompt)
-     " (arg: "
-     (propertize
-      (cond (conn--read-args-prefix-mag
-             (number-to-string
-              (* (if conn--read-args-prefix-sign -1 1)
-                 conn--read-args-prefix-mag)))
-            (conn--read-args-prefix-sign "[-1]")
-            (t "[1]"))
-      'face 'read-multiple-choice-face)
-     "; \\[reference] reference"
-     "; \\[help] help"
-     ")"
-     (when-let* ((msg (conn--read-args-display-prefix-arg)))
-       (concat ": " msg))))
-   (substitute-command-keys
-    (when-let* ((args (flatten-tree
-                       (mapcar #'conn-argument-display arguments))))
-      (concat "\n" (string-join args "; "))))))
+   (conn-read-args-prompt-line prompt)
+   (when-let* ((args (flatten-tree
+                      (mapcar #'conn-argument-display arguments))))
+     (concat "\n" (string-join args "; ")))))
 
 (defun conn--read-args-display-prompt (prompt arguments &optional teardown)
   (if teardown
@@ -2253,7 +2255,8 @@ be displayed in the echo area during `conn-read-args'."
                    (car (conn-cycling-argument-value arg))
                  (conn-cycling-argument-value arg))))
     (concat
-     (format "\\[%s] " (conn-cycling-argument-cycling-command arg))
+     (substitute-command-keys
+      (format "\\[%s] " (conn-cycling-argument-cycling-command arg)))
      (cond
       ((> (seq-count #'identity choices) 3)
        (if value
@@ -2313,7 +2316,8 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
   (concat
-   (format "\\[%s] " (conn-read-argument-toggle-command arg))
+   (substitute-command-keys
+    (format "\\[%s] " (conn-read-argument-toggle-command arg)))
    (or (and-let* ((fn (conn-read-argument-formatter arg))
                   (str (funcall fn
                                 (conn-read-argument-name arg)
@@ -2328,10 +2332,10 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defstruct (conn-protected-argument
                (:constructor conn--protected-argument (value cleanup)))
-  (value nil :type t)
-  (cleanup nil :type function))
+  (value nil :type t :read-only t)
+  (cleanup #'ignore :type function :read-only t))
 
-(defmacro conn-protected-argument (value &rest cleanup-body)
+(defmacro conn-protect-argument (value &rest cleanup-body)
   (declare (indent 1))
   `(conn--protected-argument ,value (lambda () ,@cleanup-body)))
 
