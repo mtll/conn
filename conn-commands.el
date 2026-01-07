@@ -2681,11 +2681,9 @@ append to that place."
                   &aux
                   (keymap conn-copy-thing-argument-map)
                   (required t)
-                  (value (when (and (use-region-p)
-                                    conn-thing-argument-region-dwim)
+                  (value (when (use-region-p)
                            (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-thing-argument-region-dwim))))))
+                  (set-flag (use-region-p))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
                                        (_cmd (eql filename)))
@@ -3589,6 +3587,44 @@ If CLEANUP-WHITESPACE is non-nil then also run
      (list thing arg transform cleanup-whitespace)))
   (conn-indent-thing-do cmd arg transform cleanup-whitespace))
 
+(defun conn-indent-right ()
+  (interactive)
+  (user-error "Not currently indenting"))
+
+(defun conn-indent-left ()
+  (interactive)
+  (user-error "Not currently indenting"))
+
+(defun conn-indent-right-to-tab-stop ()
+  (interactive)
+  (user-error "Not currently indenting"))
+
+(defun conn-indent-left-to-tab-stop ()
+  (interactive)
+  (user-error "Not currently indenting"))
+
+(defun conn-indent-rigidly-reference ()
+  (interactive)
+  (conn-quick-reference conn-indent-thing-rigidly-reference))
+
+(defvar-keymap conn-indent-thing-rigidly-map
+  "l" #'conn-indent-right
+  "j" #'conn-indent-left
+  "L" #'conn-indent-right-to-tab-stop
+  "J" #'conn-indent-left-to-tab-stop
+  "?" #'conn-indent-rigidly-reference)
+
+(defvar conn-indent-thing-rigidly-reference
+  (conn-reference-page "Indent Rigidly"
+    (:heading "Indent")
+    ((:keymap conn-indent-thing-rigidly-map)
+     (("left/to tab stop"
+       conn-indent-left
+       conn-indent-left-to-tab-stop))
+     (("right/to tab stop"
+       conn-indent-right
+       conn-indent-right-to-tab-stop)))))
+
 (defun conn-indent-thing-rigidly (thing arg transform)
   (interactive
    (conn-read-args (conn-indent-state
@@ -3625,14 +3661,20 @@ If CLEANUP-WHITESPACE is non-nil then also run
                      (goto-char beg)
                      (indent-rigidly-right-to-tab-stop beg end)
                      (setq beg (point)))))
-       (set-transient-map (define-keymap
-                            "l" #'right
-                            "j" #'left
-                            "L" #'rtts
-                            "J" #'ltts)
-                          t
-                          (lambda () (set-marker end nil))
-                          "Type %k to indent region interactively")))))
+       (advice-add 'conn-indent-left :override #'left)
+       (advice-add 'conn-indent-right :override #'right)
+       (advice-add 'conn-indent-right-to-tab-stop :override #'rtts)
+       (advice-add 'conn-indent-left-to-tab-stop :override #'ltts)
+       (set-transient-map
+        conn-indent-thing-rigidly-map
+        t
+        (lambda ()
+          (set-marker end nil)
+          (advice-remove 'conn-indent-left #'left)
+          (advice-remove 'conn-indent-right #'right)
+          (advice-remove 'conn-indent-right-to-tab-stop #'rtts)
+          (advice-remove 'conn-indent-left-to-tab-stop #'ltts))
+        "Type %k to indent region interactively")))))
 
 ;;;;; Narrowing Commands
 

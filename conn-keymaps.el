@@ -181,12 +181,6 @@
 
 ;;;;; Global Bindings
 
-(defvar-keymap conn-indent-rigidly-map
-  "l" 'indent-rigidly-right
-  "j" 'indent-rigidly-left
-  "L" 'indent-rigidly-right-to-tab-stop
-  "J" 'indent-rigidly-left-to-tab-stop)
-
 (defvar-keymap conn-dispatch-cycle-map
   :repeat (:exit (ignore))
   "e" 'ignore

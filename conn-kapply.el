@@ -341,7 +341,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
   (let ((files (or (project-files (project-current t))
                    (user-error "No files for kapply.")))
         (string (or string (conn--kapply-read-from-with-preview
-                            (if regexp-flag "Regexp" "String")
+                            (if regexp-flag "Regexp: " "String: ")
                             nil regexp-flag)))
         (sort-function #'nreverse)
         matches)
@@ -415,7 +415,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                  (list whole)))
             (deactivate-mark)))
          (string (or string (conn--kapply-read-from-with-preview
-                             (if regexp-flag "Regexp" "String")
+                             (if regexp-flag "Regexp: " "String: ")
                              regions
                              regexp-flag)))
          matches)
@@ -678,10 +678,7 @@ current buffer."
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
              (goto-char beg)
-             (setf conn--last-thing-command (list 'kapply nil))
-             (if conn--last-thing-command-pos
-                 (set-marker conn--last-thing-command-pos end)
-               (setf conn--last-thing-command-pos (copy-marker end))))
+             (push-mark end))
             ('nil)
             (_ (error "Invalid region %s" region)))))
        region))
@@ -991,9 +988,7 @@ When kapply finishes restore the restrictions in each buffer."
    :after (var iterator)
    (lambda (state)
      (when (eq state :record)
-       (pulse-momentary-highlight-region (point)
-                                         conn--last-thing-command-pos
-                                         'query-replace)))
+       (pulse-momentary-highlight-region (point) (mark t) 'query-replace)))
    `((depth . ,(alist-get 'kapply-pulse conn--kapply-pipeline-depths))
      (name . kapply-pulse))))
 
