@@ -368,6 +368,11 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
             (pred conn-anonymous-thing-p))
         ,thing)))))
 
+(define-inline conn-subthing-p (thing parent)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (inline-quote (memq ,parent (conn-thing-all-parents ,thing))))
+
 ;;;; Specializers
 
 (cl-generic-define-generalizer conn--thing-generalizer
@@ -1842,13 +1847,16 @@ Only the background color is used."
 
 (conn-register-thing
  'outer-line
- :beg-op (lambda () (move-beginning-of-line nil))
- :end-op (lambda () (move-end-of-line nil)))
+ :forward-op 'conn-forward-outer-line)
 
 (conn-register-thing-commands
  'outer-line 'conn-discrete-thing-handler
  'move-beginning-of-line 'move-end-of-line
  'org-beginning-of-line 'org-end-of-line)
+
+(conn-register-thing-commands
+ 'outer-line 'conn-continuous-thing-handler
+ 'conn-forward-outer-line 'conn-backward-outer-line)
 
 (defun conn--bounds-of-inner-line ()
   (cons

@@ -292,6 +292,18 @@ of line proper."
           (goto-char (line-end-position))))
     (forward-line N)))
 
+(defun conn-forward-outer-line (&optional N)
+  (interactive "p")
+  (if (< N 0)
+      (conn-backward-outer-line (abs N))
+    (move-end-of-line (+ N (if (eolp) 1 0)))))
+
+(defun conn-backward-outer-line (&optional N)
+  (interactive "p")
+  (if (< N 0)
+      (conn-forward-outer-line (abs N))
+    (move-beginning-of-line (- 2 (+ N (if (bolp) 1 0))))))
+
 (defun conn-beginning-of-inner-line (&optional N)
   "Move point to the first non-whitespace character in line.
 
@@ -458,8 +470,13 @@ If the mark is already active then deactivate it instead."
   (pcase (conn-bounds-of thing arg)
     ((and (conn-bounds `(,beg . ,end) transform)
           (conn-bounds-get :direction))
-     (goto-char (if (eql direction 1) end beg))
-     (push-mark (if (eql direction 1) beg end) t t)
+     (if (conn-subthing-p thing 'region)
+         (progn
+           (unless (>= (point) end)
+             (goto-char beg))
+           (push-mark (if (>= (point) end) beg end) t t))
+       (goto-char (if (eql direction 1) end beg))
+       (push-mark (if (eql direction 1) beg end) t t))
      (conn-push-state 'conn-mark-state))))
 
 (defun conn-exchange-mark-command (&optional arg)
@@ -3571,6 +3588,51 @@ If CLEANUP-WHITESPACE is non-nil then also run
                                 conn-indent-cleanup-whitespace-map)))
      (list thing arg transform cleanup-whitespace)))
   (conn-indent-thing-do cmd arg transform cleanup-whitespace))
+
+(defun conn-indent-thing-rigidly (thing arg transform)
+  (interactive
+   (conn-read-args (conn-indent-state
+                    :interactive 'conn-indent-thing-rigidly
+                    :prompt "Thing"
+                    :reference conn-indent-reference)
+       ((`(,thing ,arg) (conn-indent-thing-argument))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (setq end (copy-marker end))
+     (cl-labels ((right ()
+                   (interactive)
+                   (save-excursion
+                     (goto-char beg)
+                     (indent-rigidly-right beg end)
+                     (setq beg (point))))
+                 (left ()
+                   (interactive)
+                   (save-excursion
+                     (goto-char beg)
+                     (indent-rigidly-left beg end)
+                     (setq beg (point))))
+                 (ltts ()
+                   (interactive)
+                   (save-excursion
+                     (goto-char beg)
+                     (indent-rigidly-left-to-tab-stop beg end)
+                     (setq beg (point))))
+                 (rtts ()
+                   (interactive)
+                   (save-excursion
+                     (goto-char beg)
+                     (indent-rigidly-right-to-tab-stop beg end)
+                     (setq beg (point)))))
+       (set-transient-map (define-keymap
+                            "l" #'right
+                            "j" #'left
+                            "L" #'rtts
+                            "J" #'ltts)
+                          t
+                          (lambda () (set-marker end nil))
+                          "Type %k to indent region interactively")))))
 
 ;;;;; Narrowing Commands
 

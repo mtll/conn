@@ -29,6 +29,10 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
+  "L" 'conn-forward-inner-line
+  "J" 'conn-backward-inner-line
+  "C-e" 'conn-forward-outer-line
+  "C-a" 'conn-backward-outer-line
   "," conn-thing-remap
   "h" 'conn-things-in-region
   "@" 'kmacro-start-macro
@@ -103,7 +107,8 @@
   "DEL" 'clear-rectangle
   "L" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
-  "TAB" 'conn-indent-thing
+  "q" 'conn-indent-thing
+  "l" 'conn-indent-thing-rigidly
   "R" 'indent-rigidly
   "V" 'vc-region-history
   "a c" 'align-current
