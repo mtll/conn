@@ -301,7 +301,8 @@
                                   buf
                                   (1+ pg-num)
                                   pg-count)
-      (setq state (funcall display-function buf nil))
+      (conn-threadf-> state
+        (funcall display-function buf nil))
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
@@ -316,7 +317,8 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (setq state (funcall display-function buf nil state)))
+                  (conn-threadf-> state
+                    (funcall display-function buf nil)))
                  ('previous
                   (setq pages (nconc (last pages) (butlast pages))
                         pg-num (mod (1- pg-num) pg-count))
@@ -324,7 +326,8 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (setq state (funcall display-function buf nil state)))
+                  (conn-threadf-> state
+                    (funcall display-function buf nil)))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
                  (_

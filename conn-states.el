@@ -1606,7 +1606,11 @@ The duration of the message display is controlled by
                       (mapcar #'conn-argument-display arguments))))
      (concat "\n" (string-join args "; ")))))
 
-(defun conn--read-args-display-prompt (prompt arguments &optional teardown)
+(defun conn--read-args-display-prompt (prompt
+                                       arguments
+                                       &optional
+                                       _state
+                                       teardown)
   (if teardown
       (message nil)
     (message "%s" (conn--read-args-prompt prompt arguments))))
@@ -1755,6 +1759,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (delq nil)
                   make-composed-keymap))
         (local-exit nil)
+        (display-state nil)
         (quit-event (car (last (current-input-mode)))))
     (cl-labels
         ((continue-p ()
@@ -1768,7 +1773,8 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((inhibit-message conn-read-args-inhibit-message)
                  (message-log-max nil)
                  (scroll-conservatively 100))
-             (funcall display-handler prompt arguments))
+             (conn-threadf-> display-state
+               (funcall display-handler prompt arguments)))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
            (catch 'conn-read-args-new-command
@@ -1856,7 +1862,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                        (unless local-exit
                          (mapc #'conn-argument-cancel arguments))
                        (unless executing-kbd-macro
-                         (funcall display-handler nil nil t)))
+                         (funcall display-handler nil nil display-state t)))
                      (cons callback
                            (mapcar #'conn-argument-extract-value arguments))))))
         (when interactive

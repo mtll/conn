@@ -1429,7 +1429,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Display Handler
 
-(defun conn-kapply-display-handle (prompt arguments &optional teardown)
+(defun conn-kapply-display-handle (prompt arguments &optional _state teardown)
   (if teardown
       (message nil)
     (message
