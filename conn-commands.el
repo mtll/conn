@@ -1675,8 +1675,8 @@ Exiting the recursive edit will resume the isearch."
 
 (defvar-keymap conn-transpose-repeat-map
   "M-?" 'conn-transpose-repeat-help
-  "q" 'conn-transpose-repeat
-  "Q" 'conn-transpose-repeat-inverse)
+  "t" 'conn-transpose-repeat
+  "T" 'conn-transpose-repeat-inverse)
 
 (defun conn-transpose-setup-repeat-map (repeat repeat-inverse)
   (advice-add 'conn-transpose-repeat :override repeat)
@@ -3613,10 +3613,6 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (interactive)
   (user-error "Not currently indenting"))
 
-(defun conn-indent-rigidly-reference ()
-  (interactive)
-  (conn-quick-reference conn-indent-thing-rigidly-reference))
-
 (defvar-keymap conn-indent-thing-rigidly-map
   "l" #'conn-indent-right
   "j" #'conn-indent-left
@@ -3634,6 +3630,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
      (("right/to tab stop"
        conn-indent-right
        conn-indent-right-to-tab-stop)))))
+
+(defun conn-indent-rigidly-reference ()
+  (interactive)
+  (conn-quick-reference conn-indent-thing-rigidly-reference))
 
 (defun conn-indent-thing-rigidly (thing arg transform)
   (interactive
