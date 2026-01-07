@@ -1606,9 +1606,8 @@ The duration of the message display is controlled by
 
 (defun conn--read-args-display-prompt (prompt arguments &optional teardown)
   (if teardown
-      (unless executing-kbd-macro
-        (message nil))
-    (message (conn--read-args-prompt prompt arguments))))
+      (message nil)
+    (message "%s" (conn--read-args-prompt prompt arguments))))
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
@@ -1854,7 +1853,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                        (if around (funcall around #'cont) (cont))
                        (unless local-exit
                          (mapc #'conn-argument-cancel arguments))
-                       (funcall display-handler nil nil t))
+                       (unless executing-kbd-macro
+                         (funcall display-handler nil nil t)))
                      (cons callback
                            (mapcar #'conn-argument-extract-value arguments))))))
         (when interactive

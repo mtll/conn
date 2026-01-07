@@ -1227,7 +1227,7 @@ The iterator must be the first argument in ARGLIST.
                  (&optional
                   value
                   &aux
-                  (name "empty")
+                  (name "skip empty")
                   (toggle-command 'kapply-empty)
                   (keymap conn-kapply-empty-argument-map)))))
 
@@ -1289,6 +1289,18 @@ finishing showing the buffers that were visited."))
     ('buffer #'conn-kapply-per-buffer-undo)
     ('per-iteration #'conn-kapply-per-iteration-undo)))
 
+(cl-defmethod conn-argument-display ((arg conn-kapply-undo-argument))
+  (concat "\\[kapply-undo] merge undo"
+          (when-let* ((val (conn-argument-value arg)))
+            (concat " "
+                    (propertize "(" 'face 'shadow)
+                    (propertize (format "%s" val)
+                                'face 'conn-argument-active-face)
+                    (propertize (concat "|"
+                                        (truncate-string-ellipsis)
+                                        ")")
+                                'face 'shadow)))))
+
 ;;;;; Save Excursions Argument
 
 (defvar-keymap conn-kapply-excursions-argument-map
@@ -1330,7 +1342,7 @@ finishing showing the buffers that were visited."))
 ;;;;; Save Window Configuration Argument
 
 (defvar-keymap conn-kapply-window-conf-argument-map
-  "W" 'save-window-conf)
+  "w" 'save-window-conf)
 
 (cl-defstruct (conn-kapply-window-conf-argument
                (:include conn-boolean-argument)
@@ -1416,8 +1428,7 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-display-handle (prompt arguments &optional teardown)
   (if teardown
-      (unless executing-kbd-macro
-        (message nil))
+      (message nil)
     (message
      "%s"
      (concat
@@ -1447,7 +1458,8 @@ finishing showing the buffers that were visited."))
                                    'face 'read-multiple-choice-face))
                           (concat "\\[kmacro-set-counter] counter "
                                   (propertize
-                                   (format "%d" (or kmacro-initial-counter-value 0))
+                                   (format "%d"
+                                           (or kmacro-initial-counter-value 0))
                                    'face 'read-multiple-choice-face))
                           (mapcar #'conn-argument-display arguments)))))
         (cl-loop with rows = (ceiling (length args) 3)
@@ -1659,19 +1671,19 @@ finishing showing the buffers that were visited."))
   (cl-flet ((read-pats (it)
               (funcall it `(:patterns
                             . (conn--kapply-highlights-read-patterns)))
-              it))
+              it)
+            (name (arg)
+              (concat "\\[read-pattern] "
+                      (propertize
+                       "read patterns"
+                       'face (when (conn-anonymous-argument-value arg)
+                               'conn-argument-active-face))))
+            (predicate (cmd)
+              (eq cmd 'read-pattern)))
     (oclosure-lambda (conn-anonymous-argument
-                      (name
-                       (lambda (arg)
-                         (concat
-                          "\\[read-pattern] "
-                          (propertize
-                           "read patterns"
-                           'face (when (conn-anonymous-argument-value arg)
-                                   'conn-argument-active-face)))))
+                      (name #'name)
                       (keymap conn-read-pattern-map)
-                      (predicate
-                       (lambda (cmd) (eq cmd 'read-pattern))))
+                      (predicate #'predicate))
         (self cmd updater)
       (when (eq cmd 'read-pattern)
         (funcall updater
@@ -1697,8 +1709,7 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-occur ()
   (interactive)
-  (conn-kapply-on-iterator
-   (conn-kapply-region-iterator
+  (conn-thread<-
     (save-excursion
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'occur-target)
@@ -1711,12 +1722,13 @@ finishing showing the buffers that were visited."))
                         (cl-loop
                          for (beg . end) in regs
                          collect (conn-kapply-make-region
-                                  beg end (marker-buffer beg))))))))))
+                                  beg end (marker-buffer beg)))))))
+    (conn-kapply-region-iterator)
+    (conn-kapply-on-iterator)))
 
 (defun conn-kapply-on-compilation ()
   (interactive)
-  (conn-kapply-on-iterator
-   (conn-kapply-region-iterator
+  (conn-thread<-
     (save-excursion
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'compilation-message)
@@ -1733,7 +1745,9 @@ finishing showing the buffers that were visited."))
                               (forward-char (1- col))
                               (conn-kapply-make-region
                                (point)
-                               (line-end-position)))))))))))
+                               (line-end-position))))))))
+    (conn-kapply-region-iterator)
+    (conn-kapply-on-iterator)))
 
 ;;;;; Dispatch Kapply
 
