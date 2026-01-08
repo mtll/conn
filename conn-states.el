@@ -2270,10 +2270,15 @@ be displayed in the echo area during `conn-read-args'."
      (substitute-command-keys
       (format "\\[%s] " (conn-cycling-argument-cycling-command arg)))
      (cond
-      ((> (seq-count #'identity choices) 3)
+      ((>= (seq-count #'identity choices) 3)
        (if value
-           (propertize (funcall formatter value)
-                       'face 'conn-argument-active-face)
+           (concat (propertize "(" 'face 'shadow)
+                   (propertize (funcall formatter value)
+                               'face 'conn-argument-active-face)
+                   (propertize (concat "|"
+                                       (truncate-string-ellipsis)
+                                       ")")
+                               'face 'shadow))
          name))
       (value
        (concat

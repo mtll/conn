@@ -623,9 +623,9 @@ current buffer."))
     (substitute-command-keys "\\[fixup-whitespace] ")
     (if-let* ((ts (conn-argument-value arg)))
         (propertize
-         "fixup"
+         "fixup whitespace"
          'face 'eldoc-highlight-function-argument)
-      "fixup"))))
+      "fixup whitespace"))))
 
 ;;;;;; Check Bounds Argument
 
