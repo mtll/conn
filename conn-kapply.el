@@ -1182,19 +1182,28 @@ The iterator must be the first argument in ARGLIST.
          (funcall updater arg))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kapply-macro-argument))
-  (when-let* ((reg (conn-kapply-macro-argument-register arg)))
-    (kmacro-split-ring-element (get-register reg)))
-  (pcase (conn-argument-value arg)
-    ('record #'conn-kmacro-apply)
-    ('apply
-     (let ((macro (kmacro-ring-head)))
-       (lambda (it) (conn-kmacro-apply it nil macro))))
-    ('append
-     (lambda (it)
-       (conn-kmacro-apply-append
-        it nil (conn-read-args-consume-prefix-arg))))
-    ('step-edit
-     #'conn-kmacro-apply-step-edit)))
+  (let ((register (conn-kapply-macro-argument-register arg)))
+    (pcase (conn-argument-value arg)
+      ('record
+       (if register
+           (let ((macro (get-register register)))
+             (lambda (it) (conn-kmacro-apply it nil macro)))
+         #'conn-kmacro-apply))
+      ('apply
+       (let ((macro (if register
+                        (get-register register)
+                      (kmacro-ring-head))))
+         (lambda (it) (conn-kmacro-apply it nil macro))))
+      ('append
+       (when register
+         (kmacro-split-ring-element (get-register register)))
+       (lambda (it)
+         (conn-kmacro-apply-append
+          it nil (conn-read-args-consume-prefix-arg))))
+      ('step-edit
+       (when register
+         (kmacro-split-ring-element (get-register register)))
+       #'conn-kmacro-apply-step-edit))))
 
 ;;;;; Order Argument
 
