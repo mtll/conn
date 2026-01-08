@@ -1758,7 +1758,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (cons overriding-map)
                   (delq nil)
                   make-composed-keymap))
-        (local-exit nil)
         (display-state nil)
         (quit-event (car (last (current-input-mode)))))
     (cl-labels
@@ -1852,19 +1851,23 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (unless executing-kbd-macro
                    (display-message))
                  (read-command))
-               (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))
-           (setq local-exit t)))
-      (let* ((conn-read-args-last-prefix nil)
+               (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
+      (let* ((local-exit nil)
+             (vals nil)
              (ret (apply
                    (catch 'conn-read-args-return
                      (conn--unwind-protect-all
-                       (if around (funcall around #'cont) (cont))
+                       (let ((conn-read-args-last-prefix nil))
+                         (if around (funcall around #'cont) (cont))
+                         (setq vals (mapcar #'conn-argument-extract-value
+                                            arguments))
+                         (setq local-exit t))
                        (unless local-exit
                          (mapc #'conn-argument-cancel arguments))
                        (unless executing-kbd-macro
                          (funcall display-handler nil nil display-state t)))
-                     (cons callback
-                           (mapcar #'conn-argument-extract-value arguments))))))
+                     (mapc #'conn-argument-finalize arguments)
+                     (cons callback vals)))))
         (when interactive
           (add-to-history 'conn-command-history
                           (cons interactive ret)
@@ -1957,6 +1960,9 @@ echo area help message.
   (reference nil :type (or list conn--reference-page)))
 
 (cl-defgeneric conn-argument-cancel (argument)
+  ( :method (_arg) nil))
+
+(cl-defgeneric conn-argument-finalize (argument)
   ( :method (_arg) nil))
 
 (cl-defgeneric conn-argument-required-p (argument)

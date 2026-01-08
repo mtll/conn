@@ -1674,7 +1674,7 @@ Exiting the recursive edit will resume the isearch."
   (user-error "Not repeating transpose"))
 
 (defvar-keymap conn-transpose-repeat-map
-  "M-?" 'conn-transpose-repeat-help
+  "?" 'conn-transpose-repeat-help
   "t" 'conn-transpose-repeat
   "T" 'conn-transpose-repeat-inverse)
 

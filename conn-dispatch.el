@@ -633,6 +633,9 @@ themselves once the selection process has concluded."
       conn-dispatch-send
       conn-dispatch-send-replace)
      ("kapply" conn-dispatch-kapply)
+     ("yank to/replace"
+      conn-dispatch-yank-to
+      conn-dispatch-yank-to-replace)
      ("yank read/replace"
       conn-dispatch-reading-yank-to
       conn-dispatch-reading-yank-to-replace)

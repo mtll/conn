@@ -1140,7 +1140,15 @@ The iterator must be the first argument in ARGLIST.
                ( :constructor conn-kapply-macro-argument
                  (&aux
                   (required t)
-                  (reference (conn-kapply-macro-reference))))))
+                  (reference (conn-kapply-macro-reference)))))
+  (register nil :type (or integer nil)))
+
+(cl-defmethod conn-argument-display ((arg conn-kapply-macro-argument))
+  (concat (substitute-command-keys
+           "\\[register] register ")
+          (when-let* ((reg (conn-kapply-macro-argument-register arg)))
+            (propertize (format "<%c>" reg)
+                        'face 'conn-argument-active-face))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kapply-macro-argument)
                                        cmd)
@@ -1150,19 +1158,23 @@ The iterator must be the first argument in ARGLIST.
                                     cmd
                                     updater)
   (cond ((memq cmd '(apply append step-edit))
-         (if (kmacro-ring-empty-p)
+         (if (and (kmacro-ring-empty-p)
+                  (not (conn-kapply-macro-argument-register arg)))
              (conn-read-args-error "Kmacro ring empty")
            (setf (conn-argument-value arg) cmd
                  (conn-argument-set-flag arg) t)
            (funcall updater arg)))
         ((eq cmd 'register)
-         (when-let* ((reg (condition-case _
-                              (register-read-with-preview
-                               "Kmacro Register:"
-                               #'kmacro-p)
-                            (quit nil))))
-           (setf (conn-argument-value arg) reg
-                 (conn-argument-set-flag arg) t))
+         (if (conn-kapply-macro-argument-register arg)
+             (setf (conn-kapply-macro-argument-register arg) nil)
+           (when-let* ((reg (condition-case err
+                                (register-read-with-preview
+                                 "Kmacro Register:"
+                                 #'kmacro-p)
+                              (quit nil)
+                              (error (conn-read-args-error
+                                      (error-message-string err))))))
+             (setf (conn-kapply-macro-argument-register arg) reg)))
          (funcall updater arg))
         ((conn-argument-predicate arg cmd)
          (setf (conn-argument-value arg) cmd
@@ -1170,6 +1182,8 @@ The iterator must be the first argument in ARGLIST.
          (funcall updater arg))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kapply-macro-argument))
+  (when-let* ((reg (conn-kapply-macro-argument-register arg)))
+    (kmacro-split-ring-element (get-register reg)))
   (pcase (conn-argument-value arg)
     ('record #'conn-kmacro-apply)
     ('apply
@@ -1180,10 +1194,7 @@ The iterator must be the first argument in ARGLIST.
        (conn-kmacro-apply-append
         it nil (conn-read-args-consume-prefix-arg))))
     ('step-edit
-     #'conn-kmacro-apply-step-edit)
-    ((and reg (pred integerp))
-     (let ((macro (get-register reg)))
-       (lambda (it) (conn-kmacro-apply it nil macro))))))
+     #'conn-kmacro-apply-step-edit)))
 
 ;;;;; Order Argument
 
@@ -1478,7 +1489,6 @@ finishing showing the buffers that were visited."))
                    :display-handler #'conn-kapply-display-handle)
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
-       (applier (conn-kapply-macro-argument))
        (pipeline
         (conn-composite-argument
          (or pipeline
@@ -1490,7 +1500,8 @@ finishing showing the buffers that were visited."))
                           (conn-kapply-restrictions-argument restrictions)
                           (conn-kapply-window-conf-argument windows)
                           (conn-kapply-undo-argument))
-                    (ensure-list extra))))))
+                    (ensure-list extra)))))
+       (applier (conn-kapply-macro-argument)))
     (conn-kapply-macro
      applier
      iterator
@@ -1564,13 +1575,13 @@ finishing showing the buffers that were visited."))
                    :prefix count
                    :command-handler #'conn-kapply-command-handler
                    :display-handler #'conn-kapply-display-handle)
-      ((applier (conn-kapply-macro-argument))
-       (pipeline (conn-composite-argument
+      ((pipeline (conn-composite-argument
                   (list (conn-kapply-query-argument)
                         (conn-kapply-excursions-argument t)
                         (conn-kapply-restrictions-argument t)
                         (conn-kapply-window-conf-argument t)
-                        (conn-kapply-undo-argument)))))
+                        (conn-kapply-undo-argument))))
+       (applier (conn-kapply-macro-argument)))
     (conn-kapply-macro
      (lambda (iterator)
        (funcall applier iterator (or conn-read-args-last-prefix 0)))
@@ -1592,8 +1603,7 @@ finishing showing the buffers that were visited."))
                     :prompt "Kapply on Regions"
                     :command-handler #'conn-kapply-command-handler
                     :display-handler #'conn-kapply-display-handle)
-       ((applier (conn-kapply-macro-argument))
-        (restrict (unless (or (bound-and-true-p multi-isearch-file-list)
+       ((restrict (unless (or (bound-and-true-p multi-isearch-file-list)
                               (bound-and-true-p multi-isearch-buffer-list))
                     (conn-cycling-argument
                      "restrict"
@@ -1607,7 +1617,8 @@ finishing showing the buffers that were visited."))
                          (conn-kapply-excursions-argument t)
                          (conn-kapply-restrictions-argument t)
                          (conn-kapply-window-conf-argument t)
-                         (conn-kapply-undo-argument)))))
+                         (conn-kapply-undo-argument))))
+        (applier (conn-kapply-macro-argument)))
      (let ((matches
             (cond ((bound-and-true-p multi-isearch-file-list)
                    (mapcan 'conn--isearch-matches
@@ -1749,14 +1760,14 @@ finishing showing the buffers that were visited."))
                    :prompt "Kapply on Dispatch"
                    :command-handler #'conn-kapply-command-handler
                    :display-handler #'conn-kapply-display-handle)
-      ((applier (conn-kapply-macro-argument))
-       (pipeline
+      ((pipeline
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)
                (conn-kapply-window-conf-argument t)
                #'conn-kapply-save-excursion
                #'conn-kapply-relocate-to-region
-               #'conn-kapply-pulse-region))))
+               #'conn-kapply-pulse-region)))
+       (applier (conn-kapply-macro-argument)))
     (oclosure-lambda (conn-dispatch-kapply
                       (macro nil)
                       (action-auto-repeat t))
