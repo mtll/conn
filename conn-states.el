@@ -1438,7 +1438,6 @@ entering mark state.")
             (rectangle-mark-mode 1)))
       (deactivate-mark))
     (unless (or (null conn-record-mark-state)
-                (eq this-command 'keyboard-quit)
                 (= (point) (mark t)))
       (conn-push-mark-state-ring
        (list (point-marker)
