@@ -2534,6 +2534,8 @@ hook, which see."
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
+             (when (eq window (selected-window))
+               (goto-char pt))
              (with-selected-window window
                (conn-dispatch-change-group)
                (save-mark-and-excursion
@@ -2544,16 +2546,16 @@ hook, which see."
                                                  ,@transform
                                                  ,@(when check-bounds
                                                      (list 'conn-check-bounds)))))
-                    (if delete
-                        (delete-region beg end)
-                      (push (cons append (funcall region-extract-function t))
-                            strings)
-                      (conn-dispatch-undo-case 90
-                        (:undo
-                         (pop strings)
-                         (conn-dispatch-undo-pulse beg end))
-                        (:cancel
-                         (pop strings))))
+                    (unless delete
+                      (push (cons append (filter-buffer-substring beg end))
+                            strings))
+                    (delete-region beg end)
+                    (conn-dispatch-undo-case 90
+                      (:undo
+                       (pop strings)
+                       (conn-dispatch-undo-pulse beg end))
+                      (:cancel
+                       (pop strings)))
                     (when fixup-whitespace
                       (funcall conn-kill-fixup-whitespace-function bounds)))
                    (_ (user-error "No %s found" thing)))))))
