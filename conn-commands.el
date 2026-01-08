@@ -2534,31 +2534,30 @@ hook, which see."
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
-             (when (eq window (selected-window))
-               (goto-char pt))
-             (with-selected-window window
-               (conn-dispatch-change-group)
-               (save-mark-and-excursion
-                 (pcase (conn-bounds-of-dispatch thing arg pt)
-                   ((and bounds
-                         (conn-dispatch-bounds `(,beg . ,end)
-                                               `(,@dtform
-                                                 ,@transform
-                                                 ,@(when check-bounds
-                                                     (list 'conn-check-bounds)))))
-                    (unless delete
-                      (push (cons append (filter-buffer-substring beg end))
-                            strings))
-                    (delete-region beg end)
-                    (conn-dispatch-undo-case 90
-                      (:undo
-                       (pop strings)
-                       (conn-dispatch-undo-pulse beg end))
-                      (:cancel
-                       (pop strings)))
-                    (when fixup-whitespace
-                      (funcall conn-kill-fixup-whitespace-function bounds)))
-                   (_ (user-error "No %s found" thing)))))))
+             (select-window window)
+             (conn-dispatch-change-group)
+             (push-mark)
+             (goto-char pt)
+             (pcase (conn-bounds-of-dispatch thing arg pt)
+               ((and bounds
+                     (conn-dispatch-bounds `(,beg . ,end)
+                                           `(,@dtform
+                                             ,@transform
+                                             ,@(when check-bounds
+                                                 (list 'conn-check-bounds)))))
+                (unless delete
+                  (push (cons append (filter-buffer-substring beg end))
+                        strings))
+                (delete-region beg end)
+                (conn-dispatch-undo-case 90
+                  (:undo
+                   (pop strings)
+                   (conn-dispatch-undo-pulse beg end))
+                  (:cancel
+                   (pop strings)))
+                (when fixup-whitespace
+                  (funcall conn-kill-fixup-whitespace-function bounds)))
+               (_ (user-error "No %s found" thing)))))
          thing arg dtform
          :repeat repeat
          :other-end :no-other-end
