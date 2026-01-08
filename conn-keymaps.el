@@ -261,6 +261,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "M-n" 'conn-mark-ring-next
+  "M-p" 'conn-mark-ring-previous
   "DEL" 'kill-region
   "e" 'conn-emacs-state
   "TAB" 'indent-rigidly

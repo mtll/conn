@@ -68,7 +68,8 @@
 (defun conn--clone-buffer-setup ()
   (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
         conn-jump-ring (conn-copy-ring conn-jump-ring)
-        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring))
+        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
+        conn-mark-state-ring (conn-copy-ring conn-mark-state-ring))
   (cl-loop for e in conn--previous-mark-state
            if (markerp e)
            collect (copy-marker (marker-position e)) into mstate

@@ -444,19 +444,48 @@ If the mark is already active then deactivate it instead."
 (defun conn-previous-mark-command ()
   "Push, and mark the region from the previous, `conn-mark-state'."
   (interactive)
-  (unless conn--previous-mark-state
+  (pcase (conn-ring-extract-head conn-mark-state-ring)
+    (`(,pt ,mk ,rmm)
+     (goto-char pt)
+     (push-mark mk t t)
+     (set-marker pt nil)
+     (set-marker mk nil)
+     (when rmm (rectangle-mark-mode 1))
+     (conn-push-state 'conn-mark-state))
+    (_ (user-error "No previous mark state"))))
+
+(defun conn-mark-ring-previous (arg)
+  (interactive "p")
+  (unless (conn-ring-head conn-mark-state-ring)
     (user-error "No previous mark state"))
-  (goto-char (nth 0 conn--previous-mark-state))
-  (push-mark (nth 1 conn--previous-mark-state) t t)
-  (pcase (nth 2 conn--previous-mark-state)
-    (`(,pc . ,mc)
-     (rectangle-mark-mode 1)
-     (rectangle--reset-crutches)
-     (save-excursion
-       (goto-char (mark))
-       (rectangle--col-pos mc 'mark))
-     (rectangle--col-pos pc 'point)))
-  (conn-push-state 'conn-mark-state))
+  (cond ((< arg 0)
+         (conn-mark-ring-next (abs arg)))
+        ((> arg 0)
+         (when conn-mark-state
+           (conn-push-mark-state-ring
+            (list (point-marker)
+                  (copy-marker (mark-marker))
+                  (bound-and-true-p rectangle-mark-mode))))
+         (unless conn-mark-state (cl-decf arg))
+         (dotimes (_ arg)
+           (conn-ring-rotate-forward conn-mark-state-ring))
+         (conn-previous-mark-command))))
+
+(defun conn-mark-ring-next (arg)
+  (interactive "p")
+  (unless (conn-ring-head conn-mark-state-ring)
+    (user-error "No previous mark state"))
+  (cond ((< arg 0)
+         (conn-mark-ring-previous (abs arg)))
+        ((> arg 0)
+         (when conn-mark-state
+           (conn-push-mark-state-ring
+            (list (point-marker)
+                  (copy-marker (mark-marker))
+                  (bound-and-true-p rectangle-mark-mode))))
+         (dotimes (_ arg)
+           (conn-ring-rotate-backward conn-mark-state-ring))
+         (conn-previous-mark-command))))
 
 (defun conn-mark-thing (thing arg transform)
   "Mark the region defined by THING, ARG, and TRANSFORM"

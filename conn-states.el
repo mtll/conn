@@ -19,6 +19,7 @@
 
 ;;; Code
 
+(require 'mule-util)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-quick-ref)
@@ -1373,6 +1374,10 @@ command was a prefix command.")
 
 ;;;;; Mark State
 
+(defvar-local conn-mark-state-ring nil)
+
+(defvar conn-mark-state-ring-max 8)
+
 (defvar-local conn--previous-mark-state nil)
 
 (defvar conn--mark-state-rmm nil)
@@ -1392,15 +1397,30 @@ entering mark state.")
                        deactivate-mark
                        (progn
                          (setf conn--mark-state-rmm
-                               (and (bound-and-true-p rectangle-mark-mode)
-                                    (fboundp 'rectangle--pos-cols)
-                                    (rectangle--pos-cols (point) (mark))))
+                               (bound-and-true-p rectangle-mark-mode))
                          nil))))
 
 (defun conn-pop-mark-state ()
   "Pop `conn-mark-state'."
   (interactive)
   (setq deactivate-mark t))
+
+(defun conn-push-mark-state-ring (state)
+  (unless conn-mark-state-ring
+    (setq conn-mark-state-ring
+          (conn-make-ring conn-mark-state-ring-max
+                          :cleanup (lambda (elem)
+                                     (pcase elem
+                                       (`(,pt ,mk ,_rmm)
+                                        (set-marker pt nil)
+                                        (set-marker mk nil))))
+                          :copier (lambda (elem)
+                                    (pcase-exhaustive elem
+                                      (`(,pt ,mk ,rmm)
+                                       (list (copy-marker pt)
+                                             (copy-marker mk)
+                                             rmm)))))))
+  (conn-ring-insert-front conn-mark-state-ring state))
 
 (defun conn-mark-state-keep-mark-active-p (exit-type)
   "When non-nil keep the mark active when exiting `conn-mark-state'."
@@ -1409,9 +1429,7 @@ entering mark state.")
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
                                 &optional _type)
-  (setf conn--mark-state-rmm (and (bound-and-true-p rectangle-mark-mode)
-                                  (fboundp 'rectangle--pos-cols)
-                                  (rectangle--pos-cols (point) (mark)))
+  (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
         conn-record-mark-state t)
   (conn-state-on-exit exit-type
     (if (conn-mark-state-keep-mark-active-p exit-type)
@@ -1420,12 +1438,12 @@ entering mark state.")
             (rectangle-mark-mode 1)))
       (deactivate-mark))
     (unless (or (null conn-record-mark-state)
-                (eq this-command 'keyboard-quit))
-      (unless conn--previous-mark-state
-        (setq conn--previous-mark-state (list (make-marker) (make-marker) nil)))
-      (set-marker (nth 0 conn--previous-mark-state) (point))
-      (set-marker (nth 1 conn--previous-mark-state) (mark t))
-      (setf (nth 2 conn--previous-mark-state) conn--mark-state-rmm)))
+                (eq this-command 'keyboard-quit)
+                (= (point) (mark t)))
+      (conn-push-mark-state-ring
+       (list (point-marker)
+             (copy-marker (mark-marker))
+             conn--mark-state-rmm))))
   (cl-call-next-method))
 
 ;;;;; Buffer State Setup
