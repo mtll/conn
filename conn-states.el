@@ -1438,6 +1438,7 @@ entering mark state.")
             (rectangle-mark-mode 1)))
       (deactivate-mark))
     (unless (or (null conn-record-mark-state)
+                (eq this-command 'keyboard-quit)
                 (= (point) (mark t)))
       (conn-push-mark-state-ring
        (list (point-marker)
@@ -1883,7 +1884,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                          (mapc #'conn-argument-cancel arguments))
                        (unless executing-kbd-macro
                          (funcall display-handler nil nil display-state t)))
-                     (mapc #'conn-argument-finalize arguments)
+                     (mapc #'conn-argument-accept arguments)
                      (cons callback vals)))))
         (when interactive
           (add-to-history 'conn-command-history
@@ -1979,7 +1980,7 @@ echo area help message.
 (cl-defgeneric conn-argument-cancel (argument)
   ( :method (_arg) nil))
 
-(cl-defgeneric conn-argument-finalize (argument)
+(cl-defgeneric conn-argument-accept (argument)
   ( :method (_arg) nil))
 
 (cl-defgeneric conn-argument-required-p (argument)
