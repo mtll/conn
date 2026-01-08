@@ -72,22 +72,8 @@
 (defvar-keymap conn-sort-fold-case-map
   "g" 'sort-fold-case)
 
-(cl-defgeneric conn-sort-things-do (thing
-                                    arg
-                                    transform
-                                    &optional
-                                    reverse
-                                    predicate
-                                    fold-case))
-
-(cl-defmethod conn-sort-things-do ((thing (conn-thing t))
-                                   arg
-                                   transform
-                                   &optional
-                                   reverse
-                                   predicate
-                                   fold-case)
-  (pcase (conn-bounds-of thing arg)
+(defun conn--sort-in-bounds (bounds transform reverse predicate fold-case)
+  (pcase bounds
     ((and (conn-bounds-get :subregions nil
                            (and regions (pred identity)))
           (conn-bounds `(,beg . ,end)))
@@ -123,6 +109,56 @@
                (with-buffer-unmodified-if-unchanged
                  (sort-reorder-buffer sort-lists old))))))))
     (_ (user-error "No regions to sort"))))
+
+(cl-defgeneric conn-sort-things-do (thing
+                                    arg
+                                    transform
+                                    &optional
+                                    reverse
+                                    predicate
+                                    fold-case))
+
+(cl-defmethod conn-sort-things-do ((thing (conn-thing t))
+                                   arg
+                                   transform
+                                   &optional
+                                   reverse
+                                   predicate
+                                   fold-case)
+  (conn--sort-in-bounds (conn-bounds-of thing arg)
+                        transform
+                        reverse
+                        predicate
+                        fold-case))
+
+(cl-defmethod conn-sort-things-do ((thing (conn-thing conn-things-in-region))
+                                   arg
+                                   transform
+                                   &optional
+                                   reverse
+                                   predicate
+                                   fold-case)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Things in Region"
+                   :prefix arg)
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument))
+       (reverse
+        (conn-boolean-argument "reverse"
+                               'reverse
+                               conn-sort-reverse-map))
+       (fold-case
+        (conn-boolean-argument "fold case"
+                               'sort-fold-case
+                               conn-sort-fold-case-map
+                               (bound-and-true-p sort-fold-case))))
+    (conn--sort-in-bounds (conn-get-things-in-region
+                           thing arg transform
+                           (region-beginning) (region-end))
+                          nil
+                          reverse
+                          predicate
+                          fold-case)))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
                                    arg
@@ -205,10 +241,14 @@ FOLD-CASE is the value of `sort-fold-case' to use for the sorting.
 Interactively defaults to the current value of `sort-fold-case'."
   (interactive
    (conn-read-args (conn-sort-state
-                    :prompt "Things"
+                    :prompt (if (region-active-p)
+                                "Things in Regions"
+                              "Thing")
                     :reference conn-sort-bindings-ref
                     :prefix current-prefix-arg)
-       ((`(,thing ,arg) (conn-sort-things-argument))
+       ((`(,thing ,arg) (if (region-active-p)
+                            (list 'conn-things-in-region)
+                          (conn-sort-things-argument)))
         (transform (conn-transform-argument))
         (reverse
          (conn-boolean-argument "reverse"
