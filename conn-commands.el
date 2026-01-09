@@ -1301,6 +1301,28 @@ Currently selected window remains selected afterwards."
   (without-restriction
     (cl-call-next-method)))
 
+(static-when (<= 30 emacs-major-version)
+  (cl-defmethod conn-replace-do ((_thing (eql as-diff))
+                                 &rest _)
+    (call-interactively #'replace-regexp-as-diff))
+
+  (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                         (_cmd (eql as-diff)))
+    t)
+
+  (cl-defmethod conn-replace-do ((_thing (eql multi-buffer-as-diff))
+                                 &rest _)
+    (call-interactively #'multi-file-replace-regexp-as-diff))
+
+  (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                         (_cmd (eql multi-buffer-as-diff)))
+    t)
+
+  (define-keymap
+    :keymap conn-replace-thing-argument-map
+    "D" 'as-diff
+    "B" 'multi-buffer-as-diff))
+
 (defun conn-replace (thing
                      arg
                      transform

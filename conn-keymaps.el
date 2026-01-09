@@ -235,11 +235,6 @@
   "e" 'end-of-buffer
   "h" 'outline-previous-visible-heading)
 
-(static-if (<= 30 emacs-major-version)
-    (progn
-      (keymap-global-set "<conn-edit-map> W" 'replace-regexp-as-diff)
-      (keymap-global-set "<conn-edit-map> Q" 'multi-file-replace-regexp-as-diff)))
-
 (keymap-set
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
    (make-sparse-keymap))
