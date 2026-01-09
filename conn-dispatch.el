@@ -3799,8 +3799,6 @@ it."))
                   (conn-select-target)))
       (with-selected-window window
         (conn-dispatch-change-group)
-        ;; If there is a keyboard macro in the register we would like to
-        ;; amalgamate the undo
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,_end) transform)
@@ -3829,8 +3827,6 @@ it."))
                   (conn-select-target)))
       (with-selected-window window
         (conn-dispatch-change-group)
-        ;; If there is a keyboard macro in the register we would like to
-        ;; amalgamate the undo
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)

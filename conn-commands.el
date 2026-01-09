@@ -840,10 +840,14 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively ARG is the prefix argument."
   (interactive "p")
+  (unless (conn-ring-head conn-emacs-state-ring)
+    (user-error "No previous emacs state"))
   (cond ((< arg 0)
          (conn-next-emacs-state (abs arg)))
         ((> arg 0)
-         (push-mark nil t)
+         (unless (memq last-command '(conn-previous-emacs-state
+                                      conn-next-emacs-state))
+           (push-mark nil t))
          (dotimes (_ (1- arg))
            (conn-ring-rotate-forward conn-emacs-state-ring))
          (if (and conn-emacs-state
@@ -860,10 +864,14 @@ Interactively ARG is the prefix argument."
 
 Interactively ARG is the prefix argument."
   (interactive "p")
+  (unless (conn-ring-head conn-emacs-state-ring)
+    (user-error "No next emacs state"))
   (cond ((< arg 0)
          (conn-previous-emacs-state (abs arg)))
         ((> arg 0)
-         (push-mark nil t)
+         (unless (memq last-command '(conn-previous-emacs-state
+                                      conn-next-emacs-state))
+           (push-mark nil t))
          (dotimes (_ arg)
            (conn-ring-rotate-backward conn-emacs-state-ring))
          (goto-char (conn-ring-head conn-emacs-state-ring))
@@ -2536,8 +2544,6 @@ hook, which see."
                          (conn-select-target)))
              (select-window window)
              (conn-dispatch-change-group)
-             (push-mark)
-             (goto-char pt)
              (pcase (conn-bounds-of-dispatch thing arg pt)
                ((and bounds
                      (conn-dispatch-bounds `(,beg . ,end)
@@ -2545,6 +2551,8 @@ hook, which see."
                                              ,@transform
                                              ,@(when check-bounds
                                                  (list 'conn-check-bounds)))))
+                (push-mark (conn-bounds-get bounds :origin))
+                (goto-char beg)
                 (unless delete
                   (push (cons append (filter-buffer-substring beg end))
                         strings))
@@ -2582,9 +2590,6 @@ hook, which see."
                                   separator
                                   fixup-whitespace
                                   check-bounds)
-  ;; Binding these to nil prevents `with-isearch-suspended' from
-  ;; defaulting to the previous search if this is called before a
-  ;; search string has been entered.
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds `(,beg . ,end)
                        `(,@transform
