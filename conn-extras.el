@@ -238,7 +238,8 @@
   "d" 'conn-dispatch-dired-kill-subdir)
 
 (defvar conn-dired-ref-1
-  (conn-reference-page "Dired"
+  (conn-reference-page
+    (:heading "Dired")
     ((("next/prev" dired-next-line dired-previous-line)
       ("next/prev dirline" dired-next-dirline dired-prev-dirline)
       ("next/prev subdir" dired-next-subdir dired-prev-subdir)
@@ -504,7 +505,8 @@
 ;;;; Diff
 
 (defvar conn-diff-ref
-  (conn-reference-page "Diff"
+  (conn-reference-page
+    (:heading "Diff")
     ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
       ("file next/prev" diff-file-next diff-file-prev)
       ("apply hunk/buffer" diff-apply-hunk diff-apply-buffer)
@@ -565,7 +567,8 @@
 ;;;; Magit
 
 (defvar conn-magit-ref
-  (conn-reference-page "Magit"
+  (conn-reference-page
+    (:heading "Magit")
     ((("section forward/back" magit-section-forward magit-section-backward)
       ("delete thing" magit-delete-thing)
       ("dispatch" magit-dispatch))
@@ -701,7 +704,8 @@
             (ibuffer-unmark-forward nil nil 1)))))))
 
 (defvar conn-ibuffer-ref
-  (conn-reference-page "Ibuffer"
+  (conn-reference-page
+    (:heading "Ibuffer")
     ((("next/prev line" ibuffer-forward-line ibuffer-backward-line)
       ("next/prev group" ibuffer-forward-filter-group ibuffer-backward-filter-group)
       ("jump to group" ibuffer-jump-to-filter-group)
@@ -719,7 +723,8 @@
       ("recency" ibuffer-do-sort-by-recency)))))
 
 (defvar conn-ibuffer-mark-ref
-  (conn-reference-page "Ibuffer Mark"
+  (conn-reference-page
+    (:heading "Ibuffer Mark")
     ((("mark" ibuffer-mark-forward)
       ("unmark next/prev" ibuffer-unmark-forward ibuffer-unmark-backward)
       ("unmark all" ibuffer-unmark-all)
@@ -852,7 +857,8 @@
         :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
 
 (defvar conn-bookmark-bmenu-ref
-  (conn-reference-page "Bookmark Menu"
+  (conn-reference-page
+    (:heading "Bookmark Menu")
     ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
       ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
       ("annotations/all"
@@ -1001,7 +1007,8 @@
    :restrict-windows t))
 
 (defvar conn-info-ref
-  (conn-reference-page "Info"
+  (conn-reference-page
+    (:heading "Info")
     ((("history forward/back" Info-history-forward Info-history-back)
       ("next/prev" Info-next Info-prev)
       ("scroll up/down" Info-scroll-up Info-scroll-down))

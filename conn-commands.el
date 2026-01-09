@@ -1091,7 +1091,7 @@ Currently selected window remains selected afterwards."
           ("Multi file as diff" multi-file-as-diff))))))
 
 (defvar conn-replace-reference
-  (list (conn-reference-page "Replace"
+  (list (conn-reference-page
           "Replace instances of a pattern in a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
@@ -1536,7 +1536,7 @@ For more information about how the replacement is carried out see
      ("In current project" project))))
 
 (defvar conn-isearch-reference
-  (list (conn-reference-page "Isearch"
+  (list (conn-reference-page
           "Isearch within a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
@@ -1813,7 +1813,7 @@ Exiting the recursive edit will resume the isearch."
      ("recursive-edit" recursive-edit))))
 
 (defvar conn-transpose-reference
-  (list (conn-reference-page "Transpose"
+  (list (conn-reference-page
           "Transpose two things."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
@@ -1852,10 +1852,9 @@ Exiting the recursive edit will resume the isearch."
      ("Recenter" recenter-top-bottom))))
 
 (defvar conn-transpose-repeat-reference
-  (list (conn-reference-page "Commands"
+  (list (conn-reference-page
           (:eval (conn-quick-ref-to-cols
                   conn-transpose-repeat-commands-ref 1))
-          ""
           "Any other non-prefix command ends repeating.")))
 
 (defun conn-transpose-repeat-help ()
@@ -2131,12 +2130,11 @@ region after a `recursive-edit'."
      ("outer line" move-end-of-line))))
 
 (defvar conn-kill-reference
-  (list (conn-reference-page "Kill"
+  (list (conn-reference-page
           "Kill some things.
 If append is set to COLLECT then the first invocation sets the place
 which is being killed to and further invocations with `conn-repeat'
-append to that place.
-"
+append to that place."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-kill-special-ref 3))
@@ -2287,15 +2285,15 @@ append to that place.
                  (&aux
                   (transform (conn-transform-argument))
                   (reformat (when conn-kill-reformat-function
-                                      (conn-reformat-argument)))
+                              (conn-reformat-argument)))
                   (value (list transform reformat))))
                ( :constructor conn-dispatch-transform-and-fixup-argument
                  (&optional
                   initial-reformat
                   &aux
                   (reformat (when conn-kill-reformat-function
-                                      (conn-reformat-argument
-                                       initial-reformat)))
+                              (conn-reformat-argument
+                               initial-reformat)))
                   (transform (conn-dispatch-transform-argument))
                   (value (list transform reformat)))))
   (transform nil :type list)
@@ -2387,8 +2385,8 @@ hook, which see."
 (cl-defgeneric conn-kill-reformat (bounds))
 
 (cl-defmethod conn-kill-reformat :after (_bounds
-                                                 &context
-                                                 (major-mode (derived-mode prog-mode)))
+                                         &context
+                                         (major-mode (derived-mode prog-mode)))
   (let ((tab-always-indent t))
     (unless (save-excursion
               (beginning-of-line)
@@ -2809,7 +2807,7 @@ hook, which see."
      ("surround" conn-surround))))
 
 (defvar conn-copy-reference
-  (list (conn-reference-page "Copy"
+  (list (conn-reference-page
           "Copy some things.
 If append is set to COLLECT then the first invocation sets the place
 which is being copied to and further invocations with `conn-repeat'
@@ -3130,7 +3128,7 @@ that place."
 (defvar conn-how-many-special-ref nil)
 
 (defvar conn-how-many-reference
-  (list (conn-reference-page "How Many"
+  (list (conn-reference-page
           "Count the number of matches within a thing."
           (:splice (when conn-how-many-special-ref
                      (conn-reference-quote
@@ -3193,7 +3191,7 @@ The regexp is read interactively."
 (defvar conn-comment-special-ref nil)
 
 (defvar conn-comment-reference
-  (list (conn-reference-page "Comment"
+  (list (conn-reference-page
           "Comment a thing."
           (:splice (when conn-comment-special-ref
                      (conn-reference-quote
@@ -3249,7 +3247,7 @@ For how they are used to define the region see `conn-bounds-of' and
 (defvar conn-duplicate-special-ref nil)
 
 (defvar conn-duplicate-reference
-  (list (conn-reference-page "Duplicate"
+  (list (conn-reference-page
           "Duplicate a thing."
           (:splice (when conn-duplicate-special-ref
                      (conn-reference-quote
@@ -3270,10 +3268,9 @@ For how they are used to define the region see `conn-bounds-of' and
      ("Recenter" recenter-top-bottom))))
 
 (defvar conn-duplicate-repeat-reference
-  (list (conn-reference-page "Commands"
+  (list (conn-reference-page
           (:eval (conn-quick-ref-to-cols
                   conn-duplicate-repeat-commands-ref 1))
-          ""
           "Any other non-prefix command ends repeating.")))
 
 (defun conn-duplicate-repeat-help ()
@@ -3627,7 +3624,7 @@ When `conn-duplicate-repeat-mode', which see, is active the transient map
      ("surround" conn-surround))))
 
 (defvar conn-change-reference
-  (list (conn-reference-page "Change"
+  (list (conn-reference-page
           "Change some things."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
@@ -3728,7 +3725,7 @@ For how the region is determined using CMD, ARG, and TRANSFORM see
 (defvar conn-indent-special-ref nil)
 
 (defvar conn-indent-reference
-  (list (conn-reference-page "Indent"
+  (list (conn-reference-page
           "Indent some thing."
           (:splice (when conn-indent-special-ref
                      (conn-reference-quote
@@ -3829,7 +3826,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   "?" #'conn-indent-rigidly-reference)
 
 (defvar conn-indent-thing-rigidly-reference
-  (conn-reference-page "Indent Rigidly"
+  (conn-reference-page
     (:heading "Indent")
     ((:keymap conn-indent-thing-rigidly-map)
      (("left/to tab stop"

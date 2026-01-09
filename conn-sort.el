@@ -30,8 +30,8 @@
      ("Fields" sort-fields))))
 
 (defvar conn-sort-bindings-ref
-  (list (conn-reference-page "Sort"
-          "Special bindings"
+  (list (conn-reference-page
+          (:heading "Special bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-sort-special-bindings-ref 2)))))
 

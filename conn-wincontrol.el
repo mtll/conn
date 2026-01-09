@@ -404,7 +404,8 @@
 ;;;;; Wincontrol Quick Ref
 
 (defvar conn-wincontrol-windows-1
-  (conn-reference-page "Windows"
+  (conn-reference-page
+    (:heading "Windows")
     ((("switch window" conn-goto-window)
       ("quit win" quit-window)
       ("delete win" delete-window)
@@ -453,7 +454,7 @@
       ("fit win" shrink-window-if-larger-than-buffer)))))
 
 (defvar conn-wincontrol-windows-2
-  (conn-reference-page "Windows"
+  (conn-reference-page
     (((:heading "Windmove")
       ("up/down/left/right"
        conn-wincontrol-windmove-up
@@ -476,7 +477,7 @@
       ("tear off window" tear-off-window)))))
 
 (defvar conn-wincontrol-tabs-and-frames
-  (conn-reference-page "Tabs and Frames"
+  (conn-reference-page
     (((:heading "Tabs:")))
     ((("next/prev" tab-next tab-previous)
       ("new" tab-new)

@@ -61,8 +61,7 @@
 
 (cl-defstruct (conn--reference-page
                ( :constructor conn--make-reference-page
-                 (title depth definition)))
-  (title nil :type string :read-only t)
+                 (depth definition)))
   (depth 0 :type integer :read-only t)
   (definition nil :type list :read-only t))
 
@@ -83,8 +82,8 @@
                    collect (process-definition elem)
                    else collect elem))))
 
-(defmacro conn-reference-page (title &rest definition)
-  (declare (indent 1))
+(defmacro conn-reference-page (&rest definition)
+  (declare (indent 0))
   (let ((depth (or (when (eq :depth (car definition))
                      (pop definition)
                      (pop definition))
@@ -99,7 +98,6 @@
                      (mapcar #'process-definition def))
                     (_ def))))
       `(conn--make-reference-page
-        ,title
         ,depth
         (list ,@(cl-loop for row in definition
                          if (listp row)
@@ -214,10 +212,11 @@
                       (with-silent-modifications
                         (setq beg (point))
                         (insert str "\n")
-                        (goto-char beg)
-                        (while (search-forward "\n" nil 'move-to-end)
-                          (replace-match " \n"))
-                        (goto-char (point-max)))))))
+                        (add-text-properties beg (point) '(line-prefix " "))
+                        (save-excursion
+                          (goto-char beg)
+                          (while (search-forward "\n" nil 'move-to-end)
+                            (replace-match " \n"))))))))
       (with-current-buffer keymap-buffer
         (conn--where-is-with-remaps
           (while definition
@@ -237,44 +236,69 @@
                (let ((objs (or (transpose (process-row row))
                                (list "-"))))
                  (with-current-buffer ref-buffer
-                   (make-vtable
-                    :face `( :inherit default
-                             :height ,conn-quick-ref-text-scale)
-                    :divider-width 2
-                    :use-header-line nil
-                    :objects objs)
-                   (goto-char (point-max))))))))))))
+                   (let ((beg (point)))
+                     (make-vtable
+                      :face `( :inherit default
+                               :height ,conn-quick-ref-text-scale)
+                      :divider-width 2
+                      :use-header-line nil
+                      :objects objs)
+                     (goto-char (point-max))
+                     (add-text-properties beg (point)
+                                          '(line-prefix " ")))))))))))))
 
-(defun conn-quick-ref-insert-page (page buffer pg-num pg-count)
-  (pcase-let (((cl-struct conn--reference-page
-                          title
-                          definition)
-               page)
-              (keymap-buffer (current-buffer))
-              (header-pos nil))
+(defun conn-quick-ref-insert-pages (pages buffer header)
+  (let ((page-count 1)
+        (keymap-buffer (current-buffer))
+        (page-lines (max 10 (ceiling (frame-height) 3))))
     (with-current-buffer buffer
       (with-silent-modifications
-        (delete-region (point-min) (point-max))
-        (insert
-         (substitute-command-keys
-          (concat "\\<conn-quick-ref-map>"
-                  (propertize (format "[%s/%s] " pg-num pg-count)
-                              'face 'minibuffer-prompt)
-                  (propertize title 'face 'bold)
-                  " — \\[next] Next; \\[previous] Previous; \\[close] Close "
-                  "\n"))))
-      (setq header-pos (point))
-      (conn--format-ref-page definition keymap-buffer)
-      (with-silent-modifications
-        (indent-region header-pos (point-max) 1)
+        (cl-loop with beg = (point)
+                 for page in pages do
+                 (let ((prev (point)))
+                   (conn--format-ref-page
+                    (conn--reference-page-definition page)
+                    keymap-buffer)
+                   (when (> (count-lines beg (point)) page-lines)
+                     (cl-incf page-count)
+                     (save-excursion
+                       (goto-char prev)
+                       (insert " "))
+                     (setq beg prev))))
+        (goto-char (point-min))
+        (let ((current-page 1))
+          (insert (format header current-page page-count))
+          (while (search-forward "" nil t)
+            (save-excursion
+              (forward-line -1)
+              (when (looking-at-p "^\n")
+                (delete-char -1)))
+            (cl-incf current-page)
+            (insert (format header current-page page-count))))
         (add-face-text-property (point-min)
                                 (point-max)
                                 `(:height ,conn-quick-ref-text-scale)
                                 t)
-        (add-face-text-property (point-min)
-                                header-pos
-                                'conn-quick-ref-page-header-face
-                                t)))))
+        (goto-char (point-min))
+        (narrow-to-page)))))
+
+(defun conn-quick-ref-next-page (buffer)
+  (with-current-buffer buffer
+    (widen)
+    (forward-page)
+    (when (= (point) (point-max))
+      (goto-char (point-min)))
+    (narrow-to-page)))
+
+(defun conn-quick-ref-previous-page (buffer)
+  (with-current-buffer buffer
+    (widen)
+    (if (= (point) (point-min))
+        (progn
+          (goto-char (point-max))
+          (forward-page -1))
+      (forward-page -1))
+    (narrow-to-page)))
 
 (defun conn--quick-ref-parse-pages (pages)
   (cl-loop for p in pages
@@ -293,43 +317,40 @@
     (let* ((buf (get-buffer-create " *conn-quick-ref*"))
            (display-function conn-quick-ref-display-function)
            (inhibit-message t)
-           (pg-count (length pages))
-           (pg-num 0)
-           (state nil))
-      (with-current-buffer buf (special-mode))
-      (conn-quick-ref-insert-page (car pages)
-                                  buf
-                                  (1+ pg-num)
-                                  pg-count)
+           (state nil)
+           (header
+            (substitute-command-keys
+             (concat " \\<conn-quick-ref-map>"
+                     (propertize "[%s/%s]" 'face 'minibuffer-prompt)
+                     " — \\[next] Next; \\[previous] Previous; \\[close] Close "
+                     "\n"))))
+      (add-face-text-property 0 (length header)
+                              'conn-quick-ref-page-header-face
+                              t header)
+      (with-current-buffer buf
+        (widen)
+        (special-mode)
+        (setq-local page-delimiter "")
+        (with-silent-modifications
+          (delete-region (point-min) (point-max))))
+      (conn-quick-ref-insert-pages pages buf header)
       (conn-threadf-> state (funcall display-function buf))
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
              (let ((keys (read-key-sequence-vector nil)))
                (pcase (key-binding keys)
-                 ('close
-                  (cl-return))
+                 ('close (cl-return))
                  ('next
-                  (setq pages (nconc (cdr pages) (list (car pages)))
-                        pg-num (mod (1+ pg-num) pg-count))
-                  (conn-quick-ref-insert-page (car pages)
-                                              buf
-                                              (1+ pg-num)
-                                              pg-count)
+                  (conn-quick-ref-next-page buf)
                   (conn-threadf-> state (funcall display-function buf)))
                  ('previous
-                  (setq pages (nconc (last pages) (butlast pages))
-                        pg-num (mod (1- pg-num) pg-count))
-                  (conn-quick-ref-insert-page (car pages)
-                                              buf
-                                              (1+ pg-num)
-                                              pg-count)
+                  (conn-quick-ref-previous-page buf)
                   (conn-threadf-> state (funcall display-function buf)))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
-                 (_
-                  (conn-add-unread-events (this-single-command-raw-keys))
-                  (cl-return))))))
+                 (_ (conn-add-unread-events (this-single-command-raw-keys))
+                    (cl-return))))))
         (funcall display-function buf state t)))))
 
 (defun conn-quick-ref-to-cols (list col-count)
@@ -355,6 +376,7 @@
                         resize-mini-windows rs)
                   (message nil))))
         (with-current-buffer buffer
-          (message "%s" (buffer-string)))))))
+          (message "%s" (buffer-substring (point-min)
+                                          (1- (point-max)))))))))
 
 (provide 'conn-quick-ref)

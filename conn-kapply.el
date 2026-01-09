@@ -1129,7 +1129,7 @@ The iterator must be the first argument in ARGLIST.
      ("step edit the previous macro" step-edit))))
 
 (defun conn-kapply-macro-reference ()
-  (conn-reference-page "Macro"
+  (conn-reference-page
     (:heading "Keyboard Macro")
     "What keyboard macro to use and how to use it"
     (:eval (conn-quick-ref-to-cols
@@ -1254,7 +1254,7 @@ The iterator must be the first argument in ARGLIST.
 ;;;;; Ibuffer Argument
 
 (defvar conn-kapply-ibuffer-reference
-  (conn-reference-page "Ibuffer"
+  (conn-reference-page
     :depth 70
     (:heading "Ibuffer Overview")
     "When multiple buffers are visited pop up an ibuffer buffer after
@@ -1281,7 +1281,7 @@ finishing showing the buffers that were visited."))
 ;;;;; Undo Argument
 
 (defvar conn-kapply-undo-reference
-  (conn-reference-page "Undo"
+  (conn-reference-page
     :depth 70
     (:heading "Undo")))
 

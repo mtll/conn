@@ -1496,8 +1496,9 @@ entering mark state.")
      ("next/previous page" next previous))))
 
 (defvar conn-read-args-reference-page
-  (conn-reference-page "Read Args"
+  (conn-reference-page
     :depth 50
+    (:heading "Read Args")
     "Interactively reading arguments for a command.
 "
     (:eval (conn-quick-ref-to-cols

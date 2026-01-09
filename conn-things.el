@@ -514,7 +514,7 @@ arguments even when the region is active then set this variable to nil."
 ;;;;;; Subregions
 
 (defvar conn-subregions-argument-reference
-  (conn-reference-page "Subregions"
+  (conn-reference-page
     :depth 70
     (:heading "Subregions Argument")
     "If this argument is non-nil then operate on the subregions defined by
@@ -573,8 +573,9 @@ words."))
 ;;;;;; Reformat Argument
 
 (defvar conn-fixup-whitepace-argument-reference
-  (conn-reference-page "Reformat"
+  (conn-reference-page
     :depth 70
+    (:heading "Reformat")
     "Attempt to reformat the buffer around the killed region.  If toggled
 with a prefix argument then set the default value of reformat in the
 current buffer."))
@@ -632,7 +633,7 @@ Each function in the hook is called with a single argument, a
 not be delete.  The the value returned by each function is ignored.")
 
 (defvar conn-check-bounds-argument-reference
-  (conn-reference-page "Check Bounds"
+  (conn-reference-page
     :depth 70
     (:heading "Check Bounds Argument")
     "Toggle running `conn-check-bounds-functions' to ensure that the region
@@ -722,7 +723,7 @@ check bounds in the current buffer."))
 (cl-defmethod conn-argument-get-reference ((arg conn-transform-argument))
   (when-let* ((tforms (conn-argument-value arg))
               (ref (conn--transforms-get-references tforms)))
-    (conn-reference-page "Active Transforms"
+    (conn-reference-page
       :depth -50
       (:eval ref)
       (:heading "Transform Bindings")

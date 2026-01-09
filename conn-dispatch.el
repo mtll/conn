@@ -613,7 +613,7 @@ themselves once the selection process has concluded."
      ("reset" conn-transform-reset))))
 
 (defvar conn-dispatch-thing-reference
-  (conn-reference-page "Things"
+  (conn-reference-page
     (:heading "Extra Thing Bindings")
     ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
      (:splice (conn-quick-ref-to-cols
@@ -651,7 +651,7 @@ themselves once the selection process has concluded."
       conn-dispatch-replace))))
 
 (defvar conn-dispatch-command-reference
-  (conn-reference-page "Other Commands"
+  (conn-reference-page
     (((:heading "History:")
       ("previous dispatch" conn-dispatch-cycle-ring-previous)
       ("next dispatch" conn-dispatch-cycle-ring-next))
@@ -668,7 +668,7 @@ themselves once the selection process has concluded."
         conn-dispatch-thing-reference))
 
 (defun conn-dispatch-select-action-reference ()
-  (conn-reference-page "Selection Commands"
+  (conn-reference-page
     (:splice conn-dispatch-action-reference)
     (((:heading "Action Commands")
       ("toggle repeat" repeat-dispatch)
@@ -678,7 +678,7 @@ themselves once the selection process has concluded."
       ("toggle other end" other-end)))))
 
 (defun conn-dispatch-select-target-reference ()
-  (conn-reference-page "Target Finder"
+  (conn-reference-page
     (:splice (oref conn-dispatch-target-finder reference))
     (((:heading "Targeting Commands")
       ("retarget" retarget)
@@ -702,7 +702,7 @@ themselves once the selection process has concluded."
      ("set input method" set-input-method))))
 
 (defvar conn-dispatch-select-misc-reference
-  (conn-reference-page "Misc"
+  (conn-reference-page
     :depth 50
     (:heading "Miscellaneous Commands")
     (:eval (conn-quick-ref-to-cols
@@ -726,7 +726,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
   (let* ((action (conn-dispatch-action-argument-value arg))
          (ref (conn-action-get-reference action)))
-    (conn-reference-page "Actions"
+    (conn-reference-page
       :depth -50
       (:splice ref)
       (:heading (when ref "Action Bindings"))
@@ -4004,7 +4004,9 @@ it."))
                             (lambda (win)
                               (not
                                (buffer-local-value 'buffer-read-only
-                                                   (window-buffer win))))))
+                                                   (window-buffer win)))))
+                           (action-reference
+                            "Replace a thing at point with another thing selected by dispatch."))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                          (conn-select-target)))
@@ -4063,7 +4065,9 @@ it."))
                      (lambda (win)
                        (not
                         (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
+                                            (window-buffer win)))))
+                    (action-reference
+                     "Kill the thing selected by dispatch and yank it at point."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -4146,7 +4150,9 @@ it."))
                     (action-window-predicate
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
+                                                (window-buffer win)))))
+                    (action-reference
+                     "Transpose two things selected by dispatch."))
       ()
     (pcase-let* ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
                   (conn-select-target))
