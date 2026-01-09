@@ -72,7 +72,7 @@
 (defvar-keymap conn-sort-fold-case-map
   "g" 'sort-fold-case)
 
-(defun conn--sort-in-bounds (bounds transform reverse predicate fold-case)
+(defun conn--sort-in-bounds (bounds transform reverse fold-case &optional predicate)
   (pcase bounds
     ((and (conn-bounds-get :subregions nil
                            (and regions (pred identity)))
@@ -115,7 +115,6 @@
                                     transform
                                     &optional
                                     reverse
-                                    predicate
                                     fold-case))
 
 (cl-defmethod conn-sort-things-do ((thing (conn-thing t))
@@ -123,21 +122,18 @@
                                    transform
                                    &optional
                                    reverse
-                                   predicate
                                    fold-case)
   (conn--sort-in-bounds (conn-bounds-of thing arg)
                         transform
                         reverse
-                        predicate
                         fold-case))
 
-(cl-defmethod conn-sort-things-do ((thing (conn-thing conn-things-in-region))
+(cl-defmethod conn-sort-things-do ((_thing (conn-thing conn-things-in-region))
                                    arg
-                                   transform
+                                   _transform
                                    &optional
-                                   reverse
-                                   predicate
-                                   fold-case)
+                                   _reverse
+                                   _fold-case)
   (conn-read-args (conn-read-thing-state
                    :prompt "Things in Region"
                    :prefix arg)
@@ -157,7 +153,6 @@
                            (region-beginning) (region-end))
                           nil
                           reverse
-                          predicate
                           fold-case)))
 
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
@@ -165,7 +160,6 @@
                                    transform
                                    &optional
                                    reverse
-                                   _predicate
                                    _fold-case)
   (conn-read-args (conn-read-thing-state
                    :prompt "Sort Inside")
@@ -181,7 +175,6 @@
                                    transform
                                    &optional
                                    reverse
-                                   _predicate
                                    fold-case)
   (conn-read-args (conn-read-thing-state
                    :prompt "Sort Inside")
@@ -198,7 +191,6 @@
                                    transform
                                    &optional
                                    reverse
-                                   _predicate
                                    fold-case)
   (conn-read-args (conn-read-thing-state
                    :prompt "Sort Inside"
@@ -219,7 +211,6 @@
                                    _transform
                                    &optional
                                    reverse
-                                   _predicate
                                    fold-case)
   (let ((sort-fold-case fold-case))
     (sort-columns reverse
