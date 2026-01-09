@@ -935,8 +935,7 @@ thing.  Can only be used during `conn-dispatch'.")))
             (conn-bounds `(,beg . ,end)))
        (conn-make-bounds
         'point (conn-bounds-arg bounds)
-        (cons (if conn-dispatch-other-end end beg)
-              origin)))
+        (cons (if conn-dispatch-other-end end beg) origin)))
       (_ bounds))
     transforms)))
 
@@ -950,8 +949,7 @@ thing.  Can only be used during `conn-dispatch'.")))
             (conn-bounds `(,beg . ,end)))
        (conn-make-bounds
         'point (conn-bounds-arg bounds)
-        (cons (if conn-dispatch-other-end end beg)
-              origin)))
+        (cons (if conn-dispatch-other-end end beg) origin)))
       (_ bounds))
     transforms)))
 
