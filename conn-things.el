@@ -37,7 +37,7 @@ Is an alist of the form ((CMD . MARK-HANDLER) ...).
 
 For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 
-(define-inline conn-command-mark-handler (command)
+(define-inline conn-command-mark-handler (command &optional autoload)
   "Return the mark handler for COMMAND."
   (declare (important-return-value t)
            (side-effect-free t)
@@ -46,7 +46,7 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
     (inline-quote
      (and (symbolp ,command)
           (or (alist-get ,command conn-mark-handler-overrides-alist)
-              (function-get ,command :conn-mark-handler t))))))
+              (function-get ,command :conn-mark-handler ,autoload))))))
 
 (defun conn-set-command-mark-handler (command handler)
   (function-put command :conn-mark-handler handler))
@@ -100,20 +100,20 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 
 (cl-deftype conn-thing () '(satisfies conn-thing-p))
 
-(define-inline conn-command-thing (cmd)
+(define-inline conn-command-thing (cmd &optional autoload)
   (declare (side-effect-free t)
            (gv-setter conn-set-command-thing))
   (inline-letevals (cmd)
     (inline-quote
      (and (symbolp ,cmd)
-          (get ,cmd :conn-command-thing)))))
+          (function-get ,cmd :conn-command-thing ,autoload)))))
 
-(define-inline conn-thing-command-p (cmd)
+(define-inline conn-thing-command-p (cmd &optional autoload)
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (cmd)
     (inline-quote
-     (and (function-get ,cmd :conn-command-thing)
+     (and (function-get ,cmd :conn-command-thing ,autoload)
           t))))
 
 (defun conn-set-command-thing (cmd thing)
@@ -912,11 +912,11 @@ TRANSFORM."
       `(app (pcase--flip conn-transform-bounds ,transform) ,pat)
     `(app (conn-transform-bounds _ ,transform) ,pat)))
 
-(defun conn--get-boundable-thing (thing)
+(defun conn--get-boundable-thing (thing &optional autoload)
   (catch 'boundable
     (while (pcase thing
-             ((or (and (pred conn-thing-command-p)
-                       (pred conn-command-mark-handler))
+             ((or (and (pred (lambda (c) (conn-thing-command-p c autoload)))
+                       (pred (lambda (c) (conn-command-mark-handler c autoload))))
                   (pred conn-thing-p))
               (throw 'boundable thing))
              ((pred conn-anonymous-thing-p)
@@ -940,13 +940,13 @@ Returns a `conn-bounds' struct."
 (defun conn--bounds-of-thing (bounds)
   (let ((thing (conn-bounds-thing bounds))
         (arg (conn-bounds-arg bounds)))
-    (pcase (conn--get-boundable-thing thing)
+    (pcase (conn--get-boundable-thing thing t)
       ((and thing (pred conn-thing-p))
        (setf (conn-bounds bounds)
              (bounds-of-thing-at-point thing)))
       ((and thing
             (let (and handler (pred identity))
-              (conn-command-mark-handler thing)))
+              (conn-command-mark-handler thing t)))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (n
@@ -974,11 +974,11 @@ Returns a `conn-bounds' struct."
 (defun conn--bounds-of-thing-subregions (bounds)
   (let ((thing (conn-bounds-thing bounds))
         (arg (conn-bounds-arg bounds)))
-    (pcase (conn--get-boundable-thing thing)
+    (pcase (conn--get-boundable-thing thing t)
       ((pred conn-thing-p) nil)
       ((and thing
             (let (and handler (pred identity))
-              (conn-command-mark-handler thing)))
+              (conn-command-mark-handler thing t)))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (0
@@ -1028,7 +1028,7 @@ Returns a `conn-bounds' struct."
                               arg)
   (let ((pt (point))
         (buf (current-buffer)))
-    (when (conn--get-boundable-thing cmd)
+    (when (conn--get-boundable-thing cmd t)
       (conn-make-bounds
        cmd arg
        (oclosure-lambda (conn-bounds-delay)
@@ -1043,6 +1043,22 @@ Returns a `conn-bounds' struct."
                        (save-mark-and-excursion
                          (goto-char pt)
                          (conn--bounds-of-thing-subregions bounds))))))))
+
+(conn-register-thing 'simple-motion)
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing simple-motion))
+                              arg)
+  (let ((pt (point))
+        (buf (current-buffer)))
+    (conn-make-bounds
+     cmd arg
+     (oclosure-lambda (conn-bounds-delay)
+         (bounds)
+       (with-current-buffer buf
+         (save-mark-and-excursion
+           (goto-char pt)
+           (funcall cmd arg)
+           (setf (conn-bounds bounds) (cons pt (point)))))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region))
                               arg)

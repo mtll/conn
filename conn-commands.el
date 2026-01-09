@@ -1047,7 +1047,11 @@ Currently selected window remains selected afterwards."
          ((`(,thing ,arg) (conn-thing-argument t))
           (transform (conn-transform-argument)))
        (pcase (conn-bounds-of thing arg)
-         ((conn-bounds `(,beg . ,end) transform)
+         ((and (conn-bounds `(,beg . ,end) transform)
+               bounds)
+          (pcase (conn-bounds-get bounds :direction)
+            (1 (goto-char end))
+            (-1 (goto-char beg)))
           (filter-buffer-substring beg end))
          (_ (user-error "No last thing to yank")))))))
 
