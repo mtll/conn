@@ -112,14 +112,6 @@
 (declare-function outline-on-heading-p "outline")
 (declare-function outline-up-heading "outline")
 
-(conn-register-thing
- 'heading
- :bounds-op (lambda ()
-              (save-mark-and-excursion
-                (outline-mark-subtree)
-                (cons (region-beginning) (region-end))))
- :forward-op 'outline-next-visible-heading)
-
 (cl-defmethod conn-bounds-of ((cmd (eql outline-up-heading))
                               arg)
   (cl-callf prefix-numeric-value arg)
@@ -128,14 +120,21 @@
                            arg
                          (1- arg))))
 
-(conn-define-mark-command conn-mark-heading heading)
-
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
                                       _arg)
   (conn-dispatch-headings
    :reference (conn-reference-quote
                 ((:heading "Heading Targets")
                  "Hides buffer regions outside heading lines."))))
+
+(eval-and-compile
+  (conn-register-thing
+   'heading
+   :bounds-op (lambda ()
+                (save-mark-and-excursion
+                  (outline-mark-subtree)
+                  (cons (region-beginning) (region-end))))
+   :forward-op 'outline-next-visible-heading))
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler

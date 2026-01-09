@@ -3665,8 +3665,8 @@ the string after the region selected by dispatch."))
                    :prompt "Send Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
-       (fixup (when conn-kill-fixup-whitespace-function
-                (conn-fixup-whitespace-argument)))
+       (fixup (when conn-kill-reformat-function
+                (conn-reformat-argument)))
        (check-bounds
         (conn-boolean-argument "check bounds"
                                'check-bounds
@@ -3748,7 +3748,7 @@ the string after the region selected by dispatch."))
                            ((`(,thing ,arg)
                              (conn-thing-argument-dwim))
                             (transform (conn-transform-argument))
-                            (fixup (conn-fixup-whitespace-argument
+                            (fixup (conn-reformat-argument
                                     (not (region-active-p))))
                             (check-bounds
                              (conn-boolean-argument "check bounds"
@@ -4015,8 +4015,8 @@ it."))
                  (pcase (conn-bounds-of thing arg)
                    ((and bounds (conn-bounds `(,beg . ,end) transform))
                     (kill-region beg end)
-                    (when conn-kill-fixup-whitespace-function
-                      (funcall conn-kill-fixup-whitespace-function bounds)))
+                    (when conn-kill-reformat-function
+                      (funcall conn-kill-reformat-function bounds)))
                    (_ (user-error "Cannot find thing at point")))))
              (with-current-buffer (marker-buffer action-opoint)
                (save-excursion
@@ -4074,8 +4074,8 @@ it."))
           (pcase (conn-bounds-of thing arg)
             ((and bounds (conn-bounds `(,beg . ,end) transform))
              (kill-region beg end)
-             (when conn-kill-fixup-whitespace-function
-               (funcall conn-kill-fixup-whitespace-function bounds)))
+             (when conn-kill-reformat-function
+               (funcall conn-kill-reformat-function bounds)))
             (_ (user-error "Cannot find thing at point")))))
       (with-current-buffer (marker-buffer action-opoint)
         (yank)))))

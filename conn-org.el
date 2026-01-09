@@ -113,8 +113,6 @@
                       (point))))
              (_ (error "no math at point")))))))
 
-(conn-define-mark-command conn-mark-org-inner-math org-inner-math)
-
 (put 'org-math 'bounds-of-thing-at-point
      (lambda ()
        (let ((node (org-element-context)))
@@ -129,8 +127,6 @@
                     (- (org-element-end node)
                        (org-element-post-blank node))))
              (_ (error "no math at point")))))))
-
-(conn-define-mark-command conn-mark-org-math org-math)
 
 (defun conn--org-window-p (win)
   (eq 'org-mode (buffer-local-value 'major-mode (window-buffer win))))

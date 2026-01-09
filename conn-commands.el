@@ -115,6 +115,7 @@ execution."
 
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
+  (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
   (interactive "p")
   (let ((line-move-visual t))
     (vertical-motion 0)
@@ -122,6 +123,7 @@ execution."
 
 (defun conn-backward-visual-line (arg)
   "Move backward ARG visual lines."
+  (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
   (interactive "p")
   (conn-forward-visual-line (- arg)))
 
@@ -129,6 +131,7 @@ execution."
   "Goto absolute line, 1 origin.
 
 Respects the current restriction."
+  (declare (conn-thing-command line #'conn-continuous-thing-handler))
   (interactive "p")
   (if (> 0 line)
       (progn
@@ -139,6 +142,7 @@ Respects the current restriction."
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
+  (declare (conn-thing-command inner-list #'conn--down-list-other-end-handler))
   (interactive "p")
   (unless (= 0 arg)
     (conn-protected-let* ((pt (point) (goto-char pt))
@@ -152,6 +156,7 @@ Respects the current restriction."
       (down-list dir))))
 
 (defun conn-forward-up-inner-list (arg)
+  (declare (conn-thing-command inner-list #'conn--down-list-other-end-handler))
   (interactive "p")
   (conn-backward-up-inner-list (- arg)))
 
@@ -159,6 +164,7 @@ Respects the current restriction."
   "Move forward by defuns.
 
 Behaves as `thingatpt' expects a \\='forward-op to behave."
+  (declare (conn-thing-command defun #'conn-continuous-thing-handler))
   (interactive "p")
   (if (< N 0)
       (beginning-of-defun (abs N))
@@ -166,6 +172,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 (defun conn-backward-symbol (arg)
   "`forward-symbol' in reverse."
+  (declare (conn-thing-command symbol #'conn-continuous-thing-handler))
   (interactive "p")
   (forward-symbol (- arg)))
 
@@ -173,6 +180,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   "`scroll-down-command' leaving point at the same relative window position.
 
 Pulses line that was the first visible line before scrolling."
+  (declare (conn-thing-command visible #'conn-discrete-thing-handler))
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
@@ -186,6 +194,7 @@ Pulses line that was the first visible line before scrolling."
   "`scroll-up-command' leaving point at the same relative window position.
 
 Pulses line that was the last visible line before scrolling."
+  (declare (conn-thing-command visible #'conn-discrete-thing-handler))
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
@@ -197,11 +206,13 @@ Pulses line that was the last visible line before scrolling."
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
+  (declare (conn-thing-command line #'conn-continuous-thing-handler))
   (interactive "p")
   (forward-line (- N)))
 
 (defun conn-backward-whitespace (N)
   "`forward-whitespace' by N but backward."
+  (declare (conn-thing-command whitespace #'conn-discrete-thing-handler))
   (interactive "p")
   (forward-whitespace (- N)))
 
@@ -219,6 +230,7 @@ Pulses line that was the last visible line before scrolling."
   "Move forward by inner lines.
 
 Behaves as `thingatpt' expects a \\='forward-op to behave."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (if (> N 0)
       (let ((pt (point)))
@@ -243,6 +255,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 (defun conn-forward-inner-line-dwim (N)
   "Like `conn-forward-inner-line' but attempts to be more clever."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (cond ((= N 0))
         ((> 0 N)
@@ -257,11 +270,13 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 (defun conn-backward-inner-line (N)
   "Inverse of `conn-forward-inner-line'."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (conn-forward-inner-line (- N)))
 
 (defun conn-backward-inner-line-dwim (N)
   "Like `conn-backwad-inner-line' but attempts to be more clever."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (cond ((= N 0))
         ((> 0 N)
@@ -279,6 +294,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 Immediately repeating this command goes to the point at end
 of line proper."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "P")
   (if (null N)
       (let ((point (point))
@@ -293,12 +309,14 @@ of line proper."
     (forward-line N)))
 
 (defun conn-forward-outer-line (&optional N)
+  (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
   (interactive "p")
   (if (< N 0)
       (conn-backward-outer-line (abs N))
     (move-end-of-line (+ N (if (eolp) 1 0)))))
 
 (defun conn-backward-outer-line (&optional N)
+  (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
   (interactive "p")
   (if (< N 0)
       (conn-forward-outer-line (abs N))
@@ -309,6 +327,7 @@ of line proper."
 
 Immediately repeating this command goes to the point at beginning
 of line proper."
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "P")
   (if (null N)
       (let ((point (point))
@@ -324,12 +343,14 @@ of line proper."
 
 (defun conn-end-of-list ()
   "Move point to the end of the enclosing list."
+  (declare (conn-thing-command list #'conn--down-list-other-end-handler))
   (interactive)
   (up-list 1 t t)
   (down-list -1 t))
 
 (defun conn-beginning-of-list ()
   "Move point to the beginning of the enclosing list."
+  (declare (conn-thing-command list #'conn--down-list-other-end-handler))
   (interactive)
   (backward-up-list nil t t)
   (down-list 1 t))
@@ -2123,7 +2144,7 @@ append to that place.
           (:eval (conn-quick-ref-to-cols
                   conn-transformations-quick-ref 3)))))
 
-(defvar conn-kill-fixup-whitespace-default t)
+(defvar conn-kill-reformat-default t)
 
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
@@ -2265,34 +2286,34 @@ append to that place.
                ( :constructor conn-transform-and-fixup-argument
                  (&aux
                   (transform (conn-transform-argument))
-                  (fixup-whitespace (when conn-kill-fixup-whitespace-function
-                                      (conn-fixup-whitespace-argument)))
-                  (value (list transform fixup-whitespace))))
+                  (reformat (when conn-kill-reformat-function
+                                      (conn-reformat-argument)))
+                  (value (list transform reformat))))
                ( :constructor conn-dispatch-transform-and-fixup-argument
                  (&optional
-                  initial-fixup-whitespace
+                  initial-reformat
                   &aux
-                  (fixup-whitespace (when conn-kill-fixup-whitespace-function
-                                      (conn-fixup-whitespace-argument
-                                       initial-fixup-whitespace)))
+                  (reformat (when conn-kill-reformat-function
+                                      (conn-reformat-argument
+                                       initial-reformat)))
                   (transform (conn-dispatch-transform-argument))
-                  (value (list transform fixup-whitespace)))))
+                  (value (list transform reformat)))))
   (transform nil :type list)
-  (fixup-whitespace nil :type boolean)
+  (reformat nil :type boolean)
   (explicit nil :type boolean))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)
                                     cmd
                                     updater)
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
-                       (fws (conn-transform-and-fixup-argument-fixup-whitespace arg)))
+                       (fws (conn-transform-and-fixup-argument-reformat arg)))
     (let ((valid nil))
       (cond ((and (conn-argument-update tform cmd (lambda (newval)
                                                     (setq tform newval
                                                           valid t)))
                   valid)
              (unless (conn-transform-and-fixup-argument-explicit arg)
-               (setf (conn-fixup-whitespace-argument-value fws)
+               (setf (conn-reformat-argument-value fws)
                      (not (conn-transform-argument-value tform))))
              (funcall updater arg))
             ((and (conn-argument-update fws cmd (lambda (newval)
@@ -2310,7 +2331,7 @@ append to that place.
                         delete
                         register
                         separator
-                        fixup-whitespace
+                        reformat
                         check-bounds)
   "Kill a region defined by CMD, ARG, and TRANSFORM.
 
@@ -2331,10 +2352,10 @@ If DELETE is non-nil then delete the region without modifying the kill
 ring.  If DELETE is non-nil then an error is signaled if either APPEND
 or REGISTER is non-nil.
 
-If FIXUP-WHITESPACE is non-nil then attempt to fix up the whitespace
-around the kill by calling `conn-kill-fixup-whitespace-function'.
-Interactively FIXUP-WHITESPACE defaults to the value of
-`conn-kill-fixup-whitespace-default'.
+If REFORMAT is non-nil then attempt to fix up the whitespace
+around the kill by calling `conn-kill-reformat-function'.
+Interactively REFORMAT defaults to the value of
+`conn-kill-reformat-default'.
 
 If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
 hook, which see."
@@ -2351,7 +2372,7 @@ hook, which see."
      (list thing arg transform append delete
            register separator fixup check-bounds)))
   (cl-assert (not (and delete (or register append))))
-  (cl-callf and fixup-whitespace (null transform))
+  (cl-callf and reformat (null transform))
   (conn-kill-thing-do cmd
                       arg
                       transform
@@ -2359,13 +2380,13 @@ hook, which see."
                       delete
                       register
                       separator
-                      fixup-whitespace
+                      reformat
                       check-bounds)
   (setq this-command 'conn-kill-thing))
 
-(cl-defgeneric conn-kill-fixup-whitespace (bounds))
+(cl-defgeneric conn-kill-reformat (bounds))
 
-(cl-defmethod conn-kill-fixup-whitespace :after (_bounds
+(cl-defmethod conn-kill-reformat :after (_bounds
                                                  &context
                                                  (major-mode (derived-mode prog-mode)))
   (let ((tab-always-indent t))
@@ -2374,13 +2395,13 @@ hook, which see."
               (looking-at-p (rx eol)))
       (indent-for-tab-command))))
 
-(cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing region)))
+(cl-defmethod conn-kill-reformat ((_bounds (conn-thing region)))
   "Noop" nil)
 
-(cl-defmethod conn-kill-fixup-whitespace ((_bounds (conn-thing char)))
+(cl-defmethod conn-kill-reformat ((_bounds (conn-thing char)))
   "Noop" nil)
 
-(cl-defmethod conn-kill-fixup-whitespace (bounds
+(cl-defmethod conn-kill-reformat (bounds
                                           &context
                                           (major-mode (derived-mode lisp-data-mode)))
   (cl-call-next-method)
@@ -2407,7 +2428,7 @@ hook, which see."
            (forward-line)
            (move-to-column col)))))
 
-(cl-defmethod conn-kill-fixup-whitespace (bounds)
+(cl-defmethod conn-kill-reformat (bounds)
   (cl-flet ((empty-lines (&optional backward)
               (save-excursion
                 (when backward (forward-line -1))
@@ -2492,7 +2513,7 @@ hook, which see."
                                    delete
                                    register
                                    separator
-                                   fixup-whitespace
+                                   reformat
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
 
@@ -2508,7 +2529,7 @@ hook, which see."
                                   _delete
                                   register
                                   separator
-                                  _fixup-whitespace
+                                  _reformat
                                   _check-bounds)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
@@ -2534,7 +2555,7 @@ hook, which see."
                                   _delete
                                   register
                                   separator
-                                  _fixup-whitespace
+                                  _reformat
                                   _check-bounds)
   (if-let* ((_ (fboundp 'project-root))
             (fname (buffer-file-name
@@ -2555,7 +2576,7 @@ hook, which see."
                                   delete
                                   _register
                                   _separator
-                                  _fixup-whitespace
+                                  _reformat
                                   _check-bounds)
   (conn-read-args (conn-read-thing-state
                    :prompt (if delete
@@ -2583,7 +2604,7 @@ hook, which see."
                                   _delete
                                   _register
                                   _separator
-                                  _fixup-whitespace
+                                  _reformat
                                   _check-bounds)
   (conn-read-args (conn-read-thing-state
                    :prompt "Keep Matching Lines In"
@@ -2628,7 +2649,7 @@ hook, which see."
                                   delete
                                   register
                                   separator
-                                  fixup-whitespace
+                                  reformat
                                   check-bounds)
   (let ((conn-dispatch-amalgamate-undo t)
         (result nil)
@@ -2639,9 +2660,9 @@ hook, which see."
                      :reference (list conn-dispatch-thing-reference)
                      :display-handler (conn-read-args-display-columns 3 3))
         ((`(,thing ,arg) (conn-thing-argument t))
-         (`(,dtform ,fixup-whitespace)
+         (`(,dtform ,reformat)
           (conn-dispatch-transform-and-fixup-argument
-           fixup-whitespace))
+           reformat))
          (repeat
           (conn-boolean-argument "repeat"
                                  'repeat-dispatch
@@ -2715,8 +2736,8 @@ hook, which see."
                      (conn-dispatch-undo-pulse beg end))
                     (:cancel
                      (pop strings)))
-                  (when fixup-whitespace
-                    (funcall conn-kill-fixup-whitespace-function bounds)))
+                  (when reformat
+                    (funcall conn-kill-reformat-function bounds)))
                  (_ (user-error "No %s found" thing))))))
          thing arg dtform
          :repeat repeat
@@ -2740,7 +2761,7 @@ hook, which see."
                                   delete
                                   register
                                   separator
-                                  fixup-whitespace
+                                  reformat
                                   check-bounds)
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds `(,beg . ,end)
@@ -2751,9 +2772,9 @@ hook, which see."
      (if delete
          (delete-region beg end)
        (conn--kill-region beg end t append register separator))
-     (when fixup-whitespace
+     (when reformat
        (goto-char beg)
-       (funcall conn-kill-fixup-whitespace-function bounds)))))
+       (funcall conn-kill-reformat-function bounds)))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing line))
                                   &rest _)
@@ -2769,7 +2790,7 @@ hook, which see."
                                                delete
                                                register
                                                _separator
-                                               _fixup-whitespace
+                                               _reformat
                                                _check-bounds)
   (if (bound-and-true-p rectangle-mark-mode)
       (let ((beg (region-beginning))

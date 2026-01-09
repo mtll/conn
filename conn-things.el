@@ -318,42 +318,27 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
 
-(defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER."
-  (unless (conn-thing-p thing)
-    (error "%s is not a known thing" thing))
-  (dolist (cmd commands)
-    (setf (conn-command-thing cmd) thing
-          (conn-command-other-end-handler cmd) handler)))
+(eval-and-compile
+  (defun conn-register-thing-commands (thing handler &rest commands)
+    "Associate COMMANDS with a THING and a HANDLER."
+    (unless (conn-thing-p thing)
+      (error "%s is not a known thing" thing))
+    (dolist (cmd commands)
+      (setf (conn-command-thing cmd) thing
+            (conn-command-other-end-handler cmd) handler))))
 
 (eval-and-compile
-  (defun conn--mark-for-mark-command (region ignore-mark-active)
-    (pcase region
-      (`(,beg . ,end)
-       (cond ((or ignore-mark-active
-                  (not (region-active-p)))
-              (goto-char beg)
-              (push-mark end t))
-             ((= (point) (mark))
-              (pcase (car (read-multiple-choice
-                           "Mark"
-                           '((?a "after point")
-                             (?b "before point"))))
-                (?e (goto-char end))
-                (?b (goto-char beg))))
-             ((> (point) (mark)) (goto-char end))
-             (t (goto-char beg))))
-      (_ (user-error "Invalid region")))))
-
-(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
-  (declare (autoload-macro expand))
-  `(progn
-     (defun ,name ()
-       (interactive)
-       (conn--mark-for-mark-command
-        (bounds-of-thing-at-point ',thing)
-        ,ignore-mark-active))
-     (conn-register-thing-commands ',thing 'ignore ',name)))
+  (defun conn--declare-thing-command (f _args thing &optional other-end-handler)
+    `(progn
+       ,(unless (conn-thing-p thing)
+          (macroexp-warn-and-return
+	   (format "The thing %S is not known to be defined" thing)
+	   nil t nil thing))
+       (setf (conn-command-thing ',f) ',thing
+             (conn-command-other-end-handler ',f) ,other-end-handler)
+       :autoload-end))
+  (setf (alist-get 'conn-thing-command defun-declarations-alist)
+        (list #'conn--declare-thing-command)))
 
 (define-inline conn-get-thing (thing)
   (declare (side-effect-free t)
@@ -515,6 +500,17 @@ arguments even when the region is active then set this variable to nil."
        (format " (%s)" thing))
       (_ " (<thing arg>)"))))
 
+(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
+  (when-let* ((cmd (conn-argument-value arg)))
+    ;; Autoload cmd here so that any `conn-bounds-of' methods defined
+    ;; for cmd are get loaded.
+    (when-let* ((fundef (and (symbolp cmd)
+                             (fboundp cmd)
+                             (symbol-function cmd)))
+                (_ (autoloadp fundef)))
+      (autoload-do-load fundef cmd))
+    cmd))
+
 ;;;;;; Subregions
 
 (defvar conn-subregions-argument-reference
@@ -574,58 +570,57 @@ words."))
                       'face (when (conn-argument-value arg)
                               'conn-argument-active-face))))
 
-;;;;;; Fixup Whitespace Argument
+;;;;;; Reformat Argument
 
 (defvar conn-fixup-whitepace-argument-reference
-  (conn-reference-page "Fixup Whitespace"
+  (conn-reference-page "Reformat"
     :depth 70
-    (:heading "Fixup Whitespace Argument")
-    "Attempt to fixup whitespace around the killed region.  If toggled with a
-prefix argument then set the default value of fixup whitespace in the
+    "Attempt to reformat the buffer around the killed region.  If toggled
+with a prefix argument then set the default value of reformat in the
 current buffer."))
 
-(defvar-keymap conn-fixup-whitespace-argument-map
-  "q" 'fixup-whitespace)
+(defvar-keymap conn-reformat-argument-map
+  "q" 'reformat)
 
-(defvar conn-fixup-whitespace-default t)
+(defvar conn-reformat-default t)
 
-(cl-defstruct (conn-fixup-whitespace-argument
+(cl-defstruct (conn-reformat-argument
                (:include conn-argument)
-               ( :constructor conn--fixup-whitespace-argument
+               ( :constructor conn--reformat-argument
                  (&optional
                   value
                   &aux
-                  (keymap conn-fixup-whitespace-argument-map)
+                  (keymap conn-reformat-argument-map)
                   (reference conn-fixup-whitepace-argument-reference)))))
 
-(cl-defsubst conn-fixup-whitespace-argument (&optional value)
+(cl-defsubst conn-reformat-argument (&optional value)
   (unless (and (region-active-p) (null value))
-    (conn--fixup-whitespace-argument
+    (conn--reformat-argument
      (or value
-         (and conn-kill-fixup-whitespace-function
-              conn-fixup-whitespace-default)))))
+         (and conn-kill-reformat-function
+              conn-reformat-default)))))
 
-(cl-defmethod conn-argument-update ((arg conn-fixup-whitespace-argument)
+(cl-defmethod conn-argument-update ((arg conn-reformat-argument)
                                     cmd updater)
-  (when (eq cmd 'fixup-whitespace)
+  (when (eq cmd 'reformat)
     (cl-callf null (conn-argument-value arg))
     (when (conn-read-args-consume-prefix-arg)
-      (setq-local conn-fixup-whitespace-default (conn-argument-value arg)))
+      (setq-local conn-reformat-default (conn-argument-value arg)))
     (funcall updater arg)))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-fixup-whitespace-argument)
-                                       (_sym (eql fixup-whitespace)))
+(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
+                                       (_sym (eql reformat)))
   t)
 
-(cl-defmethod conn-argument-display ((arg conn-fixup-whitespace-argument))
+(cl-defmethod conn-argument-display ((arg conn-reformat-argument))
   (substitute-command-keys
    (concat
-    (substitute-command-keys "\\[fixup-whitespace] ")
+    (substitute-command-keys "\\[reformat] ")
     (if-let* ((ts (conn-argument-value arg)))
         (propertize
-         "fixup whitespace"
+         "reformat"
          'face 'eldoc-highlight-function-argument)
-      "fixup whitespace"))))
+      "reformat"))))
 
 ;;;;;; Check Bounds Argument
 
@@ -1608,12 +1603,6 @@ Only the background color is used."
 
 ;;;; Thing Definitions
 
-(conn-define-mark-command conn-mark-email email)
-(conn-define-mark-command conn-mark-uuid uuid)
-(conn-define-mark-command conn-mark-string string)
-(conn-define-mark-command conn-mark-filename filename)
-(conn-define-mark-command conn-mark-comment comment)
-
 (conn-register-thing 'kbd-macro)
 
 (conn-register-thing 'point)
@@ -1670,17 +1659,11 @@ Only the background color is used."
  :forward-op 'conn-forward-defun
  :properties '(:linewise t))
 
-(conn-register-thing
- 'visual-line
- :forward-op 'conn-forward-visual-line
- :properties '(:linewise t))
-
-(conn-register-thing-commands
- 'visual-line 'conn-continuous-thing-handler
- 'conn-forward-visual-line
- 'conn-backward-visual-line)
-
-(conn-define-mark-command conn-mark-visual-line visual-line)
+(eval-and-compile
+  (conn-register-thing
+   'visual-line
+   :forward-op 'conn-forward-visual-line
+   :properties '(:linewise t)))
 
 (conn-register-thing
  'region
@@ -1699,13 +1682,11 @@ Only the background color is used."
  :bounds-op (lambda () (cons (window-start) (window-end)))
  :properties '(:linewise t))
 
-(conn-register-thing-commands
- 'visible nil
- 'conn-scroll-up 'conn-scroll-down
- 'scroll-up-command 'scroll-down-command
- 'conn-mark-visible)
-
-(conn-define-mark-command conn-mark-visible visible)
+(eval-and-compile
+  (conn-register-thing-commands
+   'visible nil
+   'scroll-up-command 'scroll-down-command
+   'conn-mark-visible))
 
 (conn-register-thing
  'recursive-edit-thing
@@ -1721,8 +1702,6 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'isearch nil
- 'conn-isearch-region-forward
- 'conn-isearch-region-backward
  'isearch-forward
  'isearch-backward
  'isearch-forward-regexp
@@ -1736,7 +1715,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
- 'forward-symbol 'conn-backward-symbol)
+ 'forward-symbol)
 
 (conn-register-thing
  'page
@@ -1756,9 +1735,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'word 'conn-continuous-thing-handler
- 'forward-word 'backward-word
- 'upcase-word 'downcase-word 'capitalize-word
- 'upcase-dwim 'downcase-dwim 'capitalize-dwim)
+ 'forward-word 'backward-word)
 
 (conn-register-thing 'sexp :forward-op 'forward-sexp)
 
@@ -1788,6 +1765,19 @@ Only the background color is used."
  'list 'conn--up-list-other-end-handler
  'up-list 'backward-up-list)
 
+(conn-register-thing
+ 'inner-list
+ :bounds-op (lambda ()
+              (cons
+               (save-excursion
+                 (backward-up-list)
+                 (down-list)
+                 (point))
+               (save-excursion
+                 (backward-up-list -1)
+                 (down-list -1)
+                 (point)))))
+
 (defun conn--down-list-other-end-handler (_thing _beg)
   (condition-case _err
       (cond ((= (point) (save-excursion
@@ -1810,15 +1800,13 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'list 'conn--down-list-other-end-handler
- 'down-list
- 'conn-backward-up-inner-list
- 'conn-forward-up-inner-list)
+ 'down-list)
 
 (conn-register-thing 'whitespace :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
  'whitespace 'conn-discrete-thing-handler
- 'forward-whitespace 'conn-backward-whitespace)
+ 'forward-whitespace)
 
 (conn-register-thing 'sentence :forward-op 'forward-sentence)
 
@@ -1837,8 +1825,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'defun 'conn-continuous-thing-handler
- 'end-of-defun 'beginning-of-defun
- 'conn-forward-defun)
+ 'end-of-defun 'beginning-of-defun)
 
 (conn-register-thing-commands
  'buffer 'conn-discrete-thing-handler
@@ -1850,9 +1837,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'line 'conn-continuous-thing-handler
- 'forward-line 'conn-backward-line
- 'conn-line-forward-op
- 'conn-goto-line)
+ 'forward-line)
 
 (conn-register-thing 'line-column :forward-op 'next-line)
 
@@ -1872,10 +1857,6 @@ Only the background color is used."
  'move-beginning-of-line 'move-end-of-line
  'org-beginning-of-line 'org-end-of-line)
 
-(conn-register-thing-commands
- 'outer-line 'conn-continuous-thing-handler
- 'conn-forward-outer-line 'conn-backward-outer-line)
-
 (defun conn--bounds-of-inner-line ()
   (cons
    (save-excursion
@@ -1892,13 +1873,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  'inner-line 'conn-continuous-thing-handler
- 'conn-forward-inner-line-dwim
- 'conn-backward-inner-line-dwim
  'back-to-indentation
- 'conn-forward-inner-line
- 'conn-backward-inner-line
- 'conn-beginning-of-inner-line
- 'conn-end-of-inner-line
  'comment-line)
 
 (conn-register-thing 'expansion)
@@ -1906,10 +1881,5 @@ Only the background color is used."
 (conn-register-thing-commands
  'expansion nil
  'conn-expand 'conn-contract)
-
-(conn-register-thing-commands
- 'list 'conn--down-list-other-end-handler
- 'conn-beginning-of-list
- 'conn-end-of-list)
 
 (provide 'conn-things)

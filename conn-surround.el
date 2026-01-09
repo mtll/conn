@@ -141,7 +141,7 @@
                                   _append
                                   _delete
                                   _register
-                                  _fixup-whitespace
+                                  _reformat
                                   _check-bounds)
   (conn-read-args (conn-surround-with-state
                    :prompt "Surrounding"

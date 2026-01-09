@@ -68,7 +68,7 @@
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
-  "DEL" 'clear-rectangle
+  "M-DEL" 'clear-rectangle
   "<backspace>" 'clear-rectangle
   "SPC d" 'delete-whitespace-rectangle
   "SPC o" 'open-rectangle
@@ -118,7 +118,7 @@
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "F" 'conn-fill-prefix
+  "TAB" 'conn-fill-prefix
   "f" 'conn-last-dispatch-to-register
   "m" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
@@ -223,19 +223,22 @@
   "W" 'conn-backward-whitespace
   ">" 'forward-line
   "<" 'conn-backward-line
-  ";" 'conn-mark-comment
   "v" 'conn-forward-visual-line
   "V" 'conn-backward-visible
   "g" 'conn-goto-line
-  "/" 'conn-mark-filename
-  "U" 'conn-mark-uuid
-  "s" 'conn-mark-string
-  "@" 'conn-mark-email
   ")" 'forward-list
   "(" 'backward-list
   "a" 'beginning-of-buffer
   "e" 'end-of-buffer
   "h" 'outline-previous-visible-heading)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "<conn-thing-map> ;" 'comment
+  "<conn-thing-map> /" 'filename
+  "<conn-thing-map> U" 'uuid
+  "<conn-thing-map> s" 'string
+  "<conn-thing-map> @" 'email)
 
 (keymap-set
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)

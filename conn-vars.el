@@ -24,9 +24,8 @@
 (defvar conn-local-mode nil)
 (defvar conn-lighter " Conn")
 
-(defvar conn-kill-fixup-whitespace-function
-  'conn-kill-fixup-whitespace
-  "Function to fixup whitespace after killing a region.
+(defvar conn-kill-reformat-function 'conn-kill-reformat
+  "Function to reformat the buffer after killing a region.
 
 The function will be called with a single argument, the `conn-bounds' of
 the region that has just been killed, and with the point at the position
