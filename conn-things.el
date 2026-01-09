@@ -28,28 +28,28 @@
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 
-;;;; Mark Handlers
+;;;; Other End Handlers
 
-(defvar-local conn-mark-handler-overrides-alist nil
-  "Buffer local overrides for command mark handlers.
+(defvar-local conn-other-end-handler-overrides-alist nil
+  "Buffer local overrides for command other end handlers.
 
-Is an alist of the form ((CMD . MARK-HANDLER) ...).
+Is an alist of the form ((CMD . OTHER-END-HANDLER) ...).
 
-For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
+For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
-(define-inline conn-command-mark-handler (command &optional autoload)
-  "Return the mark handler for COMMAND."
+(define-inline conn-command-other-end-handler (command &optional autoload)
+  "Return the other end handler for COMMAND."
   (declare (important-return-value t)
            (side-effect-free t)
-           (gv-setter conn-set-command-mark-handler))
+           (gv-setter conn-set-command-other-end-handler))
   (inline-letevals (command)
     (inline-quote
      (and (symbolp ,command)
-          (or (alist-get ,command conn-mark-handler-overrides-alist)
-              (function-get ,command :conn-mark-handler ,autoload))))))
+          (or (alist-get ,command conn-other-end-handler-overrides-alist)
+              (function-get ,command :conn-other-end-handler ,autoload))))))
 
-(defun conn-set-command-mark-handler (command handler)
-  (function-put command :conn-mark-handler handler))
+(defun conn-set-command-other-end-handler (command handler)
+  (function-put command :conn-other-end-handler handler))
 
 (defun conn-continuous-thing-handler (thing beg)
   "Mark the things which have been moved over."
@@ -324,7 +324,7 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
     (error "%s is not a known thing" thing))
   (dolist (cmd commands)
     (setf (conn-command-thing cmd) thing
-          (conn-command-mark-handler cmd) handler)))
+          (conn-command-other-end-handler cmd) handler)))
 
 (eval-and-compile
   (defun conn--mark-for-mark-command (region ignore-mark-active)
@@ -529,7 +529,7 @@ the 3 individual words, as opposed to the single region containing all 3
 words."))
 
 (defvar-keymap conn-subregions-map
-  "/" 'toggle-subregions)
+  "~" 'toggle-subregions)
 
 (cl-defstruct (conn-subregions-argument
                (:include conn-argument)
@@ -916,7 +916,7 @@ TRANSFORM."
   (catch 'boundable
     (while (pcase thing
              ((or (and (pred (lambda (c) (conn-thing-command-p c autoload)))
-                       (pred (lambda (c) (conn-command-mark-handler c autoload))))
+                       (pred (lambda (c) (conn-command-other-end-handler c autoload))))
                   (pred conn-thing-p))
               (throw 'boundable thing))
              ((pred conn-anonymous-thing-p)
@@ -946,7 +946,7 @@ Returns a `conn-bounds' struct."
              (bounds-of-thing-at-point thing)))
       ((and thing
             (let (and handler (pred identity))
-              (conn-command-mark-handler thing t)))
+              (conn-command-other-end-handler thing t)))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (n
@@ -978,7 +978,7 @@ Returns a `conn-bounds' struct."
       ((pred conn-thing-p) nil)
       ((and thing
             (let (and handler (pred identity))
-              (conn-command-mark-handler thing t)))
+              (conn-command-other-end-handler thing t)))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (0
@@ -1747,11 +1747,11 @@ Only the background color is used."
  'page 'conn-discrete-thing-handler
  'forward-page 'backward-page)
 
-(defun conn-char-mark-handler (_thing beg)
+(defun conn-char-other-end-handler (_thing beg)
   (when current-prefix-arg beg))
 
 (conn-register-thing-commands
- 'char 'conn-char-mark-handler
+ 'char 'conn-char-other-end-handler
  'forward-char 'backward-char)
 
 (conn-register-thing-commands
@@ -1772,7 +1772,7 @@ Only the background color is used."
  'list 'conn-continuous-thing-handler
  'forward-list 'backward-list)
 
-(defun conn--up-list-mark-handler (thing beg)
+(defun conn--up-list-other-end-handler (thing beg)
   (condition-case _err
       (cond ((> (point) beg)
              (save-excursion
@@ -1785,10 +1785,10 @@ Only the background color is used."
     (scan-error nil)))
 
 (conn-register-thing-commands
- 'list 'conn--up-list-mark-handler
+ 'list 'conn--up-list-other-end-handler
  'up-list 'backward-up-list)
 
-(defun conn--down-list-mark-handler (_thing _beg)
+(defun conn--down-list-other-end-handler (_thing _beg)
   (condition-case _err
       (cond ((= (point) (save-excursion
                           (up-list 1 t t)
@@ -1809,7 +1809,7 @@ Only the background color is used."
     (scan-error nil)))
 
 (conn-register-thing-commands
- 'list 'conn--down-list-mark-handler
+ 'list 'conn--down-list-other-end-handler
  'down-list
  'conn-backward-up-inner-list
  'conn-forward-up-inner-list)
@@ -1908,7 +1908,7 @@ Only the background color is used."
  'conn-expand 'conn-contract)
 
 (conn-register-thing-commands
- 'list 'conn--down-list-mark-handler
+ 'list 'conn--down-list-other-end-handler
  'conn-beginning-of-list
  'conn-end-of-list)
 
