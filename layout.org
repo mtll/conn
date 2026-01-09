@@ -16,28 +16,28 @@ state enters command state.
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │          │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│   shell  ┃
-┃              │          │          │          │          │          │   read   │          │          │          │          │          │          │   cmd    ┃
+┃              │          │  widen   │          │  query   │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│   shell  ┃
+┃              │          │          │          │  replace │          │   read   │          │          │          │          │          │          │   cmd    ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
 ┃              │   yank   │   copy   │  emacs   │  replace │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ↑list   │  ↓list   │          ┃
 ┃              │  replace │          │  state   │          │          │          │          │          │          │   prefix │          │          │          ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
-┃                │ A        │ S        │ D        │ F bind   │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │  adjust  │ duplicate│   last   │   add    │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │ surround │          │ dispatch │ surround │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
+┃                │   M-X    │  adjust  │ duplicate│          │   add    │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │ surround │          │          │ surround │  region  │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
 ┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
 ┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
-┃                      │ Z         │ X        │ C copy   │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │  pop to   │  narrow  │   last   │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
-┃                      │  mark     │  prefix  │   thing  │   state  │          │          │          │ register │          │          │                       ┃
+┃                      │ Z exchange│ X        │ C        │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
+┃                      │   and mark│  narrow  │          │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
+┃                      │           │  prefix  │          │   state  │          │          │          │ register │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
-┃                      │ z         │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │ z exchange│ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
 ┃                      │   mark    │   C-x    │   C-c    │   last   │   edit   │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
-┃                      │   state   │          │          │   thing  │   map    │          │          │   map    │   load   │          │                       ┃
+┃                      │           │          │          │   thing  │   map    │          │          │   map    │   load   │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                 edit map                  ┃

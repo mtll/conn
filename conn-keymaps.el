@@ -98,6 +98,7 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "F" 'conn-bind-last-dispatch-to-key
   "=" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-count-iterator
@@ -162,6 +163,7 @@
 
 (define-keymap
   :keymap conn-goto-map
+  "v" 'conn-previous-mark-command
   "," 'conn-pop-jump-ring
   "." 'conn-unpop-jump-ring
   "e" 'conn-previous-emacs-state
@@ -189,8 +191,8 @@
 
 (defvar-keymap conn-last-emacs-state-repeat-map
   :repeat t
-  "M-p" 'conn-previous-emacs-state
-  "M-n" 'conn-next-emacs-state)
+  "e" 'conn-previous-emacs-state
+  "E" 'conn-next-emacs-state)
 
 (put 'conn-next-emacs-state 'repeat-check-key 'no)
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
@@ -309,7 +311,6 @@
   "R" 'conn-replace
   "#" 'eshell
   "$" 'project-eshell
-  "F" 'conn-bind-last-dispatch-to-key
   "=" 'conn-repeat
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
@@ -371,7 +372,6 @@
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
-  "V" 'conn-previous-mark-command
   "b" conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'widen
