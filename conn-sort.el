@@ -72,7 +72,12 @@
 (defvar-keymap conn-sort-fold-case-map
   "g" 'sort-fold-case)
 
-(defun conn--sort-in-bounds (bounds transform reverse fold-case &optional predicate)
+(defun conn--sort-in-bounds (bounds
+                             transform
+                             reverse
+                             fold-case
+                             &optional
+                             predicate)
   (pcase bounds
     ((and (conn-bounds-get :subregions nil
                            (and regions (pred identity)))
