@@ -2338,7 +2338,8 @@ hook, which see."
    (conn-read-args (conn-kill-state
                     :interactive 'conn-kill-thing
                     :prompt "Thing"
-                    :reference conn-kill-reference)
+                    :reference conn-kill-reference
+                    :display-handler (conn-read-args-display-columns 3 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
@@ -2631,7 +2632,8 @@ hook, which see."
     (conn-read-args (conn-dispatch-bounds-state
                      :prefix arg
                      :prompt "Kill"
-                     :reference (list conn-dispatch-thing-reference))
+                     :reference (list conn-dispatch-thing-reference)
+                     :display-handler (conn-read-args-display-columns 3 3))
         ((`(,thing ,arg) (conn-thing-argument t))
          (`(,dtform ,fixup-whitespace)
           (conn-dispatch-transform-and-fixup-argument

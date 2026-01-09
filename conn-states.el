@@ -1633,6 +1633,30 @@ The duration of the message display is controlled by
       (message nil)
     (message "%s" (conn--read-args-prompt prompt arguments))))
 
+(defun conn-read-args-display-columns (column-count separator-width)
+  (lambda (prompt arguments &optional _state teardown)
+    (if teardown
+        (message nil)
+      (message
+       "%s"
+       (let ((to-display
+              (flatten-tree
+               (cl-loop for arg in arguments
+                        collect (conn-argument-display arg))))
+             (prompt-line (conn-read-args-prompt-line prompt)))
+         (if (length> to-display column-count)
+             (with-work-buffer
+               (insert prompt-line "\n")
+               (conn-to-vtable to-display
+                               column-count
+                               (current-buffer)
+                               :separator-width separator-width
+                               :use-header-line nil)
+               (buffer-substring (point-min) (1- (point-max))))
+           (concat prompt-line "\n"
+                   (string-join to-display
+                                (make-string separator-width ?\ )))))))))
+
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
   (let ((result nil))
@@ -1791,7 +1815,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (message-log-max nil)
                  (scroll-conservatively 100))
              (conn-threadf-> display-state
-               (funcall display-handler prompt arguments)))
+               (funcall display-handler
+                        prompt
+                        (cons command-handler arguments))))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
            (catch 'conn-read-args-new-command
@@ -2339,11 +2365,12 @@ be displayed in the echo area during `conn-read-args'."
   (condition-case err
       (when (eq cmd (conn-read-argument-toggle-command arg))
         (setf (conn-argument-value arg)
-              (funcall (conn-read-argument-reader arg)
-                       (conn-argument-value arg)))
+              (unless (conn-argument-value arg)
+                (funcall (conn-read-argument-reader arg)
+                         (conn-argument-value arg))))
         (funcall updater arg))
     (quit (conn-read-args-error "Quit"))
-    (error (conn-read-args-error (cadr err)))))
+    (error (conn-read-args-error (error-message-string err)))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-read-argument)
                                        sym)

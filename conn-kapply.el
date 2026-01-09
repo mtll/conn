@@ -1431,8 +1431,8 @@ finishing showing the buffers that were visited."))
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter)))
   (condition-case _
       (kmacro-set-counter
-       (prefix-numeric-value
-        (conn-read-args-consume-prefix-arg)))
+       (or (conn-read-args-consume-prefix-arg)
+           0))
     (quit nil))
   (conn-read-args-handle))
 
@@ -1442,42 +1442,17 @@ finishing showing the buffers that were visited."))
     (quit nil))
   (conn-read-args-handle))
 
-;;;;; Display Handler
-
-(defun conn-kapply-display-handle (prompt arguments &optional teardown _state)
-  (if teardown
-      (message nil)
-    (message
-     "%s"
-     (let* ((args
-             (flatten-tree
-              (cl-loop for arg in arguments
-                       collect (conn-argument-display arg))))
-            (format
-             (concat (substitute-command-keys
-                      "\\[kmacro-set-format] format ")
-                     (propertize
-                      kmacro-counter-format
-                      'face 'read-multiple-choice-face)))
-            (counter
-             (concat (substitute-command-keys
-                      "\\[kmacro-set-counter] counter ")
-                     (propertize
-                      (format "%d"
-                              (or kmacro-initial-counter-value 0))
-                      'face 'read-multiple-choice-face)))
-            (to-display (nconc (list format counter) args))
-            (prompt-line (conn-read-args-prompt-line prompt)))
-       (if (length> to-display 4)
-           (with-work-buffer
-             (insert prompt-line "\n")
-             (conn-to-vtable (nconc (list format counter) args)
-                             3 (current-buffer)
-                             :separator-width 3
-                             :use-header-line nil)
-             (buffer-substring (point-min) (1- (point-max))))
-         (concat prompt-line "\n"
-                 (string-join to-display "; ")))))))
+(cl-defmethod conn-argument-display ((_cmd (eql conn-kapply-command-handler)))
+  (list (concat (substitute-command-keys
+                 "\\[kmacro-set-format] format ")
+                (propertize
+                 kmacro-counter-format
+                 'face 'read-multiple-choice-face))
+        (concat (substitute-command-keys
+                 "\\[kmacro-set-counter] counter ")
+                (propertize
+                 (format "%d" (or kmacro-initial-counter-value 0))
+                 'face 'read-multiple-choice-face))))
 
 ;;;; Commands
 
@@ -1495,7 +1470,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler #'conn-kapply-display-handle)
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
@@ -1583,7 +1558,7 @@ finishing showing the buffers that were visited."))
                    :prompt "Kapply with Count"
                    :prefix count
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler #'conn-kapply-display-handle)
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((pipeline (conn-composite-argument
                   (list (conn-kapply-query-argument)
                         (conn-kapply-excursions-argument t)
@@ -1611,7 +1586,7 @@ finishing showing the buffers that were visited."))
    (conn-read-args (conn-kapply-state
                     :prompt "Kapply on Regions"
                     :command-handler #'conn-kapply-command-handler
-                    :display-handler #'conn-kapply-display-handle)
+                    :display-handler (conn-read-args-display-columns 3 3))
        ((restrict (unless (or (bound-and-true-p multi-isearch-file-list)
                               (bound-and-true-p multi-isearch-buffer-list))
                     (conn-cycling-argument
@@ -1768,7 +1743,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler #'conn-kapply-display-handle)
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((pipeline
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)
