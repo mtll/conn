@@ -29,20 +29,20 @@
 (eval-when-compile
   (require 'cl-lib))
 
+(autoload 'multi-isearch-read-files "misearch")
+(autoload 'multi-isearch-read-matching-files "misearch")
+(autoload 'multi-isearch-read-buffers "misearch")
+(autoload 'multi-isearch-read-matching-buffers "misearch")
+(autoload 'kmacro-ring-head "kmacro")
+
 (declare-function outline-insert-heading "outline")
 (declare-function project-files "project")
 (declare-function project-root "project")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
-(declare-function multi-isearch-read-matching-files "misearch")
-(declare-function multi-isearch-read-files "misearch")
-(declare-function multi-isearch-read-matching-buffers "misearch")
-(declare-function multi-isearch-read-buffers "misearch")
 (declare-function fileloop-continue "fileloop")
 
 ;;;; Commands
-
-(autoload 'kmacro-ring-head "kmacro")
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
@@ -1056,8 +1056,14 @@ Currently selected window remains selected afterwards."
 ;;;;; Replace
 
 (defvar conn-replace-special-ref
-  (conn-reference-quote
-    (("In project" project))))
+  (append
+   (conn-reference-quote
+     (("In project" project)
+      ("In files" multi-file)))
+   (static-if (<= 30 emacs-major-version)
+       (conn-reference-quote
+         (("As diff" as-diff)
+          ("Multi file as diff" multi-file-as-diff))))))
 
 (defvar conn-replace-reference
   (list (conn-reference-page "Replace"
@@ -1076,6 +1082,7 @@ Currently selected window remains selected afterwards."
 
 (defvar-keymap conn-replace-thing-argument-map
   "p" 'project
+  "/" 'multi-file
   "'" 'kapply)
 
 (cl-defstruct (conn-replace-thing-argument
@@ -1095,6 +1102,10 @@ Currently selected window remains selected afterwards."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        (_cmd (eql project)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                       (_cmd (eql multi-file)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
@@ -1166,10 +1177,12 @@ Currently selected window remains selected afterwards."
                                 regexp-flag
                                 backward
                                 regions
-                                delimited)
-  (let ((prompt (concat "Replace"
-                        (when backward " backward")
-                        (when delimited " word"))))
+                                delimited
+                                prompt)
+  (let ((prompt (or prompt
+                    (concat "Replace"
+                            (when backward " backward")
+                            (when delimited " word")))))
     (deactivate-mark)
     (conn-with-region-emphasis regions
       (let* ((from (conn--replace-read-from
@@ -1296,6 +1309,51 @@ Currently selected window remains selected afterwards."
                              from
                              to))
 
+(cl-defmethod conn-replace-do ((thing (eql multi-file))
+                               arg
+                               transform
+                               &optional
+                               delimited
+                               backward
+                               regexp-flag
+                               subregions-p
+                               from
+                               to)
+  (let ((files (multi-isearch-read-files)))
+    (unless (and (buffer-file-name)
+                 (seq-find (lambda (f)
+                             (file-equal-p f (buffer-file-name)))
+                           files))
+      (find-file (car files)))
+    (when (or (null from) (null to))
+      (pcase-setq `(,from . ,to)
+                  (conn--replace-read-args regexp-flag
+                                           backward
+                                           nil
+                                           delimited)))
+    (let ((mstart (make-hash-table :test 'eq)))
+      (fileloop-initialize
+       files
+       (lambda ()
+         (when (re-search-forward from nil t)
+           (puthash (current-buffer) (match-beginning 0) mstart)))
+       (lambda ()
+         (perform-replace from to t regexp-flag delimited
+                          nil multi-query-replace-map
+                          (gethash (current-buffer) mstart (point-min))
+                          (point-max)))))
+    (fileloop-continue)
+    (conn-push-command-history 'conn-replace
+                               thing
+                               arg
+                               transform
+                               delimited
+                               backward
+                               regexp-flag
+                               subregions-p
+                               from
+                               to)))
+
 (cl-defmethod conn-replace-do ((_thing (eql widen))
                                &rest _)
   (without-restriction
@@ -1303,26 +1361,82 @@ Currently selected window remains selected afterwards."
 
 (static-if (<= 30 emacs-major-version)
     (progn
-      (cl-defmethod conn-replace-do ((_thing (eql as-diff))
-                                     &rest _)
-        (call-interactively #'replace-regexp-as-diff))
+      (cl-defmethod conn-replace-do ((thing (eql as-diff))
+                                     arg
+                                     transform
+                                     &optional
+                                     delimited
+                                     backward
+                                     regexp-flag
+                                     subregions-p
+                                     from
+                                     to)
+        (when (or (null from) (null to))
+          (pcase-setq `(,from . ,to)
+                      (conn--replace-read-args regexp-flag
+                                               nil
+                                               nil
+                                               delimited)))
+        (multi-file-replace-as-diff
+         (list (or buffer-file-name (current-buffer)))
+         from to regexp-flag delimited)
+        (conn-push-command-history 'conn-replace
+                                   thing
+                                   arg
+                                   transform
+                                   delimited
+                                   backward
+                                   regexp-flag
+                                   subregions-p
+                                   from
+                                   to))
 
       (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                              (_cmd (eql as-diff)))
         t)
 
-      (cl-defmethod conn-replace-do ((_thing (eql multi-buffer-as-diff))
-                                     &rest _)
-        (call-interactively #'multi-file-replace-regexp-as-diff))
+      (cl-defmethod conn-replace-do ((thing (eql multi-file-as-diff))
+                                     arg
+                                     transform
+                                     &optional
+                                     delimited
+                                     backward
+                                     regexp-flag
+                                     subregions-p
+                                     from
+                                     to)
+        (let ((files (multi-isearch-read-files)))
+          (unless (and (buffer-file-name)
+                       (seq-find (lambda (f)
+                                   (file-equal-p f (buffer-file-name)))
+                                 files))
+            (find-file (car files)))
+          (when (or (null from) (null to))
+            (pcase-setq `(,from . ,to)
+                        (conn--replace-read-args regexp-flag
+                                                 nil
+                                                 nil
+                                                 delimited)))
+          (multi-file-replace-as-diff files from to regexp-flag delimited)
+          (conn-push-command-history 'conn-replace
+                                     thing
+                                     arg
+                                     transform
+                                     delimited
+                                     backward
+                                     regexp-flag
+                                     subregions-p
+                                     from
+                                     to)))
 
       (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
-                                             (_cmd (eql multi-buffer-as-diff)))
+                                             (_cmd (eql multi-file-as-diff)))
         t)
 
       (define-keymap
         :keymap conn-replace-thing-argument-map
         "D" 'as-diff
-        "B" 'multi-buffer-as-diff)))
+        "F" 'multi-file-as-diff)))
 
 (defun conn-replace (thing
                      arg
@@ -1410,8 +1524,8 @@ For more information about how the replacement is carried out see
   :lighter "ISEARCH-IN")
 
 (defvar-keymap conn-isearch-thing-map
-  "F" 'multi-file
-  "B" 'multi-buffer
+  "/" 'multi-file
+  "*" 'multi-buffer
   "p" 'project)
 
 (cl-defstruct (conn-isearch-thing-argument
