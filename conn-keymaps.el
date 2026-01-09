@@ -98,7 +98,8 @@
 
 (define-keymap
   :keymap conn-default-edit-map
-  "F" 'conn-bind-last-dispatch-to-key
+  "<" #'conn-unset-register
+  "F" #'conn-bind-last-dispatch-to-key
   "=" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-count-iterator

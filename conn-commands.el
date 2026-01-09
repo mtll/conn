@@ -1633,7 +1633,7 @@ Exiting the recursive edit will resume the isearch."
 
 (defun conn-isearch-restrict-to-thing ()
   (interactive)
-  ;; Binding these to nil prevents `with-isearch-suspendedseparator' from
+  ;; Binding these to nil prevents `with-isearch-suspended' from
   ;; defaulting to the previous search if this is called before a
   ;; search string has been entered.
   (let (regexp-search-ring
