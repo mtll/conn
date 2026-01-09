@@ -39,7 +39,8 @@
    "(arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
-   "\\[conn-wincontrol-exit] exit):"
+   "\\[conn-wincontrol-exit] exit; "
+   "\\[conn-wincontrol-quick-ref] help):"
    "%s"))
 
 (defvar conn--wincontrol-arg nil)

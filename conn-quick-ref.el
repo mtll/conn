@@ -46,6 +46,19 @@
   "Face for quick ref header."
   :group 'conn-quick-ref)
 
+(defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
+
+(defvar conn-quick-ref-text-scale 0.95
+  "Text scale to use for text in the quick ref buffer.")
+
+(defvar conn--quick-ref-unbound
+  (propertize "Ø" 'face 'conn-quick-ref-error-face))
+
+(defvar-keymap conn-quick-ref-map
+  "?" 'next
+  "M-?" 'previous
+  "<escape>" 'close)
+
 (cl-defstruct (conn--reference-page
                ( :constructor conn--make-reference-page
                  (title depth definition)))
@@ -93,19 +106,6 @@
                          collect (list '\` (process-definition row))
                          else
                          collect row))))))
-
-(defvar-keymap conn-quick-ref-map
-  "?" 'next
-  "M-?" 'previous
-  "<escape>" 'close)
-
-(defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
-
-(defvar conn-quick-ref-text-scale 0.95
-  "Text scale to use for text in the quick ref buffer.")
-
-(defvar conn--quick-ref-unbound
-  (propertize "Ø" 'face 'conn-quick-ref-error-face))
 
 (defun conn-quick-ref-find-remap (remap &optional keymap)
   (let (result)
@@ -301,8 +301,7 @@
                                   buf
                                   (1+ pg-num)
                                   pg-count)
-      (conn-threadf-> state
-        (funcall display-function buf nil))
+      (conn-threadf-> state (funcall display-function buf))
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
@@ -317,8 +316,7 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (conn-threadf-> state
-                    (funcall display-function buf nil)))
+                  (conn-threadf-> state (funcall display-function buf)))
                  ('previous
                   (setq pages (nconc (last pages) (butlast pages))
                         pg-num (mod (1- pg-num) pg-count))
@@ -326,14 +324,13 @@
                                               buf
                                               (1+ pg-num)
                                               pg-count)
-                  (conn-threadf-> state
-                    (funcall display-function buf nil)))
+                  (conn-threadf-> state (funcall display-function buf)))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
                  (_
                   (conn-add-unread-events (this-single-command-raw-keys))
                   (cl-return))))))
-        (funcall display-function buf t state)))))
+        (funcall display-function buf state t)))))
 
 (defun conn-quick-ref-to-cols (list col-count)
   (cl-loop with cols = (cl-loop repeat col-count collect nil)
@@ -342,13 +339,13 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-minibuffer (buffer hide-p &optional restore)
+(defun conn--quick-ref-minibuffer (buffer &optional state teardown)
   (let (inhibit-message
         message-log-max)
-    (if hide-p
-        (when restore (funcall restore))
+    (if teardown
+        (when state (funcall state))
       (prog1
-          (or restore
+          (or state
               (let ((mh max-mini-window-height)
                     (rs resize-mini-windows))
                 (setq max-mini-window-height 1.0

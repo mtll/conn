@@ -1656,7 +1656,6 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
-  (require 'misearch)
   (let ((isearch-forward (not backward)))
     (multi-isearch-buffers
      (if arg
@@ -1670,7 +1669,6 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
-  (require 'misearch)
   (let ((isearch-forward (not backward)))
     (multi-isearch-files
      (if arg
@@ -1684,14 +1682,15 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
-  (require 'project)
-  (let ((files (project-files (project-current)))
-        (isearch-forward (not backward)))
-    (multi-isearch-files
-     (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
-         (cons (buffer-file-name)
-               (seq-remove-at-position files n))
-       files))))
+  (if-let* ((_ (fboundp 'project-root))
+            (files (project-files (project-current))))
+      (let ((isearch-forward (not backward)))
+        (multi-isearch-files
+         (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
+             (cons (buffer-file-name)
+                   (seq-remove-at-position files n))
+           files)))
+    (user-error "Buffer does not have a project")))
 
 (defun conn-isearch-forward (thing
                              arg
@@ -2130,7 +2129,7 @@ append to that place.
   "j" 'move-end-of-line)
 
 (defvar-keymap conn-append-argument-map
-  "z" 'append)
+  "p" 'append)
 
 (defvar-keymap conn-delete-argument-map
   "d" 'delete)
@@ -2532,8 +2531,8 @@ hook, which see."
                                   separator
                                   _fixup-whitespace
                                   _check-bounds)
-  (require 'project)
-  (if-let* ((fname (buffer-file-name
+  (if-let* ((_ (fboundp 'project-root))
+            (fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
                       (current-buffer))))
@@ -2613,6 +2612,9 @@ hook, which see."
 (oclosure-define (conn-kill-action
                   (:parent conn-action)))
 
+(defvar-keymap conn-kill-dispatch-append-map
+  "C-p" 'append)
+
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing dispatch))
                                   arg
                                   transform
@@ -2634,78 +2636,85 @@ hook, which see."
          (`(,dtform ,fixup-whitespace)
           (conn-dispatch-transform-and-fixup-argument
            fixup-whitespace))
+         (repeat
+          (conn-boolean-argument "repeat"
+                                 'repeat-dispatch
+                                 conn-dispatch-repeat-argument-map))
          (`(,delete ,append ,register ,separator)
           (conn-kill-how-argument
            :append (if (eq append 'repeat) nil append)
            :delete delete
            :register register
            :separator separator))
-         (repeat
-          (conn-boolean-argument "repeat"
-                                 'repeat-dispatch
-                                 conn-dispatch-repeat-argument-map))
+         (other-end
+          (conn-boolean-argument "stay"
+                                 'other-end
+                                 conn-other-end-argument-map))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
                                  conn-restrict-windows-argument-map)))
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
-          (when (eq cmd 'other-end)
+          (when (eq cmd 'append)
             (setq append (pcase append
                            ('nil 'append)
                            ('prepend nil)
                            (_ 'prepend)))
             (conn-dispatch-handle)))
+        ( :keymap conn-kill-dispatch-append-map)
         ( :message 10 (keymap)
-          (when-let* ((binding
-                       (where-is-internal 'other-end keymap t)))
+          (when-let* ((binding (where-is-internal 'append keymap t)))
             (concat
              (propertize (key-description binding)
                          'face 'help-key-binding)
              " "
              (pcase append
                ('nil "append")
-               ('prepend
-                (propertize
-                 "prepend"
-                 'face 'eldoc-highlight-function-argument))
-               (_
-                (propertize
-                 "append"
-                 'face 'eldoc-highlight-function-argument))))))
+               (val
+                (concat
+                 (propertize "(" 'face 'shadow)
+                 (propertize (format "%s" val)
+                             'face 'eldoc-highlight-function-argument)
+                 (propertize "|" 'face 'shadow)
+                 (propertize (truncate-string-ellipsis) 'face 'shadow)
+                 (propertize ")" 'face 'shadow)))))))
         (conn-dispatch-setup
          (oclosure-lambda (conn-kill-action
                            (action-description "Kill"))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
-             (select-window window)
-             (conn-dispatch-change-group)
-             (pcase (conn-bounds-of-dispatch thing arg pt)
-               ((and bounds
-                     (conn-dispatch-bounds `(,beg . ,end)
-                                           `(,@dtform
-                                             ,@transform
-                                             ,@(when check-bounds
-                                                 (list 'conn-check-bounds)))))
-                (push-mark (conn-bounds-get bounds :origin))
-                (goto-char beg)
-                (unless delete
-                  (push (cons append (filter-buffer-substring beg end))
-                        strings))
-                (delete-region beg end)
-                (conn-dispatch-undo-case 90
-                  (:undo
-                   (pop strings)
-                   (conn-dispatch-undo-pulse beg end))
-                  (:cancel
-                   (pop strings)))
-                (when fixup-whitespace
-                  (funcall conn-kill-fixup-whitespace-function bounds)))
-               (_ (user-error "No %s found" thing)))))
+             (unless conn-dispatch-other-end
+               (select-window window))
+             (with-selected-window window
+               (conn-dispatch-change-group)
+               (pcase (conn-bounds-of-dispatch thing arg pt)
+                 ((and bounds
+                       (conn-dispatch-bounds `(,beg . ,end)
+                                             `(,@dtform
+                                               ,@transform
+                                               ,@(when check-bounds
+                                                   (list 'conn-check-bounds)))))
+                  (unless conn-dispatch-other-end
+                    (push-mark (conn-bounds-get bounds :origin))
+                    (goto-char beg))
+                  (unless delete
+                    (push (cons append (filter-buffer-substring beg end))
+                          strings))
+                  (delete-region beg end)
+                  (conn-dispatch-undo-case 90
+                    (:undo
+                     (pop strings)
+                     (conn-dispatch-undo-pulse beg end))
+                    (:cancel
+                     (pop strings)))
+                  (when fixup-whitespace
+                    (funcall conn-kill-fixup-whitespace-function bounds)))
+                 (_ (user-error "No %s found" thing))))))
          thing arg dtform
          :repeat repeat
-         :other-end :no-other-end
+         :other-end other-end
          :restrict-windows restrict-windows))
       (when strings
         (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)

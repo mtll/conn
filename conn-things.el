@@ -1504,35 +1504,37 @@ Only the background color is used."
          (size (length bounds))
          (pips (conn--multi-thing-pip-strings))
          (display-handler
-          (lambda (prompt _args)
-            (message
-             (substitute-command-keys
-              (concat
-               (propertize prompt 'face 'minibuffer-prompt)
-               (if (> size 4)
-                   (propertize (format " [%s/%s]" curr size)
-                               'face 'minibuffer-prompt)
-                 (cl-loop for i below size
-                          concat " "
-                          if (= i curr) concat (car pips)
-                          else concat (cdr pips)))
-               " ("
-               (let* ((desc (conn-thing-pretty-print
-                             (conn-bounds-thing (nth curr bounds)))))
-                 (propertize (if (length> desc 40)
-                                 (truncate-string-to-width desc 40 nil nil t)
-                               desc)
-                             'face 'eldoc-highlight-function-argument))
-               ")"
-               (when-let* ((msg (conn--read-args-display-prefix-arg)))
-                 (concat ": " msg))
-               "\n\\[select] select; "
-               "\\[select-other-end] select other end; "
-               "\\[abort] abort"
-               (when (> size 1)
-                 (concat
-                  "; \\[conn-expand] next; "
-                  "\\[conn-contract] prev")))))))
+          (lambda (prompt _args &optional _state teardown)
+            (if teardown
+                (message nil)
+              (message
+               (substitute-command-keys
+                (concat
+                 (propertize prompt 'face 'minibuffer-prompt)
+                 (if (> size 4)
+                     (propertize (format " [%s/%s]" curr size)
+                                 'face 'minibuffer-prompt)
+                   (cl-loop for i below size
+                            concat " "
+                            if (= i curr) concat (car pips)
+                            else concat (cdr pips)))
+                 " ("
+                 (let* ((desc (conn-thing-pretty-print
+                               (conn-bounds-thing (nth curr bounds)))))
+                   (propertize (if (length> desc 40)
+                                   (truncate-string-to-width desc 40 nil nil t)
+                                 desc)
+                               'face 'eldoc-highlight-function-argument))
+                 ")"
+                 (when-let* ((msg (conn--read-args-display-prefix-arg)))
+                   (concat ": " msg))
+                 "\n\\[select] select; "
+                 "\\[select-other-end] select other end; "
+                 "\\[abort] abort"
+                 (when (> size 1)
+                   (concat
+                    "; \\[conn-expand] next; "
+                    "\\[conn-contract] prev"))))))))
          (command-handler
           (lambda (command)
             (pcase command
