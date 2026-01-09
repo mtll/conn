@@ -4300,7 +4300,7 @@ it."))
           (nth 1 (conn-previous-dispatch-thing-state dispatch))
           (if-let* ((ts (nth 2 (conn-previous-dispatch-thing-state dispatch))))
               (concat
-               "; "
+               "   "
                (mapconcat (lambda (tf)
                             (or (get tf :conn-transform-description) ""))
                           ts " > "))
