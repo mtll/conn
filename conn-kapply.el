@@ -1739,7 +1739,7 @@ finishing showing the buffers that were visited."))
   (macro :mutable t))
 
 (defun conn-dispatch-kapply ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
                    :command-handler #'conn-kapply-command-handler

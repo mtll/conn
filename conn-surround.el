@@ -30,7 +30,7 @@
 
 (cl-defstruct (conn-self-insert-event
                (:constructor conn--self-insert (id)))
-  id)
+  (id -1 :type integer))
 
 (keymap-set (conn-get-state-map 'conn-read-thing-state)
             "g" 'conn-surround)
@@ -46,9 +46,9 @@
 (let ((map (conn-get-state-map 'conn-surround-with-state)))
   (set-char-table-range (nth 1 map)
                         (cons #x100 (max-char))
-                        'dispatch-character-event)
+                        'surround-self-insert)
   (cl-loop for i from ?! below 256
-           do (define-key map (vector i) 'dispatch-character-event)))
+           do (define-key map (vector i) 'surround-self-insert)))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-with-state)
@@ -106,21 +106,29 @@
                     (or (assoc id insert-pair-alist)
                         (list id id)))
                    (n (prefix-numeric-value arg)))
-        (pcase-dolist (`(,beg . ,end)
-                       (seq-drop-while (pcase-lambda (`(,beg . ,end))
-                                         (or (>= beg (region-beginning))
-                                             (<= end (region-end))))
-                                       (conn--expand-create-expansions)))
-          (when (and (eql open (char-after beg))
-                     (eql close (char-before end))
-                     (> (- end beg) 1)
-                     (>= 0 (cl-decf n)))
-            (throw 'return
-                   (conn-make-bounds
-                    'conn-surround arg (cons beg end)
-                    :open (conn-make-bounds 'region nil (cons beg (1+ beg)))
-                    :close (conn-make-bounds 'region nil (cons (1- end) end))
-                    :inner (conn-make-bounds 'region nil (cons (1+ beg) (1- end)))))))))))
+        (push-mark nil t t)
+        (condition-case _err
+            (while t
+              (conn-expand-subr 1)
+              (let ((beg (region-beginning))
+                    (end (region-end)))
+                (when (and (eql open (char-after beg))
+                           (eql close (char-before end))
+                           (> (- end beg) 1)
+                           (>= 0 (cl-decf n)))
+                  (throw 'return
+                         (conn-make-bounds
+                          'conn-surround arg (cons beg end)
+                          :open (conn-make-bounds
+                                 'region nil
+                                 (cons beg (1+ beg)))
+                          :close (conn-make-bounds
+                                  'region nil
+                                  (cons (1- end) end))
+                          :inner (conn-make-bounds
+                                  'region nil
+                                  (cons (1+ beg) (1- end))))))))
+          (user-error nil))))))
 
 ;;;;; Delete
 
@@ -141,6 +149,7 @@
                                   _append
                                   _delete
                                   _register
+                                  _separator
                                   _reformat
                                   _check-bounds)
   (conn-read-args (conn-surround-with-state
@@ -304,7 +313,9 @@
   (conn-read-args (conn-surround-thing-state
                    :prompt "Surround"
                    :prefix arg)
-      ((`(,thing ,arg) (conn-thing-argument-dwim t))
+      ((`(,thing ,arg) (if (use-region-p)
+                           (list 'region nil)
+                         (conn-thing-argument t)))
        (transform (conn-transform-argument '(conn-bounds-trim)))
        (subregions (conn-subregions-argument
                     (use-region-p))))
@@ -392,12 +403,13 @@
                                       &key
                                       regions
                                       keymap
+                                      trim
                                       open
                                       close
                                       &allow-other-keys)
   (mapc #'delete-overlay regions)
   (save-mark-and-excursion
-    (conn-with-recursive-stack conn-current-state
+    (conn-with-recursive-stack (conn-buffer-base-state)
       (conn-push-state 'conn-mark-state)
       (when other-end (conn-exchange-mark-command))
       (let ((adjust t)
@@ -426,8 +438,10 @@
               (let ((beg (region-beginning))
                     (end (region-end)))
                 (goto-char end)
+                (when trim (skip-chars-backward trim))
                 (insert close)
                 (goto-char beg)
+                (when trim (skip-chars-forward trim))
                 (insert open))
             (let ((ov (make-overlay (region-beginning) (region-end))))
               (unwind-protect
@@ -556,6 +570,9 @@
 
 ;;;; Adjust Surround
 
+(defvar-keymap conn-surround-trim-argument-map
+  "q" 'trim)
+
 (defun conn-adjust-surround ()
   (interactive)
   (conn-read-args (conn-change-surround-state
@@ -565,23 +582,32 @@
        (at-end (conn-boolean-argument "At End"
                                       'other-end
                                       conn-other-end-argument-map
-                                      t)))
+                                      t))
+       (trim (conn-read-argument
+              "trim whitespace"
+              'trim
+              conn-surround-trim-argument-map
+              (lambda (_) (read-string "Whitespace Chars: "))
+              :value "\n\t ")))
     (with-undo-amalgamate
       (atomic-change-group
-        (pcase-let* ((`(,ov . ,prep-keys)
-                      (conn-prepare-change-surround thing arg transform))
-                     (cleanup (plist-get prep-keys :cleanup))
-                     (success nil))
-          (unwind-protect
-              (apply #'conn-surround-do
-                     `(,(if at-end
-                            'conn-adjust-surround-other-end
-                          'conn-adjust-surround)
-                       nil
-                       :regions ,(list ov)
-                       ,@prep-keys))
-            (delete-overlay ov)
-            (when cleanup
-              (funcall cleanup (if success :accept :cancel)))))))))
+        (pcase (conn-prepare-change-surround thing arg transform)
+          (`(,ov . ,prep-keys)
+           (let ((cleanup (plist-get prep-keys :cleanup))
+                 (success nil))
+             (unwind-protect
+                 (progn
+                   (apply #'conn-surround-do
+                          `(,(if at-end
+                                 'conn-adjust-surround-other-end
+                               'conn-adjust-surround)
+                            nil
+                            :regions ,(list ov)
+                            :trim ,trim
+                            ,@prep-keys)))
+               (delete-overlay ov)
+               (when cleanup
+                 (funcall cleanup (if success :accept :cancel))))))
+          (_ (user-error "No surround found")))))))
 
 (provide 'conn-surround)

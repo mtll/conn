@@ -427,7 +427,7 @@
                   (:parent conn-action)))
 
 (defun conn-dispatch-dired-mark ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-dired-mark
                     (action-description "Mark")
                     (action-window-predicate
@@ -451,7 +451,7 @@
                   (:parent conn-action)))
 
 (defun conn-dispatch-dired-kill-line ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-dired-kill-line
                     (action-description "Kill Line")
                     (action-window-predicate
@@ -471,7 +471,7 @@
                   (:parent conn-action)))
 
 (defun conn-dispatch-dired-kill-subdir ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
                     (action-description "Kill Subdir")
                     (action-window-predicate
@@ -684,7 +684,7 @@
                   (:parent conn-action)))
 
 (defun conn-dispatch-ibuffer-mark ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
                     (action-description "Mark")
                     (action-window-predicate
@@ -818,7 +818,7 @@
                   (:parent conn-action)))
 
 (defun conn-dispatch-bmenu-mark ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-bmenu-mark
                     (action-description "Mark")
                     (action-window-predicate

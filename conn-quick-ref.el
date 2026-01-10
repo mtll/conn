@@ -321,7 +321,8 @@
            (header
             (substitute-command-keys
              (concat " \\<conn-quick-ref-map>"
-                     (propertize "[%s/%s]" 'face 'minibuffer-prompt)
+                     (propertize "[%s/%s] " 'face 'minibuffer-prompt)
+                     (propertize "Quick Reference" 'face 'bold)
                      " — \\[next] Next; \\[previous] Previous; \\[close] Close "
                      "\n"))))
       (add-face-text-property 0 (length header)

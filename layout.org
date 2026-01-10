@@ -44,18 +44,3 @@ state enters command state.
                                                          ┃                                           ┃
                                                          ┃                                           ┃
                                                          ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-* Mark State Map
-
-Most mark state bindings are inherited from =conn-command-state=, with
-the following additions:
-
-| Key   | Binding                        |
-|-------+--------------------------------|
-| "TAB" | indent-rigidly                 |
-| "Y"   | completing yank replace region |
-| "y"   | yank replace region            |
-| "*"   | calc-grab-region               |
-| "v"   | rectangle-mark-mode            |
-| "g"   | surround region                |
-| "RET" | duplicate region               |

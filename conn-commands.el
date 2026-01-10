@@ -20,6 +20,7 @@
 ;;; Code
 
 (require 'compat)
+(require 'conn-jump-ring)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-things)
@@ -101,18 +102,6 @@ execution."
 
 ;;;;; Movement
 
-(defun conn-pop-jump-ring ()
-  (interactive)
-  (conn-push-jump-ring (point-marker))
-  (conn-ring-rotate-forward conn-jump-ring)
-  (goto-char (conn-ring-head conn-jump-ring)))
-
-(defun conn-unpop-jump-ring ()
-  (interactive)
-  (conn-push-jump-ring (point-marker))
-  (conn-ring-rotate-backward conn-jump-ring)
-  (goto-char (conn-ring-head conn-jump-ring)))
-
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
   (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
@@ -176,11 +165,15 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (forward-symbol (- arg)))
 
+(defun conn--scroll-jump-predicate (_start)
+  (not (memq last-command '(conn-scroll-down conn-scroll-up))))
+
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position.
 
 Pulses line that was the first visible line before scrolling."
-  (declare (conn-thing-command visible #'conn-discrete-thing-handler))
+  (declare (conn-thing-command visible #'conn-discrete-thing-handler)
+           (conn-jump #'conn--scroll-jump-predicate))
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
@@ -194,7 +187,8 @@ Pulses line that was the first visible line before scrolling."
   "`scroll-up-command' leaving point at the same relative window position.
 
 Pulses line that was the last visible line before scrolling."
-  (declare (conn-thing-command visible #'conn-discrete-thing-handler))
+  (declare (conn-thing-command visible #'conn-discrete-thing-handler)
+           (conn-jump #'conn--scroll-jump-predicate))
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
@@ -232,32 +226,57 @@ Pulses line that was the last visible line before scrolling."
 Behaves as `thingatpt' expects a \\='forward-op to behave."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
-  (if (> N 0)
-      (let ((pt (point)))
-        (conn--end-of-inner-line-1)
-        (when (> (point) pt) (cl-decf N))
-        (cl-loop until (or (<= N 0)
-                           (= (point) (point-max)))
-                 do (forward-line 1)
-                 unless (eolp)
-                 do (cl-decf N))
-        (conn--end-of-inner-line-1))
-    (cl-callf abs N)
-    (let ((pt (point)))
-      (back-to-indentation)
-      (when (> pt (point)) (cl-decf N))
-      (cl-loop until (or (<= N 0)
-                         (= (point) (point-max)))
-               do (forward-line -1)
-               unless (eolp)
-               do (cl-decf N))
-      (back-to-indentation))))
+  (cond ((> N 0)
+         (let ((pt (point)))
+           (conn--end-of-inner-line-1)
+           (when (> (point) pt) (cl-decf N))
+           (cl-loop until (or (<= N 0)
+                              (= (point) (point-max)))
+                    do (forward-line 1)
+                    unless (eolp)
+                    do (cl-decf N))
+           (conn--end-of-inner-line-1)))
+        ((< N 0)
+         (cl-callf abs N)
+         (let ((pt (point)))
+           (back-to-indentation)
+           (when (> pt (point)) (cl-decf N))
+           (cl-loop until (or (<= N 0)
+                              (= (point) (point-max)))
+                    do (forward-line -1)
+                    unless (eolp)
+                    do (cl-decf N))
+           (back-to-indentation)))))
 
 (defun conn-backward-inner-line (N)
   "Inverse of `conn-forward-inner-line'."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (conn-forward-inner-line (- N)))
+
+(defun conn-forward-inner-line-dwim (N)
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (interactive "p")
+  (cond ((> N 0)
+         (let ((pt (point)))
+           (conn--end-of-inner-line-1)
+           (unless (= pt (point))
+             (cl-decf N))
+           (conn-forward-inner-line N)))
+        ((< N 0)
+         (conn-backward-inner-line-dwim (abs N)))))
+
+(defun conn-backward-inner-line-dwim (N)
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (interactive "p")
+  (cond ((> N 0)
+         (let ((pt (point)))
+           (back-to-indentation)
+           (unless (= pt (point))
+             (cl-decf N))
+           (conn-backward-inner-line N)))
+        ((< N 0)
+         (conn-forward-inner-line-dwim (abs N)))))
 
 (defun conn-forward-outer-line (&optional N)
   (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
@@ -1176,11 +1195,11 @@ Currently selected window remains selected afterwards."
 
 (defvar conn--replace-reading nil)
 
-(defun conn--replace-read-from ( prompt
-                                 regions
-                                 &optional
-                                 regexp-flag
-                                 delimited-flag)
+(defun conn--replace-read-from (prompt
+                                regions
+                                &optional
+                                regexp-flag
+                                delimited-flag)
   (minibuffer-with-setup-hook
       (minibuffer-lazy-highlight-setup
        :case-fold case-fold-search
@@ -3294,39 +3313,6 @@ For how they are used to define the region see `conn-bounds-of' and
   :keymap (conn-get-state-map 'conn-duplicate-state)
   "c" 'copy-from-above-command)
 
-(define-minor-mode conn-duplicate-repeat-mode
-  "After duplicating provide a set of keybindings for repeating.
-
-The following commands are bound in `conn-duplicate-repeat-map'.
-If the next command is one in `conn-duplicate-repeat-map' then the
-map stays active.  The commands are only usable while the map is active.
-\\<conn-duplicate-repeat-map>
-
-`digit-argument' and `negative-argument'.
-
-\\[conn-duplicate-indent-repeat] `conn-duplicate-indent-repeat':
- Indent the region containing all duplicates.
-
-\\[conn-duplicate-delete-repeat] `conn-duplicate-delete-repeat':
- Delete the most recently inserted duplicate.  With a prefix argument
-delete that many duplicates.
-
-\\[conn-duplicate-repeat] `conn-duplicate-repeat':
- Insert another duplicate.  With a prefix argument insert that many
-additional duplicates.
-
-\\[conn-duplicate-repeat-toggle-padding] `conn-duplicate-repeat-toggle-padding':
- Toggles the insertion of an extra newline before each duplicate.
-
-\\[conn-duplicate-repeat-comment] `conn-duplicate-repeat-comment':
- Comment or uncomment each duplicated region.
-
-\\[recenter-top-bottom] `recenter-top-bottom':
- Recenter the window."
-  :global t
-  :lighter nil
-  :group 'conn)
-
 (defvar-keymap conn-duplicate-repeat-map
   "M-?" 'conn-duplicate-repeat-help
   "TAB" 'conn-duplicate-indent-repeat
@@ -3376,10 +3362,7 @@ Only available during repeating duplicate."
   (user-error "Not repeating duplicate"))
 
 (defun conn-duplicate-subr (beg end &optional repeat)
-  "Duplicate the region from BEG to END REPEAT times.
-
-When `conn-duplicate-repeat-mode' is non-nil activate
-`conn-duplicate-repeat-map' after duplicating."
+  "Duplicate the region from BEG to END REPEAT times."
   (deactivate-mark)
   (conn-protected-let*
       ((regions (list (make-overlay beg end nil t))
@@ -3502,65 +3485,63 @@ When `conn-duplicate-repeat-mode' is non-nil activate
         (when (> repeat 0) (push-mark nil nil))
         (undo-boundary)
         (dotimes (_ repeat) (dup)))
-      (if (not conn-duplicate-repeat-mode)
-          (cleanup)
-        (advice-add 'conn-duplicate-indent-repeat :override #'indent)
-        (advice-add 'conn-duplicate-repeat :override #'repeat)
-        (advice-add 'conn-duplicate-delete-repeat :override #'delete)
-        (advice-add 'conn-duplicate-repeat-comment :override #'comment)
-        (advice-add 'conn-duplicate-repeat-toggle-padding :override
-                    (if block #'block-padding #'non-block-padding))
-        (set-transient-map
-         conn-duplicate-repeat-map
-         (lambda ()
-           (pcase this-command
-             ((or 'recenter-top-bottom 'reposition-window
-                  'universal-argument 'digit-argument 'negative-argument
-                  'undo 'undo-only 'undo-redo)
-              t)
-             ((let mc (lookup-key conn-duplicate-repeat-map
-                                  (this-command-keys-vector)))
-              (when (and mc (symbolp mc))
-                (setq mc (or (command-remapping mc) mc)))
-              (and mc (eq this-command mc)))))
-         #'cleanup
-         (format "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat-toggle-padding
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-indent-repeat
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat-comment
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-delete-repeat
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)
-                 (propertize
-                  (key-description
-                   (where-is-internal 'conn-duplicate-repeat-help
-                                      (list conn-duplicate-repeat-map)
-                                      t))
-                  'face 'help-key-binding)))))))
+      (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+      (advice-add 'conn-duplicate-repeat :override #'repeat)
+      (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+      (advice-add 'conn-duplicate-repeat-comment :override #'comment)
+      (advice-add 'conn-duplicate-repeat-toggle-padding :override
+                  (if block #'block-padding #'non-block-padding))
+      (set-transient-map
+       conn-duplicate-repeat-map
+       (lambda ()
+         (pcase this-command
+           ((or 'recenter-top-bottom 'reposition-window
+                'universal-argument 'digit-argument 'negative-argument
+                'undo 'undo-only 'undo-redo)
+            t)
+           ((let mc (lookup-key conn-duplicate-repeat-map
+                                (this-command-keys-vector)))
+            (when (and mc (symbolp mc))
+              (setq mc (or (command-remapping mc) mc)))
+            (and mc (eq this-command mc)))))
+       #'cleanup
+       (format "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat-toggle-padding
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-indent-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat-comment
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-delete-repeat
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-duplicate-repeat-help
+                                    (list conn-duplicate-repeat-map)
+                                    t))
+                'face 'help-key-binding))))))
 
 (cl-defgeneric conn-duplicate-thing-do (cmd
                                         arg
@@ -3608,10 +3589,7 @@ For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'.
 
 If REPEAT is non-nil then duplicate the region REPEAT times.
-Interactively REPEAT is given by the prefix argument.
-
-When `conn-duplicate-repeat-mode', which see, is active the transient map
-`conn-duplicate-repeat-map' is setup after duplicating."
+Interactively REPEAT is given by the prefix argument."
   (interactive
    (conn-read-args (conn-duplicate-state
                     :interactive 'conn-duplicate-thing

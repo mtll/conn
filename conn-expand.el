@@ -39,7 +39,7 @@ potential expansions.  Functions may return invalid expansions
 (defvar-keymap conn-expand-repeat-map
   :repeat (:exit (ignore))
   "e" 'ignore
-  "z" 'conn-expand-exchange
+  "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "h" 'conn-expand
   "l" 'conn-expand)
@@ -68,24 +68,17 @@ potential expansions.  Functions may return invalid expansions
 
 (defun conn--expand-create-expansions ()
   (unless (conn--valid-expansions-p)
-    (with-delayed-message (1 "Collecting expansions...")
-      (setq conn--current-expansions
-            (compat-call sort
-                         (thread-first
-                           (mapcan #'funcall conn-expansion-functions)
-                           (conn--expand-filter-regions))
-                         :lessp (lambda (a b)
-                                  (or (> (car a) (car b))
-                                      (< (cdr a) (cdr b))))
-                         :in-place t))
+    (prog1
+        (setq conn--current-expansions
+              (compat-call sort
+                           (thread-first
+                             (mapcan #'funcall conn-expansion-functions)
+                             (conn--expand-filter-regions))
+                           :lessp (lambda (a b)
+                                    (or (> (car a) (car b))
+                                        (< (cdr a) (cdr b))))
+                           :in-place t))
       (setq conn--current-expansions-tick (buffer-chars-modified-tick)))))
-
-(defun conn-expand-exchange ()
-  "Move point to the other end of the current expansion."
-  (interactive)
-  (if (region-active-p)
-      (exchange-point-and-mark)
-    (conn-exchange-mark-command)))
 
 (defun conn-expand-subr (arg)
   (conn--expand-create-expansions)
@@ -150,7 +143,7 @@ Expansions and contractions are provided by functions in
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
   "M-DEL" 'reset-arg
-  "z" 'conn-expand-exchange
+  "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand
   "h" 'conn-expand
@@ -165,8 +158,8 @@ Expansions and contractions are provided by functions in
   (cl-flet ((command-handler (command)
               (condition-case err
                   (pcase command
-                    ('conn-expand-exchange
-                     (conn-expand-exchange)
+                    ('exchange-point-and-mark
+                     (exchange-point-and-mark)
                      (conn-read-args-handle))
                     ('conn-contract
                      (conn-contract-subr

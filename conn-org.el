@@ -171,7 +171,7 @@
                   (:parent conn-action)))
 
 (defun conn-open-org-link ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-open-org-link
                     (action-description "Open Link"))
       (window pt _thing _arg)

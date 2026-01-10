@@ -3230,8 +3230,10 @@ contain targets."
        (:eval doc-string)))))
 
 (eval-and-compile
-  (defun conn--set-action-property (f _args val)
-    `(function-put ',f :conn-dispatch-action ',val))
+;;;###autoload
+  (defun conn--set-action-property (f _args)
+    `(function-put ',f :conn-dispatch-action t))
+;;;###autoload
   (setf (alist-get 'conn-dispatch-action defun-declarations-alist)
         (list #'conn--set-action-property)))
 
@@ -3320,7 +3322,7 @@ contain targets."
                   (:parent conn-action)))
 
 (defun conn-dispatch-goto ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-goto
                     (action-description "Goto")
@@ -3350,7 +3352,7 @@ goes to the end of the thing."))
                   (:parent conn-action)))
 
 (defun conn-dispatch-push-button ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-push-button
                     (action-description "Push Button")
@@ -3372,7 +3374,7 @@ goes to the end of the thing."))
   (separator :type string))
 
 (defun conn-dispatch-copy-to ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
@@ -3435,7 +3437,7 @@ after the region selected by dispatch."))
   (str :type string))
 
 (defun conn-dispatch-copy-to-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
@@ -3478,7 +3480,7 @@ after the region selected by dispatch."))
   (str :type string))
 
 (defun conn-dispatch-yank-to-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-yank-to-replace
                     (action-description "Yank and Replace To")
@@ -3511,7 +3513,7 @@ selected by dispatch with it."))
   (str :type string))
 
 (defun conn-dispatch-reading-yank-to-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-reading-yank-to-replace
                     (action-description "Yank and Replace To")
@@ -3545,7 +3547,7 @@ dispatch with it."))
   (separator :type string))
 
 (defun conn-dispatch-yank-to ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
@@ -3600,7 +3602,7 @@ region selected by dispatch."))
   (separator :type string))
 
 (defun conn-dispatch-reading-yank-to ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (let ((str (read-from-kill-ring "Yank To: ")))
     (oclosure-lambda (conn-dispatch-reading-yank-to
@@ -3659,7 +3661,7 @@ the string after the region selected by dispatch."))
   (action-change-group))
 
 (defun conn-dispatch-send ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-kill-state
                    :prompt "Send Thing")
@@ -3736,7 +3738,7 @@ the string after the region selected by dispatch."))
   (action-change-group))
 
 (defun conn-dispatch-send-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send-replace
@@ -3797,7 +3799,7 @@ it."))
   (register :type integer))
 
 (defun conn-dispatch-register-load ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: "))
@@ -3826,7 +3828,7 @@ it."))
   (register :type integer))
 
 (defun conn-dispatch-register-load-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-register-load-replace
                     (register (register-read-with-preview "Register: "))
@@ -3875,7 +3877,7 @@ it."))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (defun conn-dispatch-copy-from ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-copy-from
                     (action-description "Copy From")
@@ -3923,7 +3925,7 @@ it."))
     (:-> (conn-dispatch-replace-copy action))))
 
 (defun conn-dispatch-copy-from-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-copy-state
                    :prompt "Replace Thing")
@@ -3986,7 +3988,7 @@ it."))
     (:-> (conn-dispatch-replace-copy action))))
 
 (defun conn-dispatch-replace ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-copy-state
                    :prompt "Replace Thing")
@@ -4056,7 +4058,7 @@ it."))
     (:-> (conn-dispatch-grab-copy action))))
 
 (defun conn-dispatch-grab ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-grab
                     (action-description "Grab From")
@@ -4091,7 +4093,7 @@ it."))
                   (:parent conn-action)))
 
 (defun conn-dispatch-jump ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-jump
                     (action-description "Jump"))
@@ -4111,7 +4113,7 @@ it."))
   (command :type list))
 
 (defun conn-dispatch-repeat-command ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (when command-history
     (oclosure-lambda (conn-dispatch-repeat-command
@@ -4142,7 +4144,7 @@ it."))
                   (:parent conn-action)))
 
 (defun conn-dispatch-transpose ()
-  (declare (conn-dispatch-action t)
+  (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-transpose
                     (action-description "Transpose")

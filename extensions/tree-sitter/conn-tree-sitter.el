@@ -488,7 +488,7 @@
    'conn-ts-thing))
 
 (defun conn-dispatch-ts-goto ()
-  (declare (conn-dispatch-action t))
+  (declare (conn-dispatch-action))
   (oclosure-lambda (conn-dispatch-goto
                     (action-description "Goto Node"))
       ()

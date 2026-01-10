@@ -65,4 +65,3 @@
             (cl-return expansions))))))
 
 (provide 'conn-expand-region)
-

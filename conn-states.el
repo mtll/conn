@@ -593,6 +593,20 @@ then an error is signaled."
 (defvar-local conn--prev-mode-line-mule-info nil)
 (put 'conn--prev-mode-line-mule-info 'risky-local-variable t)
 
+(defun conn--toggle-input-method-ad (&rest app)
+  (if (and conn-local-mode
+           (not isearch-mode)
+           (not conn-disable-input-method-hooks)
+           (conn-state-get conn-current-state :suppress-input-method)
+           conn--input-method)
+      (unwind-protect
+          (progn
+            (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+            (activate-input-method conn--input-method)
+            (deactivate-input-method))
+        (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
+    (apply app)))
+
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
   (when (and conn-local-mode
@@ -1006,6 +1020,12 @@ current state does not have a :pop-alternate property then push
            (important-return-value t))
   (cadr conn--state-stack))
 
+(defun conn-buffer-base-state ()
+  "Returns the next state in the state stack."
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (car (last conn--state-stack)))
+
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
   (declare (important-return-value t))
@@ -1167,13 +1187,13 @@ can only be changed by redefining a state and are not inherited.
  :cursor
  "The `cursor-type' to use while in the state.")
 
-(eval-and-compile
-  (conn-declare-state-property
-   :pop-alternate
-   "The state to enter if the defined state is the base state and the state
+(conn-declare-state-property
+ :pop-alternate
+ "The state to enter if the defined state is the base state and the state
 stack is popped."
-   t)
+ t)
 
+(eval-and-compile
   (conn-declare-state-property
    :no-keymap
    "Do not allow a keymap to be created for this state"
@@ -1854,9 +1874,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                           (eql help-char (aref keyseq (1- (length keyseq)))))
                  (setq cmd 'execute-extended-command
                        partial-keymap (key-binding (seq-subseq keyseq 0 -1)))))
-             (when (eql (aref keyseq 0) quit-event)
+             (cond
+              ((eql (aref keyseq 0) quit-event)
                (keyboard-quit))
-             (when cmd
+              (cmd
                (when pre (funcall pre cmd))
                (pcase cmd
                  ('reference
@@ -1878,7 +1899,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (update-args cmd)))
                  (_ (update-args cmd)))
                (when post (funcall post cmd))
-               (setq conn-read-args-last-command cmd))))
+               (setq conn-read-args-last-command cmd)))))
          (cont ()
            (conn-with-recursive-stack state
              (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))

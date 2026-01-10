@@ -147,11 +147,6 @@
   :repeat t
   "n" 'pop-global-mark)
 
-(defvar-keymap conn-pop-to-mark-command-repeat-map
-  :repeat t
-  "," 'conn-pop-jump-ring
-  "." 'conn-unpop-jump-ring)
-
 (defvar-keymap conn-xref-repeat-map
   :repeat t
   "<" 'xref-go-back
@@ -165,8 +160,6 @@
 (define-keymap
   :keymap conn-goto-map
   "v" 'conn-previous-mark-command
-  "," 'conn-pop-jump-ring
-  "." 'conn-unpop-jump-ring
   "e" 'conn-previous-emacs-state
   "E" 'conn-next-emacs-state
   "O" 'conn-push-jump-ring
@@ -333,11 +326,11 @@
   ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
   "i" conn-previous-line-remap
-  "J" 'conn-backward-inner-line
+  "J" 'conn-backward-inner-line-dwim
   "j" conn-backward-char-remap
   "K" conn-forward-paragraph-remap
   "k" conn-next-line-remap
-  "L" 'conn-forward-inner-line
+  "L" 'conn-forward-inner-line-dwim
   "l" conn-forward-char-remap
   "M" conn-end-of-defun-remap
   "m" conn-forward-sexp-remap

@@ -41,28 +41,6 @@
 (require 'conn-surround)
 (eval-when-compile (require 'cl-lib))
 
-;;;; Advice
-
-(defun conn--toggle-input-method-ad (&rest app)
-  (if (and conn-local-mode
-           (not isearch-mode)
-           (not conn-disable-input-method-hooks)
-           (conn-state-get conn-current-state :suppress-input-method)
-           conn--input-method)
-      (unwind-protect
-          (progn
-            (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-            (activate-input-method conn--input-method)
-            (deactivate-input-method))
-        (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
-    (apply app)))
-
-(defun conn--xref-push-markers-ad (buf pt _win)
-  (when (buffer-live-p buf)
-    (with-current-buffer buf
-      (unless (= pt (point))
-        (conn-push-jump-ring pt)))))
-
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
@@ -145,30 +123,12 @@
     (if conn-mode
         (progn
           (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
-          (advice-add 'xref--push-markers :after #'conn--xref-push-markers-ad)
-          (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
-          (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-          (add-hook 'pre-command-hook #'conn--jump-pre-command-hook)
-          (add-hook 'post-command-hook #'conn--jump-post-command-hook 90))
+          (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
-      (advice-remove 'xref--push-markers #'conn--xref-push-markers-ad)
       (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
       (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
-      (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup)
-      (remove-hook 'pre-command-hook #'conn--jump-pre-command-hook)
-      (remove-hook 'post-command-hook #'conn--jump-post-command-hook))))
-
-(define-minor-mode conn-emacs-state-operators-mode
-  "Bind conn operators in conn-emacs-state."
-  :global t
-  :group 'conn)
-
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-emacs-state 'conn-emacs-state-operators-mode)
-  "C-w" 'conn-kill-thing
-  "M-w" 'conn-copy-thing
-  "M-t" 'conn-transpose-things)
+      (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup))))
 
 (provide 'conn)
 
