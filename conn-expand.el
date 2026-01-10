@@ -90,7 +90,7 @@ potential expansions.  Functions may return invalid expansions
                        (abs (- (region-end) (region-beginning))))
                return (progn
                         (goto-char (if (= (point) (region-beginning)) beg end))
-                        (set-mark (if (= (point) (region-end)) beg end))
+                        (set-mark (if (= (point) (region-beginning)) end beg))
                         (unless (region-active-p) (activate-mark)))
                finally (user-error "No more expansions")))))
 

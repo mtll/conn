@@ -589,25 +589,27 @@
               conn-surround-trim-argument-map
               (lambda (_) (read-string "Whitespace Chars: "))
               :value "\n\t ")))
-    (with-undo-amalgamate
-      (atomic-change-group
-        (pcase (conn-prepare-change-surround thing arg transform)
-          (`(,ov . ,prep-keys)
-           (let ((cleanup (plist-get prep-keys :cleanup))
-                 (success nil))
-             (unwind-protect
-                 (progn
-                   (apply #'conn-surround-do
-                          `(,(if at-end
-                                 'conn-adjust-surround-other-end
-                               'conn-adjust-surround)
-                            nil
-                            :regions ,(list ov)
-                            :trim ,trim
-                            ,@prep-keys)))
-               (delete-overlay ov)
-               (when cleanup
-                 (funcall cleanup (if success :accept :cancel))))))
-          (_ (user-error "No surround found")))))))
+    (save-mark-and-excursion
+      (with-undo-amalgamate
+        (atomic-change-group
+          (pcase (conn-prepare-change-surround thing arg transform)
+            (`(,ov . ,prep-keys)
+             (let ((cleanup (plist-get prep-keys :cleanup))
+                   (success nil))
+               (unwind-protect
+                   (progn
+                     (apply #'conn-surround-do
+                            `(,(if at-end
+                                   'conn-adjust-surround-other-end
+                                 'conn-adjust-surround)
+                              nil
+                              :regions ,(list ov)
+                              :trim ,trim
+                              ,@prep-keys)))
+                 (deactivate-mark)
+                 (delete-overlay ov)
+                 (when cleanup
+                   (funcall cleanup (if success :accept :cancel))))))
+            (_ (user-error "No surround found"))))))))
 
 (provide 'conn-surround)

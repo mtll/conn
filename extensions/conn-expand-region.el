@@ -44,7 +44,8 @@
           (when (and expand-region-skip-whitespace
                      (er--point-is-surrounded-by-white-space)
                      (= (region-beginning) (region-end)))
-            (skip-chars-forward er--space-str))
+            (skip-chars-forward er--space-str)
+            (setq start (point)))
 
           (dolist (try er/try-expand-list)
             (er--save-excursion
@@ -58,7 +59,6 @@
 
           (goto-char best-start)
           (set-mark best-end)
-          (push (cons (region-beginning) (region-end)) expansions)
 
           (when (and (= best-start (point-min))
                      (= best-end (point-max)))

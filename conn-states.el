@@ -1020,11 +1020,15 @@ current state does not have a :pop-alternate property then push
            (important-return-value t))
   (cadr conn--state-stack))
 
-(defun conn-buffer-base-state ()
+(defun conn-buffer-base-state (&optional buffer)
   "Returns the next state in the state stack."
   (declare (side-effect-free t)
            (important-return-value t))
-  (car (last conn--state-stack)))
+  (conn-thread<-
+    'conn--state-stack
+    (buffer-local-value (or buffer (current-buffer)))
+    last
+    car))
 
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
