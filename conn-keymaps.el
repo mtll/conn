@@ -333,11 +333,11 @@
   ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
   "i" conn-previous-line-remap
-  "J" 'conn-backward-inner-line-dwim
+  "J" 'conn-backward-inner-line
   "j" conn-backward-char-remap
   "K" conn-forward-paragraph-remap
   "k" conn-next-line-remap
-  "L" 'conn-forward-inner-line-dwim
+  "L" 'conn-forward-inner-line
   "l" conn-forward-char-remap
   "M" conn-end-of-defun-remap
   "m" conn-forward-sexp-remap

@@ -253,60 +253,11 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
                do (cl-decf N))
       (back-to-indentation))))
 
-(defun conn-forward-inner-line-dwim (N)
-  "Like `conn-forward-inner-line' but attempts to be more clever."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
-  (interactive "p")
-  (cond ((= N 0))
-        ((> 0 N)
-         (conn-backward-inner-line-dwim (- N)))
-        ((= (point)
-            (progn
-              (conn--end-of-inner-line-1)
-              (point)))
-         (conn-forward-inner-line N))
-        ((= N 1))
-        (t (conn-forward-inner-line N))))
-
 (defun conn-backward-inner-line (N)
   "Inverse of `conn-forward-inner-line'."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
   (interactive "p")
   (conn-forward-inner-line (- N)))
-
-(defun conn-backward-inner-line-dwim (N)
-  "Like `conn-backwad-inner-line' but attempts to be more clever."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
-  (interactive "p")
-  (cond ((= N 0))
-        ((> 0 N)
-         (conn-backward-inner-line-dwim (- N)))
-        ((= (point)
-            (progn
-              (back-to-indentation)
-              (point)))
-         (conn-forward-inner-line (- N)))
-        ((= N 1))
-        (t (conn-forward-inner-line (- N)))))
-
-(defun conn-end-of-inner-line (&optional N)
-  "Move point to after the last non-whitespace or comment character in line.
-
-Immediately repeating this command goes to the point at end
-of line proper."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
-  (interactive "P")
-  (if (null N)
-      (let ((point (point))
-            (mark (mark t)))
-        (conn--end-of-inner-line-1)
-        (when (and (= point (point))
-                   (or (= mark (save-excursion
-                                 (back-to-indentation)
-                                 (point)))
-                       (region-active-p)))
-          (goto-char (line-end-position))))
-    (forward-line N)))
 
 (defun conn-forward-outer-line (&optional N)
   (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
@@ -507,27 +458,6 @@ If the mark is already active then deactivate it instead."
          (dotimes (_ arg)
            (conn-ring-rotate-backward conn-mark-state-ring))
          (conn-previous-mark-command))))
-
-(defun conn-mark-thing (thing arg transform)
-  "Mark the region defined by THING, ARG, and TRANSFORM"
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-mark-thing
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument t))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((and (conn-bounds `(,beg . ,end) transform)
-          (conn-bounds-get :direction))
-     (if (conn-subthing-p thing 'region)
-         (progn
-           (unless (>= (point) end)
-             (goto-char beg))
-           (push-mark (if (>= (point) end) beg end) t t))
-       (goto-char (if (eql direction 1) end beg))
-       (push-mark (if (eql direction 1) beg end) t t))
-     (conn-push-state 'conn-mark-state))))
 
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' and push `conn-mark-state' if mark is activated."
@@ -1077,6 +1007,85 @@ Currently selected window remains selected afterwards."
          (_ (user-error "No last thing to yank")))))))
 
 ;;;; Thing Commands
+
+;;;;; Mark
+
+(conn-define-state conn-mark-thing-state (conn-read-thing-state)
+  :lighter "MARK")
+
+(cl-defgeneric conn-mark-thing-do (thing arg transform))
+
+(cl-defmethod conn-mark-thing-do ((thing (conn-thing t))
+                                  arg
+                                  transform)
+  (pcase (conn-bounds-of thing arg)
+    ((and (conn-bounds `(,beg . ,end) transform)
+          (conn-bounds-get :direction))
+     (goto-char (if (eql direction 1) end beg))
+     (push-mark (if (eql direction 1) beg end) t t)
+     (conn-push-state 'conn-mark-state))))
+
+(cl-defmethod conn-mark-thing-do ((thing (conn-thing region))
+                                  arg
+                                  transform)
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (unless (>= (point) end)
+       (goto-char beg))
+     (push-mark (if (>= (point) end) beg end) t t)
+     (conn-push-state 'conn-mark-state))))
+
+(cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
+                                  arg
+                                  transform)
+  (conn-read-args (conn-dispatch-bounds-state
+                   :prefix arg
+                   :prompt "Thing")
+      ((`(,thing ,arg) (conn-thing-argument t))
+       (dtform (conn-dispatch-transform-argument))
+       (repeat
+        (conn-boolean-argument "repeat"
+                               'repeat-dispatch
+                               conn-dispatch-repeat-argument-map))
+       (other-end
+        (conn-boolean-argument "other-end"
+                               'other-end
+                               conn-other-end-argument-map))
+       (restrict-windows
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-restrict-windows-argument-map)))
+    (conn-dispatch-setup
+     (oclosure-lambda (conn-action
+                       (action-description "Mark"))
+         ()
+       (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
+                     (conn-select-target)))
+         (conn-protected-let* ((owin (selected-window)
+                                     (select-window owin)))
+           (select-window window)
+           (pcase (conn-bounds-of-dispatch thing arg pt)
+             ((conn-dispatch-bounds `(,beg . ,end)
+                                    (nconc dtform transform))
+              (push-mark end nil t)
+              (goto-char beg))
+             (_ (user-error "No %s found" thing))))))
+     thing arg dtform
+     :repeat repeat
+     :other-end other-end
+     :restrict-windows restrict-windows))
+  (conn-push-state 'conn-mark-state))
+
+(defun conn-mark-thing (thing arg transform)
+  "Mark the region defined by THING, ARG, and TRANSFORM"
+  (interactive
+   (conn-read-args (conn-mark-thing-state
+                    :interactive 'conn-mark-thing
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument t))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-mark-thing-do thing arg transform))
 
 ;;;;; Replace
 

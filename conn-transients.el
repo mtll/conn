@@ -26,10 +26,6 @@
 (require 'transient)
 (require 'text-property-search)
 
-;;;; Declarations
-
-(defvar sort-fold-case)
-
 ;;;; Utils
 
 (defmacro conn-transient-mode-suffix (name arglist description mode &rest properties)
@@ -362,4 +358,3 @@
    [("q" "quit" ignore)]])
 
 (provide 'conn-transients)
-

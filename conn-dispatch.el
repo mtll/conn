@@ -3158,7 +3158,7 @@ contain targets."
         (goto-char (point-max))
         (while (let ((pt (point)))
                  (forward-line -1)
-                 (conn-end-of-inner-line)
+                 (conn--end-of-inner-line-1)
                  (/= (point) pt))
           (when (not (invisible-p (point)))
             (conn-make-target-overlay
