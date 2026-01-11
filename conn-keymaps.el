@@ -202,8 +202,8 @@
 
 (defvar-keymap conn-line-repeat-map
   :repeat t
-  ">" 'forward-line
-  "<" 'conn-backward-line)
+  "k" 'forward-line
+  "i" 'conn-backward-line)
 
 (defvar-keymap conn-list-repeat-map
   :repeat t
@@ -212,12 +212,12 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "k" 'forward-line
+  "i" 'conn-backward-line
   "p" conn-thing-inner-remap
   "," conn-thing-inner-remap
   "w" 'forward-whitespace
   "W" 'conn-backward-whitespace
-  ">" 'forward-line
-  "<" 'conn-backward-line
   "v" 'conn-forward-visual-line
   "V" 'conn-backward-visible
   "g" 'conn-goto-line

@@ -1,9 +1,3 @@
-* Emacs State
-
-Emacs state binds no keys by default except <escape> to pop the state
-stack.  If emacs state is the base state in the stack then popping the
-state enters command state.
-
 * Command State Map
 
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
@@ -16,8 +10,8 @@ state enters command state.
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │          │  query   │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←sentence│ →sentence│   shell  ┃
-┃              │          │          │          │  replace │          │   read   │          │          │          │          │          │          │   cmd    ┃
+┃              │          │  widen   │          │  query   │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←inner   │ →inner   │   shell  ┃
+┃              │          │          │          │  replace │          │   read   │          │          │          │          │  list    │  list    │   cmd    ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
 ┃              │   yank   │   copy   │  emacs   │  replace │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ↑list   │  ↓list   │          ┃
@@ -31,13 +25,13 @@ state enters command state.
 ┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
 ┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
-┃                      │ Z exchange│ X        │ C        │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │   and mark│  narrow  │          │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
-┃                      │           │  prefix  │          │   state  │          │          │          │ register │          │          │                       ┃
+┃                      │ Z         │ X        │ C        │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
+┃                      │  exchange │  narrow  │          │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
+┃                      │  and mark │  prefix  │          │   state  │          │          │          │ register │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
-┃                      │ z exchange│ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │   mark    │   C-x    │   C-c    │   last   │   edit   │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
-┃                      │           │          │          │   thing  │   map    │          │          │   map    │   load   │          │                       ┃
+┃                      │ z         │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │  exchange │   C-x    │   C-c    │   last   │   edit   │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
+┃                      │    mark   │          │          │   thing  │   map    │          │          │   map    │   load   │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                 edit map                  ┃
