@@ -53,9 +53,14 @@
 
 (defvar conn--kapply-automatic-flag nil)
 
-(defun conn-kapply-clear-automatic-flag (&optional force)
+(defvar conn--kbd-query-automatic-flag nil)
+
+(defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))
-    (setq conn--kapply-automatic-flag nil)))
+    (setq conn--kapply-automatic-flag nil))
+  (dolist (cons conn--kbd-query-automatic-flag)
+    (when (eq t (cdr cons))
+      (setf (cdr cons) nil))))
 
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
@@ -67,33 +72,36 @@ different commands each time the macro executes.
 Without prefix argument, ask whether to continue running the
 macro.
 
-Your options are: \\<query-replace-map>
+Your options are: \\<multi-query-replace-map>
 
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
+\\[exit-current]	Skip the rest of this iteration in rest of buffer.
 \\[exit]	Stop the macro entirely right now.
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
-\\[automatic]   Apply keyboard macro to rest."
+\\[automatic]   Apply keyboard macro to rest of buffer.
+\\[automatic-all]   Apply keyboard macro to all buffers."
   (interactive "P")
   (or executing-kbd-macro
       defining-kbd-macro
       (user-error "Not defining or executing kbd macro"))
   (let ((msg (substitute-command-keys
-              "Proceed with macro?\\<query-replace-map>\
- (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
+              "Proceed with macro?\\<multi-query-replace-map>\
+ (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto buffer, \\[automatic-all] auto all)")))
     (cond
      (flag
       (let (executing-kbd-macro defining-kbd-macro)
         (recursive-edit)))
      ((not executing-kbd-macro))
-     ((not conn--kapply-automatic-flag)
+     ((not (alist-get executing-kbd-macro-index
+                      conn--kbd-query-automatic-flag))
       (let ((wconf (current-window-configuration)))
         (cl-loop
          (pcase (let ((executing-kbd-macro nil)
                       (defining-kbd-macro nil))
                   (message "%s" msg)
-                  (lookup-key query-replace-map (vector (read-event))))
+                  (lookup-key multi-query-replace-map (vector (read-event))))
            ('act
             (set-window-configuration wconf)
             (cl-return))
@@ -113,7 +121,15 @@ Your options are: \\<query-replace-map>
             (cl-return))
            ('automatic
             (set-window-configuration wconf)
-            (setq conn--kapply-automatic-flag t)
+            (setf (alist-get executing-kbd-macro-index
+                             conn--kbd-query-automatic-flag)
+                  t)
+            (cl-return))
+           ('automatic-all
+            (set-window-configuration wconf)
+            (setf (alist-get executing-kbd-macro-index
+                             conn--kbd-query-automatic-flag)
+                  :all)
             (cl-return))
            ('help
             (with-output-to-temp-buffer "*Help*"
@@ -554,7 +570,7 @@ Possibilities: \\<query-replace-map>
                   (pcase (let ((executing-kbd-macro nil)
                                (defining-kbd-macro nil))
                            (message "%s" msg)
-                           (lookup-key query-replace-map (vector (read-event))))
+                           (lookup-key multi-query-replace-map (vector (read-event))))
                     ('act (cl-return res))
                     ('skip (setq res (funcall iterator state)))
                     ('exit-current
@@ -702,7 +718,7 @@ current buffer."
           (pcase region
             (`[,beg ,end ,buffer]
              (unless (eq buffer (current-buffer))
-               (conn-kapply-clear-automatic-flag)
+               (conn-kapply-clear-automatic-flags)
                (switch-to-buffer buffer t)
                (deactivate-mark)
                (unless (eq buffer (window-buffer (selected-window)))
@@ -1053,6 +1069,7 @@ After kapply has finished restore the previous window configuration."
          (undo-strong-limit most-positive-fixnum)
          (conn-kmacro-applying-p t)
          (conn--kapply-automatic-flag nil)
+         (conn--kbd-query-automatic-flag nil)
          (iterations 0)
          (success nil)
          (iterator (lambda (&optional state)

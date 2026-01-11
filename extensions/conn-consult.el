@@ -297,12 +297,14 @@
                   (set-marker marker nil))))
             cands)))
       (conn-kapply-on-iterator
-       (conn-kapply-region-iterator regions))))
+       (conn-kapply-region-iterator regions)
+       :query t)))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
     (conn-kapply-on-iterator
-     (conn--consult-grep-iterator cands)))
+     (conn--consult-grep-iterator cands)
+     :query t))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
@@ -314,7 +316,8 @@
                    (conn-kapply-make-region mk mk (marker-buffer mk)))
                   (`(,buf . ,pt)
                    (conn-kapply-make-region pt pt buf))))
-              cands))))
+              cands))
+     :query t))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-xref-map
