@@ -98,6 +98,7 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "." 'conn-register-prefix
   "<" #'conn-unset-register
   "F" #'conn-bind-last-dispatch-to-key
   "=" 'conn-command-to-register
@@ -347,7 +348,7 @@
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
-  "SPC" 'conn-set-mark-command
+  "C-SPC" 'conn-set-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
   "`" 'conn-wincontrol-mru-window
@@ -370,6 +371,7 @@
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
   "b" conn-edit-remap
+  "SPC" conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
