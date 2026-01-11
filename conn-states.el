@@ -1295,9 +1295,6 @@ state.")
 
 ;;;;; Emacs State
 
-(defvar conn-emacs-state-register nil
-  "Register containing the last `conn-emacs-state' position, or nil if none.")
-
 (defvar-local conn-emacs-state-ring nil
   "Ring of previous positions where `conn-emacs-state' was exited.")
 
@@ -1318,12 +1315,7 @@ state.")
   (conn-state-on-exit _exit-type
     (conn-ring-delete (point) conn-emacs-state-ring #'=)
     (let ((pt (conn--create-marker (point) nil t)))
-      (conn-ring-insert-front conn-emacs-state-ring pt)
-      (when conn-emacs-state-register
-        (if-let* ((marker (get-register conn-emacs-state-register))
-                  ((markerp marker)))
-            (set-marker marker (point) (current-buffer))
-          (set-register conn-emacs-state-register (copy-marker pt))))))
+      (conn-ring-insert-front conn-emacs-state-ring pt)))
   (cl-call-next-method))
 
 ;;;;; Autopop State
@@ -1349,7 +1341,10 @@ function is not called and the state stays active if the previous
 command was a prefix command.")
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
-                                &optional _type)
+                                &optional type)
+  (when (or (eq type :recurse)
+            (null conn--state-stack))
+    (error "%s cannot be the base state" state))
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
         (preserve-state (make-symbol "preserve-state"))

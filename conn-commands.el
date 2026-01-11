@@ -603,7 +603,7 @@ for the meaning of prefix ARG."
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-register-load-and-replace
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
         (register (conn-read-argument
                    "register"
@@ -680,7 +680,7 @@ for the meaning of prefix ARG."
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-yank-replace
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
         (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
         (register (conn-read-argument
@@ -764,7 +764,7 @@ Interactively `region-beginning' and `region-end'."
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-rgrep-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -782,7 +782,7 @@ Interactively `region-beginning' and `region-end'."
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-occur-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -1812,7 +1812,7 @@ Exiting the recursive edit will resume the isearch."
   (with-isearch-suspended
    (pcase (conn-read-args (conn-read-thing-state
                            :prompt "Thing")
-              ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+              ((`(,thing ,arg) (conn-thing-argument-dwim))
                (transform (conn-transform-argument)))
             (conn-transform-bounds
              (conn-bounds-of thing arg)
@@ -2284,12 +2284,7 @@ append to that place."
                   recursive-edit
                   &aux
                   (keymap conn-kill-thing-argument-map)
-                  (required t)
-                  (value (when (and (use-region-p)
-                                    conn-thing-argument-region-dwim)
-                           (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-thing-argument-region-dwim))))))
+                  (required t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql filename)))
@@ -3576,11 +3571,9 @@ Only available during repeating duplicate."
                   &aux
                   (keymap conn-duplicate-thing-argument-map)
                   (required t)
-                  (value (when (and (use-region-p)
-                                    conn-thing-argument-region-dwim)
+                  (value (when (use-region-p)
                            (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-thing-argument-region-dwim))))))
+                  (set-flag (use-region-p))))))
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by THING, ARG, and TRANSFORM.
@@ -3595,7 +3588,7 @@ Interactively REPEAT is given by the prefix argument."
                     :interactive 'conn-duplicate-thing
                     :prompt "Thing"
                     :reference conn-duplicate-reference)
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
+       ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing arg transform
            (prefix-numeric-value current-prefix-arg))))
@@ -3833,7 +3826,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
                     :interactive 'conn-indent-thing-rigidly
                     :prompt "Thing"
                     :reference conn-indent-reference)
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always t))
+       ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)

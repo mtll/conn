@@ -211,7 +211,8 @@ See also `conn-repeat'.")
            (indent 0))
   `(let ((emulation-mode-map-alists
           (seq-difference emulation-mode-map-alists
-                          '(conn--minor-mode-maps
+                          '(conn--wincontrol-map-alist
+                            conn--minor-mode-maps
                             conn--major-mode-map
                             conn--state-map)
                           #'eq)))

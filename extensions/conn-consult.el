@@ -79,7 +79,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-ripgrep-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -100,7 +100,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-line-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -120,7 +120,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-line-multi-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -141,7 +141,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-locate-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -160,7 +160,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-git-grep-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
@@ -181,7 +181,7 @@
    (conn-read-args (conn-read-thing-state
                     :interactive 'conn-consult-find-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim-always))
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)

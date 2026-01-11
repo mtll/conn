@@ -414,15 +414,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 ;;;;; Thing Args
 
-(defcustom conn-thing-argument-region-dwim t
-  "When non-nil makes thing commands always use the region when active.
-
-This causes all thing commands to skip reading any arguments when the
-region is active. If you would prefer to thing commands to read
-arguments even when the region is active then set this variable to nil."
-  :group 'conn
-  :type 'boolean)
-
 (defvar-keymap conn-recursive-edit-thing-map
   "`" 'recursive-edit)
 
@@ -434,16 +425,6 @@ arguments even when the region is active then set this variable to nil."
                   &aux
                   (required t)))
                ( :constructor conn-thing-argument-dwim
-                 (&optional
-                  recursive-edit
-                  &aux
-                  (required t)
-                  (value (when (and (use-region-p)
-                                    conn-thing-argument-region-dwim)
-                           (list 'region nil)))
-                  (set-flag (and (use-region-p)
-                                 conn-thing-argument-region-dwim))))
-               ( :constructor conn-thing-argument-dwim-always
                  (&optional
                   recursive-edit
                   &aux
