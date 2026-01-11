@@ -40,7 +40,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[conn-wincontrol-exit] exit; "
-   "\\[conn-wincontrol-quick-ref] help):"))
+   "\\[conn-wincontrol-quick-ref] help):\n"))
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
@@ -154,8 +154,6 @@
   "C-M-d" 'delete-other-frames
   "C-S-l" 'move-to-window-line-top-bottom
   "C-]" 'conn-wincontrol-abort
-  "C-r" 'conn-wincontrol-isearch-backward
-  "C-s" 'conn-wincontrol-isearch
   "C-u" 'conn-wincontrol-universal-arg
   "DEL" 'conn-wincontrol-backward-delete-arg
   "<backspace>" 'conn-wincontrol-backward-delete-arg
@@ -276,10 +274,7 @@
         (conn-wincontrol-mode -1)
         (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
     (unless (current-message)
-      (message "%s"
-               (let ((str (conn--wincontrol-message)))
-                 (add-text-properties 0 1 '(conn-wincontrol-string t) str)
-                 str)))))
+      (message "%s" (conn--wincontrol-message)))))
 
 (defun conn--wincontrol-new-frame (frame)
   (set-face-inverse-video 'mode-line t frame)
@@ -289,23 +284,19 @@
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-message ()
-  (format (substitute-command-keys conn--wincontrol-help-format)
-          (format (if conn--wincontrol-arg "%s%s" "[%s1]")
-                  (if (= conn--wincontrol-arg-sign -1) "-" "")
-                  conn--wincontrol-arg)))
+  (propertize
+   (format (substitute-command-keys conn--wincontrol-help-format)
+           (format (if conn--wincontrol-arg "%s%s" "[%s1]")
+                   (if (= conn--wincontrol-arg-sign -1) "-" "")
+                   conn--wincontrol-arg))
+   'conn-wincontrol-string t))
 
 (defun conn-wincontrol-message-function (string)
-  (let ((beg (if (text-property-any 0 (length string)
-                                    'conn-wincontrol-string
-                                    t string)
-                 (or (next-single-property-change
-                      1 'conn-wincontrol-string string)
-                     (length string))
-               0)))
-    (concat (propertize (concat (conn--wincontrol-message)
-                                (when string "\n"))
-                        'conn-wincontrol-string t)
-            (substring string beg))))
+  (if (text-property-any 0 (length string)
+                         'conn-wincontrol-string
+                         t string)
+      string
+    (concat (conn--wincontrol-message) string)))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (message "%s" (conn--wincontrol-message))
@@ -538,43 +529,17 @@
 
 ;;;;; Wincontrol Isearch
 
-(defun conn-wincontrol-isearch (arg)
-  "`isearch-forward', resuming `conn-wincontrol-mode' afterward."
-  (interactive "P")
-  (when conn-wincontrol-mode
-    (conn--wincontrol-exit)
-    (unwind-protect
-        (isearch-forward arg)
-      (conn--wincontrol-setup t))))
-
-(defun conn-wincontrol-isearch-backward (arg)
-  "`isearch-backward', resuming `conn-wincontrol-mode' afterward."
-  (interactive "P")
-  (when conn-wincontrol-mode
-    (conn--wincontrol-exit)
-    (unwind-protect
-        (isearch-backward arg)
-      (conn--wincontrol-setup t))))
-
 (defun conn-wincontrol-isearch-other-window (arg)
   "`isearch-forward' in `other-window-for-scrolling'."
   (interactive "P")
-  (when conn-wincontrol-mode
-    (conn--wincontrol-exit)
-    (unwind-protect
-        (with-selected-window (other-window-for-scrolling)
-          (isearch-forward arg))
-      (conn--wincontrol-setup t))))
+  (with-selected-window (other-window-for-scrolling)
+    (isearch-forward arg)))
 
 (defun conn-wincontrol-isearch-other-window-backward (arg)
   "`isearch-backward' in `other-window-for-scrolling'."
   (interactive "P")
-  (when conn-wincontrol-mode
-    (conn--wincontrol-exit)
-    (unwind-protect
-        (with-selected-window (other-window-for-scrolling)
-          (isearch-backward arg))
-      (conn--wincontrol-setup t))))
+  (with-selected-window (other-window-for-scrolling)
+    (isearch-backward arg)))
 
 ;;;;; Window Selection
 
