@@ -88,12 +88,16 @@ Your options are: \\<multi-query-replace-map>
       (user-error "Not defining or executing kbd macro"))
   (let ((msg (substitute-command-keys
               "Proceed with macro?\\<multi-query-replace-map>\
- (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto buffer, \\[automatic-all] auto all)")))
+ (\\[act] act, \\[skip] skip, \\[exit-current] skip buffer, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto buffer, \\[automatic-all] auto all)")))
     (cond
      (flag
       (let (executing-kbd-macro defining-kbd-macro)
         (recursive-edit)))
      ((not executing-kbd-macro))
+     ((eq (alist-get executing-kbd-macro-index
+                     conn--kbd-query-automatic-flag)
+          :exit-current)
+      (setq executing-kbd-macro ""))
      ((not (alist-get executing-kbd-macro-index
                       conn--kbd-query-automatic-flag))
       (let ((wconf (current-window-configuration)))
@@ -106,6 +110,12 @@ Your options are: \\<multi-query-replace-map>
             (set-window-configuration wconf)
             (cl-return))
            ('skip
+            (setq executing-kbd-macro "")
+            (cl-return))
+           ('exit-current
+            (setf (alist-get executing-kbd-macro-index
+                             conn--kbd-query-automatic-flag)
+                  :exit-current)
             (setq executing-kbd-macro "")
             (cl-return))
            ('exit
