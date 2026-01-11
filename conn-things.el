@@ -215,40 +215,42 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (eval-and-compile
   (defun conn--anonymous-thing-parse-properties (properties)
-    (cl-loop
-     with known = (get 'conn-anonymous-thing :known-properties)
-     with seen = nil
-     for (key val) on properties by #'cddr
-     for gfn = (alist-get key known)
-     if gfn
-     collect (let ((method-expander
-                    (lambda (args &rest body)
-                      (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-                        (`#'(lambda ,args . ,body)
-                         (let ((parsed-body (macroexp-parse-body body))
-                               (cnm (gensym "thing--cnm")))
-                           `#'(lambda ,(cons cnm args)
-                                ,@(car parsed-body)
-                                ,(let ((exp (macroexpand-all
-                                             `(cl-flet ((cl-call-next-method ,cnm))
-                                                ,@(cdr parsed-body)))))
-                                   (if (memq gfn seen)
-                                       (macroexp-warn-and-return
-                                        "Method in anonymous thing shadows previous definition"
-                                        exp nil nil key)
-                                     exp)))))
-                        (result (error "Unexpected macroexpansion result :%S"
-                                       result))))))
-               (prog1 `(cons ',gfn
-                             ,(macroexpand-all
-                               val
-                               (cons (cons :method method-expander)
-                                     macroexpand-all-environment)))
-                 (push gfn seen)))
-     into methods
-     else collect `(cons ,key ,val) into props
-     finally return (cons (cons 'list (nreverse methods))
-                          (cons 'list (nreverse props))))))
+    (let ((known (get 'conn-anonymous-thing :known-methods))
+          (defined nil)
+          (mlist nil)
+          (plist nil))
+      (while properties
+        (let* ((key (pop properties))
+               (val (pop properties))
+               (gfn (alist-get key known)))
+          (if (null gfn)
+              (push `(cons ,key ,val) plist)
+            (let ((method-expander
+                   (lambda (args &rest body)
+                     (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                       (`#'(lambda ,args . ,body)
+                        (let ((parsed-body (macroexp-parse-body body))
+                              (cnm (gensym "thing--cnm")))
+                          `#'(lambda ,(cons cnm args)
+                               ,@(car parsed-body)
+                               ,(let ((exp (macroexpand-all
+                                            `(cl-flet ((cl-call-next-method ,cnm))
+                                               ,@(cdr parsed-body)))))
+                                  (if (memq gfn defined)
+                                      (macroexp-warn-and-return
+                                       "Anonymous thing method shadows previous definition"
+                                       exp nil nil key)
+                                    exp)))))
+                       (result (error "Unexpected macroexpansion result :%S"
+                                      result))))))
+              (push (macroexpand-all
+                     `(cons ',gfn ,val)
+                     (cons (cons :method method-expander)
+                           macroexpand-all-environment))
+                    mlist)
+              (push gfn defined)))))
+      (cons `(list ,@mlist)
+            `(list ,@plist)))))
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing inheriting from PARENT."
@@ -285,7 +287,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
       (insert (or (cdr ud) main ""))
       (insert "\n\n\tCurrently supported properties for anonymous things:\n\n")
       (pcase-dolist (`(,fn . ,props)
-                     (seq-group-by #'cdr (get 'conn-anonymous-thing :known-properties)))
+                     (thread-last
+                       (get 'conn-anonymous-thing :known-methods)
+                       reverse
+                       (seq-group-by #'cdr)))
         (insert (format "`%s' - %s" fn (mapcar #'car props)))
         (insert "\n\n"))
       (let ((combined-doc (buffer-string)))
@@ -310,12 +315,12 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
            (dolist (prop props)
              (when-let* ((gfn (alist-get prop
                                          (get 'conn-anonymous-thing
-                                              :known-properties)))
+                                              :known-methods)))
                          (_ (not (eq gfn ',f))))
                (error "%s already an anonymous thing property for %s" prop gfn)))
            (dolist (prop props)
              (setf (alist-get prop (get 'conn-anonymous-thing
-                                        :known-properties))
+                                        :known-methods))
                    ',f))))
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))

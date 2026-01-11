@@ -963,7 +963,8 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-mark-thing-state (conn-read-thing-state)
   :lighter "MARK")
 
-(cl-defgeneric conn-mark-thing-do (thing arg transform))
+(cl-defgeneric conn-mark-thing-do (thing arg transform)
+  (declare (conn-anonymous-thing-property :mark-op)))
 
 (cl-defmethod conn-mark-thing-do ((thing (conn-thing t))
                                   arg
@@ -1048,7 +1049,8 @@ Currently selected window remains selected afterwards."
                                      &optional
                                      swap
                                      register
-                                     check-bounds))
+                                     check-bounds)
+  (declare (conn-anonymous-thing-property :yank-replace-op)))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing t))
                                     arg
@@ -1359,7 +1361,8 @@ selected by dispatch with it."))
                                 regexp-flag
                                 subregions-p
                                 from
-                                to))
+                                to)
+  (declare (conn-anonymous-thing-property :replace-op)))
 
 (cl-defmethod conn-replace-do ((thing (conn-thing t))
                                arg
