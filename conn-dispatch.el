@@ -4552,14 +4552,14 @@ INITIAL-ARG is the initial value of the prefix argument during
                             (posframe-hide " *conn-list-posframe*"))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
+       (`(,action ,repeat) (conn-dispatch-action-argument))
        (other-end (conn-boolean-argument "other-end"
                                          'other-end
                                          conn-other-end-argument-map))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-restrict-windows-argument-map))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
+                               conn-restrict-windows-argument-map)))
     (conn-dispatch-setup
      action thing arg transform
      :repeat repeat

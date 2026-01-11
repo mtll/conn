@@ -2681,9 +2681,6 @@ hook, which see."
                      :reference (list conn-dispatch-thing-reference)
                      :display-handler (conn-read-args-display-columns 3 3))
         ((`(,thing ,arg) (conn-thing-argument t))
-         (`(,dtform ,reformat)
-          (conn-dispatch-transform-and-fixup-argument
-           reformat))
          (repeat
           (conn-boolean-argument "repeat"
                                  'repeat-dispatch
@@ -2701,7 +2698,10 @@ hook, which see."
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-restrict-windows-argument-map)))
+                                 conn-restrict-windows-argument-map))
+         (`(,dtform ,reformat)
+          (conn-dispatch-transform-and-fixup-argument
+           reformat)))
       (conn-with-dispatch-event-handlers
         ( :handler (cmd)
           (when (eq cmd 'append)

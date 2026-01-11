@@ -419,15 +419,11 @@
        windmove-swap-states-down
        windmove-swap-states-left
        windmove-swap-states-right)))
-    (((:heading "Isearch:")
-      ("this window forward/back"
-       conn-wincontrol-isearch
-       conn-wincontrol-isearch-backward)
-      ("other window forward/back"
-       conn-wincontrol-isearch-other-window
-       conn-wincontrol-isearch-other-window-backward)))
     (((:heading "Misc:")
-      ("tear off window" tear-off-window)))))
+      ("tear off window" tear-off-window)
+      ("isearch other window forward/back"
+       conn-wincontrol-isearch-other-window
+       conn-wincontrol-isearch-other-window-backward)))))
 
 (defvar conn-wincontrol-tabs-and-frames
   (conn-reference-page
