@@ -1504,25 +1504,6 @@ entering mark state.")
 
 ;;;; Read Args
 
-(defvar conn-read-args-ref-bindings
-  (conn-reference-quote
-    ((:keymap conn-read-args-map)
-     ("backward delete arg" backward-delete-arg)
-     ("reset arg" reset-arg)
-     ("completing-read available commands" help)
-     (:keymap conn-quick-ref-map)
-     ("close quick reference" close)
-     ("next/previous page" next previous))))
-
-(defvar conn-read-args-reference-page
-  (conn-reference-page
-    :depth 50
-    (:heading "Read Args")
-    "Interactively reading arguments for a command.
-"
-    (:eval (conn-quick-ref-to-cols
-            conn-read-args-ref-bindings 1))))
-
 (defvar conn-read-args-last-command nil
   "Last command read by `conn-read-args'.")
 
@@ -1561,6 +1542,25 @@ entering mark state.")
   "DEL" 'backward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
+
+(defvar conn-read-args-ref-bindings
+  (conn-reference-quote
+    ((:keymap conn-read-args-map)
+     ("backward delete arg" backward-delete-arg)
+     ("reset arg" reset-arg)
+     ("completing-read available commands" help)
+     (:keymap conn-quick-ref-map)
+     ("close quick reference" close)
+     ("next/previous page" next previous))))
+
+(defvar conn-read-args-reference-page
+  (conn-reference-page
+    :depth 50
+    (:heading "Read Args")
+    "Interactively reading arguments for a command.
+"
+    (:eval (conn-quick-ref-to-cols
+            conn-read-args-ref-bindings 1))))
 
 (defun conn-read-args-prefix-arg ()
   "Return the value of the current prefix argument during `conn-read-args'."

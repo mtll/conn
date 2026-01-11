@@ -19,6 +19,7 @@
 
 (require 'kmacro)
 (require 'mule-util)
+(require 'text-property-search)
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-states)
@@ -30,6 +31,7 @@
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function project-files "project")
 (declare-function ibuffer-unmark-all-marks "ibuffer")
+(declare-function compilation--message->loc "compile")
 
 ;;;; Kapply
 
@@ -506,16 +508,7 @@ Possibilities: \\<query-replace-map>
 \\[automatic-all]	Apply keyboard macro to rest in all remaining buffers.")
 
 (defun conn-kapply-query (iterator)
-  "Query user before each iteration of the keyboard macro.
-
-The options provided are: \\<multi-query-replace-map>
-
-\\[act]	Proceed with this iteration normally and continue to the next.
-\\[skip]	Skip this iteration and got to the next.
-\\[exit]	End this kapply normally.
-\\[quit]	End this kapply by signaling a quit.
-\\[recenter]	Redisplay the screen, then ask again.
-\\[automatic]	Apply keyboard macro to rest."
+  "Query user before each iteration of the keyboard macro."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -1752,7 +1745,8 @@ finishing showing the buffers that were visited."))
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'compilation-message)
                while match
-               collect (pcase (compilation--message->loc (prop-match-value match))
+               collect (pcase (compilation--message->loc
+                               (prop-match-value match))
                          (`(,col ,line (,file . ,_) . ,_)
                           (with-current-buffer
                               (let ((name (apply #'expand-file-name file)))

@@ -27,32 +27,6 @@
 (defvar-local conn-jump-ring nil
   "Ring of previous jump positions in a buffer.")
 
-(defun conn-push-jump-ring (location &optional back msg)
-  "Push LOCATION to the jump ring.
-
-If BACK is non-nil then push LOCATION to the back of the jump ring."
-  (interactive (list (point) nil t))
-  (when conn-jump-ring-mode
-    (when (not conn-jump-ring)
-      (setq conn-jump-ring
-            (conn-make-ring 40
-                            :cleanup (lambda (mk) (set-marker mk nil))
-                            :copier #'conn--copy-mark)))
-    (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
-                (ptf (conn-ring-head conn-jump-ring)))
-      (cond
-       ((and ptf (= location ptf))
-        (when back (conn-ring-rotate-forward conn-jump-ring)))
-       ((and ptb (= location ptb))
-        (unless back (conn-ring-rotate-backward conn-jump-ring)))
-       (t
-        (if back
-            (conn-ring-insert-back conn-jump-ring
-                                   (conn--create-marker location))
-          (conn-ring-insert-front conn-jump-ring
-                                  (conn--create-marker location))))))
-    (when msg (message "Jump ring pushed"))))
-
 (defun conn--jump-pre-command-hook ()
   (set-marker conn-this-command-start (point) (current-buffer)))
 
@@ -126,6 +100,32 @@ to the jump ring."
     (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
     (remove-hook 'pre-command-hook #'conn--jump-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--jump-post-command-hook)))
+
+(defun conn-push-jump-ring (location &optional back msg)
+  "Push LOCATION to the jump ring.
+
+If BACK is non-nil then push LOCATION to the back of the jump ring."
+  (interactive (list (point) nil t))
+  (when conn-jump-ring-mode
+    (when (not conn-jump-ring)
+      (setq conn-jump-ring
+            (conn-make-ring 40
+                            :cleanup (lambda (mk) (set-marker mk nil))
+                            :copier #'conn--copy-mark)))
+    (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
+                (ptf (conn-ring-head conn-jump-ring)))
+      (cond
+       ((and ptf (= location ptf))
+        (when back (conn-ring-rotate-forward conn-jump-ring)))
+       ((and ptb (= location ptb))
+        (unless back (conn-ring-rotate-backward conn-jump-ring)))
+       (t
+        (if back
+            (conn-ring-insert-back conn-jump-ring
+                                   (conn--create-marker location))
+          (conn-ring-insert-front conn-jump-ring
+                                  (conn--create-marker location))))))
+    (when msg (message "Jump ring pushed"))))
 
 ;;;###autoload
 (setf (alist-get 'conn-jump defun-declarations-alist)

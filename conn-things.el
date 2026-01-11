@@ -325,14 +325,13 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
 
-(eval-and-compile
-  (defun conn-register-thing-commands (thing handler &rest commands)
-    "Associate COMMANDS with a THING and a HANDLER."
-    (unless (conn-thing-p thing)
-      (error "%s is not a known thing" thing))
-    (dolist (cmd commands)
-      (setf (conn-command-thing cmd) thing
-            (conn-command-other-end-handler cmd) handler))))
+(defun conn-register-thing-commands (thing handler &rest commands)
+  "Associate COMMANDS with a THING and a HANDLER."
+  (unless (conn-thing-p thing)
+    (error "%s is not a known thing" thing))
+  (dolist (cmd commands)
+    (setf (conn-command-thing cmd) thing
+          (conn-command-other-end-handler cmd) handler)))
 
 (eval-and-compile
 ;;;###autoload
@@ -1652,11 +1651,10 @@ Only the background color is used."
  :forward-op 'conn-forward-defun
  :properties '(:linewise t))
 
-(eval-and-compile
-  (conn-register-thing
-   'visual-line
-   :forward-op 'conn-forward-visual-line
-   :properties '(:linewise t)))
+(conn-register-thing
+ 'visual-line
+ :forward-op 'conn-forward-visual-line
+ :properties '(:linewise t))
 
 (conn-register-thing
  'region
@@ -1675,11 +1673,10 @@ Only the background color is used."
  :bounds-op (lambda () (cons (window-start) (window-end)))
  :properties '(:linewise t))
 
-(eval-and-compile
-  (conn-register-thing-commands
-   'visible nil
-   'scroll-up-command 'scroll-down-command
-   'conn-mark-visible))
+(conn-register-thing-commands
+ 'visible nil
+ 'scroll-up-command 'scroll-down-command
+ 'conn-mark-visible)
 
 (conn-register-thing
  'recursive-edit-thing
