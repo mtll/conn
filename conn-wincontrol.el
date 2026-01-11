@@ -40,7 +40,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[conn-wincontrol-exit] exit; "
-   "\\[conn-wincontrol-quick-ref] help):\n"))
+   "\\[conn-wincontrol-quick-ref] help):"))
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
@@ -283,9 +283,14 @@
 
 (defalias 'conn--wincontrol-ignore 'ignore)
 
+(defvar conn--wincontrol-message-newline t)
+
 (defun conn--wincontrol-message ()
   (propertize
-   (format (substitute-command-keys conn--wincontrol-help-format)
+   (format (substitute-command-keys
+            (if conn--wincontrol-message-newline
+                (concat conn--wincontrol-help-format "\n")
+              conn--wincontrol-help-format))
            (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                    (if (= conn--wincontrol-arg-sign -1) "-" "")
                    conn--wincontrol-arg))
@@ -296,7 +301,7 @@
                          'conn-wincontrol-string
                          t string)
       string
-    (concat (conn--wincontrol-message) string)))
+    (concat (conn--wincontrol-message t) string)))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (message "%s" (conn--wincontrol-message))
@@ -321,7 +326,8 @@
 
 (defun conn--wincontrol-exit ()
   (setq isearch-message-function conn--previous-isearch-message-function
-        conn--previous-isearch-message-function nil)
+        conn--previous-isearch-message-function nil
+        conn--wincontrol-message-newline t)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -352,6 +358,7 @@
                    (remove-hook 'pre-command-hook hook)
                    (conn-wincontrol-exit))))
     (add-hook 'pre-command-hook hook 99))
+  (setq conn--wincontrol-message-newline nil)
   (conn-wincontrol))
 
 ;;;;; Wincontrol Quick Ref
