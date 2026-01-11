@@ -273,8 +273,13 @@
       (progn
         (conn-wincontrol-mode -1)
         (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
-    (unless (current-message)
-      (message "%s" (conn--wincontrol-message)))))
+    (let ((curr (current-message)))
+      (cond ((null curr)
+             (message "%s" (conn--wincontrol-message)))
+            ((not (text-property-any 0 (length curr)
+                                     'conn-wincontrol-string
+                                     t curr))
+             (message "%s%s" (conn--wincontrol-message) curr))))))
 
 (defun conn--wincontrol-new-frame (frame)
   (set-face-inverse-video 'mode-line t frame)
