@@ -423,12 +423,9 @@
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
   (conn-dispatch-jump))
 
-(oclosure-define (conn-dispatch-dired-mark
-                  (:parent conn-action)))
-
 (defun conn-dispatch-dired-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-dired-mark
+  (oclosure-lambda (conn-action
                     (action-description "Mark")
                     (action-window-predicate
                      (lambda (win)
@@ -447,12 +444,9 @@
                 (dired-unmark 1)
               (dired-mark 1))))))))
 
-(oclosure-define (conn-dispatch-dired-kill-line
-                  (:parent conn-action)))
-
 (defun conn-dispatch-dired-kill-line ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-dired-kill-line
+  (oclosure-lambda (conn-action
                     (action-description "Kill Line")
                     (action-window-predicate
                      (lambda (win)
@@ -467,12 +461,9 @@
           (goto-char pt)
           (dired-kill-line))))))
 
-(oclosure-define (conn-dispatch-dired-kill-subdir
-                  (:parent conn-action)))
-
 (defun conn-dispatch-dired-kill-subdir ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-dired-kill-subdir
+  (oclosure-lambda (conn-action
                     (action-description "Kill Subdir")
                     (action-window-predicate
                      (lambda (win)
@@ -680,12 +671,9 @@
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
   (conn-dispatch-jump))
 
-(oclosure-define (conn-dispatch-ibuffer-mark
-                  (:parent conn-action)))
-
 (defun conn-dispatch-ibuffer-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-ibuffer-mark
+  (oclosure-lambda (conn-action
                     (action-description "Mark")
                     (action-window-predicate
                      (lambda (win)
@@ -814,12 +802,9 @@
      :restrict-windows t
      :other-end :no-other-end)))
 
-(oclosure-define (conn-dispatch-bmenu-mark
-                  (:parent conn-action)))
-
 (defun conn-dispatch-bmenu-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-bmenu-mark
+  (oclosure-lambda (conn-action
                     (action-description "Mark")
                     (action-window-predicate
                      (lambda (win)
@@ -973,13 +958,10 @@
 (declare-function Info-prev-reference "info")
 (declare-function Info-follow-nearest-node "info")
 
-(oclosure-define (conn-action-info-ref
-                  (:parent conn-action)))
-
 (defun conn-dispatch-on-info-refs ()
   (interactive)
   (conn-dispatch-setup
-   (oclosure-lambda (conn-action-info-ref
+   (oclosure-lambda (conn-action
                      (action-description "Info Refs")
                      (action-window-predicate
                       (lambda (win)

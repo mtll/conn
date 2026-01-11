@@ -487,22 +487,6 @@
         (<= (car bd) (point) (cdr bd)))))
    'conn-ts-thing))
 
-(defun conn-dispatch-ts-goto ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-dispatch-goto
-                    (action-description "Goto Node"))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,_transform)
-                  (conn-select-target)))
-      (select-window window)
-      (conn-dispatch-change-group)
-      (unless (= pt (point))
-        (unless conn-dispatch-repeating
-          (conn-push-jump-ring (point)))
-        (unless (region-active-p)
-          (push-mark nil t))
-        (goto-char pt)))))
-
 (conn-define-target-finder conn-ts-query-targets
     ()
     ((things :initarg :things)
@@ -1291,7 +1275,6 @@
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
   "s" (conn-anonymous-thing
         'conn-ts-thing
-        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-things")
         :target-finder ( :method (_self _arg)
                          (conn-ts-query-targets
@@ -1307,7 +1290,6 @@
                       'conn-ts-thing)))
   "S" (conn-anonymous-thing
         'conn-ts-thing
-        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-parents")
         :target-finder ( :method (_self _arg)
                          (conn-ts-query-targets
@@ -1326,7 +1308,6 @@
                       'conn-ts-thing)))
   "n" (conn-anonymous-thing
         'sexp
-        :default-action ( :method (_) (conn-dispatch-ts-goto))
         :pretty-print ( :method (_) "ts-all-sexps")
         :target-finder ( :method (_self _arg)
                          (conn-ts-all-things :thing 'sexp))

@@ -475,12 +475,12 @@
         'point
         :pretty-print ( :method (_) "prev-emacs-state")
         :default-action ( :method (_self)
-                          (let ((goto (conn-dispatch-goto)))
+                          (let ((jump (conn-dispatch-jump)))
                             (oclosure-lambda (conn-action
                                               (action-description "Previous Emacs State")
                                               (action-no-history t))
                                 ()
-                              (funcall goto)
+                              (funcall jump)
                               (conn-push-state 'conn-emacs-state))))
         :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point

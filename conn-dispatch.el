@@ -3243,7 +3243,7 @@ contain targets."
            (important-return-value t)))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
-  (conn-dispatch-goto))
+  (conn-dispatch-jump))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
   (conn-dispatch-jump))
@@ -3319,43 +3319,10 @@ contain targets."
     (_
      (insert separator))))
 
-(oclosure-define (conn-dispatch-goto
-                  (:parent conn-action)))
-
-(defun conn-dispatch-goto ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (oclosure-lambda (conn-dispatch-goto
-                    (action-description "Goto")
-                    (action-reference
-                     "Goes to the start of the selected thing.  If other-end is non-nil then
-goes to the end of the thing."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (select-window window)
-      (conn-dispatch-change-group)
-      (conn-push-jump-ring (point))
-      (unless (and (= pt (point))
-                   (region-active-p))
-        (let ((forward (< (point) pt)))
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-dispatch-bounds `(,beg . ,end) transform)
-             (if (region-active-p)
-                 (goto-char (if (and forward (not (eq thing 'point)))
-                                end
-                              beg))
-               (push-mark nil t)
-               (goto-char beg)))
-            (_ (user-error "Cannot find thing at point"))))))))
-
-(oclosure-define (conn-dispatch-push-button
-                  (:parent conn-action)))
-
 (defun conn-dispatch-push-button ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-push-button
+  (oclosure-lambda (conn-action
                     (action-description "Push Button")
                     (action-no-history t)
                     (action-reference
@@ -3433,10 +3400,6 @@ after the region selected by dispatch."))
       (format "Copy To <%s>" sep)
     "Copy To"))
 
-(oclosure-define (conn-dispatch-copy-to-replace
-                  (:parent conn-action))
-  (str :type string))
-
 (defun conn-dispatch-copy-to-replace ()
   (declare (conn-dispatch-action)
            (important-return-value t))
@@ -3444,70 +3407,66 @@ after the region selected by dispatch."))
                    :prompt "Copy Thing")
       ((`(,fthing ,farg) (conn-thing-argument-dwim))
        (ftransform (conn-transform-argument)))
-    (oclosure-lambda (conn-dispatch-copy-to-replace
-                      (action-description "Copy and Replace To")
-                      (str (pcase (conn-bounds-of fthing farg)
-                             ((conn-bounds `(,beg . ,end) ftransform)
-                              (conn-dispatch-action-pulse beg end)
-                              (filter-buffer-substring beg end))
-                             (_ (user-error "Cannot find %s at point"
-                                            (conn-thing-pretty-print fthing)))))
+    (let ((str (pcase (conn-bounds-of fthing farg)
+                 ((conn-bounds `(,beg . ,end) ftransform)
+                  (conn-dispatch-action-pulse beg end)
+                  (filter-buffer-substring beg end))
+                 (_ (user-error "Cannot find %s at point"
+                                (conn-thing-pretty-print fthing))))))
+      (oclosure-lambda (conn-action
+                        (action-description "Copy and Replace To")
+                        (action-window-predicate
+                         (lambda (win)
+                           (not
+                            (buffer-local-value 'buffer-read-only
+                                                (window-buffer win)))))
+                        (action-reference
+                         "Copy the current region to the region selected, replacing it."))
+          ()
+        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                      (conn-select-target)))
+          (with-selected-window window
+            (conn-dispatch-change-group)
+            (save-mark-and-excursion
+              (pcase (conn-bounds-of-dispatch thing arg pt)
+                ((conn-bounds `(,beg . ,end) transform)
+                 (goto-char beg)
+                 (delete-region beg end)
+                 (insert-for-yank str)
+                 (conn-dispatch-action-pulse
+                  (- (point) (length str))
+                  (point)))
+                (_ (user-error "Cannot find %s"
+                               (conn-thing-pretty-print thing)))))))))))
+
+(defun conn-dispatch-yank-to-replace ()
+  (declare (conn-dispatch-action)
+           (important-return-value t))
+  (let ((str (current-kill 0)))
+    (oclosure-lambda (conn-action
+                      (action-description "Yank and Replace To")
                       (action-window-predicate
                        (lambda (win)
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win)))))
                       (action-reference
-                       "Copy the current region to the region selected, replacing it."))
+                       "Yank the the last killed text from the kill ring and replace the region
+selected by dispatch with it."))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
-          (save-mark-and-excursion
+          (save-excursion
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-bounds `(,beg . ,end) transform)
                (goto-char beg)
                (delete-region beg end)
                (insert-for-yank str)
                (conn-dispatch-action-pulse
-                (- (point) (length str))
-                (point)))
-              (_ (user-error "Cannot find %s"
-                             (conn-thing-pretty-print thing))))))))))
-
-(oclosure-define (conn-dispatch-yank-to-replace
-                  (:parent conn-action))
-  (str :type string))
-
-(defun conn-dispatch-yank-to-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (oclosure-lambda (conn-dispatch-yank-to-replace
-                    (action-description "Yank and Replace To")
-                    (str (current-kill 0))
-                    (action-window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win)))))
-                    (action-reference
-                     "Yank the the last killed text from the kill ring and replace the region
-selected by dispatch with it."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (conn-dispatch-change-group)
-        (save-excursion
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (delete-region beg end)
-             (insert-for-yank str)
-             (conn-dispatch-action-pulse
-              (- (point) (length str)) (point)))
-            (_ (user-error "Cannot find thing at point"))))))))
+                (- (point) (length str)) (point)))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (defun conn-dispatch-reading-yank-to-replace ()
   (declare (conn-dispatch-action)
@@ -4086,24 +4045,30 @@ it."))
 (cl-defmethod conn-cancel-action ((action conn-dispatch-grab))
   (set-marker (conn-dispatch-grab--action-opoint action) nil))
 
-(oclosure-define (conn-dispatch-jump
-                  (:parent conn-action)))
-
 (defun conn-dispatch-jump ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-jump
+  (oclosure-lambda (conn-action
                     (action-description "Jump"))
       ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
       (select-window window)
       (conn-dispatch-change-group)
-      (conn-push-jump-ring (point))
-      (unless (= pt (point))
-        (unless (region-active-p)
-          (push-mark nil t))
-        (goto-char pt)))))
+      (if (or conn-dispatch-other-end
+              transform)
+          (pcase (conn-bounds-of-dispatch thing arg pt)
+            ((conn-dispatch-bounds `(,beg . ,_end) transform)
+             (unless (= beg (point))
+               (conn-push-jump-ring (point))
+               (unless (region-active-p)
+                 (push-mark nil t))
+               (goto-char beg))))
+        (unless (= pt (point))
+          (conn-push-jump-ring (point))
+          (unless (region-active-p)
+            (push-mark nil t))
+          (goto-char pt))))))
 
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))
@@ -4137,13 +4102,10 @@ it."))
   (if short "Repeat Cmd"
     (format "Repeat <%s>" (car (oref action command)))))
 
-(oclosure-define (conn-dispatch-transpose
-                  (:parent conn-action)))
-
 (defun conn-dispatch-transpose ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-transpose
+  (oclosure-lambda (conn-action
                     (action-description "Transpose")
                     (action-always-retarget t)
                     (action-window-predicate
@@ -4684,6 +4646,25 @@ for the dispatch."
      :has-other-end-p ( :method (_self) :no-other-end))
    nil nil))
 
+(conn-define-target-finder conn-isearch-targets
+    ()
+    ((matches :initform nil
+              :initarg :matches)
+     (buffer :initform nil
+             :initarg :buffer))
+  ( :default-update-handler (state)
+    (when-let* ((_ (eq (oref state buffer) (current-buffer)))
+                (matches (oref state matches)))
+      (pcase-dolist ((and bds `(,beg . ,end)) matches)
+        (conn-make-target-overlay
+         beg (- end beg)
+         :thing (conn-anonymous-thing
+                  'region
+                  :bounds-op ( :method (_self arg)
+                               (conn-make-bounds
+                                'region arg
+                                (cons beg end)))))))))
+
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
@@ -4694,20 +4675,18 @@ for the dispatch."
                              (conn-make-bounds
                               'point nil
                               (cons beg end))))))
-    (let ((targets (with-restriction (window-start) (window-end)
+    (let ((matches (with-restriction (window-start) (window-end)
                      (conn--isearch-matches))))
       (unwind-protect ;In case this was a recursive isearch
           (isearch-exit)
         (conn-dispatch-setup
-         (conn-dispatch-goto)
+         (conn-dispatch-jump)
          (conn-anonymous-thing
            'region
            :target-finder ( :method (_self _arg)
-                            (lambda ()
-                              (cl-loop for (beg . end) in targets
-                                       do (conn-make-target-overlay
-                                           beg (- end beg)
-                                           :thing (target-thing beg end))))))
+                            (conn-isearch-targets
+                             :matches matches
+                             :buffer (current-buffer))))
          nil nil
          :restrict-windows t
          :other-end nil)))))

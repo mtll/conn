@@ -1968,12 +1968,6 @@ Exiting the recursive edit will resume the isearch."
   "DEL" 'scroll-down-command
   "C-o" 'other-window)
 
-(oclosure-define (conn-transpose-command
-                  (:parent conn-dispatch-transpose))
-  (buffer :type buffer)
-  (point :type marker)
-  (thing1 :type function))
-
 (defvar conn-transpose-repeat-commands-ref
   (conn-reference-quote
     (("Repeat transposition" conn-transpose-repeat)
@@ -2757,9 +2751,6 @@ hook, which see."
              (throw 'sep "\n")))
          " "))))
 
-(oclosure-define (conn-kill-action
-                  (:parent conn-action)))
-
 (defvar-keymap conn-kill-dispatch-append-map
   "C-p" 'append)
 
@@ -2829,7 +2820,7 @@ hook, which see."
                  (propertize (truncate-string-ellipsis) 'face 'shadow)
                  (propertize ")" 'face 'shadow)))))))
         (conn-dispatch-setup
-         (oclosure-lambda (conn-kill-action
+         (oclosure-lambda (conn-action
                            (action-description "Kill"))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
@@ -3213,7 +3204,7 @@ that place."
       (let ((result nil)
             (strings nil))
         (conn-dispatch-setup
-         (oclosure-lambda (conn-kill-action
+         (oclosure-lambda (conn-action
                            (action-description "Copy"))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)

@@ -167,12 +167,9 @@
  'org-paragraph 'conn-continuous-thing-handler
  'org-forward-paragraph 'org-backward-paragraph)
 
-(oclosure-define (conn-open-org-link
-                  (:parent conn-action)))
-
 (defun conn-open-org-link ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-open-org-link
+  (oclosure-lambda (conn-action
                     (action-description "Open Link"))
       (window pt _thing _arg)
     (with-selected-window window
