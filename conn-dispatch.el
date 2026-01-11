@@ -3509,38 +3509,34 @@ selected by dispatch with it."))
               (- (point) (length str)) (point)))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(oclosure-define (conn-dispatch-reading-yank-to-replace
-                  (:parent conn-action))
-  (str :type string))
-
 (defun conn-dispatch-reading-yank-to-replace ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-reading-yank-to-replace
-                    (action-description "Yank and Replace To")
-                    (str (read-from-kill-ring "Yank: "))
-                    (action-window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win)))))
-                    (action-reference
-                     "Select a string from the kill list and replace the region selected by
+  (let ((str (read-from-kill-ring "Yank: ")))
+    (oclosure-lambda (conn-action
+                      (action-description "Yank and Replace To")
+                      (action-window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win)))))
+                      (action-reference
+                       "Select a string from the kill list and replace the region selected by
 dispatch with it."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (conn-dispatch-change-group)
-        (save-excursion
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (goto-char beg)
-             (delete-region beg end)
-             (insert-for-yank str)
-             (conn-dispatch-action-pulse
-              (- (point) (length str)) (point)))
-            (_ (user-error "Cannot find thing at point"))))))))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target)))
+        (with-selected-window window
+          (conn-dispatch-change-group)
+          (save-excursion
+            (pcase (conn-bounds-of-dispatch thing arg pt)
+              ((conn-bounds `(,beg . ,end) transform)
+               (goto-char beg)
+               (delete-region beg end)
+               (insert-for-yank str)
+               (conn-dispatch-action-pulse
+                (- (point) (length str)) (point)))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))

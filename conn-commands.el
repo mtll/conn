@@ -669,75 +669,6 @@ for the meaning of prefix ARG."
   (interactive "p")
   (yank-pop (- arg)))
 
-(defun conn-yank-replace (thing
-                          arg
-                          transform
-                          &optional
-                          swap
-                          register
-                          check-bounds)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :interactive 'conn-yank-replace
-                    :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument))
-        (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
-        (register (conn-read-argument
-                   "register"
-                   'register
-                   conn-register-argument-map
-                   (lambda (_) (register-read-with-preview "Register:"))
-                   :formatter #'conn-argument-format-register))
-        (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform swap register check-bounds)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end)
-                  (append transform
-                          (when check-bounds
-                            (list 'conn-check-bounds))))
-     (atomic-change-group
-       (if register
-           (let ((str (cond (swap (filter-buffer-substring beg end t))
-                            ((and (eq thing 'region)
-                                  (bound-and-true-p rectangle-mark-mode))
-                             (delete-rectangle (region-beginning)
-                                               (region-end)))
-                            (t (delete-region beg end)))))
-             (register-val-insert (get-register register))
-             (when swap (set-register register str)))
-         (goto-char beg)
-         (if swap
-             (let ((str (filter-buffer-substring beg end t)))
-               (yank)
-               (kill-new str))
-           (let ((cg (prepare-change-group)))
-             (delete-region beg end)
-             (yank)
-             (set-transient-map
-              conn-yank-pop-repeat-map
-              t
-              (lambda () (undo-amalgamate-change-group cg))
-              (format "%s yank pop; %s yank unpop; %s yank with completion"
-                      (propertize
-                       (key-description
-                        (where-is-internal 'yank-pop
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding)
-                      (propertize
-                       (key-description
-                        (where-is-internal 'conn-yank-unpop
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding)
-                      (propertize
-                       (key-description
-                        (where-is-internal 'conn-yank-with-completion
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding))))))))))
-
 (defun conn-yank-replace-rectangle ()
   "Delete the current rectangle and `yank-rectangle'."
   (interactive)
@@ -1105,6 +1036,176 @@ Currently selected window remains selected afterwards."
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (conn-mark-thing-do thing arg transform))
+
+;;;;; Yank Replace
+
+(conn-define-state conn-yank-replace-state (conn-read-thing-state)
+  :lighter "YANK-REPLACE")
+
+(cl-defgeneric conn-yank-replace-do (thing
+                                     arg
+                                     transform
+                                     &optional
+                                     swap
+                                     register
+                                     check-bounds))
+
+(cl-defmethod conn-yank-replace-do ((thing (conn-thing t))
+                                    arg
+                                    transform
+                                    &optional
+                                    swap
+                                    register
+                                    check-bounds)
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end)
+                  (append transform
+                          (when check-bounds
+                            (list 'conn-check-bounds))))
+     (atomic-change-group
+       (if register
+           (let ((str (cond (swap (filter-buffer-substring beg end t))
+                            ((and (eq thing 'region)
+                                  (bound-and-true-p rectangle-mark-mode))
+                             (delete-rectangle (region-beginning)
+                                               (region-end)))
+                            (t (delete-region beg end)))))
+             (register-val-insert (get-register register))
+             (when swap (set-register register str)))
+         (goto-char beg)
+         (if swap
+             (let ((str (filter-buffer-substring beg end t)))
+               (yank)
+               (kill-new str))
+           (let ((cg (prepare-change-group)))
+             (delete-region beg end)
+             (yank)
+             (set-transient-map
+              conn-yank-pop-repeat-map
+              t
+              (lambda () (undo-amalgamate-change-group cg))
+              (format "%s yank pop; %s yank unpop; %s yank with completion"
+                      (propertize
+                       (key-description
+                        (where-is-internal 'yank-pop
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding)
+                      (propertize
+                       (key-description
+                        (where-is-internal 'conn-yank-unpop
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding)
+                      (propertize
+                       (key-description
+                        (where-is-internal 'conn-yank-with-completion
+                                           (list conn-yank-pop-repeat-map)
+                                           t))
+                       'face 'help-key-binding)))))))
+     (conn-push-command-history 'conn-yank-replace
+                                thing
+                                arg
+                                transform
+                                swap
+                                register
+                                check-bounds))))
+
+(cl-defmethod conn-yank-replace-do ((_thing (conn-thing dispatch))
+                                    arg
+                                    transform
+                                    &optional
+                                    swap
+                                    register
+                                    check-bounds)
+  (conn-read-args (conn-dispatch-bounds-state
+                   :prefix arg
+                   :prompt "Yank and Replace"
+                   :reference (list conn-dispatch-thing-reference))
+      ((`(,thing ,arg) (conn-thing-argument t))
+       (transform (conn-dispatch-transform-argument transform))
+       (repeat
+        (conn-boolean-argument "repeat"
+                               'repeat-dispatch
+                               conn-dispatch-repeat-argument-map))
+       (other-end (conn-boolean-argument "other-end"
+                                         'other-end
+                                         conn-other-end-argument-map))
+       (restrict-windows
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-restrict-windows-argument-map)))
+    (let ((str (if register
+                   (get-register register)
+                 (current-kill 0))))
+      (cl-assert (stringp str))
+      (conn-dispatch-setup
+       (oclosure-lambda (conn-action
+                         (action-description "Yank and Replace To")
+                         (action-window-predicate
+                          (lambda (win)
+                            (not
+                             (buffer-local-value 'buffer-read-only
+                                                 (window-buffer win)))))
+                         (action-reference
+                          "Yank the the last killed text from the kill ring and replace the region
+selected by dispatch with it."))
+           ()
+         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                       (conn-select-target)))
+           (unless conn-dispatch-other-end
+             (select-window window))
+           (with-selected-window window
+             (conn-dispatch-change-group)
+             (pcase (conn-bounds-of-dispatch thing arg pt)
+               ((conn-bounds (and bounds `(,beg . ,end)) transform)
+                (when check-bounds
+                  (conn-check-bounds bounds))
+                (unless conn-dispatch-other-end
+                  (goto-char beg))
+                (if swap
+                    (let ((newstr (filter-buffer-substring beg end)))
+                      (delete-region beg end)
+                      (save-excursion
+                        (goto-char beg)
+                        (insert-for-yank str))
+                      (conn-dispatch-action-pulse
+                       beg (+ beg (length str)))
+                      (setq str newstr))
+                  (delete-region beg end)
+                  (save-excursion
+                    (goto-char beg)
+                    (insert-for-yank str))
+                  (conn-dispatch-action-pulse
+                   beg (+ beg (length str)))))
+               (_ (user-error "Cannot find thing at point"))))))
+       thing arg transform
+       :repeat repeat
+       :other-end other-end
+       :restrict-windows restrict-windows))))
+
+(defun conn-yank-replace (thing
+                          arg
+                          transform
+                          &optional
+                          swap
+                          register
+                          check-bounds)
+  (interactive
+   (conn-read-args (conn-yank-replace-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-thing-argument-dwim))
+        (transform (conn-transform-argument))
+        (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
+        (register (conn-read-argument
+                   "register"
+                   'register
+                   conn-register-argument-map
+                   (lambda (_) (register-read-with-preview "Register:"))
+                   :formatter #'conn-argument-format-register))
+        (check-bounds (conn-check-bounds-argument)))
+     (list thing arg transform swap register check-bounds)))
+  (conn-yank-replace-do thing arg transform swap register check-bounds))
 
 ;;;;; Replace
 
