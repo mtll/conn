@@ -20,6 +20,7 @@
 (require 'eieio)
 (require 'conn-states)
 (require 'conn-things)
+(require 'conn-jump-ring)
 (eval-when-compile
   (require 'cl-lib))
 

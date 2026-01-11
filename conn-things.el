@@ -219,10 +219,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
      with known = (get 'conn-anonymous-thing :known-properties)
      with seen = nil
      for (key val) on properties by #'cddr
-     if (when-let* ((fn (alist-get key known)))
-          (cl-assert (not (memq fn seen)) nil
-                     "Duplicate method in anonymous thing definition")
-          (push fn seen))
+     for gfn = (alist-get key known)
+     if gfn
      collect (let ((method-expander
                     (lambda (args &rest body)
                       (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
@@ -231,20 +229,26 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                (cnm (gensym "thing--cnm")))
                            `#'(lambda ,(cons cnm args)
                                 ,@(car parsed-body)
-                                ,(macroexpand-all
-                                  `(cl-flet ((cl-call-next-method ,cnm))
-                                     ,@(cdr parsed-body))))))
+                                ,(let ((exp (macroexpand-all
+                                             `(cl-flet ((cl-call-next-method ,cnm))
+                                                ,@(cdr parsed-body)))))
+                                   (if (memq gfn seen)
+                                       (macroexp-warn-and-return
+                                        "Method in anonymous thing shadows previous definition"
+                                        exp nil nil key)
+                                     exp)))))
                         (result (error "Unexpected macroexpansion result :%S"
                                        result))))))
-               `(cons ',(car seen)
-                      ,(macroexpand-all
-                        val
-                        (cons (cons :method method-expander)
-                              macroexpand-all-environment))))
+               (prog1 `(cons ',gfn
+                             ,(macroexpand-all
+                               val
+                               (cons (cons :method method-expander)
+                                     macroexpand-all-environment)))
+                 (push gfn seen)))
      into methods
      else collect `(cons ,key ,val) into props
-     finally return (cons (cons 'list methods)
-                          (cons 'list props)))))
+     finally return (cons (cons 'list (nreverse methods))
+                          (cons 'list (nreverse props))))))
 
 (defmacro conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing inheriting from PARENT."

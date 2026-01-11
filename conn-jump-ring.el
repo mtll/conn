@@ -19,6 +19,7 @@
 
 (require 'compat)
 (require 'conn-vars)
+(require 'conn-utils)
 (eval-when-compile
   (require 'subr-x)
   (require 'cl-lib))
