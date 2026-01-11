@@ -306,7 +306,7 @@
                          'conn-wincontrol-string
                          t string)
       string
-    (concat (conn--wincontrol-message t) string)))
+    (concat (conn--wincontrol-message) string)))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (message "%s" (conn--wincontrol-message))
