@@ -1873,12 +1873,13 @@ This skips executing the body of the `conn-read-args' form entirely."
                           (eql help-char (aref keyseq (1- (length keyseq)))))
                  (setq cmd 'execute-extended-command
                        partial-keymap (key-binding (seq-subseq keyseq 0 -1)))))
-             (cond
-              ((eql (aref keyseq 0) quit-event)
-               (keyboard-quit))
-              (cmd
+             (when (eql (aref keyseq 0) quit-event)
+               (setq cmd 'keyboard-quit))
+             (when cmd
                (when pre (funcall pre cmd))
                (pcase cmd
+                 ('keyboard-quit
+                  (keyboard-quit))
                  ('reference
                   (apply #'conn-quick-reference
                          reference
@@ -1898,7 +1899,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (update-args cmd)))
                  (_ (update-args cmd)))
                (when post (funcall post cmd))
-               (setq conn-read-args-last-command cmd)))))
+               (setq conn-read-args-last-command cmd))))
          (cont ()
            (conn-with-recursive-stack state
              (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))

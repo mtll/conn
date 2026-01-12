@@ -53,14 +53,35 @@
 
 (defvar conn--kapply-automatic-flag nil)
 
-(defvar conn--kbd-query-automatic-flag nil)
+(defvar conn--kbd-query-automatic-flags nil)
 
 (defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))
     (setq conn--kapply-automatic-flag nil))
-  (dolist (cons conn--kbd-query-automatic-flag)
-    (when (eq t (cdr cons))
+  (dolist (cons conn--kbd-query-automatic-flags)
+    (when (or force
+              (eq :automatic (cdr cons))
+              (eq :exit-current (cdr cons)))
       (setf (cdr cons) nil))))
+
+(defvar-keymap conn-kapply-query-map
+  :parent multi-query-replace-map
+  "E" 'exit-all)
+
+(defconst conn-kapply-kbd-query-prompt
+  (concat
+   "Proceed with macro?\\<conn-kapply-query-map> "
+   "("
+   "\\[act] act, "
+   "\\[exit-current] skip buffer, "
+   "\\[exit-all] skip all, "
+   "\\[exit] exit, "
+   "\\[recenter] recenter, "
+   "\\[edit] edit, "
+   "\\[automatic] auto buffer, "
+   "\\[automatic-all] auto all, "
+   "\\[skip] skip"
+   ")"))
 
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
@@ -72,40 +93,42 @@ different commands each time the macro executes.
 Without prefix argument, ask whether to continue running the
 macro.
 
-Your options are: \\<multi-query-replace-map>
+Your options are: \\<conn-kapply-query-map>
 
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
 \\[exit-current]	Skip the rest of this iteration in rest of buffer.
+\\[exit-all]	Skip the rest of this iteration in all iterations
 \\[exit]	Stop the macro entirely right now.
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
-\\[automatic]   Apply keyboard macro to rest of buffer.
-\\[automatic-all]   Apply keyboard macro to all buffers."
+\\[automatic]	Apply keyboard macro to rest of buffer.
+\\[automatic-all]	Apply keyboard macro to all buffers."
   (interactive "P")
   (or executing-kbd-macro
       defining-kbd-macro
       (user-error "Not defining or executing kbd macro"))
-  (let ((msg (substitute-command-keys
-              "Proceed with macro?\\<multi-query-replace-map>\
- (\\[act] act, \\[skip] skip, \\[exit-current] skip buffer, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto buffer, \\[automatic-all] auto all)")))
+  (let ((msg (substitute-command-keys conn-kapply-kbd-query-prompt)))
     (cond
      (flag
       (let (executing-kbd-macro defining-kbd-macro)
         (recursive-edit)))
      ((not executing-kbd-macro))
-     ((eq (alist-get executing-kbd-macro-index
-                     conn--kbd-query-automatic-flag)
-          :exit-current)
+     ((or (eq (alist-get executing-kbd-macro-index
+                         conn--kbd-query-automatic-flags)
+              :exit-current)
+          (eq (alist-get executing-kbd-macro-index
+                         conn--kbd-query-automatic-flags)
+              :exit-all))
       (setq executing-kbd-macro ""))
      ((not (alist-get executing-kbd-macro-index
-                      conn--kbd-query-automatic-flag))
+                      conn--kbd-query-automatic-flags))
       (let ((wconf (current-window-configuration)))
         (cl-loop
          (pcase (let ((executing-kbd-macro nil)
                       (defining-kbd-macro nil))
                   (message "%s" msg)
-                  (lookup-key multi-query-replace-map (vector (read-event))))
+                  (lookup-key conn-kapply-query-map (vector (read-event))))
            ('act
             (set-window-configuration wconf)
             (cl-return))
@@ -114,8 +137,14 @@ Your options are: \\<multi-query-replace-map>
             (cl-return))
            ('exit-current
             (setf (alist-get executing-kbd-macro-index
-                             conn--kbd-query-automatic-flag)
+                             conn--kbd-query-automatic-flags)
                   :exit-current)
+            (setq executing-kbd-macro "")
+            (cl-return))
+           ('exit-all
+            (setf (alist-get executing-kbd-macro-index
+                             conn--kbd-query-automatic-flags)
+                  :exit-all)
             (setq executing-kbd-macro "")
             (cl-return))
            ('exit
@@ -132,27 +161,30 @@ Your options are: \\<multi-query-replace-map>
            ('automatic
             (set-window-configuration wconf)
             (setf (alist-get executing-kbd-macro-index
-                             conn--kbd-query-automatic-flag)
-                  t)
+                             conn--kbd-query-automatic-flags)
+                  :automatic)
             (cl-return))
            ('automatic-all
             (set-window-configuration wconf)
             (setf (alist-get executing-kbd-macro-index
-                             conn--kbd-query-automatic-flag)
-                  :all)
+                             conn--kbd-query-automatic-flags)
+                  :automatic-all)
             (cl-return))
            ('help
             (with-output-to-temp-buffer "*Help*"
               (princ
                (substitute-command-keys
                 "Specify how to proceed with keyboard macro execution.
-Possibilities: \\<query-replace-map>
+Possibilities: \\<conn-kapply-query-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
+\\[exit-current]	Skip the rest of this iteration in rest of buffer.
+\\[exit-all]	Skip the rest of this iteration in all iterations
 \\[exit]	Stop the macro entirely right now.
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
-\\[automatic]   Apply keyboard macro to rest."))
+\\[automatic]	Apply keyboard macro to rest of buffer.
+\\[automatic-all]	Apply keyboard macro to all buffers."))
               (with-current-buffer standard-output
                 (help-mode))))
            (_ (ding t)))))))))
@@ -518,8 +550,18 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
   "Alist of depth values for kapply pipeline functions.")
 
 (defconst conn-kapply-query-prompt
-  "Proceed with macro?\\<multi-query-replace-map>\
- (\\[act] act, \\[skip] skip, \\[exit-current] skip buffer, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto buffer, \\[automatic-all] auto all)")
+  (concat
+   "Proceed with macro?\\<multi-query-replace-map>"
+   "("
+   "\\[act] act, "
+   "\\[exit-current] skip buffer, "
+   "\\[exit] exit, "
+   "\\[recenter] recenter, "
+   "\\[edit] edit, "
+   "\\[automatic] auto buffer, "
+   "\\[automatic-all] auto all)"
+   "\\[skip] skip"
+   ")"))
 
 (defconst conn-kapply-query-help
   "Specify how to proceed with keyboard macro execution.
@@ -593,7 +635,7 @@ Possibilities: \\<query-replace-map>
                      (setq conn--kapply-automatic-flag t)
                      (cl-return res))
                     ('automatic-all
-                     (setq conn--kapply-automatic-flag :all)
+                     (setq conn--kapply-automatic-flag :automatic-all)
                      (cl-return res))
                     ('help
                      (with-output-to-temp-buffer "*Help*"
@@ -1079,7 +1121,7 @@ After kapply has finished restore the previous window configuration."
          (undo-strong-limit most-positive-fixnum)
          (conn-kmacro-applying-p t)
          (conn--kapply-automatic-flag nil)
-         (conn--kbd-query-automatic-flag nil)
+         (conn--kbd-query-automatic-flags nil)
          (iterations 0)
          (success nil)
          (iterator (lambda (&optional state)
@@ -1167,36 +1209,55 @@ The iterator must be the first argument in ARGLIST.
   :keymap (conn-get-state-map 'conn-kapply-state)
   "M-n" 'kmacro-cycle-ring-next
   "M-p" 'kmacro-cycle-ring-previous
+  "M-h" 'conn-display-kmacro-ring
+  "M-t" 'kmacro-swap-ring
+  "M-d" 'kmacro-delete-ring-head
   "." 'register
   "p" 'apply
   "a" 'append
   "r" 'step-edit
-  "e" 'record
-  "c" 'kmacro-set-counter
+  "e" 'record-emacs-state
+  "c" 'record
+  "+" 'kmacro-set-counter
   "f" 'kmacro-set-format)
 
 ;;;;; Applier Argument
 
 (defvar conn-kapply-appliers-ref-list
   (conn-reference-quote
-    (("record a new macro" record)
+    (("record a new macro in the current state" record)
+     ("record a new macro in emacs state" record-emacs-state)
      ("apply the previous macro" apply)
      ("apply and then append to the previous macro" append)
      ("step edit the previous macro" step-edit))))
 
-(defun conn-kapply-macro-reference ()
-  (conn-reference-page
-    (:heading "Keyboard Macro")
-    "What keyboard macro to use and how to use it"
-    (:eval (conn-quick-ref-to-cols
-            conn-kapply-appliers-ref-list 1))))
+(defvar conn-kapply-ring-command-list
+  (conn-reference-quote
+    (("cycle backward" kmacro-cycle-ring-next)
+     ("cycle forward" kmacro-cycle-ring-previous)
+     ("display last-kbd-macro" conn-display-kmacro-ring)
+     ("delete head" kmacro-delete-ring-head)
+     ("swap" kmacro-swap-ring))))
+
+(defvar conn-kapply-macro-reference
+  (list
+   (conn-reference-page
+     (:heading "Keyboard Macro")
+     "What keyboard macro to use and how to use it"
+     (:eval (conn-quick-ref-to-cols
+             conn-kapply-appliers-ref-list 1)))
+   (conn-reference-page
+     (:heading "Kmacro Ring Commands")
+     (:eval (conn-quick-ref-to-cols
+             conn-kapply-ring-command-list
+             2)))))
 
 (cl-defstruct (conn-kapply-macro-argument
                (:include conn-argument)
                ( :constructor conn-kapply-macro-argument
                  (&aux
                   (required t)
-                  (reference (conn-kapply-macro-reference)))))
+                  (reference conn-kapply-macro-reference))))
   (register nil :type (or integer nil)))
 
 (cl-defmethod conn-argument-display ((arg conn-kapply-macro-argument))
@@ -1208,7 +1269,12 @@ The iterator must be the first argument in ARGLIST.
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kapply-macro-argument)
                                        cmd)
-  (memq cmd '(apply record append step-edit register)))
+  (memq cmd '(apply
+              record
+              record-emacs-state
+              append
+              step-edit
+              register)))
 
 (cl-defmethod conn-argument-update ((arg conn-kapply-macro-argument)
                                     cmd
@@ -1245,6 +1311,16 @@ The iterator must be the first argument in ARGLIST.
            (let ((macro (get-register register)))
              (lambda (it) (conn-kmacro-apply it nil macro)))
          #'conn-kmacro-apply))
+      ('record-emacs-state
+       (if register
+           (let ((macro (get-register register)))
+             (lambda (it)
+               (conn-kmacro-apply
+                (conn-kapply-with-state it 'conn-emacs-state)
+                nil macro)))
+         (lambda (it)
+           (conn-kmacro-apply
+            (conn-kapply-with-state it 'conn-emacs-state)))))
       ('apply
        (let ((macro (if register
                         (get-register register)
@@ -1261,10 +1337,34 @@ The iterator must be the first argument in ARGLIST.
          (kmacro-split-ring-element (get-register register)))
        #'conn-kmacro-apply-step-edit))))
 
+;;;;; State Argument
+
+(defvar-keymap conn-kapply-state-argument-map
+  "s" 'kapply-state)
+
+(defun conn--format-state-argument (val)
+  (pcase val
+    ('conn-emacs-state "emacs")
+    ('conn-command-state "command")))
+
+(cl-defstruct (conn-kapply-state-argument
+               (:include conn-cycling-argument)
+               ( :constructor conn-kapply-state-argument
+                 (&aux
+                  (name "state")
+                  (choices '(nil conn-command-state conn-emacs-state))
+                  (cycling-command 'kapply-state)
+                  (keymap conn-kapply-state-argument-map)
+                  (formatter #'conn--format-state-argument)))))
+
+(cl-defmethod conn-argument-extract-value ((arg conn-kapply-state-argument))
+  (let ((state (conn-argument-value arg)))
+    (lambda (it) (conn-kapply-with-state it state))))
+
 ;;;;; Order Argument
 
 (defvar-keymap conn-kapply-order-argument-map
-  "s" 'kapply-order)
+  "o" 'kapply-order)
 
 (cl-defstruct (conn-kapply-order-argument
                (:include conn-cycling-argument)
@@ -1474,15 +1574,36 @@ finishing showing the buffers that were visited."))
 (cl-defgeneric conn-kapply-command-handler (cmd)
   (:method (_) nil))
 
+(defun conn--kapply-display-ring (&optional timeout)
+  (if (fboundp 'conn-posframe--kmacro-ring-display-subr)
+      (conn-posframe--kmacro-ring-display-subr)
+    (let ((minibuffer-message-timeout (or timeout minibuffer-message-timeout)))
+      (conn-read-args-message
+       (conn--kmacro-display last-kbd-macro 30 "Kmacro ring emtpy")))))
+
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-next)))
-  (let ((this-command 'kmacro-cycle-ring-next))
-    (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
-    (conn-read-args-handle)))
+  (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
+  (conn--kapply-display-ring)
+  (conn-read-args-handle))
 
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-previous)))
-  (let ((this-command 'kmacro-cycle-ring-previous))
-    (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
-    (conn-read-args-handle)))
+  (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
+  (conn--kapply-display-ring)
+  (conn-read-args-handle))
+
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql conn-display-kmacro-ring)))
+  (conn--kapply-display-ring 30)
+  (conn-read-args-handle))
+
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-delete-ring-head)))
+  (kmacro-delete-ring-head (conn-read-args-consume-prefix-arg))
+  (conn--kapply-display-ring)
+  (conn-read-args-handle))
+
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-swap-ring)))
+  (kmacro-swap-ring)
+  (conn--kapply-display-ring)
+  (conn-read-args-handle))
 
 (cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter)))
   (condition-case _
@@ -1526,13 +1647,18 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler (conn-read-args-display-columns 3 3))
+                   :display-handler (conn-read-args-display-columns 3 3)
+                   :pre (lambda (_)
+                          (when (and (bound-and-true-p conn-posframe-mode)
+                                     (fboundp 'posframe-hide))
+                            (posframe-hide " *conn-list-posframe*"))))
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
         (conn-composite-argument
          (or pipeline
              (nconc (list (conn-kapply-other-end-argument other-end)
+                          (conn-kapply-state-argument)
                           (conn-kapply-ibuffer-argument ibuffer)
                           (conn-kapply-query-argument query)
                           (conn-kapply-empty-argument empty)
@@ -1548,7 +1674,6 @@ finishing showing the buffers that were visited."))
      `(conn-kapply-relocate-to-region
        conn-kapply-open-invisible
        conn-kapply-pulse-region
-       conn-kapply-with-state
        ,@pipeline))))
 
 (cl-defmethod conn-replace-do ((_thing (eql 'kapply))
@@ -1614,7 +1739,11 @@ finishing showing the buffers that were visited."))
                    :prompt "Kapply with Count"
                    :prefix count
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler (conn-read-args-display-columns 3 3))
+                   :display-handler (conn-read-args-display-columns 3 3)
+                   :pre (lambda (_)
+                          (when (and (bound-and-true-p conn-posframe-mode)
+                                     (fboundp 'posframe-hide))
+                            (posframe-hide " *conn-list-posframe*"))))
       ((pipeline (conn-composite-argument
                   (list (conn-kapply-query-argument)
                         (conn-kapply-excursions-argument t)
@@ -1629,7 +1758,6 @@ finishing showing the buffers that were visited."))
      `(conn-kapply-relocate-to-region
        conn-kapply-open-invisible
        conn-kapply-pulse-region
-       conn-kapply-with-state
        ,@pipeline))))
 
 (defvar-keymap conn-restrict-argument-map
@@ -1642,7 +1770,11 @@ finishing showing the buffers that were visited."))
    (conn-read-args (conn-kapply-state
                     :prompt "Kapply on Regions"
                     :command-handler #'conn-kapply-command-handler
-                    :display-handler (conn-read-args-display-columns 3 3))
+                    :display-handler (conn-read-args-display-columns 3 3)
+                    :pre (lambda (_)
+                           (when (and (bound-and-true-p conn-posframe-mode)
+                                      (fboundp 'posframe-hide))
+                             (posframe-hide " *conn-list-posframe*"))))
        ((restrict (unless (or (bound-and-true-p multi-isearch-file-list)
                               (bound-and-true-p multi-isearch-buffer-list))
                     (conn-cycling-argument
@@ -1652,6 +1784,7 @@ finishing showing the buffers that were visited."))
                      :keymap conn-restrict-argument-map)))
         (pipeline (conn-composite-argument
                    (list (conn-kapply-order-argument)
+                         (conn-kapply-state-argument)
                          (conn-kapply-ibuffer-argument t)
                          (conn-kapply-query-argument)
                          (conn-kapply-excursions-argument t)
@@ -1681,7 +1814,6 @@ finishing showing the buffers that were visited."))
         `(conn-kapply-relocate-to-region
           conn-kapply-open-invisible
           conn-kapply-pulse-region
-          conn-kapply-with-state
           ,@pipeline)))))
   (isearch-done))
 
@@ -1800,7 +1932,11 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
                    :command-handler #'conn-kapply-command-handler
-                   :display-handler (conn-read-args-display-columns 3 3))
+                   :display-handler (conn-read-args-display-columns 3 3)
+                   :pre (lambda (_)
+                          (when (and (bound-and-true-p conn-posframe-mode)
+                                     (fboundp 'posframe-hide))
+                            (posframe-hide " *conn-list-posframe*"))))
       ((pipeline
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)

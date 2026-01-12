@@ -320,45 +320,48 @@
      :border-color (face-background 'conn-posframe-border))
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
-(defun conn-posframe--switch-kmacro-display (&rest _)
+(defun conn-posframe--kmacro-ring-display-subr ()
   (require 'kmacro)
+  (posframe-show
+   " *conn-list-posframe*"
+   :string (concat
+            (propertize (format " %s Kmacro Ring\n"
+                                (or (if defining-kbd-macro
+                                        kmacro-counter
+                                      kmacro-initial-counter-value)
+                                    (format "[%s]" kmacro-counter)))
+                        'face 'conn-posframe-header)
+            (mapconcat
+             (lambda (km)
+               (conn--kmacro-display (kmacro--keys km)))
+             (take (min 4 (floor (length kmacro-ring) 2))
+                   (reverse kmacro-ring))
+             "\n")
+            (when (length> kmacro-ring 1) "\n")
+            (propertize (concat (conn--kmacro-display last-kbd-macro)
+                                "\n")
+                        'face 'conn-posframe-highlight)
+            (mapconcat
+             (lambda (km)
+               (conn--kmacro-display (kmacro--keys km)))
+             (take (min 4 (ceiling (length kmacro-ring) 2))
+                   kmacro-ring)
+             "\n")
+            (when (length> kmacro-ring 1) "\n"))
+   :left-fringe 0
+   :right-fringe 0
+   :poshandler conn-posframe-tab-poshandler
+   :timeout conn-posframe-timeout
+   :border-width conn-posframe-border-width
+   :border-color (face-background 'conn-posframe-border)))
+
+(defun conn-posframe--kmacro-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-list-posframe fn))))
-    (posframe-show
-     " *conn-list-posframe*"
-     :string (concat
-              (propertize (format " %s Kmacro Ring\n"
-                                  (or (if defining-kbd-macro
-                                          kmacro-counter
-                                        kmacro-initial-counter-value)
-                                      (format "[%s]" kmacro-counter)))
-                          'face 'conn-posframe-header)
-              (mapconcat
-               (lambda (km)
-                 (conn--kmacro-display (kmacro--keys km)))
-               (take (min 4 (floor (length kmacro-ring) 2))
-                     (reverse kmacro-ring))
-               "\n")
-              (when (length> kmacro-ring 1) "\n")
-              (propertize (concat (conn--kmacro-display last-kbd-macro)
-                                  "\n")
-                          'face 'conn-posframe-highlight)
-              (mapconcat
-               (lambda (km)
-                 (conn--kmacro-display (kmacro--keys km)))
-               (take (min 4 (ceiling (length kmacro-ring) 2))
-                     kmacro-ring)
-               "\n")
-              "\n")
-     :left-fringe 0
-     :right-fringe 0
-     :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-timeout
-     :border-width conn-posframe-border-width
-     :border-color (face-background 'conn-posframe-border))
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+    (conn-posframe--kmacro-ring-display-subr)
+    (add-hook 'pre-command-hook #'conn-posframe--hide-pre)))
 
 (defun conn-posframe--dispatch-ring-display-subr ()
   (let ((ring (conn-ring-list conn-dispatch-ring)))
@@ -413,10 +416,10 @@
   (if conn-posframe-mode
       (progn
         (advice-add 'kmacro-cycle-ring-next :after
-                    'conn-posframe--switch-kmacro-display
+                    'conn-posframe--kmacro-ring-display
                     '((name . conn-list-posframe)))
         (advice-add 'kmacro-cycle-ring-previous :after
-                    'conn-posframe--switch-kmacro-display
+                    'conn-posframe--kmacro-ring-display
                     '((name . conn-list-posframe)))
         (advice-add 'previous-buffer :after
                     'conn-posframe--switch-buffer-display

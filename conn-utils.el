@@ -238,6 +238,45 @@ See `quail-add-unread-command-events'."
                   conn-command-history-max
                   t))
 
+;;;;; Keyboard Macro
+
+(defun conn--kmacro-display (macro &optional trunc empty-string)
+  (pcase macro
+    ((or 'nil '[] "") (or empty-string "nil"))
+    (_ (let* ((m (format-kbd-macro macro))
+              (l (length m))
+              (z (and trunc (> l trunc))))
+         (format "%s%s"
+                 (if z (substring m 0 (1- trunc)) m)
+                 (if z "…" ""))))))
+
+(defun conn--kmacro-ring-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Ring: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value)
+     " - "
+     (propertize
+      (conn--kmacro-display last-kbd-macro 35)
+      'face 'transient-value))))
+
+(defun conn--kmacro-counter-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Counter: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value))))
+
+(defun conn--in-kbd-macro-p ()
+  (or defining-kbd-macro executing-kbd-macro))
+
 ;;;;; Buffer Properties
 
 (defvar-local conn--buffer-properties nil)
