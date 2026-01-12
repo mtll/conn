@@ -87,6 +87,7 @@
     "C-z" 'conn-isearch-exit-other-end
     "M-'" 'conn-kapply-on-isearch
     "C-," 'conn-dispatch-isearch
+    "C-." 'conn-dispatch-isearch-with-action
     "C-'" 'conn-isearch-open-recursive-edit))
 
 ;;;;; Top-level Command State Maps

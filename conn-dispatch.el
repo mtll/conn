@@ -719,10 +719,11 @@ themselves once the selection process has concluded."
   (repeat nil)
   (curr nil))
 
-(defun conn-dispatch-action-argument ()
+(defun conn-dispatch-action-argument (&optional required)
   (setq conn--dispatch-thing-predicate #'always)
   (make-conn-dispatch-action-argument
-   :keymap conn-dispatch-repeat-argument-map))
+   :keymap conn-dispatch-repeat-argument-map
+   :required required))
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
   (let* ((action (conn-dispatch-action-argument-value arg))
@@ -754,7 +755,8 @@ themselves once the selection process has concluded."
                  (setf conn--dispatch-thing-predicate
                        (or (conn-action--action-thing-predicate action)
                            #'always))
-                 (setf (conn-argument-value arg) action)
+                 (setf (conn-argument-value arg) action
+                       (conn-argument-set-flag arg) t)
                  (setf (conn-dispatch-action-argument-repeat arg)
                        (pcase (conn-dispatch-action-argument-repeat arg)
                          ((or 'auto 'nil)
@@ -763,6 +765,7 @@ themselves once the selection process has concluded."
                          (_ (conn-dispatch-action-argument-repeat arg)))))
              (setf conn--dispatch-thing-predicate #'always
                    (conn-argument-value arg) nil
+                   (conn-argument-set-flag arg) nil
                    curr nil))
          (error
           (conn-read-args-error (error-message-string err))
@@ -2742,22 +2745,23 @@ contain targets."
                   (eq (window-buffer win)
                       (current-buffer)))))
   ( :default-update-handler (state)
-    (let ((line-height (window-height))
-          (string (oref state string))
-          (prev (point))
-          (line-count 0))
+    (let* ((line-height (window-height))
+           (string (oref state string))
+           (prev (point))
+           (line-count 0)
+           (matches nil)
+           (thing (conn-anonymous-thing
+                    'region
+                    :bounds-op ( :method (_self _arg)
+                                 (when-let* ((bd (assq (point) matches)))
+                                   (conn-make-bounds 'region nil bd))))))
       (save-excursion
         (while (and (< line-count line-height)
                     (search-backward string nil t))
           (let ((beg (match-beginning 0))
                 (end (match-end 0)))
-            (overlay-put (conn-make-target-overlay beg 0)
-                         'thing (conn-anonymous-thing
-                                  'region
-                                  :bounds-op ( :method (_self _arg)
-                                               (conn-make-bounds
-                                                'region nil
-                                                (cons beg end)))))
+            (push (cons beg end) matches)
+            (conn-make-target-overlay beg 0 :thing thing)
             (when (<= beg (pos-eol) prev)
               (cl-incf line-count))
             (setq prev beg))))
@@ -2767,14 +2771,7 @@ contain targets."
                     (search-forward string nil t))
           (let ((beg (match-beginning 0))
                 (end (match-end 0)))
-            (conn-make-target-overlay
-             beg 0
-             :thing (conn-anonymous-thing
-                      'region
-                      :bounds-op ( :method (_self _arg)
-                                   (conn-make-bounds
-                                    'region nil
-                                    (cons beg end)))))
+            (conn-make-target-overlay beg 0 :thing thing)
             (when (<= prev (pos-bol) beg)
               (cl-incf line-count))
             (setq prev beg)))))))
@@ -4647,23 +4644,27 @@ for the dispatch."
    nil nil))
 
 (conn-define-target-finder conn-isearch-targets
-    ()
+    (conn-dispatch-focus-mixin)
     ((matches :initform nil
               :initarg :matches)
      (buffer :initform nil
              :initarg :buffer))
+  ( :update-method (state)
+    (unless conn-targets
+      (conn-dispatch-call-update-handlers state)))
   ( :default-update-handler (state)
-    (when-let* ((_ (eq (oref state buffer) (current-buffer)))
-                (matches (oref state matches)))
-      (pcase-dolist ((and bds `(,beg . ,end)) matches)
-        (conn-make-target-overlay
-         beg (- end beg)
-         :thing (conn-anonymous-thing
-                  'region
-                  :bounds-op ( :method (_self arg)
-                               (conn-make-bounds
-                                'region arg
-                                (cons beg end)))))))))
+    (while-no-input
+      (when-let* ((_ (eq (oref state buffer) (current-buffer)))
+                  (matches (oref state matches)))
+        (let ((thing (conn-anonymous-thing
+                       'region
+                       :bounds-op ( :method (_self arg)
+                                    (when-let* ((bd (assq (point) matches)))
+                                      (conn-make-bounds 'region arg bd))))))
+          (pcase-dolist ((and bds `(,beg . ,end)) matches)
+            (conn-make-target-overlay
+             beg (- end beg)
+             :thing thing)))))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
@@ -4675,8 +4676,7 @@ for the dispatch."
                              (conn-make-bounds
                               'point nil
                               (cons beg end))))))
-    (let ((matches (with-restriction (window-start) (window-end)
-                     (conn--isearch-matches))))
+    (let ((matches (conn--isearch-matches)))
       (unwind-protect ;In case this was a recursive isearch
           (isearch-exit)
         (conn-dispatch-setup
@@ -4686,10 +4686,57 @@ for the dispatch."
            :target-finder ( :method (_self _arg)
                             (conn-isearch-targets
                              :matches matches
-                             :buffer (current-buffer))))
+                             :buffer (current-buffer)
+                             :context-lines 4)))
          nil nil
+         :repeat nil
          :restrict-windows t
          :other-end nil)))))
+
+(defun conn-dispatch-isearch-with-action ()
+  "Jump to an isearch match with dispatch labels."
+  (interactive)
+  (cl-flet ((target-thing (beg end)
+              (conn-anonymous-thing
+                'point
+                :bounds-op ( :method (_self _arg)
+                             (conn-make-bounds
+                              'point nil
+                              (cons beg end))))))
+    (let ((matches (conn--isearch-matches)))
+      (unwind-protect ;In case this was a recursive isearch
+          (isearch-exit)
+        (let (ovs)
+          (unwind-protect
+              (progn
+                (cl-loop with wbeg = (window-start)
+                         with wend = (window-end)
+                         for (beg . end) in matches
+                         when (<= wbeg beg wend)
+                         do (let ((ov (make-overlay beg end)))
+                              (push ov ovs)
+                              (overlay-put ov 'face 'lazy-highlight)))
+                (conn-read-args (conn-dispatch-state
+                                 :prompt "Dispatch on Isearch")
+                    ((`(,action ,repeat) (conn-dispatch-action-argument t))
+                     (other-end (conn-boolean-argument "other-end"
+                                                       'other-end
+                                                       conn-other-end-argument-map)))
+                  (mapc #'delete-overlay (cl-shiftf ovs nil))
+                  (conn-dispatch-setup
+                   action
+                   (conn-anonymous-thing
+                     'region
+                     :target-finder ( :method (_self _arg)
+                                      (conn-isearch-targets
+                                       :matches matches
+                                       :buffer (current-buffer)
+                                       :context-lines 4)))
+                   nil nil
+                   :repeat repeat
+                   :restrict-windows t
+                   :other-end other-end)))
+            (mapc #'delete-overlay ovs)))))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
