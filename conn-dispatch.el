@@ -1704,6 +1704,35 @@ depths will be sorted before greater depths.
         (with-current-buffer buf
           (face-remap-remove-relative cookie))))))
 
+(defvar conn--current-dispatch-buffers)
+
+(defun conn-dispatch-select-window (window &optional norecord)
+  (prog1 (select-window window norecord)
+    (or (gethash (current-buffer) conn--current-dispatch-buffers)
+        (setf (gethash (current-buffer) conn--current-dispatch-buffers)
+              (point-marker)))))
+
+(defmacro conn-dispatch-with-selected-window (window &rest body)
+  (declare (indent 1) (debug t))
+  `(with-selected-window ,window
+     (or (gethash (current-buffer) conn--current-dispatch-buffers)
+         (setf (gethash (current-buffer) conn--current-dispatch-buffers)
+               (point-marker)))
+     ,@body))
+
+(defun conn-dispatch-goto-char (position &optional nopush)
+  (let ((buffer (current-buffer)))
+    (goto-char position)
+    (when-let* ((mk (and (not nopush)
+                         (gethash buffer conn--current-dispatch-buffers))))
+      (unless (region-active-p)
+        (push-mark mk))
+      (unless (or (not conn-jump-ring-mode)
+                  (gethash conn-jump-ring conn--current-dispatch-buffers))
+        (conn-push-jump-ring mk)
+        (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
+      (set-marker mk (point)))))
+
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
 (cl-defmethod conn-dispatch-perform-action (action repeat)
@@ -1715,7 +1744,10 @@ depths will be sorted before greater depths.
         (conn--dispatch-label-state nil)
         (conn--dispatch-change-groups nil)
         (conn--read-args-error-message nil)
-        (conn-dispatch-in-progress t))
+        (conn-dispatch-in-progress t)
+        (conn--current-dispatch-buffers (make-hash-table :test 'eq)))
+    (setf (gethash (current-buffer) conn--current-dispatch-buffers)
+          (point-marker))
     (conn--unwind-protect-all
       (progn
         (redisplay)
@@ -1771,6 +1803,10 @@ depths will be sorted before greater depths.
       (if success
           (conn-accept-action action)
         (conn-cancel-action action))
+      (maphash
+       (lambda (_buf mk)
+         (when (markerp mk) (set-marker mk nil)))
+       conn--current-dispatch-buffers)
       (unless success
         (select-frame oframe)
         (set-window-configuration owconf)
@@ -1967,7 +2003,7 @@ the meaning of depth."
 (cl-defun conn-dispatch-handle-and-redisplay (&optional (must-prompt t))
   (redisplay)
   (cl-callf or conn--dispatch-must-prompt must-prompt)
-  (throw 'dispatch-redisplay #'ignore))
+  (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle t))
@@ -2095,17 +2131,19 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up-command)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                        next-screen-context-lines)))
-    (conn-scroll-up))
-  (conn-dispatch-handle-and-redisplay))
+    (ignore-error end-of-buffer
+      (scroll-up))
+    (conn-dispatch-handle-and-redisplay)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down-command)))
   (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                        next-screen-context-lines)))
-    (conn-scroll-down))
-  (conn-dispatch-handle-and-redisplay))
+    (ignore-error beginning-of-buffer
+      (scroll-down))
+    (conn-dispatch-handle-and-redisplay)))
 
 (defun conn-dispatch-goto-window (window)
-  (select-window window)
+  (conn-dispatch-select-window window)
   (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
     (face-remap-add-relative
      'mode-line
@@ -2633,16 +2671,17 @@ contain targets."
 (cl-defmethod conn-target-finder-prompt-p ((_state conn-dispatch-focus-mixin))
   t)
 
-(cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
+(defun conn-focus-targets-remove-overlays (state)
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
     (mapc #'delete-overlay ovs))
-  (setf (oref state hidden) nil)
+  (setf (oref state hidden) nil))
+
+(cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
+  (conn-focus-targets-remove-overlays state)
   (cl-call-next-method))
 
 (cl-defmethod conn-target-finder-suspend ((state conn-dispatch-focus-mixin))
-  (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
-    (mapc #'delete-overlay ovs))
-  (setf (oref state hidden) nil)
+  (conn-focus-targets-remove-overlays state)
   (cl-call-next-method))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
@@ -2654,9 +2693,6 @@ contain targets."
     (memq recenter-positions)
     (cadr)
     (or (car recenter-positions)))
-  (let ((inhibit-message nil)
-        (message-log-max 1000))
-    (message "%s" (oref conn-dispatch-target-finder cursor-location)))
   (unless executing-kbd-macro
     (pulse-momentary-highlight-one-line))
   (conn-dispatch-handle-and-redisplay))
@@ -2665,6 +2701,11 @@ contain targets."
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
     (mapc #'delete-overlay ovs))
   (setf (oref state hidden) nil))
+
+(cl-defmethod conn-target-finder-update :around ((state conn-dispatch-focus-mixin))
+  (let ((inhibit-redisplay t))
+    (cl-call-next-method state))
+  (redisplay))
 
 (cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,win ,tick . ,ovs) (oref state hidden))
@@ -2677,61 +2718,64 @@ contain targets."
     (pcase-let ((`(,tick . ,old-hidden)
                  (alist-get win (oref state hidden))))
       (with-selected-window win
-        (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
-          (mapc #'delete old-hidden)
-          (conn-protected-let*
-              ((hidden (list (make-overlay (point-min) (point-min)))
-                       (mapc #'delete-overlay hidden))
-               (context-lines (oref state context-lines))
-               (separator-p (if (slot-boundp state 'separator-p)
-                                (oref state separator-p)
-                              (> context-lines 0))))
-            (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
-              (save-excursion
-                (dolist (tar targets)
-                  (push (or (overlay-get tar 'context)
-                            (progn
-                              (goto-char (overlay-start tar))
-                              (let ((beg (pos-bol (- 1 context-lines)))
-                                    (end (pos-bol (+ 2 context-lines))))
-                                (cons (if (invisible-p end) (max 1 (1- beg)) beg)
-                                      end))))
-                        regions)))
-              (cl-callf conn--merge-overlapping-regions regions t)
-              (conn--compat-callf sort regions :key #'car :in-place t)
-              (cl-loop for beg = (point-min) then next-beg
-                       for (end . next-beg) in regions
-                       while end
-                       do (let ((ov (make-overlay beg end)))
-                            (push ov hidden)
-                            (overlay-put ov 'invisible t)
-                            (overlay-put ov 'window win)
-                            (when (and separator-p (/= end (point-max)))
-                              (overlay-put
-                               (car hidden)
-                               'before-string
-                               (propertize
-                                (format " %s\n"
-                                        (when (memq display-line-numbers
-                                                    '(nil relative visual))
-                                          (line-number-at-pos end)))
-                                'face 'conn-dispatch-context-separator-face))))
-                       finally (let ((ov (make-overlay beg (point-max))))
-                                 (push ov hidden)
-                                 (overlay-put ov 'window win)
-                                 (overlay-put ov 'invisible t))))
-            (setf (alist-get win (oref state hidden))
-                  (cons (buffer-chars-modified-tick) hidden))))
-        (let ((this-scroll-margin
-               (min (max 0 scroll-margin)
-                    (truncate (/ (window-body-height) 4.0)))))
-          (pcase (alist-get win (oref state cursor-location))
-            ('middle (recenter nil))
-            ('top (recenter this-scroll-margin))
-            ('bottom (recenter (- -1 this-scroll-margin)))
-            (_ (setf (alist-get win (oref state cursor-location)) 'middle)
-               (recenter nil)))))))
-  (redisplay))
+        (let ((lines (unless (alist-get win (oref state cursor-location))
+                       (count-screen-lines (window-start) (point)))))
+          (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
+            (mapc #'delete old-hidden)
+            (conn-protected-let*
+                ((hidden (list (make-overlay (point-min) (point-min)))
+                         (mapc #'delete-overlay hidden))
+                 (context-lines (oref state context-lines))
+                 (separator-p (if (slot-boundp state 'separator-p)
+                                  (oref state separator-p)
+                                (> context-lines 0))))
+              (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
+                (save-excursion
+                  (dolist (tar targets)
+                    (push (or (overlay-get tar 'context)
+                              (progn
+                                (goto-char (overlay-start tar))
+                                (let ((beg (pos-bol (- 1 context-lines)))
+                                      (end (pos-bol (+ 2 context-lines))))
+                                  (cons (if (invisible-p end) (max 1 (1- beg)) beg)
+                                        end))))
+                          regions)))
+                (cl-callf conn--merge-overlapping-regions regions t)
+                (conn--compat-callf sort regions :key #'car :in-place t)
+                (cl-loop for beg = (point-min) then next-beg
+                         for (end . next-beg) in regions
+                         while end
+                         do (let ((ov (make-overlay beg end)))
+                              (push ov hidden)
+                              (overlay-put ov 'invisible t)
+                              (overlay-put ov 'window win)
+                              (when (and separator-p (/= end (point-max)))
+                                (overlay-put
+                                 (car hidden)
+                                 'before-string
+                                 (propertize
+                                  (format " %s\n"
+                                          (when (memq display-line-numbers
+                                                      '(nil relative visual))
+                                            (line-number-at-pos end)))
+                                  'face 'conn-dispatch-context-separator-face))))
+                         finally (let ((ov (make-overlay beg (point-max))))
+                                   (push ov hidden)
+                                   (overlay-put ov 'window win)
+                                   (overlay-put ov 'invisible t))))
+              (setf (alist-get win (oref state hidden))
+                    (cons (buffer-chars-modified-tick) hidden))))
+          (let ((this-scroll-margin
+                 (min (max 0 scroll-margin)
+                      (truncate (/ (window-body-height) 4.0)))))
+            (pcase (alist-get win (oref state cursor-location))
+              ('middle (recenter nil))
+              ('top (recenter this-scroll-margin))
+              ('bottom (recenter (- -1 this-scroll-margin)))
+              ('nil (setf (alist-get win (oref state cursor-location))
+                          lines)
+                    (recenter lines))
+              (loc (recenter loc)))))))))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
@@ -4050,22 +4094,16 @@ it."))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
-      (select-window window)
+      (conn-dispatch-select-window window)
       (conn-dispatch-change-group)
       (if (or conn-dispatch-other-end
               transform)
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,_end) transform)
              (unless (= beg (point))
-               (conn-push-jump-ring (point))
-               (unless (region-active-p)
-                 (push-mark nil t))
-               (goto-char beg))))
+               (conn-dispatch-goto-char beg))))
         (unless (= pt (point))
-          (conn-push-jump-ring (point))
-          (unless (region-active-p)
-            (push-mark nil t))
-          (goto-char pt))))))
+          (conn-dispatch-goto-char pt))))))
 
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))
@@ -4645,72 +4683,107 @@ for the dispatch."
 
 (conn-define-target-finder conn-isearch-targets
     (conn-dispatch-focus-mixin)
-    ((matches :initform nil
-              :initarg :matches)
-     (buffer :initform nil
-             :initarg :buffer))
+    ()
   ( :update-method (state)
-    (unless conn-targets
-      (conn-dispatch-call-update-handlers state)))
+    (conn-focus-targets-remove-overlays state)
+    (conn-dispatch-call-update-handlers state))
   ( :default-update-handler (state)
-    (while-no-input
-      (when-let* ((_ (eq (oref state buffer) (current-buffer)))
-                  (matches (oref state matches)))
-        (let ((thing (conn-anonymous-thing
-                       'region
-                       :bounds-op ( :method (_self arg)
-                                    (when-let* ((bd (assq (point) matches)))
-                                      (conn-make-bounds 'region arg bd))))))
-          (pcase-dolist ((and bds `(,beg . ,end)) matches)
-            (conn-make-target-overlay
-             beg (- end beg)
-             :thing thing)))))))
+    (let* ((matches nil)
+           (thing (conn-anonymous-thing
+                    'region
+                    :bounds-op ( :method (_self arg)
+                                 (when-let* ((bd (assq (point) matches)))
+                                   (conn-make-bounds 'region arg bd)))))
+           (screen-lines (ceiling (* 2 (window-screen-lines)))))
+      (cl-flet ((collect ()
+                  (cl-loop
+                   with bound = (if isearch-forward
+                                    (point-max)
+                                  (point-min))
+                   with case-fold-search = isearch-case-fold-search
+                   with count = 1
+                   with line = (if isearch-forward (pos-eol) (pos-bol))
+                   while (and (< count screen-lines)
+                              (isearch-search-string isearch-string bound t))
+                   when (funcall isearch-filter-predicate
+                                 (match-beginning 0)
+                                 (match-end 0))
+                   do (progn
+                        (cond ((and isearch-forward
+                                    (> (point) line))
+                               (setq line (pos-eol))
+                               (cl-incf count))
+                              ((and (not isearch-forward)
+                                    (< (point) line))
+                               (setq line (pos-bol))
+                               (cl-incf count)))
+                        (push (cons (match-beginning 0) (match-end 0))
+                              matches)
+                        (conn-make-target-overlay
+                         (match-beginning 0)
+                         (- (match-end 0) (match-beginning 0))
+                         :thing thing))
+                   when (and (= (match-beginning 0) (match-end 0))
+                             (not (if isearch-forward (eobp) (bobp))))
+                   do (forward-char (if isearch-forward 1 -1)))))
+        (save-excursion
+          (let ((isearch-forward t))
+            (collect)))
+        (save-excursion
+          (let (isearch-forward)
+            (collect)))))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (cl-flet ((target-thing (beg end)
-              (conn-anonymous-thing
-                'point
-                :bounds-op ( :method (_self _arg)
-                             (conn-make-bounds
-                              'point nil
-                              (cons beg end))))))
-    (let ((matches (conn--isearch-matches)))
-      (unwind-protect ;In case this was a recursive isearch
-          (isearch-exit)
-        (conn-dispatch-setup
-         (conn-dispatch-jump)
-         (conn-anonymous-thing
-           'region
-           :target-finder ( :method (_self _arg)
-                            (conn-isearch-targets
-                             :matches matches
-                             :buffer (current-buffer)
-                             :context-lines 4)))
-         nil nil
-         :repeat nil
-         :restrict-windows t
-         :other-end nil)))))
+  (unwind-protect
+      (let ((regexp-search-ring
+             (if isearch-regexp
+                 (cons isearch-string regexp-search-ring)
+               regexp-search-ring))
+            (search-ring
+             (if isearch-regexp
+                 search-ring
+               (cons isearch-string search-ring)))
+            (opoint))
+        (with-isearch-suspended
+         (conn-dispatch-setup
+          (conn-dispatch-jump)
+          (conn-anonymous-thing
+            'region
+            :target-finder ( :method (_self _arg)
+                             (conn-isearch-targets
+                              :window-predicate (let ((owin (selected-window)))
+                                                  (lambda (win) (eq win owin)))
+                              :context-lines (ceiling (window-screen-lines) 2.5))))
+          nil nil
+          :repeat nil
+          :restrict-windows t
+          :other-end nil)
+         (setq opoint (point)))
+        (goto-char opoint))
+    (save-mark-and-excursion
+      (isearch-exit))))
 
 (defun conn-dispatch-isearch-with-action ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (cl-flet ((target-thing (beg end)
-              (conn-anonymous-thing
-                'point
-                :bounds-op ( :method (_self _arg)
-                             (conn-make-bounds
-                              'point nil
-                              (cons beg end))))))
-    (let (ovs action repeat other-end)
-      (unwind-protect
-          (progn
-            (with-restriction (window-start) (window-end)
-              (cl-loop for (beg . end) in (conn--isearch-matches)
-                       do (let ((ov (make-overlay beg end)))
-                            (push ov ovs)
-                            (overlay-put ov 'face 'lazy-highlight))))
+  (let (ovs action repeat other-end)
+    (unwind-protect
+        (progn
+          (with-restriction (window-start) (window-end)
+            (cl-loop for (beg . end) in (conn--isearch-matches)
+                     do (let ((ov (make-overlay beg end)))
+                          (push ov ovs)
+                          (overlay-put ov 'face 'lazy-highlight))))
+          (let ((regexp-search-ring
+                 (if isearch-regexp
+                     (cons isearch-string regexp-search-ring)
+                   regexp-search-ring))
+                (search-ring
+                 (if isearch-regexp
+                     search-ring
+                   (cons isearch-string search-ring))))
             (with-isearch-suspended
              (conn-read-args (conn-dispatch-state
                               :prompt "Dispatch on Isearch")
@@ -4720,24 +4793,37 @@ for the dispatch."
                                              conn-other-end-argument-map)))
                (setq action act
                      repeat rep
-                     other-end oe))))
-        (mapc #'delete-overlay ovs))
-      (let ((matches (conn--isearch-matches)))
-        (unwind-protect ;In case this was a recursive isearch
-            (isearch-exit)
-          (conn-dispatch-setup
-           action
-           (conn-anonymous-thing
-             'region
-             :target-finder ( :method (_self _arg)
-                              (conn-isearch-targets
-                               :matches matches
-                               :buffer (current-buffer)
-                               :context-lines 4)))
-           nil nil
-           :repeat repeat
-           :restrict-windows t
-           :other-end other-end))))))
+                     other-end oe)))))
+      (mapc #'delete-overlay ovs))
+    (unwind-protect
+        (let ((regexp-search-ring
+               (if isearch-regexp
+                   (cons isearch-string regexp-search-ring)
+                 regexp-search-ring))
+              (search-ring
+               (if isearch-regexp
+                   search-ring
+                 (cons isearch-string search-ring)))
+              (opoint nil))
+          (with-isearch-suspended
+           (save-selected-window
+             (conn-dispatch-setup
+              action
+              (conn-anonymous-thing
+                'region
+                :target-finder ( :method (_self _arg)
+                                 (conn-isearch-targets
+                                  :window-predicate (let ((owin (selected-window)))
+                                                      (lambda (win) (eq win owin)))
+                                  :context-lines (floor (window-screen-lines) 2.5))))
+              nil nil
+              :repeat repeat
+              :restrict-windows t
+              :other-end other-end))
+           (setq opoint (point)))
+          (when opoint (goto-char opoint)))
+      (save-mark-and-excursion
+        (isearch-exit)))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."

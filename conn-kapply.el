@@ -1216,7 +1216,7 @@ The iterator must be the first argument in ARGLIST.
   "p" 'apply
   "a" 'append
   "r" 'step-edit
-  "e" 'record-emacs-state
+  "e" 'record
   "c" 'record
   "+" 'kmacro-set-counter
   "f" 'kmacro-set-format)
@@ -1271,7 +1271,6 @@ The iterator must be the first argument in ARGLIST.
                                        cmd)
   (memq cmd '(apply
               record
-              record-emacs-state
               append
               step-edit
               register)))
@@ -1307,35 +1306,26 @@ The iterator must be the first argument in ARGLIST.
   (let ((register (conn-kapply-macro-argument-register arg)))
     (pcase (conn-argument-value arg)
       ('record
-       (if register
-           (let ((macro (get-register register)))
-             (lambda (it) (conn-kmacro-apply it nil macro)))
-         #'conn-kmacro-apply))
-      ('record-emacs-state
-       (if register
-           (let ((macro (get-register register)))
-             (lambda (it)
-               (conn-kmacro-apply
-                (conn-kapply-with-state it 'conn-emacs-state)
-                nil macro)))
-         (lambda (it)
-           (conn-kmacro-apply
-            (conn-kapply-with-state it 'conn-emacs-state)))))
+       (let ((macro (when register (get-register register))))
+         (lambda (it) (conn-kmacro-apply it nil macro))))
       ('apply
-       (let ((macro (if register
-                        (get-register register)
-                      (kmacro-ring-head))))
+       (let ((macro (when register (get-register register))))
          (lambda (it) (conn-kmacro-apply it nil macro))))
       ('append
        (when register
          (kmacro-split-ring-element (get-register register)))
        (lambda (it)
          (conn-kmacro-apply-append
-          it nil (conn-read-args-consume-prefix-arg))))
+          it nil (conn-read-args-consume-prefix-arg))
+         (when register
+           (set-register register (kmacro-ring-head)))))
       ('step-edit
        (when register
          (kmacro-split-ring-element (get-register register)))
-       #'conn-kmacro-apply-step-edit))))
+       (lambda (it)
+         (conn-kmacro-apply-step-edit it)
+         (when register
+           (set-register register (kmacro-ring-head))))))))
 
 ;;;;; State Argument
 
@@ -1352,7 +1342,9 @@ The iterator must be the first argument in ARGLIST.
                ( :constructor conn-kapply-state-argument
                  (&aux
                   (name "state")
-                  (choices '(nil conn-command-state conn-emacs-state))
+                  (choices (if (eq conn-current-state 'conn-emacs-state)
+                               '(conn-emacs-state conn-command-state)
+                             '(conn-command-state conn-emacs-state)))
                   (cycling-command 'kapply-state)
                   (keymap conn-kapply-state-argument-map)
                   (formatter #'conn--format-state-argument)))))
@@ -1941,6 +1933,7 @@ finishing showing the buffers that were visited."))
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)
                (conn-kapply-window-conf-argument t)
+               (conn-kapply-state-argument)
                #'conn-kapply-save-excursion
                #'conn-kapply-relocate-to-region
                #'conn-kapply-pulse-region)))
@@ -1962,19 +1955,17 @@ finishing showing the buffers that were visited."))
                (:undo (conn-dispatch-undo-pulse beg end)))
              (with-undo-amalgamate
                (conn-with-dispatch-suspended
-                 (let ((conn-kapply-suppress-message t))
-                   (conn-kapply-macro
-                    (pcase applier
-                      ((or 'conn-kmacro-apply
-                           (guard macro))
-                       (lambda (iterator)
-                         (conn-kmacro-apply iterator nil macro)))
-                      (_ applier))
-                    (conn-kapply-region-iterator
-                     (list (conn-kapply-make-region beg end)))
-                    pipeline)))))
+                 (save-excursion
+                   (let ((conn-kapply-suppress-message t))
+                     (conn-kapply-macro
+                      (if macro
+                          (lambda (it) (conn-kmacro-apply it nil macro))
+                        applier)
+                      (conn-kapply-region-iterator
+                       (list (conn-kapply-make-region beg end)))
+                      pipeline)
+                     (unless macro (setq macro (kmacro-ring-head))))))))
             (_ (user-error "Cannot find thing at point"))))
-        (unless macro (setq macro (kmacro-ring-head)))
         (conn-dispatch-undo-case 0
           ((or :undo :cancel)
            (setf (kmacro--counter macro) counter)))))))
