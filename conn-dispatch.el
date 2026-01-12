@@ -4703,40 +4703,41 @@ for the dispatch."
                              (conn-make-bounds
                               'point nil
                               (cons beg end))))))
-    (let ((matches (conn--isearch-matches)))
-      (unwind-protect ;In case this was a recursive isearch
-          (isearch-exit)
-        (let (ovs)
-          (unwind-protect
-              (progn
-                (cl-loop with wbeg = (window-start)
-                         with wend = (window-end)
-                         for (beg . end) in matches
-                         when (<= wbeg beg wend)
-                         do (let ((ov (make-overlay beg end)))
-                              (push ov ovs)
-                              (overlay-put ov 'face 'lazy-highlight)))
-                (conn-read-args (conn-dispatch-state
-                                 :prompt "Dispatch on Isearch")
-                    ((`(,action ,repeat) (conn-dispatch-action-argument t))
-                     (other-end (conn-boolean-argument "other-end"
-                                                       'other-end
-                                                       conn-other-end-argument-map)))
-                  (mapc #'delete-overlay (cl-shiftf ovs nil))
-                  (conn-dispatch-setup
-                   action
-                   (conn-anonymous-thing
-                     'region
-                     :target-finder ( :method (_self _arg)
-                                      (conn-isearch-targets
-                                       :matches matches
-                                       :buffer (current-buffer)
-                                       :context-lines 4)))
-                   nil nil
-                   :repeat repeat
-                   :restrict-windows t
-                   :other-end other-end)))
-            (mapc #'delete-overlay ovs)))))))
+    (let (ovs action repeat other-end)
+      (unwind-protect
+          (progn
+            (with-restriction (window-start) (window-end)
+              (cl-loop for (beg . end) in (conn--isearch-matches)
+                       do (let ((ov (make-overlay beg end)))
+                            (push ov ovs)
+                            (overlay-put ov 'face 'lazy-highlight))))
+            (with-isearch-suspended
+             (conn-read-args (conn-dispatch-state
+                              :prompt "Dispatch on Isearch")
+                 ((`(,act ,rep) (conn-dispatch-action-argument t))
+                  (oe (conn-boolean-argument "other-end"
+                                             'other-end
+                                             conn-other-end-argument-map)))
+               (setq action act
+                     repeat rep
+                     other-end oe))))
+        (mapc #'delete-overlay ovs))
+      (let ((matches (conn--isearch-matches)))
+        (unwind-protect ;In case this was a recursive isearch
+            (isearch-exit)
+          (conn-dispatch-setup
+           action
+           (conn-anonymous-thing
+             'region
+             :target-finder ( :method (_self _arg)
+                              (conn-isearch-targets
+                               :matches matches
+                               :buffer (current-buffer)
+                               :context-lines 4)))
+           nil nil
+           :repeat repeat
+           :restrict-windows t
+           :other-end other-end))))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
