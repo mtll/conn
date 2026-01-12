@@ -35,7 +35,7 @@
 
 ;;;; Kapply
 
-(defvar kmacro-step-edit-replace nil)
+(defvar kmacro-step-edit-replace)
 
 (defvar conn-kmacro-applying-p nil
   "Non-nil during kmacro application.")
@@ -51,9 +51,9 @@
 
 ;;;;; Kapply Query
 
-(defvar conn--kapply-automatic-flag nil)
+(defvar conn--kapply-automatic-flag)
 
-(defvar conn--kbd-query-automatic-flags nil)
+(defvar conn--kbd-query-automatic-flags)
 
 (defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))

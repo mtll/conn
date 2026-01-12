@@ -18,6 +18,7 @@
 ;;; Code:
 
 (require 'compat)
+(require 'kmacro)
 (require 'conn-vars)
 (eval-when-compile
   (require 'subr-x)
