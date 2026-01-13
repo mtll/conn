@@ -2370,6 +2370,8 @@ append to that place."
   (cl-call-next-method))
 
 (defvar-keymap conn-kill-thing-argument-map
+  "w" 'copy
+  "q" 'yank-replace
   "/" 'filename
   "P" 'project-filename
   ">" 'kill-matching-lines
@@ -2398,6 +2400,14 @@ append to that place."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql kill-matching-lines)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql yank-replace)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
+                                       (_cmd (eql copy)))
   t)
 
 (cl-defstruct (conn-transform-and-fixup-argument
@@ -2846,7 +2856,8 @@ hook, which see."
                     (push (cons append (filter-buffer-substring beg end))
                           strings))
                   (delete-region beg end)
-                  (conn-dispatch-undo-case 90
+                  (conn-dispatch-undo-case
+                    :depth 90
                     (:undo
                      (pop strings)
                      (conn-dispatch-undo-pulse beg end))
@@ -2897,6 +2908,66 @@ hook, which see."
   (let ((col (current-column)))
     (cl-call-next-method)
     (move-to-column col)))
+
+(cl-defmethod conn-kill-thing-do ((_cmd (eql copy))
+                                  arg
+                                  transform
+                                  &optional
+                                  append
+                                  _delete
+                                  register
+                                  separator
+                                  _reformat
+                                  _check-bounds)
+  (conn-read-args (conn-copy-state
+                   :interactive 'conn-copy-thing
+                   :prefix arg
+                   :prompt "Copy Thing")
+      ((`(,thing ,arg) (conn-copy-thing-argument))
+       (transform (conn-transform-argument transform))
+       (`(,append ,register ,separator)
+        (conn-copy-how-argument
+         :append append
+         :register register
+         :separator separator)))
+    (conn-copy-thing-do thing
+                        arg
+                        transform
+                        append
+                        register
+                        separator)))
+
+(cl-defmethod conn-kill-thing-do ((_cmd (eql yank-replace))
+                                  arg
+                                  transform
+                                  &optional
+                                  _append
+                                  _delete
+                                  register
+                                  _separator
+                                  _reformat
+                                  check-bounds)
+  (conn-read-args (conn-yank-replace-state
+                   :interactive 'conn-copy-thing
+                   :prefix arg
+                   :prompt "Yank Replace")
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument transform))
+       (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
+       (register (conn-read-argument
+                  "register"
+                  'register
+                  conn-register-argument-map
+                  (lambda (_) (register-read-with-preview "Register:"))
+                  :formatter #'conn-argument-format-register
+                  :value register))
+       (check-bounds (conn-check-bounds-argument check-bounds)))
+    (conn-yank-replace-do thing
+                          arg
+                          transform
+                          swap
+                          register
+                          check-bounds)))
 
 (cl-defmethod conn-kill-thing-do :extra "rmm" ((_cmd (conn-thing region))
                                                _arg
@@ -3220,7 +3291,8 @@ that place."
                     (push (cons append (filter-buffer-substring beg end))
                           strings)
                     (conn-dispatch-action-pulse beg end)
-                    (conn-dispatch-undo-case 90
+                    (conn-dispatch-undo-case
+                      :depth 90
                       (:undo
                        (pop strings)
                        (conn-dispatch-undo-pulse beg end))

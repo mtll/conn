@@ -1951,7 +1951,8 @@ finishing showing the buffers that were visited."))
           (conn-dispatch-change-group)
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
-             (conn-dispatch-undo-case 50
+             (conn-dispatch-undo-case
+               :depth 50
                (:undo (conn-dispatch-undo-pulse beg end)))
              (with-undo-amalgamate
                (conn-with-dispatch-suspended
@@ -1966,7 +1967,7 @@ finishing showing the buffers that were visited."))
                       pipeline)
                      (unless macro (setq macro (kmacro-ring-head))))))))
             (_ (user-error "Cannot find thing at point"))))
-        (conn-dispatch-undo-case 0
+        (conn-dispatch-undo-case
           ((or :undo :cancel)
            (setf (kmacro--counter macro) counter)))))))
 

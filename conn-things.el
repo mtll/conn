@@ -572,7 +572,7 @@ with a prefix argument then set the default value of reformat in the
 current buffer."))
 
 (defvar-keymap conn-reformat-argument-map
-  "q" 'reformat)
+  "r" 'reformat)
 
 (defvar conn-reformat-default t)
 

@@ -108,7 +108,6 @@
   "+" 'indent-relative-first-indent-point
   ";" 'conn-comment-thing
   "_" 'indent-relative
-  "DEL" 'clear-rectangle
   "L" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
   "q" 'conn-indent-thing

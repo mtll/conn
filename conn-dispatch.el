@@ -1660,7 +1660,7 @@ separately.")
 All events read by `conn-dispatch-read-char' are read with this buffer
 current.")
 
-(defmacro conn-dispatch-undo-case (depth &rest cases)
+(defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
 
 CASES is a list of the form (PATTERN CODE...).  PATTERN is a `pcase'
@@ -1677,16 +1677,22 @@ its corresponding CODE run.  The undo signal will be one of:
 
 DEPTH controls were in the undo list the undo case will be put.  Lesser
 depths will be sorted before greater depths.
-`conn-dispatch-change-group' undo cases have a depth of 0."
-  (declare (indent 1))
-  (cl-assert (<= -100 depth 100))
-  (cl-with-gensyms (buf signal)
-    `(conn--dispatch-push-undo-case
-      ,depth
-      (let ((,buf (current-buffer)))
-        (lambda (,signal)
-          (with-current-buffer ,buf
-            (pcase ,signal ,@cases)))))))
+`conn-dispatch-change-group' undo cases have a depth of 0.
+
+\(fn [:depth DEPTH] &rest BODY)"
+  (declare (indent 0))
+  (let ((depth 0))
+    (when (eq :depth (car cases))
+      (setq depth (nth 1 cases)
+            cases (drop 2 cases)))
+    (cl-assert (<= -100 depth 100))
+    (cl-with-gensyms (buf signal)
+      `(conn--dispatch-push-undo-case
+        ,depth
+        (let ((,buf (current-buffer)))
+          (lambda (,signal)
+            (with-current-buffer ,buf
+              (pcase ,signal ,@cases))))))))
 
 (define-minor-mode conn-dispatch-select-mode
   "Mode for selecting targets during dispatch."
@@ -1777,13 +1783,15 @@ depths will be sorted before greater depths.
                           (pt (point))
                           (label-state conn--dispatch-label-state))
                       (push nil conn--dispatch-change-groups)
-                      (conn-dispatch-undo-case 100
+                      (conn-dispatch-undo-case
+                        :depth 100
                         (:undo (redisplay)))
                       (unwind-protect
                           (funcall action)
                         (unless (or (equal wconf (current-window-configuration))
                                     (null (car conn--dispatch-change-groups)))
-                          (conn-dispatch-undo-case -90
+                          (conn-dispatch-undo-case
+                            :depth -90
                             (:undo
                              (select-frame frame)
                              (set-window-configuration wconf)
@@ -1884,7 +1892,7 @@ the meaning of depth."
         (dolist (b (or buffers (list (current-buffer))))
           (with-current-buffer b
             (undo-boundary))))
-      (conn-dispatch-undo-case 0
+      (conn-dispatch-undo-case
         ((or :cancel :undo)
          (cancel-change-group cg)
          (cl-loop for buf in buffers
@@ -2205,7 +2213,7 @@ the meaning of depth."
                (start (overlay-start target))
                (win (overlay-get target 'window))
                (face (overlay-get target 'label-face)))
-    (conn-dispatch-undo-case 0
+    (conn-dispatch-undo-case
       (:undo
        (conn-make-target-overlay
         start 0
@@ -4867,11 +4875,11 @@ for the dispatch."
                            bound)
                       (when repeat
                         (push (make-overlay beg end) ovs)
-                        (conn-dispatch-undo-case 0
+                        (conn-dispatch-undo-case
                           ((or :cancel :undo) (delete-overlay (pop ovs))))
                         (overlay-put (car ovs) 'face 'region))
                       (push bound subregions)
-                      (conn-dispatch-undo-case 0
+                      (conn-dispatch-undo-case
                         ((or :cancel :undo) (pop subregions))))
                      (_
                       (user-error "No %s found at point" thing))))))
