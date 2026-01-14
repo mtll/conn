@@ -877,15 +877,35 @@ BODY will never be evaluated if the state is not re-entered."
     (setq type (gensym)))
   (cl-with-gensyms (next)
     `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
-       (setf (gethash conn--state-stack conn--state-re-entry-functions)
-             (lambda (,type)
-               (unwind-protect
-                   ,(macroexp-progn body)
-                 (when ,next (funcall ,next ,type))))))))
+       (push (cons nil
+                   (lambda (,type)
+                     (unwind-protect
+                         ,(macroexp-progn body)
+                       (when ,next
+                         (funcall (cdar ,next) ,type)))))
+             (gethash conn--state-stack conn--state-re-entry-functions)))))
+
+(defmacro conn-state-on-re-entry-once (type &rest body)
+  "Defer evaluation of BODY until the current state is re-entered.
+
+BODY will never be evaluated if the state is not re-entered."
+  (declare (indent 1))
+  (when (eql ?_ (string-to-char (symbol-name type)))
+    (setq type (gensym)))
+  (cl-with-gensyms (next id)
+    `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
+       (unless (assq id ,next)
+         (push (cons ,id
+                     (lambda (,type)
+                       (unwind-protect
+                           ,(macroexp-progn body)
+                         (when ,next
+                           (funcall (cdar ,next) ,type)))))
+               (gethash conn--state-stack conn--state-re-entry-functions))))))
 
 (defun conn--run-re-entry-fns (type)
-  (when-let* ((fn (gethash conn--state-stack conn--state-re-entry-functions)))
-    (funcall fn type)))
+  (when-let* ((fns (gethash conn--state-stack conn--state-re-entry-functions)))
+    (funcall (cdar fns) type)))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
