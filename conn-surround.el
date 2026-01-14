@@ -508,12 +508,16 @@
   (pcase (conn-bounds-of cmd arg)
     ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
           (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend)))
-          (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend) transform)))
-     (prog1 (list (conn--make-surround-region ibeg iend)
-                  :open (buffer-substring-no-properties obeg oend)
-                  :close (buffer-substring-no-properties cbeg cend))
-       (delete-region iend cend)
-       (delete-region obeg ibeg)))))
+          (conn-bounds-get :inner nil (and (conn-bounds `(,ibeg . ,iend))
+                                           (conn-bounds `(,initb . ,inite)
+                                                        transform))))
+     (conn-protected-let* ((ov (conn--make-surround-region initb inite)
+                               (delete-overlay ov)))
+       (prog1 (list ov
+                    :open (buffer-substring-no-properties obeg oend)
+                    :close (buffer-substring-no-properties cbeg cend))
+         (delete-region iend cend)
+         (delete-region obeg ibeg))))))
 
 (cl-defmethod conn-change-thing-do ((_cmd (eql conn-surround))
                                     arg
@@ -614,5 +618,23 @@
                  (when cleanup
                    (funcall cleanup (if success :accept :cancel))))))
             (_ (user-error "No surround found"))))))))
+
+(defun conn-surround-raise ()
+  (interactive)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Thing"
+                   :prefix current-prefix-arg)
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument)))
+    (conn-read-args (conn-change-surround-state
+                     :prompt "Surrounding")
+        ((`(,surround ,sarg) (conn-change-surround-argument)))
+      (pcase (conn-bounds-of thing arg)
+        ((conn-bounds `(,beg . ,end) transform)
+         (let ((to-raise (filter-buffer-substring beg end)))
+           (pcase (conn-bounds-of surround sarg)
+             ((conn-bounds `(,sbeg . ,send))
+              (delete-region sbeg send)
+              (insert to-raise)))))))))
 
 (provide 'conn-surround)

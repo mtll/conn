@@ -2500,8 +2500,7 @@ hook, which see."
    (conn-read-args (conn-kill-state
                     :interactive 'conn-kill-thing
                     :prompt "Thing"
-                    :reference conn-kill-reference
-                    :display-handler (conn-read-args-display-columns 3 3))
+                    :reference conn-kill-reference)
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))

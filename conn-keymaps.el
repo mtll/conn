@@ -230,6 +230,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
   "<conn-thing-map> ;" 'comment
+  "<conn-thing-map> x" 'sexp
   "<conn-thing-map> /" 'filename
   "<conn-thing-map> U" 'uuid
   "<conn-thing-map> s" 'string
