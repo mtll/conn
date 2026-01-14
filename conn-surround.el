@@ -99,7 +99,8 @@
                               arg)
   (catch 'return
     (save-mark-and-excursion
-      (pcase-let* (((cl-struct conn-self-insert-event id)
+      (pcase-let* ((opoint (point))
+                   ((cl-struct conn-self-insert-event id)
                     cmd)
                    ((or `(,_cmd ,open ,close)
                         `(,open ,close))
@@ -112,7 +113,9 @@
               (conn-expand-subr 1)
               (let ((beg (region-beginning))
                     (end (region-end)))
-                (when (and (eql open (char-after beg))
+                (when (and (not (or (= opoint beg)
+                                    (= opoint end)))
+                           (eql open (char-after beg))
                            (eql close (char-before end))
                            (> (- end beg) 1)
                            (>= 0 (cl-decf n)))

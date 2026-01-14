@@ -102,6 +102,14 @@ execution."
 
 ;;;;; Movement
 
+(defun conn-forward-up-list (arg)
+  (interactive "p")
+  (backward-up-list (- arg)))
+
+(defun conn-backward-down-list (arg)
+  (interactive "p")
+  (down-list (- arg)))
+
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
   (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
@@ -2531,8 +2539,8 @@ hook, which see."
   "Noop" nil)
 
 (cl-defmethod conn-kill-reformat (bounds
-                                          &context
-                                          (major-mode (derived-mode lisp-data-mode)))
+                                  &context
+                                  (major-mode (derived-mode lisp-data-mode)))
   (cl-call-next-method)
   (cond ((conn-get-thing-property (conn-bounds-thing bounds) :linewise))
         ((save-excursion
@@ -2540,7 +2548,10 @@ hook, which see."
            (looking-at-p (rx (seq (* (syntax whitespace))
                                   (+ (syntax close-parenthesis))
                                   eol))))
-         (join-line))
+         (unless (save-excursion
+                   (move-end-of-line 0)
+                   (conn--point-in-comment-p))
+           (join-line)))
         ((and (looking-back (rx (seq (* (syntax whitespace))
                                      (syntax open-parenthesis)))
                             (pos-bol))
@@ -2552,10 +2563,13 @@ hook, which see."
            (and (looking-at-p (rx (seq (* (syntax whitespace))
                                        eol)))
                 (> (car (syntax-ppss)) 0)))
-         (let ((col (current-column)))
-           (join-line)
-           (forward-line)
-           (move-to-column col)))))
+         (unless (save-excursion
+                   (move-end-of-line 0)
+                   (conn--point-in-comment-p))
+           (let ((col (current-column)))
+             (join-line)
+             (forward-line)
+             (move-to-column col))))))
 
 (cl-defmethod conn-kill-reformat (bounds)
   (cl-flet ((empty-lines (&optional backward)

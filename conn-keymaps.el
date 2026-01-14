@@ -318,11 +318,12 @@
   "u" conn-backward-word-remap
   "{" 'conn-backward-up-inner-list
   "}" 'conn-forward-up-inner-list
-  "(" conn-backward-list-remap
-  ")" conn-forward-list-remap
-  "[" conn-backward-up-list-remap
-  "]" conn-down-list-remap
+  "(" 'backward-up-list
+  ")" 'conn-forward-up-list
+  "[" 'conn-backward-down-list
+  "]" 'down-list
   "S" 'conn-adjust-surround
+  "C" 'conn-surround-raise
   ;; "{" conn-backward-sentence-remap
   ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
