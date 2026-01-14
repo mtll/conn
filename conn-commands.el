@@ -3755,6 +3755,10 @@ Only available during repeating duplicate."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
+(cl-defmethod conn-argument-predicate ((arg conn-duplicate-thing-argument)
+                                       (cmd (eql copy-from-above-command)))
+  t)
+
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
   "Duplicate the region defined by THING, ARG, and TRANSFORM.
 
@@ -3768,7 +3772,7 @@ Interactively REPEAT is given by the prefix argument."
                     :interactive 'conn-duplicate-thing
                     :prompt "Thing"
                     :reference conn-duplicate-reference)
-       ((`(,thing ,arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,arg) (conn-duplicate-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform
            (prefix-numeric-value current-prefix-arg))))
