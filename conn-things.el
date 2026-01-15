@@ -215,31 +215,35 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (eval-and-compile
   (defun conn--anonymous-thing-parse-properties (properties)
-    (let ((known (get 'conn-anonymous-thing :known-methods))
-          (defined nil)
-          (mlist nil)
-          (plist nil))
-      (while-let ((key (pop properties))
-                  (val (pop properties)))
-        (if-let* ((gfn (alist-get key known)))
-            (let ((method-expander
-                   (lambda (args &rest body)
-                     (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-                       (`#'(lambda ,args . ,body)
-                        (let ((parsed-body (macroexp-parse-body body))
-                              (cnm (gensym "thing--cnm")))
-                          `#'(lambda ,(cons cnm args)
-                               ,@(car parsed-body)
-                               ,(let ((exp (macroexpand-all
-                                            `(cl-flet ((cl-call-next-method ,cnm))
-                                               ,@(cdr parsed-body)))))
-                                  (if (memq gfn defined)
-                                      (macroexp-warn-and-return
-                                       "Anonymous thing method shadows previous definition"
-                                       exp nil nil key)
-                                    exp)))))
-                       (result (error "Unexpected macroexpansion result :%S"
-                                      result))))))
+    (let* ((known (get 'conn-anonymous-thing :known-methods))
+           (defined nil)
+           (mlist nil)
+           (plist nil)
+           (gfn nil)
+           (key nil)
+           (val nil)
+           (method-expander
+            (lambda (args &rest body)
+              (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                (`#'(lambda ,args . ,body)
+                 (let ((parsed-body (macroexp-parse-body body))
+                       (cnm (gensym "thing--cnm")))
+                   `#'(lambda ,(cons cnm args)
+                        ,@(car parsed-body)
+                        ,(let ((exp (macroexpand-all
+                                     `(cl-flet ((cl-call-next-method ,cnm))
+                                        ,@(cdr parsed-body)))))
+                           (if (memq gfn defined)
+                               (macroexp-warn-and-return
+                                "Anonymous thing method shadows previous definition"
+                                exp nil nil key)
+                             exp)))))
+                (result (error "Unexpected macroexpansion result :%S"
+                               result))))))
+      (while (setq key (pop properties)
+                   val (pop properties))
+        (if (setq gfn (alist-get key known))
+            (progn
               (push (macroexpand-all
                      `(cons ',gfn ,val)
                      (cons (cons :method method-expander)
