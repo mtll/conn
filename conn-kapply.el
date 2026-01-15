@@ -1668,7 +1668,7 @@ finishing showing the buffers that were visited."))
        conn-kapply-pulse-region
        ,@pipeline))))
 
-(cl-defmethod conn-replace-do ((_thing (eql 'kapply))
+(cl-defmethod conn-replace-do ((_thing (eql kapply))
                                _arg
                                transform
                                &optional

@@ -847,17 +847,17 @@ is being entered after the current state has exited or nil if
                (funcall (car ,rest) ,type (cdr ,rest))))
            conn--state-exit-functions)))
 
-(defmacro conn-state-on-exit-once (type &rest body)
+(defmacro conn-state-on-exit-once (name type &rest body)
   "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
 
 For more information see `conn-state-on-exit'."
-  (declare (indent 1)
+  (declare (indent 2)
            (debug (def-body)))
   (when (eql ?_ (string-to-char (symbol-name type)))
     (setq type (gensym)))
-  (cl-with-gensyms (rest id)
-    `(unless (memq ',id conn--state-exit-functions-ids)
-       (push ',id conn--state-exit-functions-ids)
+  (cl-with-gensyms (rest)
+    `(unless (memq ',name conn--state-exit-functions-ids)
+       (push ',name conn--state-exit-functions-ids)
        (push (lambda (,type ,rest)
                (unwind-protect
                    ,(macroexp-progn body)
@@ -885,17 +885,17 @@ BODY will never be evaluated if the state is not re-entered."
                          (funcall (cdar ,next) ,type)))))
              (gethash conn--state-stack conn--state-re-entry-functions)))))
 
-(defmacro conn-state-on-re-entry-once (type &rest body)
+(defmacro conn-state-on-re-entry-once (name type &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
 
 BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name type)))
     (setq type (gensym)))
-  (cl-with-gensyms (next id)
+  (cl-with-gensyms (next)
     `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
-       (unless (assq id ,next)
-         (push (cons ,id
+       (unless (assq ',name ,next)
+         (push (cons ',name
                      (lambda (,type)
                        (unwind-protect
                            ,(macroexp-progn body)

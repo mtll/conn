@@ -3755,8 +3755,8 @@ Only available during repeating duplicate."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
-(cl-defmethod conn-argument-predicate ((arg conn-duplicate-thing-argument)
-                                       (cmd (eql copy-from-above-command)))
+(cl-defmethod conn-argument-predicate ((_arg conn-duplicate-thing-argument)
+                                       (_cmd (eql copy-from-above-command)))
   t)
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
