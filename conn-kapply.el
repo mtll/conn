@@ -1333,18 +1333,24 @@ The iterator must be the first argument in ARGLIST.
   "s" 'kapply-state)
 
 (defun conn--format-state-argument (val)
-  (pcase val
-    ('conn-emacs-state "emacs")
-    ('conn-command-state "command")))
+  (conn-state-get val :lighter))
 
 (cl-defstruct (conn-kapply-state-argument
                (:include conn-cycling-argument)
                ( :constructor conn-kapply-state-argument
                  (&aux
+                  (display-prefix "state ")
                   (name "state")
-                  (choices (if (eq conn-current-state 'conn-emacs-state)
-                               '(conn-emacs-state conn-command-state)
-                             '(conn-command-state conn-emacs-state)))
+                  (value (if (memq conn-current-state
+                                   (list (conn-buffer-base-state)
+                                         'conn-command-state
+                                         'conn-emacs-state))
+                             conn-current-state
+                           (conn-buffer-base-state)))
+                  (choices (delete-dups
+                            (list (conn-buffer-base-state)
+                                  'conn-command-state
+                                  'conn-emacs-state)))
                   (cycling-command 'kapply-state)
                   (keymap conn-kapply-state-argument-map)
                   (formatter #'conn--format-state-argument)))))
