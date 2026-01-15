@@ -163,15 +163,17 @@ function may setup any other necessary state as well.")
                   unless (memq parent no-inherit)
                   collect (conn-state-all-keymap-parents parent)))))
 
+(defun conn--state-all-children-subr (state)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (let ((children (conn-state--children (conn--find-state state))))
+    (append children (mapcan #'conn--state-all-children-subr children))))
+
 (defun conn-state-all-children (state)
   "Return all children for STATE."
   (declare (side-effect-free t)
            (important-return-value t))
-  (cl-labels ((all-children (state)
-                (let ((children (conn-state--children
-                                 (conn--find-state state))))
-                  (append children (mapcan #'all-children children)))))
-    (delete-dups (all-children state))))
+  (delete-dups (conn--state-all-children-subr state)))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."

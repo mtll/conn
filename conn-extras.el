@@ -181,7 +181,7 @@
   "U" 'outline-move-subtree-up
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" 'outline-show-branches
+  "B" 'outline-show-branches
   "c" (conn-remap-key "C-c" t)
   "d" 'conn-kill-thing
   "w h" 'outline-hide-by-heading-regexp
@@ -197,7 +197,6 @@
   "m" 'outline-show-subtree
   "n" 'outline-hide-leaves
   "o" 'outline-hide-other
-  "p" 'conn-register-prefix
   "q" 'conn-transpose-things
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body

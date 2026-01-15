@@ -2366,20 +2366,25 @@ updated.")
 (cl-defmethod conn-target-finder-update ((state conn-target-finder-base))
   (conn-dispatch-call-update-handlers state))
 
+(defun conn--find-update-handler (ctors default)
+  (if-let* ((fn (caar ctors)))
+      (funcall fn (lambda () (conn--find-update-handler (cdr ctors) default)))
+    default))
+
 (defun conn-dispatch-call-update-handlers (target-finder &rest args)
   (let ((ufns (oref target-finder current-update-handlers))
+        (default nil)
         (handler-ctors nil))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (apply
          (with-memoization (alist-get (current-buffer) ufns)
-           (cl-labels ((find-handler (ctors)
-                         (if-let* ((fn (caar ctors)))
-                             (funcall fn (lambda () (find-handler (cdr ctors))))
-                           (oref target-finder default-update-handler))))
-             (or (find-handler (with-memoization handler-ctors
-                                 (oref target-finder update-handlers)))
-                 #'ignore)))
+           (or (conn--find-update-handler
+                (with-memoization handler-ctors
+                  (oref target-finder update-handlers))
+                (with-memoization default
+                  (oref target-finder default-update-handler)))
+               #'ignore))
          target-finder
          args)))
     (setf (oref target-finder current-update-handlers) ufns)))
