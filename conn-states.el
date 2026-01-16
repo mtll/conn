@@ -1124,6 +1124,25 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
                            (cdr (conn-state-minor-mode-maps-alist parent)))
               (conn--ensure-minor-mode-map name mode))))))))
 
+(defun conn--make-state-docstring (state docstring)
+  (put state 'variable-documentation
+       (list
+        (lambda ()
+          (concat
+           docstring
+           "\n\n\tParent states:\n"
+           (cl-loop for parent in (cdr (conn-state-all-parents state))
+                    concat (format "`%s'\n" parent) into ps
+                    finally return (if (string-empty-p ps)
+                                       "No parent states"
+                                     ps))
+           "\n\n\tChild states:\n"
+           (cl-loop for child in (conn-state-all-children state)
+                    concat (format "`%s'\n" child) into cs
+                    finally return (if (string-empty-p cs)
+                                       "No child states"
+                                     cs)))))))
+
 (defmacro conn-define-state (name parents &rest properties)
   "Define a conn state named NAME.
 
@@ -1167,16 +1186,7 @@ can only be changed by redefining a state and are not inherited.
                                    (eq (cadr p) :no-inherit-keymap))
                          collect `',(car p))))
        (defvar-local ,name nil)
-       (put ',name
-            'variable-documentation
-            (concat
-             ,docstring
-             "\n\n\tParent states:\n"
-             (cl-loop for parent in (cdr (conn-state-all-parents ',name))
-                      concat (format "`%s'\n" parent) into ps
-                      finally return (if (string-empty-p ps)
-                                         "No parent states"
-                                       ps))))
+       (conn--make-state-docstring ',name ,docstring)
        ',name)))
 
 (defun conn--make-define-state-docstring ()

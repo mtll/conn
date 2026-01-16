@@ -1567,8 +1567,6 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Command Handler
 
-;; TODO: macro counter and format
-
 (cl-defgeneric conn-kapply-command-handler (cmd)
   (:method (_) nil))
 
