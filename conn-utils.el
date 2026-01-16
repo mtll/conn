@@ -635,26 +635,27 @@ If BUFFER is nil check `current-buffer'."
 If RESTRICT either \\='before or \\='after which will then matches will
 be restricted to those before or after the current match inclusive."
   (with-current-buffer (or buffer (current-buffer))
-    (save-excursion
-      (pcase restrict
-        ('after
-         (unless isearch-forward
-           (isearch-repeat 'forward))
-         (goto-char isearch-other-end))
-        ('before
-         (when isearch-forward
-           (isearch-repeat 'backward))
-         (goto-char isearch-other-end))
-        (_
-         (goto-char (if isearch-forward (point-min) (point-max)))))
-      (cl-loop with bound = (if isearch-forward (point-max) (point-min))
-               with case-fold-search = isearch-case-fold-search
-               while (isearch-search-string isearch-string bound t)
-               when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
-               collect (cons (match-beginning 0) (match-end 0))
-               when (and (= (match-beginning 0) (match-end 0))
-                         (not (if isearch-forward (eobp) (bobp))))
-               do (forward-char (if isearch-forward 1 -1))))))
+    (let ((multi-isearch-current-buffer buffer))
+      (save-excursion
+        (pcase restrict
+          ('after
+           (unless isearch-forward
+             (isearch-repeat 'forward))
+           (goto-char isearch-other-end))
+          ('before
+           (when isearch-forward
+             (isearch-repeat 'backward))
+           (goto-char isearch-other-end))
+          (_
+           (goto-char (if isearch-forward (point-min) (point-max)))))
+        (cl-loop with bound = (if isearch-forward (point-max) (point-min))
+                 with case-fold-search = isearch-case-fold-search
+                 while (isearch-search-string isearch-string bound t)
+                 when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
+                 collect (cons (match-beginning 0) (match-end 0))
+                 when (and (= (match-beginning 0) (match-end 0))
+                           (not (if isearch-forward (eobp) (bobp))))
+                 do (forward-char (if isearch-forward 1 -1)))))))
 
 (defun conn--string-no-upper-case-p (string)
   "Return t if STRING contains no upper case characters."

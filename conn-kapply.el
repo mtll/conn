@@ -554,13 +554,13 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
    "Proceed with macro?\\<multi-query-replace-map>"
    "("
    "\\[act] act, "
+   "\\[skip] skip, "
    "\\[exit-current] skip buffer, "
    "\\[exit] exit, "
    "\\[recenter] recenter, "
    "\\[edit] edit, "
    "\\[automatic] auto buffer, "
-   "\\[automatic-all] auto all)"
-   "\\[skip] skip"
+   "\\[automatic-all] auto all"
    ")"))
 
 (defconst conn-kapply-query-help
@@ -1763,57 +1763,95 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-isearch ()
   (interactive)
-  ;; TODO: defer opening files like match
-  (with-isearch-suspended
-   (conn-read-args (conn-kapply-state
-                    :prompt "Kapply on Regions"
-                    :command-handler #'conn-kapply-command-handler
-                    :display-handler (conn-read-args-display-columns 3 3)
-                    :pre (lambda (_)
-                           (when (and (bound-and-true-p conn-posframe-mode)
-                                      (fboundp 'posframe-hide))
-                             (posframe-hide " *conn-list-posframe*"))))
-       ((restrict (unless (or (bound-and-true-p multi-isearch-file-list)
-                              (bound-and-true-p multi-isearch-buffer-list))
-                    (conn-cycling-argument
-                     "restrict"
-                     '(nil 'after 'before)
-                     'restrict
-                     :keymap conn-restrict-argument-map)))
-        (pipeline (conn-composite-argument
-                   (list (conn-kapply-order-argument)
-                         (conn-kapply-state-argument)
-                         (conn-kapply-ibuffer-argument t)
-                         (conn-kapply-query-argument)
-                         (conn-kapply-excursions-argument t)
-                         (conn-kapply-restrictions-argument t)
-                         (conn-kapply-window-conf-argument t)
-                         (conn-kapply-undo-argument))))
-        (applier (conn-kapply-macro-argument)))
-     (let ((matches
-            (cond ((bound-and-true-p multi-isearch-file-list)
-                   (mapcan 'conn--isearch-matches
-                           (nconc
-                            (delq (current-buffer)
-                                  (mapcar #'find-file-noselect
-                                          multi-isearch-file-list))
-                            (list (current-buffer)))))
-                  ((bound-and-true-p multi-isearch-buffer-list)
-                   (mapcan 'conn--isearch-matches
-                           (nconc
-                            (remq (current-buffer) multi-isearch-buffer-list)
-                            (list (current-buffer)))))
-                  (t (conn--isearch-matches (current-buffer) restrict)))))
-       (conn-kapply-macro
-        applier
-        (conn-kapply-region-iterator
-         (cl-loop for (beg . end) in matches
-                  collect (conn-kapply-make-region beg end)))
-        `(conn-kapply-relocate-to-region
-          conn-kapply-open-invisible
-          conn-kapply-pulse-region
-          ,@pipeline)))))
-  (isearch-done))
+  (cl-macrolet ((with-protected-isearch-vars (body)
+                  (let ((vars '(multi-isearch-file-list
+                                multi-isearch-buffer-list
+	                        multi-isearch-next-buffer-current-function
+                                isearch-string
+	                        isearch-message
+	                        isearch-forward
+	                        isearch-regexp-function
+	                        isearch-case-fold-search
+                                isearch-search-fun-function
+                                isearch-wrap-function
+                                isearch-push-state-function)))
+                    (pcase-exhaustive body
+                      (`(lambda ,args . ,body)
+                       (cl-loop
+                        for var in vars
+                        collect `(,(gensym "var") ,var) into bindings
+                        finally return `(let ,bindings
+                                          (lambda ,args
+                                            (let ,(mapcar #'reverse bindings)
+                                              ,@body)))))))))
+    (let ((matches nil)
+          (restrict
+           (unless (or (bound-and-true-p multi-isearch-file-list)
+                       (bound-and-true-p multi-isearch-buffer-list))
+             (conn-cycling-argument
+              "restrict"
+              '(nil 'after 'before)
+              'restrict
+              :keymap conn-restrict-argument-map)))
+          (iterator nil)
+          (curr (current-buffer)))
+      (cl-labels ((collect-matches ()
+                    (pcase-dolist (`(,beg . ,end)
+                                   (conn--isearch-matches curr restrict))
+                      (push (conn-kapply-make-region beg end curr) matches))
+                    (cl-callf nreverse matches))
+                  (next ()
+                    (when multi-isearch-next-buffer-current-function
+                      (condition-case _
+                          (while (null matches)
+                            (cl-callf2 funcall
+                                multi-isearch-next-buffer-current-function
+                                curr)
+                            (collect-matches))
+                        (error nil)))))
+        (setq iterator (with-protected-isearch-vars
+                        (lambda (state)
+                          (pcase state
+                            (:exit-current
+                             (mapc #'delete-overlay (cl-shiftf matches nil)))
+                            (:cleanup
+                             (mapc #'delete-overlay matches))
+                            ((or :next :record)
+                             (unless matches (next))
+                             (conn-kapply-consume-region (pop matches)))))))
+        (unwind-protect
+            (with-isearch-suspended
+             (conn-read-args (conn-kapply-state
+                              :prompt "Kapply on Regions"
+                              :command-handler #'conn-kapply-command-handler
+                              :display-handler (conn-read-args-display-columns 3 3)
+                              :pre (lambda (_)
+                                     (when (and (bound-and-true-p conn-posframe-mode)
+                                                (fboundp 'posframe-hide))
+                                       (posframe-hide " *conn-list-posframe*"))))
+                 ((rst restrict)
+                  (pipeline (conn-composite-argument
+                             (list (conn-kapply-state-argument)
+                                   (conn-kapply-ibuffer-argument t)
+                                   (conn-kapply-query-argument)
+                                   (conn-kapply-excursions-argument t)
+                                   (conn-kapply-restrictions-argument t)
+                                   (conn-kapply-window-conf-argument t)
+                                   (conn-kapply-undo-argument))))
+                  (applier (conn-kapply-macro-argument)))
+               (setq restrict rst)
+               (collect-matches)
+               (conn-kapply-macro
+                applier
+                iterator
+                `(conn-kapply-relocate-to-region
+                  conn-kapply-open-invisible
+                  conn-kapply-pulse-region
+                  ,@pipeline))
+               (setq curr (current-buffer))))
+          (setq isearch-window-configuration nil)
+          (isearch-done)
+          (switch-to-buffer curr))))))
 
 (defvar-keymap conn-read-pattern-map
   "p" 'read-pattern)

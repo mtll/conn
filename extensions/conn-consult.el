@@ -196,30 +196,6 @@
                  (buffer-substring-no-properties beg end))))
      (conn-push-jump-ring (mark-marker)))))
 
-(defun conn-consult--isearch-matches (&optional buffer)
-  (with-current-buffer (or buffer (current-buffer))
-    (save-excursion
-      (goto-char (if isearch-forward (point-min) (point-max)))
-      (cl-loop with bound = (if isearch-forward (point-max) (point-min))
-               with case-fold-search = isearch-case-fold-search
-               with cand-idx = 0
-               while (isearch-search-string isearch-string bound t)
-               when (funcall isearch-filter-predicate
-                             (match-beginning 0) (match-end 0))
-               collect (let ((line (line-number-at-pos (match-beginning 0) consult-line-numbers-widen)))
-                         (save-excursion
-                           (goto-char (match-beginning 0))
-                           (consult--location-candidate
-                            (consult--buffer-substring
-                             (line-beginning-position)
-                             (line-end-position)
-                             'fontify)
-                            (cons (current-buffer) (match-beginning 0))
-                            line (prog1 cand-idx (cl-incf cand-idx)))))
-               when (and (= (match-beginning 0) (match-end 0))
-                         (not (if isearch-forward (eobp) (bobp))))
-               do (forward-char (if isearch-forward 1 -1))))))
-
 (defun conn--consult-grep-iterator (candidates)
   (let ((files nil)
         (curr-file nil))
@@ -285,6 +261,10 @@
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
 
+  (defun conn--embark-save-selected-window ()
+    (let ((win (selected-window)))
+      (run-with-timer 0 nil (lambda () (select-window win)))))
+
   (defun conn-kapply-xref-candidates (cands)
     (let ((regions
            (mapcar
@@ -298,13 +278,15 @@
             cands)))
       (conn-kapply-on-iterator
        (conn-kapply-region-iterator regions)
-       :query t)))
+       :query t))
+    (conn--embark-save-selected-window))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
     (conn-kapply-on-iterator
      (conn--consult-grep-iterator cands)
-     :query t))
+     :query t)
+    (conn--embark-save-selected-window))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
@@ -317,7 +299,8 @@
                   (`(,buf . ,pt)
                    (conn-kapply-make-region pt pt buf))))
               cands))
-     :query t))
+     :query t)
+    (conn--embark-save-selected-window))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-xref-map
