@@ -1134,20 +1134,29 @@ Currently selected window remains selected afterwards."
                    :reference (list conn-dispatch-thing-reference))
       ((`(,thing ,arg) (conn-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
+       (read-from-kill-ring
+        (unless register
+          (conn-read-argument
+           "read from kill ring"
+           'from-kill-ring
+           (define-keymap "y" 'from-kill-ring)
+           (lambda (_) (read-from-kill-ring "Yank")))))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map))
-       (other-end (conn-boolean-argument "other-end"
-                                         'other-end
-                                         conn-other-end-argument-map))
+       (other-end (conn-boolean-argument
+                   "stay"
+                   'other-end
+                   conn-other-end-argument-map))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
                                conn-restrict-windows-argument-map)))
     (let ((str (if register
                    (get-register register)
-                 (current-kill 0))))
+                 (or read-from-kill-ring
+                     (current-kill 0)))))
       (cl-assert (stringp str))
       (conn-dispatch-setup
        (oclosure-lambda (conn-action

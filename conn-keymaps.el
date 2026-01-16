@@ -453,15 +453,12 @@
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
-  "W" 'conn-dispatch-copy-to-replace
-  "q" 'conn-dispatch-yank-to-replace
-  "Q" 'conn-dispatch-reading-yank-to-replace
+  "r" 'conn-dispatch-copy-to-replace
+  "q" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from
-  "F" 'conn-dispatch-copy-from-replace
   "g" 'conn-dispatch-grab
-  "r" 'conn-dispatch-replace
   "d" 'conn-dispatch-send
   "D" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
