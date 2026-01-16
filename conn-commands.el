@@ -379,7 +379,8 @@ The command to be stored is read from `command-history'."
                        (alist-get 'conn-tab-cookie
                                   (thread-first
                                     (funcall tab-bar-tabs-function)
-                                    tab-bar--current-tab-find cdr))
+                                    tab-bar--current-tab-find
+                                    cdr))
                      (gensym "conn-tab-cookie")))
                   (frame (selected-frame)))))
   (cookie nil :read-only t)
