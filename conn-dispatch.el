@@ -634,12 +634,9 @@ themselves once the selection process has concluded."
       conn-dispatch-send
       conn-dispatch-send-replace)
      ("kapply" conn-dispatch-kapply)
-     ("yank to/replace"
+     ("yank to/read"
       conn-dispatch-yank-to
-      conn-dispatch-yank-to-replace)
-     ("yank read/replace"
-      conn-dispatch-reading-yank-to
-      conn-dispatch-reading-yank-to-replace)
+      conn-dispatch-reading-yank-to)
      ("copy to/replace"
       conn-dispatch-copy-to
       conn-dispatch-copy-to-replace)
@@ -647,9 +644,8 @@ themselves once the selection process has concluded."
      ("register load/replace"
       conn-dispatch-register-load
       conn-dispatch-register-load-replace)
-     ("take/replace"
-      conn-dispatch-grab
-      conn-dispatch-replace))))
+     ("repeat command at" conn-dispatch-repeat-command)
+     ("grab" conn-dispatch-grab))))
 
 (defvar conn-dispatch-command-reference
   (conn-reference-page
@@ -1220,8 +1216,7 @@ Target overlays may override this default by setting the
                (window (overlay-get overlay 'window))
                (display-width nil)
                (padding-width 0)
-               (ov nil)
-               (face (overlay-get target 'label-face)))
+               (ov nil))
     (unwind-protect
         (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
@@ -1243,15 +1238,16 @@ Target overlays may override this default by setting the
             ((or (and (pred listp) disp)
                  (and (pred vectorp) vec
                       (let disp (seq-into vec 'list))))
-             (add-text-properties 0 (length full-string)
-                                  `(display ,(list (assq 'raise disp)
-                                                   (assq 'height disp)))
-                                  full-string)))
+             (when-let* ((r (assq 'raise disp)))
+               (add-display-text-property 0 (length full-string)
+                                          'raise (cadr r)
+                                          full-string))
+             (when-let* ((h (assq 'height disp)))
+               (add-display-text-property 0 (length full-string)
+                                          'height (cadr h)
+                                          full-string))))
           (when-let* ((f (get-char-property (overlay-start target) 'face)))
-            (add-text-properties 0 (length full-string)
-                                 `(face ,(append (ensure-list face)
-                                                 (ensure-list f)))
-                                 full-string))
+            (add-face-text-property 0 (length full-string) f t full-string))
           (setq display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-max))
@@ -1338,11 +1334,11 @@ Target overlays may override this default by setting the
                 (funcall padding-function
                          overlay
                          padding-width
-                         face)
+                         (get-text-property 0 'face full-string))
               (funcall conn-default-label-padding-function
                        overlay
                        padding-width
-                       face)))))
+                       (get-text-property 0 'face full-string))))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
@@ -3557,35 +3553,6 @@ after the region selected by dispatch."))
                   (point)))
                 (_ (user-error "Cannot find %s"
                                (conn-thing-pretty-print thing)))))))))))
-
-(defun conn-dispatch-yank-to-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (let ((str (current-kill 0)))
-    (oclosure-lambda (conn-action
-                      (action-description "Yank and Replace To")
-                      (action-window-predicate
-                       (lambda (win)
-                         (not
-                          (buffer-local-value 'buffer-read-only
-                                              (window-buffer win)))))
-                      (action-reference
-                       "Yank the the last killed text from the kill ring and replace the region
-selected by dispatch with it."))
-        ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
-        (with-selected-window window
-          (conn-dispatch-change-group)
-          (save-excursion
-            (pcase (conn-bounds-of-dispatch thing arg pt)
-              ((conn-bounds `(,beg . ,end) transform)
-               (goto-char beg)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (conn-dispatch-action-pulse
-                (- (point) (length str)) (point)))
-              (_ (user-error "Cannot find thing at point")))))))))
 
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))

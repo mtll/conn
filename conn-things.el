@@ -230,14 +230,14 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                        (cnm (gensym "thing--cnm")))
                    `#'(lambda ,(cons cnm args)
                         ,@(car parsed-body)
-                        ,(let ((exp (macroexpand-all
-                                     `(cl-flet ((cl-call-next-method ,cnm))
-                                        ,@(cdr parsed-body)))))
+                        ,(let ((mbody (macroexpand-all
+                                       `(cl-flet ((cl-call-next-method ,cnm))
+                                          ,@(cdr parsed-body)))))
                            (if (memq gfn defined)
                                (macroexp-warn-and-return
                                 "Anonymous thing method shadows previous definition"
-                                exp nil nil key)
-                             exp)))))
+                                mbody nil nil key)
+                             mbody)))))
                 (result (error "Unexpected macroexpansion result :%S"
                                result))))))
       (while (setq key (pop properties)
