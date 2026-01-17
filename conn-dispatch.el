@@ -1971,15 +1971,14 @@ the meaning of depth."
                       (_
                        (read-event prompt t seconds)))))))
       (if seconds
-          (cl-loop
-           (when-let* ((ev (read-ev (unless inhibit-message
-                                      (concat prompt
-                                              ": "
-                                              prompt-suffix
-                                              (when prompt-suffix " ")
-                                              error-msg))
-                                    seconds)))
-             (cl-return (and (characterp ev) ev))))
+          (and-let* ((ev (read-ev (unless inhibit-message
+                                    (concat prompt
+                                            ": "
+                                            prompt-suffix
+                                            (when prompt-suffix " ")
+                                            error-msg))
+                                  seconds)))
+            (and (characterp ev) ev))
         (cl-loop
          (pcase (let ((scroll-conservatively 100))
                   (conn-with-overriding-map keymap
@@ -2664,6 +2663,38 @@ to the key binding for that target."
 (defvar-keymap conn-dispatch-read-string-target-keymap
   "M-e" 'read-string)
 
+(defun conn-dispatch-lazy-update (update-fn)
+  (let ((unwind (make-symbol "unwind"))
+        (after-change (make-symbol "after-change"))
+        (pred (make-symbol "pred"))
+        (timer (timer-create)))
+    (fset pred (lambda (win) (not (window-minibuffer-p win))))
+    (fset unwind
+          (lambda ()
+            (remove-function conn-target-window-predicate pred)
+            (remove-hook 'after-change-functions after-change t)
+            (remove-hook 'minibuffer-exit-hook unwind t)
+            (conn-cleanup-targets)))
+    (fset after-change
+          (lambda (_beg _end _len)
+            (cancel-timer timer)
+            (let ((inhibit-redisplay t)
+                  (string (minibuffer-contents)))
+              (timer-set-function
+               timer
+               (lambda ()
+                 (conn-cleanup-targets)
+                 (unless (equal string "")
+                   (with-minibuffer-selected-window
+                     (while-no-input
+                       (funcall update-fn string))))))
+              (timer-set-idle-time timer 0.05 nil)
+              (timer-activate-when-idle timer t))))
+    (lambda ()
+      (add-function :before-while conn-target-window-predicate pred)
+      (add-hook 'minibuffer-exit-hook unwind nil t)
+      (add-hook 'after-change-functions after-change nil t))))
+
 (conn-define-target-finder conn-dispatch-read-with-timeout
     (conn-dispatch-string-targets)
     ((timeout :initform 0.5 :initarg :timeout))
@@ -2676,10 +2707,15 @@ to the key binding for that target."
             ( :handler (cmd)
               (when (eq cmd 'read-string)
                 (let ((str (conn-with-dispatch-suspended
-                             (read-string
-                              "String: " string
-                              'conn-read-string-target-history
-                              nil t))))
+                             (minibuffer-with-setup-hook
+                                 (conn-dispatch-lazy-update
+                                  (lambda (str)
+                                    (setf string str)
+                                    (conn-dispatch-call-update-handlers state)))
+                               (read-string
+                                "String: " string
+                                'conn-read-string-target-history
+                                nil t)))))
                   (unless (equal str "")
                     (setq string str)
                     (:return)))))
