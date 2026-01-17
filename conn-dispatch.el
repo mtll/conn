@@ -71,22 +71,22 @@
   :group 'conn-faces)
 
 (defface conn-dispatch-label-face
-  '((t (:inherit default :foreground "black" :background "#ff8bd1" :bold t)))
+  '((t (:foreground "black" :background "#ff8bd1" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-alt-face
-  '((t (:inherit default :foreground "black" :background "#ffc5e8" :bold t)))
+  '((t (:foreground "black" :background "#ffc5e8" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-face
-  '((t (:inherit default :foreground "black" :background "#8bd6ff" :bold t)))
+  '((t (:foreground "black" :background "#8bd6ff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-alt-face
-  '((t (:inherit default :foreground "black" :background "#c5ebff" :bold t)))
+  '((t (:foreground "black" :background "#c5ebff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
@@ -1218,10 +1218,10 @@ Target overlays may override this default by setting the
                 label)
                (full-string (concat prefix string suffix))
                (window (overlay-get overlay 'window))
-               (display-width
-                (conn--string-pixel-width full-string (window-buffer window)))
+               (display-width nil)
                (padding-width 0)
-               (ov nil))
+               (ov nil)
+               (face (overlay-get target 'label-face)))
     (unwind-protect
         (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
@@ -1231,6 +1231,29 @@ Target overlays may override this default by setting the
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
           (overlay-put ov 'wrap-prefix "")
+          (pcase (get-char-property (overlay-start target) 'display)
+            ((or (and (pred listp) disp)
+                 (and (pred vectorp) vec
+                      (let disp (seq-into vec 'list))))
+             (add-text-properties 0 (length full-string)
+                                  `(display ,(list (assq 'raise disp)
+                                                   (assq 'height disp)))
+                                  full-string))
+            (`(raise ,amount)
+             (add-text-properties 0 (length full-string)
+                                  `(display (raise ,amount))
+                                  full-string))
+            (`(height ,amount)
+             (add-text-properties 0 (length full-string)
+                                  `(display (height ,amount))
+                                  full-string)))
+          (when-let* ((f (get-char-property (overlay-start target) 'face)))
+            (add-text-properties 0 (length full-string)
+                                 `(face ,(append (ensure-list face)
+                                                 (ensure-list f)))
+                                 full-string))
+          (setq display-width
+                (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-max))
             (let* ((win (overlay-get target 'window))
                    (beg (overlay-end target))
@@ -1315,11 +1338,11 @@ Target overlays may override this default by setting the
                 (funcall padding-function
                          overlay
                          padding-width
-                         (overlay-get target 'label-face))
+                         face)
               (funcall conn-default-label-padding-function
                        overlay
                        padding-width
-                       (overlay-get target 'label-face))))))
+                       face)))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
