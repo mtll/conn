@@ -3444,10 +3444,16 @@ contain targets."
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (select-window window)
-      (if (button-at pt)
-          (push-button pt)
-        (when (fboundp 'widget-apply-action)
-          (widget-apply-action (get-char-property pt 'button) pt))))))
+      (cond ((and-let* ((link (save-excursion
+                                (goto-char pt)
+                                (org-element-link-parser))))
+               (org-link-open link)
+               t))
+            ((button-at pt)
+             (push-button pt))
+            (t
+             (when (fboundp 'widget-apply-action)
+               (widget-apply-action (get-char-property pt 'button) pt)))))))
 
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))

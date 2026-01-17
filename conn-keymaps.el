@@ -99,6 +99,7 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "," 'conn-dispatch-on-buttons
   "h" 'conn-register-prefix
   "<" #'conn-unset-register
   "F" #'conn-bind-last-dispatch-to-key
