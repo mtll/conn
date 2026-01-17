@@ -2686,8 +2686,7 @@ to the key binding for that target."
                  (conn-cleanup-targets)
                  (unless (equal string "")
                    (with-minibuffer-selected-window
-                     (while-no-input
-                       (funcall update-fn string))))))
+                     (funcall update-fn string)))))
               (timer-set-idle-time timer 0.05 nil)
               (timer-activate-when-idle timer t))))
     (lambda ()
@@ -2711,7 +2710,8 @@ to the key binding for that target."
                                  (conn-dispatch-lazy-update
                                   (lambda (str)
                                     (setf string str)
-                                    (conn-dispatch-call-update-handlers state)))
+                                    (while-no-input
+                                      (conn-dispatch-call-update-handlers state))))
                                (read-string
                                 "String: " string
                                 'conn-read-string-target-history
