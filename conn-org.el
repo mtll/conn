@@ -26,6 +26,17 @@
 (require 'org-element)
 (require 'org-agenda)
 
+;;;###autoload
+(defun conn-dispatch-org-button-handler (pt)
+  (and-let* ((link (save-excursion
+                     (goto-char pt)
+                     (org-element-link-parser))))
+    (org-link-open link)
+    t))
+
+;;;###autoload
+(add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
+
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-element))
                                         _arg)
   (org-transpose-element))

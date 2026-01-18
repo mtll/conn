@@ -3443,6 +3443,18 @@ contain targets."
   (conn--action-cancel-change-group
    (conn-change-group-action--action-change-group action)))
 
+(defvar conn-dispatch-button-functions nil)
+
+(defun conn-dispatch-button-handler-default (pt)
+  (cond ((button-at pt)
+         (push-button pt)
+         t)
+        ((fboundp 'widget-apply-action)
+         (widget-apply-action (get-char-property pt 'button) pt)
+         t)))
+
+(add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default)
+
 (defun conn-dispatch-push-button ()
   (declare (conn-dispatch-action)
            (important-return-value t))
@@ -3455,16 +3467,7 @@ contain targets."
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (select-window window)
-      (cond ((and-let* ((link (save-excursion
-                                (goto-char pt)
-                                (org-element-link-parser))))
-               (org-link-open link)
-               t))
-            ((button-at pt)
-             (push-button pt))
-            (t
-             (when (fboundp 'widget-apply-action)
-               (widget-apply-action (get-char-property pt 'button) pt)))))))
+      (run-hook-with-args-until-success 'conn-dispatch-button-functions pt))))
 
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
