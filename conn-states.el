@@ -877,15 +877,12 @@ BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name type)))
     (setq type (gensym)))
-  (cl-with-gensyms (next)
-    `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
-       (push (cons nil
-                   (lambda (,type)
-                     (unwind-protect
-                         ,(macroexp-progn body)
-                       (when ,next
-                         (funcall (cdar ,next) ,type)))))
-             (gethash conn--state-stack conn--state-re-entry-functions)))))
+  (cl-with-gensyms (rest)
+    `(push (lambda (,type ,rest)
+             (unwind-protect
+                 ,(macroexp-progn body)
+               (when ,rest (funcall (car ,rest) ,type (cdr ,rest)))))
+           (cdr (gethash conn--state-stack conn--state-re-entry-functions)))))
 
 (defmacro conn-state-on-re-entry-once (name type &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
@@ -894,20 +891,19 @@ BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name type)))
     (setq type (gensym)))
-  (cl-with-gensyms (next)
-    `(let ((,next (gethash conn--state-stack conn--state-re-entry-functions)))
-       (unless (assq ',name ,next)
-         (push (cons ',name
-                     (lambda (,type)
-                       (unwind-protect
-                           ,(macroexp-progn body)
-                         (when ,next
-                           (funcall (cdar ,next) ,type)))))
-               (gethash conn--state-stack conn--state-re-entry-functions))))))
+  (cl-symbol-macrolet ((place (gethash conn--state-stack conn--state-re-entry-functions)))
+    (cl-with-gensyms (rest)
+      `(unless (memq ',name (car ,place))
+         (push ',name (car ,place))
+         (push (lambda (,type ,rest)
+                 (unwind-protect
+                     ,(macroexp-progn body)
+                   (when ,rest (funcall (car ,rest) ,type (cdr ,rest)))))
+               (cdr ,place))))))
 
 (defun conn--run-re-entry-fns (type)
-  (when-let* ((fns (gethash conn--state-stack conn--state-re-entry-functions)))
-    (funcall (cdar fns) type)))
+  (when-let* ((fns (cdr (gethash conn--state-stack conn--state-re-entry-functions))))
+    (funcall (car fns) type (cdr fns))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")

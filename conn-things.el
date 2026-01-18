@@ -307,7 +307,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 ;;;###autoload
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property))
-
 ;;;###autoload
   (defun conn--set-anonymous-thing-property (f args &rest properties)
     `(progn
