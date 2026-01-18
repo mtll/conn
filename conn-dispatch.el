@@ -1045,6 +1045,7 @@ buffer is a valid target.")
 (cl-defun conn-make-target-overlay (pt
                                     length
                                     &key
+                                    point
                                     padding-function
                                     window
                                     thing
@@ -1075,6 +1076,7 @@ Optionally the overlay may have an associated THING."
                    (make-overlay composition-start composition-start nil nil t))
                (make-overlay pt (min (+ pt length) (cdr line-bounds)) nil nil t))
              (delete-overlay ov)))
+      (overlay-put ov 'point (or point pt))
       (overlay-put ov 'conn-overlay t)
       (overlay-put ov 'category 'conn-target-overlay)
       (overlay-put ov 'face 'conn-target-overlay-face)
@@ -2231,6 +2233,7 @@ the meaning of depth."
   (pcase-let* (((cl-struct conn-dispatch-label string target)
                 label)
                (start (overlay-start target))
+               (point (or (overlay-get target 'point) start))
                (win (overlay-get target 'window))
                (face (overlay-get target 'label-face)))
     (conn-dispatch-undo-case
@@ -2240,7 +2243,7 @@ the meaning of depth."
         :window win
         :properties `( label-face ,face
                        label-string ,string))))
-    (list start win (overlay-get target 'thing))))
+    (list point win (overlay-get target 'thing))))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
   (setf (conn-dispatch-label-narrowed-string label)
@@ -2697,25 +2700,25 @@ to the key binding for that target."
     ((timeout :initform 0.5 :initarg :timeout))
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
-      (let ((timeout (oref state timeout)))
-        (unless string
+      (unless string
+        (let ((timeout (oref state timeout)))
           (conn-with-dispatch-event-handlers
             (:keymap conn-dispatch-read-string-target-keymap)
             ( :handler (cmd)
               (when (eq cmd 'read-string)
-                (let ((str (conn-with-dispatch-suspended
-                             (minibuffer-with-setup-hook
-                                 (conn-dispatch-lazy-update
-                                  (lambda (str)
-                                    (setf string str)
-                                    (while-no-input
-                                      (conn-dispatch-call-update-handlers state))))
-                               (read-string
-                                "String: " string
-                                'conn-read-string-target-history
-                                nil t)))))
-                  (unless (equal str "")
-                    (setq string str)
+                (let ((newstr (conn-with-dispatch-suspended
+                                (minibuffer-with-setup-hook
+                                    (conn-dispatch-lazy-update
+                                     (lambda (str)
+                                       (setf string str)
+                                       (while-no-input
+                                         (conn-dispatch-call-update-handlers state))))
+                                  (read-string
+                                   "String: " string
+                                   'conn-read-string-target-history
+                                   nil t)))))
+                  (unless (equal newstr "")
+                    (setq string newstr)
                     (:return)))))
             (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
               (setf string (char-to-string (conn-dispatch-read-char prompt t)))
@@ -2725,8 +2728,8 @@ to the key binding for that target."
                                       prompt t timeout string)))
                 (conn-cleanup-targets)
                 (setf string (concat string (char-to-string next-char)))
-                (conn-dispatch-call-update-handlers state))))
-          (conn-cleanup-targets)))
+                (conn-dispatch-call-update-handlers state)))))
+        (conn-cleanup-targets))
       (conn-dispatch-call-update-handlers state 0))))
 
 (defclass conn-dispatch-focus-mixin ()
@@ -3113,12 +3116,15 @@ contain targets."
     ()
     ((thing :initarg :thing)
      (prefix-regexp :initarg :prefix-regexp)
+     (skip-prefix :initarg :skip-prefix
+                  :initform nil)
      (fixed-length :initform nil
                    :initarg :fixed-length))
   ( :default-update-handler (state)
     (let ((thing (oref state thing))
           (prefix (oref state prefix-regexp))
-          (fixed-length (oref state fixed-length)))
+          (fixed-length (oref state fixed-length))
+          (skip-prefix (oref state skip-prefix)))
       (pcase-dolist (`(,beg . ,end)
                      (conn--visible-re-matches
                       prefix
@@ -3128,7 +3134,9 @@ contain targets."
                           (pcase (ignore-errors (conn-bounds-of thing nil))
                             ((conn-bounds `(,tbeg . ,tend))
                              (and (= tbeg beg) (<= end tend))))))))
-        (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
+        (conn-make-target-overlay
+         beg (or fixed-length (- end beg))
+         :point (when skip-prefix end))))))
 
 (conn-define-target-finder conn-dispatch-things-matching-re-targets
     ()
@@ -3443,6 +3451,7 @@ contain targets."
   (conn--action-cancel-change-group
    (conn-change-group-action--action-change-group action)))
 
+;;;###autoload
 (defvar conn-dispatch-button-functions nil)
 
 (defun conn-dispatch-button-handler-default (pt)

@@ -1600,6 +1600,22 @@ Only the background color is used."
 
 ;;;; Thing Definitions
 
+(conn-register-thing
+ 'inner-string
+ :bounds-op (lambda ()
+              (pcase (bounds-of-thing-at-point 'string)
+                (`(,beg . ,end)
+                 (save-match-data
+                   (cons
+                    (save-excursion
+                      (goto-char beg)
+                      (when (looking-at (rx (* (syntax string-quote))))
+                        (match-end 0)))
+                    (save-excursion
+                      (goto-char end)
+                      (when (looking-back (rx (* (syntax string-quote))) beg t)
+                        (match-beginning 0)))))))))
+
 (conn-register-thing 'kbd-macro)
 
 (conn-register-thing 'point)

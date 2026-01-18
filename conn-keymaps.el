@@ -434,21 +434,25 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   ")" (conn-anonymous-thing
-        'forward-sexp
-        :pretty-print (:method (_self) "list")
-        :target-finder ( :method (_self _arg)
-                         (conn-dispatch-things-with-re-prefix-targets
-                          :thing 'sexp
-                          :prefix-regexp (rx (syntax open-parenthesis)))))
-  "]" (conn-anonymous-thing
         'sexp
-        :pretty-print (:method (_self) "inner-list")
-        :bounds-op ( :method (_self arg)
-                     (conn-bounds-of 'down-list arg))
+        :pretty-print (:method (_) "outer-list-or-string")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-things-with-re-prefix-targets
                           :thing 'sexp
-                          :prefix-regexp (rx (syntax open-parenthesis))))))
+                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                                                 (syntax string-quote))))))
+  "]" (conn-anonymous-thing
+        'inner-list
+        :pretty-print (:method (_) "inner-list-or-string")
+        :bounds-op ( :method (_self arg)
+                     (or (conn-bounds-of 'inner-string arg)
+                         (cl-call-next-method)))
+        :target-finder ( :method (_self _arg)
+                         (conn-dispatch-things-with-re-prefix-targets
+                          :thing 'sexp
+                          :skip-prefix t
+                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                                                 (syntax string-quote)))))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)

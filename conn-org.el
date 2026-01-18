@@ -34,8 +34,7 @@
     (org-link-open link)
     t))
 
-;;;###autoload
-(add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
+;;;###autoload(add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-element))
                                         _arg)
