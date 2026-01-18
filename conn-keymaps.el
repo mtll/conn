@@ -460,6 +460,7 @@
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from
   "g" 'conn-dispatch-grab
+  "G" 'conn-dispatch-grab-replace
   "d" 'conn-dispatch-send
   "D" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose

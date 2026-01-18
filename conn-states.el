@@ -2072,7 +2072,7 @@ echo area help message.
          (not (conn-argument-set-flag arg)))))
 
 (cl-defgeneric conn-argument-update (argument form updater)
-  ( :method (_arg _form _update-fn) nil))
+  ( :method (_arg _form _updater) nil))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   "Extract ARGUMENT's value."
