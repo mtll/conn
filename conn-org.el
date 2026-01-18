@@ -235,32 +235,55 @@
  'org-up-element
  'org-up-heading)
 
-(put 'org-heading 'bounds-of-thing-at-point
-     (lambda () (bounds-of-thing-at-point 'org-element)))
-(put 'org-heading 'forward-op 'org-next-visible-heading)
+(conn-register-thing
+ 'org-heading
+ :parent 'org-element
+ :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
+ :forward-op 'org-next-visible-heading)
+
+(conn-define-target-finder conn-dispatch-all-headings
+    (conn-dispatch-focus-mixin)
+    ((cache :initform nil)
+     (window-predicate :initform #'conn--org-window-p))
+  ( :default-update-handler (state)
+    (cl-symbol-macrolet ((cache (oref state cache)))
+      (unless (and-let* ((cached (alist-get (current-buffer) cache)))
+                (= (car cached) (buffer-chars-modified-tick)))
+        (setf (alist-get (current-buffer) cache)
+              (cons (buffer-chars-modified-tick)
+                    (let ((pts nil))
+                      (conn-for-each-visible (point-min) (point-max)
+                        (goto-char (point-max))
+                        (while (/= (point)
+                                   (progn (org-previous-visible-heading 1)
+                                          (point)))
+                          (push (point) pts)))
+                      pts))))
+      (dolist (pt (cdr (alist-get (current-buffer) cache)))
+        (conn-make-target-overlay
+         pt 0
+         :properties '(no-hide t))))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading))
                                       _arg)
-  (conn-all-things-targets
-   :thing 'org-heading
-   :window-predicate #'conn--org-window-p
-   :reference (conn-reference-quote
-                ((:heading "Org Heading Targets")))))
+  (conn-dispatch-all-headings))
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-dispatch-targets-state 'org-mode)
+  "h" 'org-heading)
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler
  'conn-org-heading-state-up-heading
  'org-next-visible-heading
- 'org-previous-visible-heading)
+ 'org-previous-visible-heading
+ 'org-forward-heading-same-level
+ 'org-backward-heading-same-level)
 
 (conn-register-thing-commands
  'org-element 'conn-discrete-thing-handler
  'org-forward-element
  'org-backward-element
- 'org-next-visible-heading
- 'org-previous-visible-heading
- 'org-forward-heading-same-level
- 'org-backward-heading-same-level
  'org-up-element
  'org-up-heading)
 
