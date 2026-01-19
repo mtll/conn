@@ -727,11 +727,6 @@ If END is less than BEG then the order of iteration is reversed.
 
 ;;;;; Overlay Utils
 
-(defun conn--clear-overlays ()
-  "Delete all conn overlays in BUFFER."
-  (without-restriction
-    (remove-overlays nil nil 'conn-overlay t)))
-
 (defun conn--overlays-in-of-type (beg end category &optional window)
   (declare (important-return-value t))
   (cl-loop for ov in (overlays-in beg end)

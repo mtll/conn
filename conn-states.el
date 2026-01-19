@@ -1498,6 +1498,17 @@ entering mark state.")
 
 ;;;;; Buffer State Setup
 
+(defun conn-setup-state-for-buffer (&optional no-major-mode-maps)
+  (when conn--state-stack
+    (let (conn-next-state)
+      (conn--run-exit-fns :exit))
+    (setq conn--state-stack nil))
+  (unless no-major-mode-maps
+    (setq conn--active-major-mode-maps
+          (conn--derived-mode-all-parents major-mode)))
+  (or (run-hook-with-args-until-success 'conn-setup-state-hook)
+      (conn-push-state 'conn-emacs-state)))
+
 (defun conn-setup-commit-state ()
   "Set the base state to `conn-emacs-state' in commit message buffers."
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))

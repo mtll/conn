@@ -59,21 +59,26 @@
 
 ;;;; Grep
 
-(defvar-local conn--wgrep-stack-cookie nil)
+(defvar-local conn--grep-edit-stack-cookie nil)
 
 (with-eval-after-load 'wgrep
-
   (defun conn--wgrep-cleanup ()
-    (conn-set-major-mode-maps
-     (conn--derived-mode-all-parents major-mode))
-    (conn-exit-recursive-stack conn--wgrep-stack-cookie))
+    (when-let* ((cookie (cl-shiftf conn--grep-edit-stack-cookie nil)))
+      (conn-set-major-mode-maps
+       (conn--derived-mode-all-parents major-mode))
+      (conn-exit-recursive-stack cookie)))
   (advice-add 'wgrep-to-original-mode :after 'conn--wgrep-cleanup)
 
   (defun conn--wgrep-setup ()
     (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setq conn--wgrep-stack-cookie
+    (setq conn--grep-edit-stack-cookie
           (conn-enter-recursive-stack 'conn-command-state)))
   (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
+
+(with-eval-after-load 'grep
+  (defun conn--exit-grep-edit-mode (&rest _)
+    (conn-setup-state-for-buffer))
+  (advice-add 'grep-edit-save-changes :after 'conn--exit-grep-edit-mode))
 
 ;;;; Calc
 

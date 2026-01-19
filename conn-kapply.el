@@ -588,7 +588,6 @@ Possibilities: \\<query-replace-map>
                 conn-kapply-query-help)))
      (overlay-put hl 'priority 2000)
      (overlay-put hl 'face 'query-replace)
-     (overlay-put hl 'conn-overlay t)
      (lambda (iterator state)
        (pcase state
          (:record

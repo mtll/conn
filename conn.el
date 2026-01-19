@@ -80,8 +80,6 @@
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
-        (setq conn-current-state nil
-              conn--state-stack nil)
         (make-local-variable 'conn-lighter)
         (setq-local conn--state-map (list (list 'conn-local-mode))
                     conn--major-mode-map (list (list 'conn-local-mode)))
@@ -90,21 +88,16 @@
                 (conn-make-ring 8
                                 :cleanup (lambda (mk) (set-marker mk nil))
                                 :copier #'conn--copy-mark)))
-        (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
-        (setq conn--input-method current-input-method
-              conn--active-major-mode-maps (conn--derived-mode-all-parents major-mode))
-        (or (run-hook-with-args-until-success 'conn-setup-state-hook)
-            (conn-push-state 'conn-emacs-state)))
-    (setq conn--state-stack nil)
+        (setq conn--input-method current-input-method)
+        (conn-setup-state-for-buffer))
     (let (conn-next-state)
       (conn--run-exit-fns :exit))
+    (setq conn--state-stack nil)
     (kill-local-variable 'conn-lighter)
-    (conn--clear-overlays)
     (setq cursor-type t)
-    (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)

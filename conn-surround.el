@@ -174,7 +174,6 @@
 
 (put 'conn-surround-overlay 'face 'region)
 (put 'conn-surround-overlay 'priority 2000)
-(put 'conn-surround-overlay 'conn-overlay t)
 
 (defun conn-surround-create-regions (regions)
   (cl-loop for (beg . end) in regions

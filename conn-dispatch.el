@@ -1039,7 +1039,6 @@ buffer is a valid target.")
 3-tuple of `conn-target-window-predicate', `conn-target-predicate', and
 `conn-target-sort-function'.")
 
-(put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
 (cl-defun conn-make-target-overlay (pt
@@ -1077,7 +1076,6 @@ Optionally the overlay may have an associated THING."
                (make-overlay pt (min (+ pt length) (cdr line-bounds)) nil nil t))
              (delete-overlay ov)))
       (overlay-put ov 'point (or point pt))
-      (overlay-put ov 'conn-overlay t)
       (overlay-put ov 'category 'conn-target-overlay)
       (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
@@ -1169,7 +1167,6 @@ Target overlays may override this default by setting the
                      conn-dispatch-pixelwise-labels-line-limit)))
 
 (put 'conn-label-overlay 'priority 3000)
-(put 'conn-label-overlay 'conn-overlay t)
 
 (defun conn--flush-left-padding (overlay width face)
   (when (> width 0)
