@@ -449,8 +449,10 @@
         'inner-list
         :pretty-print (:method (_) "inner-list-or-string")
         :bounds-op ( :method (_self arg)
-                     (or (conn-bounds-of 'inner-string arg)
-                         (cl-call-next-method)))
+                     (pcase (conn-bounds-of 'inner-string arg)
+                       ((and bounds (conn-bounds (pred identity)))
+                        bounds)
+                       (_ (cl-call-next-method))))
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-things-with-re-prefix-targets
                           :thing 'sexp

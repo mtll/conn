@@ -582,7 +582,8 @@
                      :target-finder ( :method (self _arg)
                                       (conn-ts-all-things :thing thing))
                      :pretty-print ( :method (self)
-                                     (string-join
+                                     (mapconcat
+                                      #'conn-thing-pretty-print
                                       (conn-anonymous-thing-property self :types)
                                       " & "))
                      :bounds-op ( :method (_ _)
