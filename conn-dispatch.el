@@ -2987,19 +2987,34 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-headings
     (conn-dispatch-focus-mixin)
-    ()
+    ((cache :initform nil))
   ( :default-update-handler (state)
-    (when (or (derived-mode-p (list 'outline-mode))
-              (bound-and-true-p outline-minor-mode))
-      (let ((heading-regexp (concat "^\\(?:" outline-regexp "\\).*")))
-        (save-excursion
-          (pcase-dolist (`(,beg . ,end)
-                         (conn--visible-regions (point-min) (point-max)))
-            (goto-char beg)
-            (while (re-search-forward heading-regexp end t)
-              (when (looking-at-p outline-heading-end-regexp)
-                (conn-make-target-overlay
-                 (match-beginning 0) 0)))))))))
+    (cl-symbol-macrolet ((cache (oref state cache)))
+      (when (or (derived-mode-p (list 'outline-mode))
+                (bound-and-true-p outline-minor-mode))
+        (unless (and-let* ((cached (alist-get (current-buffer) cache)))
+                  (= (car cached) (buffer-chars-modified-tick)))
+          (let ((pts nil))
+            (setf (alist-get (current-buffer) cache)
+                  (cons (buffer-chars-modified-tick)
+                        (progn
+                          (save-excursion
+                            (catch 'break
+                              (while t
+                                (unless (outline-next-visible-heading -1)
+                                  (throw 'break nil))
+                                (push (point) pts))))
+                          (save-excursion
+                            (catch 'break
+                              (while t
+                                (unless (outline-next-visible-heading 1)
+                                  (throw 'break nil))
+                                (push (point) pts))))
+                          pts)))))
+        (dolist (pt (cdr (alist-get (current-buffer) cache)))
+          (conn-make-target-overlay
+           pt 0
+           :properties '(no-hide t)))))))
 
 (conn-define-target-finder conn-dispatch-all-defuns
     (conn-dispatch-focus-mixin)
@@ -3462,7 +3477,7 @@ contain targets."
          (widget-apply-action (get-char-property pt 'button) pt)
          t)))
 
-(add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default)
+(add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default 50)
 
 (defun conn-dispatch-push-button ()
   (declare (conn-dispatch-action)

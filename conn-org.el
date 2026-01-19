@@ -241,36 +241,48 @@
  :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
  :forward-op 'org-next-visible-heading)
 
-(conn-define-target-finder conn-dispatch-all-headings
-    (conn-dispatch-focus-mixin)
-    ((cache :initform nil)
-     (window-predicate :initform #'conn--org-window-p))
-  ( :default-update-handler (state)
-    (cl-symbol-macrolet ((cache (oref state cache)))
+(defun conn-update-org-heading-targets (state)
+  (cl-symbol-macrolet ((cache (oref state cache)))
+    (when (or (derived-mode-p (list 'outline-mode))
+              (bound-and-true-p outline-minor-mode))
       (unless (and-let* ((cached (alist-get (current-buffer) cache)))
                 (= (car cached) (buffer-chars-modified-tick)))
-        (setf (alist-get (current-buffer) cache)
-              (cons (buffer-chars-modified-tick)
-                    (let ((pts nil))
-                      (conn-for-each-visible (point-min) (point-max)
-                        (goto-char (point-max))
-                        (while (/= (point)
-                                   (progn (org-previous-visible-heading 1)
-                                          (point)))
-                          (push (point) pts)))
-                      pts))))
+        (let ((pts nil))
+          (setf (alist-get (current-buffer) cache)
+                (cons (buffer-chars-modified-tick)
+                      (progn
+                        (save-excursion
+                          (catch 'break
+                            (while t
+                              (when (= (point)
+                                       (progn
+                                         (org-next-visible-heading -1)
+                                         (point)))
+                                (throw 'break nil))
+                              (push (point) pts))))
+                        (save-excursion
+                          (catch 'break
+                            (while t
+                              (when (= (org-next-visible-heading 1)
+                                       (point-max))
+                                (throw 'break nil))
+                              (push (point) pts))))
+                        pts)))))
       (dolist (pt (cdr (alist-get (current-buffer) cache)))
         (conn-make-target-overlay
          pt 0
          :properties '(no-hide t))))))
 
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading))
-                                      _arg)
-  (conn-dispatch-all-headings))
+(conn-add-update-handler
+ 'conn-dispatch-headings
+ (lambda (trynext)
+   (if (provided-mode-derived-p major-mode 'org-mode)
+       #'conn-update-org-heading-targets
+     (funcall trynext))))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-dispatch-targets-state 'org-mode)
-  "h" 'org-heading)
+  "h" 'heading)
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler

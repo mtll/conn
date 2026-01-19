@@ -246,6 +246,10 @@
 
 (provide 'conn-consult)
 
+(defun conn--embark-save-selected-window ()
+  (let ((win (selected-window)))
+    (run-with-timer 0 nil (lambda () (select-window win)))))
+
 (with-eval-after-load 'embark
   (defvar embark-general-map)
 
@@ -260,10 +264,6 @@
 
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
-
-  (defun conn--embark-save-selected-window ()
-    (let ((win (selected-window)))
-      (run-with-timer 0 nil (lambda () (select-window win)))))
 
   (defun conn-kapply-xref-candidates (cands)
     (let ((regions
