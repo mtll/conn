@@ -70,6 +70,23 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                (forward-thing thing (- dir))
                (point)))))))
 
+(defun conn-nestable-thing-handler (thing beg)
+  "Mark the things which have been moved over."
+  (ignore-errors
+    (cond ((< beg (point))
+           (min (or (conn-continuous-thing-handler thing beg)
+                    most-positive-fixnum)
+                (save-excursion
+                  (forward-thing thing -1)
+                  (point))))
+          ((> beg (point))
+           (max (or (conn-continuous-thing-handler thing beg)
+                    most-negative-fixnum)
+                (save-excursion
+                  (forward-thing thing 1)
+                  (point))))
+          (t nil))))
+
 (defun conn-discrete-thing-handler (thing _beg)
   "Mark the thing at point."
   (pcase (ignore-errors (bounds-of-thing-at-point thing))
