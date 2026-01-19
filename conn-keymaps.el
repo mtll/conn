@@ -433,10 +433,7 @@
         'symbol
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'symbol))))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-targets-state)
+                         (conn-all-things-targets :thing 'symbol)))
   ")" (conn-anonymous-thing
         'sexp
         :pretty-print (:method (_) "outer-list-or-string")
