@@ -139,7 +139,7 @@ Respects the current restriction."
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn--down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-down-list-other-end-handler))
   (interactive "p")
   (unless (= 0 arg)
     (conn-protected-let* ((pt (point) (goto-char pt))
@@ -153,7 +153,7 @@ Respects the current restriction."
       (down-list dir))))
 
 (defun conn-forward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn--down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-down-list-other-end-handler))
   (interactive "p")
   (conn-backward-up-inner-list (- arg)))
 
@@ -321,14 +321,14 @@ of line proper."
 
 (defun conn-end-of-list ()
   "Move point to the end of the enclosing list."
-  (declare (conn-thing-command list #'conn--down-list-other-end-handler))
+  (declare (conn-thing-command list #'conn-down-list-other-end-handler))
   (interactive)
   (up-list 1 t t)
   (down-list -1 t))
 
 (defun conn-beginning-of-list ()
   "Move point to the beginning of the enclosing list."
-  (declare (conn-thing-command list #'conn--down-list-other-end-handler))
+  (declare (conn-thing-command list #'conn-down-list-other-end-handler))
   (interactive)
   (backward-up-list nil t t)
   (down-list 1 t))

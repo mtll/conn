@@ -1776,7 +1776,7 @@ Only the background color is used."
  'list 'conn-continuous-thing-handler
  'forward-list 'backward-list)
 
-(defun conn--up-list-other-end-handler (thing beg)
+(defun conn-up-list-other-end-handler (thing beg)
   (condition-case _err
       (cond ((> (point) beg)
              (save-excursion
@@ -1789,7 +1789,7 @@ Only the background color is used."
     (scan-error nil)))
 
 (conn-register-thing-commands
- 'list 'conn--up-list-other-end-handler
+ 'list 'conn-up-list-other-end-handler
  'up-list 'backward-up-list)
 
 (conn-register-thing
@@ -1805,28 +1805,32 @@ Only the background color is used."
                  (down-list -1)
                  (point)))))
 
-(defun conn--down-list-other-end-handler (_thing _beg)
-  (condition-case _err
-      (cond ((= (point) (save-excursion
-                          (up-list 1 t t)
-                          (down-list -1 t)
-                          (point)))
-             (save-excursion
-               (up-list -1 t t)
-               (down-list 1 t)
-               (point)))
-            ((= (point) (save-excursion
-                          (up-list -1 t t)
-                          (down-list 1 t)
-                          (point)))
-             (save-excursion
-               (up-list 1 t t)
-               (down-list -1 t)
-               (point))))
-    (scan-error nil)))
+(defun conn-down-list-other-end-handler (up-list-fn
+                                         down-list-fn)
+  (lambda (_thing _beg)
+    (condition-case _err
+        (cond ((= (point) (save-excursion
+                            (funcall up-list-fn 1)
+                            (funcall down-list-fn -1)
+                            (point)))
+               (save-excursion
+                 (funcall up-list-fn -1)
+                 (funcall down-list-fn 1)
+                 (point)))
+              ((= (point) (save-excursion
+                            (funcall up-list-fn -1)
+                            (funcall down-list-fn 1)
+                            (point)))
+               (save-excursion
+                 (funcall up-list-fn 1)
+                 (funcall down-list-fn -1)
+                 (point))))
+      (scan-error nil))))
 
 (conn-register-thing-commands
- 'list 'conn--down-list-other-end-handler
+ 'list (conn-down-list-other-end-handler
+        (lambda (n) (up-list n t t))
+        (lambda (n) (down-list n t)))
  'down-list)
 
 (conn-register-thing 'whitespace :forward-op 'forward-whitespace)
