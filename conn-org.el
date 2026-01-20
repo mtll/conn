@@ -34,7 +34,8 @@
     (org-link-open link)
     t))
 
-;;;###autoload(add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
+;;;###autoload
+(add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-element))
                                         _arg)
@@ -76,7 +77,8 @@
   (when (buffer-match-p "CAPTURE-.*" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-;;;###autoload (add-hook 'conn-setup-state-hook 'conn-setup-capture-state -20)
+;;;###autoload
+(add-hook 'conn-setup-state-hook 'conn-setup-capture-state -20)
 
 ;;;###autoload
 (defun conn-org-heading-state ()
