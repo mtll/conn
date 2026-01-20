@@ -380,14 +380,14 @@ of highlighting."
          (query-replace-read-from-suggestions)
          t)))))
 
-(cl-defgeneric conn-kapply-match-iterator (thing
-                                           arg
-                                           transform
-                                           &optional
-                                           subregions
-                                           regexp-flag
-                                           delimited-flag
-                                           string)
+(cl-defgeneric conn-kapply-on-matches (thing
+                                       arg
+                                       transform
+                                       &optional
+                                       subregions
+                                       regexp-flag
+                                       delimited-flag
+                                       string)
   "Create an iterator over matches for a string in a region.
 
 The region is defined by THING, ARG, and TRANSFORM.  For how they are
@@ -407,14 +407,14 @@ boundaries.
 SORT-FUNCTION if non-nil is a function to sort the regions before
 iterating over them.  SORT-FUNCTION should take a list of overlays.")
 
-(cl-defmethod conn-kapply-match-iterator ((_thing (eql project))
-                                          _arg
-                                          _transform
-                                          &optional
-                                          _subregions
-                                          regexp-flag
-                                          delimited-flag
-                                          string)
+(cl-defmethod conn-kapply-on-matches ((_thing (eql project))
+                                      _arg
+                                      _transform
+                                      &optional
+                                      _subregions
+                                      regexp-flag
+                                      delimited-flag
+                                      string)
   (require 'project)
   (let ((files (or (project-files (project-current t))
                    (user-error "No files for kapply.")))
@@ -475,14 +475,14 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
             (conn-kapply-consume-region (pop matches)))))
        :query t))))
 
-(cl-defmethod conn-kapply-match-iterator ((thing (conn-thing t))
-                                          arg
-                                          transform
-                                          &optional
-                                          subregions
-                                          regexp-flag
-                                          delimited-flag
-                                          string)
+(cl-defmethod conn-kapply-on-matches ((thing (conn-thing t))
+                                      arg
+                                      transform
+                                      &optional
+                                      subregions
+                                      regexp-flag
+                                      delimited-flag
+                                      string)
   (let* ((regions
           (prog1
               (pcase (conn-bounds-of thing arg)
@@ -526,8 +526,8 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
      :extra (conn-kapply-order-argument)
      :query t)))
 
-(cl-defmethod conn-kapply-match-iterator ((_thing (eql widen))
-                                          &rest _)
+(cl-defmethod conn-kapply-on-matches ((_thing (eql widen))
+                                      &rest _)
   (without-restriction
     (cl-call-next-method)))
 
@@ -1698,12 +1698,12 @@ finishing showing the buffers that were visited."))
                                'delimited
                                conn-delimited-argument-map
                                delimited)))
-    (conn-kapply-match-iterator thing
-                                arg
-                                transform
-                                subregions-p
-                                regexp-flag
-                                delimited)))
+    (conn-kapply-on-matches thing
+                            arg
+                            transform
+                            subregions-p
+                            regexp-flag
+                            delimited)))
 
 (defun conn-kapply-on-things (thing arg transform)
   (interactive
