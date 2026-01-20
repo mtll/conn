@@ -1626,6 +1626,7 @@ entering mark state.")
   "8" 'digit-argument
   "9" 'digit-argument
   "?" 'reference
+  "M-?" 'reference
   "C-h" 'help
   "<escape>" 'keyboard-quit
   "C-g" 'keyboard-quit
