@@ -3567,8 +3567,7 @@ Only available during repeating duplicate."
        (extra-newline nil)
        (padding (if block "\n" " "))
        (regexp (if block "\n" "[\t ]"))
-       (commented nil)
-       (amalgamate t))
+       (commented nil))
     (set-marker-insertion-type m2 t)
     (cl-labels
         ((dup ()
@@ -3601,8 +3600,7 @@ Only available during repeating duplicate."
            (set-marker m1 nil)
            (set-marker m2 nil)
            (mapc #'delete-overlay regions)
-           (when amalgamate
-             (undo-amalgamate-change-group cg))
+           (undo-amalgamate-change-group cg)
            (advice-remove 'conn-duplicate-indent-repeat #'indent)
            (advice-remove 'conn-duplicate-repeat #'repeat)
            (advice-remove 'conn-duplicate-delete-repeat #'delete)
@@ -3692,8 +3690,6 @@ Only available during repeating duplicate."
            ((or 'recenter-top-bottom 'reposition-window
                 'universal-argument 'digit-argument 'negative-argument)
             t)
-           ((or 'undo 'undo-only 'undo-redo)
-            (setq amalgamate nil))
            ((let mc (lookup-key conn-duplicate-repeat-map
                                 (this-command-keys-vector)))
             (when (and mc (symbolp mc))
