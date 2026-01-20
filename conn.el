@@ -55,7 +55,7 @@
            finally do (setq conn--previous-mark-state mstate))
   (setq conn--state-stack nil)
   (let (conn-next-state)
-    (conn--run-exit-fns :clone))
+    (conn--run-exit-fns (conn-stack-signal clone)))
   (or (run-hook-with-args-until-success 'conn-setup-state-hook)
       (conn-push-state 'conn-emacs-state)))
 
@@ -94,7 +94,7 @@
         (setq conn--input-method current-input-method)
         (conn-setup-state-for-buffer))
     (let (conn-next-state)
-      (conn--run-exit-fns :exit))
+      (conn--run-exit-fns (conn-stack-signal exit)))
     (setq conn--state-stack nil)
     (kill-local-variable 'conn-lighter)
     (setq cursor-type t)

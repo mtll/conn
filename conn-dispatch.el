@@ -538,7 +538,7 @@ themselves once the selection process has concluded."
   :mode-line-face 'conn-dispatch-mode-line-face)
 
 (cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state))
-                                        &optional _type)
+                                        _signal)
   (if (or defining-kbd-macro executing-kbd-macro)
       (error "Dispatch not available in keyboard macros")
     (cl-call-next-method)))
@@ -4940,11 +4940,9 @@ for the dispatch."
                               arg)
   (conn-make-bounds
    cmd arg
-   (oclosure-lambda (conn-bounds-delay)
-       (bounds)
+   (conn-bounds-delay bounds
      (conn--dispatch-bounds bounds))
-   :subregions (oclosure-lambda (conn-bounds-delay)
-                   (bounds)
+   :subregions (conn-bounds-delay bounds
                  (conn--dispatch-bounds bounds t))))
 
 (cl-defmethod conn-dispatch-bounds-between (bounds)
