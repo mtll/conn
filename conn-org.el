@@ -72,6 +72,13 @@
   "y" 'org-show-all)
 
 ;;;###autoload
+(defun conn-setup-capture-state ()
+  (when (buffer-match-p "CAPTURE-.*" (current-buffer))
+    (conn-push-state 'conn-emacs-state)
+    t))
+;;;###autoload (add-hook 'conn-setup-state-hook 'conn-setup-capture-state -20)
+
+;;;###autoload
 (defun conn-org-heading-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
