@@ -391,7 +391,15 @@
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
-  "," conn-thing-remap)
+  "," conn-thing-remap
+  "<conn-thing-map> b" (conn-anonymous-thing
+                         'visual-line
+                         :target-finder ( :method (_self _arg)
+                                          (conn-dispatch-end-of-visual-line-targets))
+                         :bounds-op ( :method (_self _arg)
+                                      (save-excursion
+                                        (goto-char (pos-bol))
+                                        (cl-call-next-method)))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'outline-minor-mode)
