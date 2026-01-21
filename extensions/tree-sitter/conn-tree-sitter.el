@@ -41,8 +41,6 @@
    "queries"
    (file-name-directory (locate-library "conn-tree-sitter"))))
 
-(defvar conn-ts--symbol-tick 0)
-
 (defconst conn-ts--symbol-cache
   (make-hash-table :test 'equal))
 
@@ -52,7 +50,8 @@
                     when (stringp s) concat s
                     when (symbolp s) concat (symbol-name s))
            (number-to-string
-            (cl-incf conn-ts--symbol-tick)))))
+            (prog1 gensym-counter
+              (cl-incf gensym-counter))))))
 
 (defun conn-ts--parse-query (query)
   (cl-labels
