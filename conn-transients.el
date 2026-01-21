@@ -32,28 +32,31 @@
 (defmacro conn-transient-mode-suffix (name arglist description mode &rest properties)
   "Define a `transient' suffix for a minor mode.
 
-\(fn NAME DESCRIPTION MODE &rest [KEYWORD VALUE]... [BODY...])"
+\(fn NAME ARGLIST DESCRIPTION MODE &rest [KEYWORD VALUE...] BODY)"
   (declare (indent defun))
-  (pcase-let* (((or `(,mode-command ,mode-var)
-                    (and mode-command mode-var))
-                mode)
-               (body `((interactive)
-                       (,mode-command 'toggle)))
-               (properties (cl-loop for (k . rest) on properties by #'cddr
-                                    if (keywordp k)
-                                    nconc (list k (car rest)) into props
-                                    else
-                                    do (setq body (cons k rest))
-                                    and return props)))
-    `(transient-define-suffix ,name ,arglist
-       :description (lambda ()
-                      (concat ,description " "
-                              (if (bound-and-true-p ,mode-var)
-                                  (propertize "(*)" 'face 'transient-value)
-                                (propertize "( )" 'face 'transient-inactive-value))))
-       :transient t
-       ,@properties
-       ,@body)))
+  (pcase mode
+    ((or `(,mode-command ,mode-var)
+         (and mode-command mode-var (pred symbolp)))
+     (let ((body `((interactive)
+                   (,mode-command 'toggle)))
+           (props nil))
+       (cl-loop for (k . rest) on properties by #'cddr
+                do (pcase k
+                     ((pred keywordp)
+                      (cl-callf2 nconc (list k (car rest)) props))
+                     (`(interactive)
+                      (cl-return (setq body (cons k rest))))
+                     (_ (error "Malformed body"))))
+       `(transient-define-suffix ,name ,arglist
+          :description (lambda ()
+                         (concat ,description " "
+                                 (if (bound-and-true-p ,mode-var)
+                                     (propertize "(*)" 'face 'transient-value)
+                                   (propertize "( )" 'face 'transient-inactive-value))))
+          :transient t
+          ,@props
+          ,@body)))
+    (_ (error "Malformed mode"))))
 
 ;;;; Kmacro Prefix
 
