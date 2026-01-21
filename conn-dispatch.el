@@ -1198,11 +1198,13 @@ Target overlays may override this default by setting the
                     'display `(space :width (,right))
                     'face face)))))
 
-(defun conn--dispatch-eol (pt window)
+(defun conn--dispatch-eovl (pt window)
   (declare (important-return-value t))
-  (cl-loop for (beg . end) in (conn--dispatch-window-lines window)
-           when (and (<= beg pt) (< pt end))
-           return (1- end)))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (vertical-motion (cons (window-width) 0))
+      (point))))
 
 (defun conn--dispatch-setup-label-pixelwise (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -1257,10 +1259,7 @@ Target overlays may override this default by setting the
                    (beg-width nil)
                    (end nil)
                    (line-end
-                    (or (conn--dispatch-eol beg win)
-                        (save-excursion
-                          (goto-char beg)
-                          (pos-eol))))
+                    (conn--dispatch-eovl beg win))
                    (pt beg))
               ;; Find the end of the label overlay.  Barring
               ;; exceptional conditions we want the label overlay to
@@ -1356,10 +1355,7 @@ Target overlays may override this default by setting the
              (beg (overlay-start overlay))
              (end nil)
              (line-end
-              (or (conn--dispatch-eol beg win)
-                  (save-excursion
-                    (goto-char beg)
-                    (pos-eol))))
+              (conn--dispatch-eovl beg win))
              (pt beg))
         (while (not end)
           (cond

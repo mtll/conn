@@ -1810,8 +1810,8 @@ Only the background color is used."
                  (down-list -1)
                  (point)))))
 
-(defun conn-down-list-other-end-handler (up-list-fn
-                                         down-list-fn)
+(defun conn-make-inner-list-other-end-handler (up-list-fn
+                                               down-list-fn)
   (lambda (_thing _beg)
     (condition-case _err
         (cond ((= (point) (save-excursion
@@ -1832,10 +1832,13 @@ Only the background color is used."
                  (point))))
       (scan-error nil))))
 
+(defalias 'conn-inner-list-handler
+  (conn-make-inner-list-other-end-handler
+   (lambda (n) (up-list n t t))
+   (lambda (n) (down-list n t))))
+
 (conn-register-thing-commands
- 'list (conn-down-list-other-end-handler
-        (lambda (n) (up-list n t t))
-        (lambda (n) (down-list n t)))
+ 'list #'conn-inner-list-handler
  'down-list)
 
 (conn-register-thing 'whitespace :forward-op 'forward-whitespace)

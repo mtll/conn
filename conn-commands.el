@@ -139,7 +139,7 @@ Respects the current restriction."
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn-down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
   (interactive "p")
   (unless (= 0 arg)
     (conn-protected-let* ((pt (point) (goto-char pt))
@@ -153,7 +153,7 @@ Respects the current restriction."
       (down-list dir))))
 
 (defun conn-forward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn-down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
   (interactive "p")
   (conn-backward-up-inner-list (- arg)))
 
@@ -319,16 +319,16 @@ of line proper."
           (goto-char (line-beginning-position))))
     (forward-line (- N))))
 
-(defun conn-end-of-list ()
+(defun conn-end-of-inner-list ()
   "Move point to the end of the enclosing list."
-  (declare (conn-thing-command list #'conn-down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
   (interactive)
   (up-list 1 t t)
   (down-list -1 t))
 
-(defun conn-beginning-of-list ()
+(defun conn-beginning-of-inner-list ()
   "Move point to the beginning of the enclosing list."
-  (declare (conn-thing-command list #'conn-down-list-other-end-handler))
+  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
   (interactive)
   (backward-up-list nil t t)
   (down-list 1 t))
@@ -3504,7 +3504,6 @@ For how they are used to define the region see `conn-bounds-of' and
   "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
-  "d" 'conn-duplicate-repeat
   "D" 'conn-duplicate-repeat
   "M-RET" 'conn-duplicate-repeat-toggle-padding
   "M-<return>" 'conn-duplicate-repeat-toggle-padding
