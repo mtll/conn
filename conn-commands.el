@@ -4197,6 +4197,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
       (_ (user-error "Narrow ring empty")))))
 
 (defun conn-widen ()
+  "Widen and record the current position in `conn-narrow-ring'.
+
+Records point in `conn-narrow-ring' if the current narrowing is the head
+of `conn-narrow-ring'."
   (interactive)
   (pcase (conn-ring-head conn-narrow-ring)
     ((and head (cl-struct conn-narrowing start end))

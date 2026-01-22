@@ -237,8 +237,8 @@
          (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))
       ("w" "Widen" conn-widen)
       ("c" "Clear" conn-clear-narrow-ring)]
-    [ ("n" "Cycle Next" conn-cycle-narrowings :transient t)
-      ("p" "Cycle Previous"
+    [ ("k" "Cycle Next" conn-cycle-narrowings :transient t)
+      ("i" "Cycle Previous"
        (lambda (arg)
          (interactive "p")
          (conn-cycle-narrowings (- arg)))
@@ -259,7 +259,7 @@
                  (with-selected-window win
                    (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
                (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
-      ("j" "Add Region" conn-thing-to-narrow-ring)]]
+      ("t" "Add Region" conn-thing-to-narrow-ring)]]
   (interactive)
   (transient-setup 'conn-narrow-ring-prefix nil nil
                    :scope (conn--narrow-ring-save-state)))
