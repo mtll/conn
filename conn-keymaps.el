@@ -125,11 +125,11 @@
   "f" 'conn-last-dispatch-to-register
   "m" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
-  "i" 'conn-emacs-state-open-line-above
+  "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
-  "k" 'conn-emacs-state-open-line
+  "d" 'conn-emacs-state-open-line
   "r" 'conn-replace
-  "n" 'conn-narrow-to-thing
+  "x" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
   "Y" 'yank-rectangle
   "s" 'conn-sort-things
@@ -351,7 +351,7 @@
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "H" 'conn-expand
-  "C-SPC" 'conn-set-mark-command
+  "b" 'conn-set-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
   "`" 'conn-wincontrol-mru-window
@@ -367,14 +367,12 @@
   "r" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
-  "," conn-thing-remap
   "." 'conn-register-load
   "q" 'conn-yank-replace
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
-  "b" conn-edit-remap
-  "SPC" conn-edit-remap
+  "," conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
