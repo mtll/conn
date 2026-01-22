@@ -230,10 +230,13 @@
 (transient-define-prefix conn-narrow-ring-prefix ()
   "Transient menu for narrow ring function."
   [ :description conn--narrow-ring-display
-    [ ("m" "Merge" conn-merge-narrow-ring :transient t)
-      ("w" "Widen" widen)
-      ("c" "Clear" conn-clear-narrow-ring)
-      ("j" "Add Region" conn-thing-to-narrow-ring)]
+    [ ("e" "End" ignore)
+      ("a" "Abort"
+       (lambda ()
+         (interactive)
+         (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))
+      ("w" "Widen" conn-widen)
+      ("c" "Clear" conn-clear-narrow-ring)]
     [ ("n" "Cycle Next" conn-cycle-narrowings :transient t)
       ("p" "Cycle Previous"
        (lambda (arg)
@@ -241,10 +244,7 @@
          (conn-cycle-narrowings (- arg)))
        :transient t)
       ("d" "Pop" conn-pop-narrow-ring :transient t)
-      ("a" "Abort Cycling"
-       (lambda ()
-         (interactive)
-         (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]
+      ("m" "Merge" conn-merge-narrow-ring :transient t)]
     [ ("N" "Narrow Indirect"
        (lambda ()
          (interactive)
@@ -258,7 +258,8 @@
              (if (eq (window-buffer win) buf)
                  (with-selected-window win
                    (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))]]
+               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
+      ("j" "Add Region" conn-thing-to-narrow-ring)]]
   (interactive)
   (transient-setup 'conn-narrow-ring-prefix nil nil
                    :scope (conn--narrow-ring-save-state)))
