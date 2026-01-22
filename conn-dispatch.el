@@ -1388,7 +1388,15 @@ Target overlays may override this default by setting the
           (setq display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-min))
-            (let* ((beg (overlay-start target))
+            (let* ((beg (save-excursion
+                          (goto-char (overlay-start target))
+                          (when (and word-wrap
+                                     (or (looking-back "[ \t]" 1)
+                                         (aref (char-category-set
+                                                (char-before (point)))
+                                               ?|)))
+                            (backward-char))
+                          (point)))
                    (end nil)
                    (line-beg (save-excursion
                                (goto-char beg)
