@@ -1303,20 +1303,16 @@ Target overlays may override this default by setting the
                                                   'conn-target-overlay
                                                   window))
                   (setq end pt))
-                 ((and (get-char-property pt 'after-string)
-                       (= pt (next-single-char-property-change
-                              (1- pt) 'after-string nil (1+ pt))))
-                  (setq end (1+ pt)))
-                 ;; If we are abutting another target overlay then end
-                 ;; the label overlay here so that we don't hide it.
-                 ((dolist (ov (overlays-in pt (1+ pt)) end)
-                    (when (and (eq 'conn-target-overlay
-                                   (overlay-get ov 'category))
-                               (or (/= (overlay-start target)
-                                       (overlay-start ov))
-                                   (/= (overlay-end target)
-                                       (overlay-end ov))))
-                      (setq end pt))))
+                 ((or (and (get-char-property pt 'before-string)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'before-string nil (1+ pt))))
+                      (and (get-char-property pt 'after-string)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'after-string nil (1+ pt))))
+                      (and (get-char-property pt 'display)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'display nil (1+ pt)))))
+                  (setq end (max beg (1- pt))))
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
                             pt 'composition nil line-end)))
@@ -1350,12 +1346,12 @@ Target overlays may override this default by setting the
                            padding-function)
                 label)
                (full-string (concat prefix string suffix))
-               (win (overlay-get overlay 'window))
+               (window (overlay-get overlay 'window))
                (display-width nil)
                (padding-width 0)
                (ov nil))
     (unwind-protect
-        (save-excursion
+        (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
           ;; width calculations, temporarily disable them.
           (setq ov (make-overlay (point-min) (point-max)))
@@ -1363,7 +1359,9 @@ Target overlays may override this default by setting the
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
           (overlay-put ov 'wrap-prefix "")
-          (pcase (get-char-property (overlay-start target) 'display)
+          (pcase (get-char-property (min (1+ (overlay-start target))
+                                         (overlay-end target))
+                                    'display)
             (`(raise ,amount)
              (add-display-text-property 0 (length full-string)
                                         'raise amount
@@ -1383,54 +1381,52 @@ Target overlays may override this default by setting the
                (add-display-text-property 0 (length full-string)
                                           'height (cadr h)
                                           full-string))))
-          (when-let* ((f (get-char-property (overlay-start target) 'face)))
+          (when-let* ((f (get-char-property (min (1+ (overlay-start target))
+                                                 (overlay-end target))
+                                            'face)))
             (add-face-text-property 0 (length full-string) f t full-string))
           (setq display-width
-                (conn--string-pixel-width full-string (window-buffer win)))
-          (unless (= (overlay-start overlay) (point-max))
+                (conn--string-pixel-width full-string (window-buffer window)))
+          (unless (= (overlay-start overlay) (point-min))
             (let* ((beg (overlay-start target))
-                   (beg-width nil)
                    (end nil)
                    (line-beg (save-excursion
                                (goto-char beg)
                                (vertical-motion 0)
+                               (when (= beg (point))
+                                 (vertical-motion -1))
                                (point)))
                    (pt beg))
-              ;; Find the end of the label overlay.  Barring
-              ;; exceptional conditions we want the label overlay to
-              ;; be wider than the label string.
               (while (not end)
-                (goto-char pt)
                 (cond
                  ((= line-beg pt)
                   (setq end pt))
-                 ;; If the label overlay is wider than the label
-                 ;; string we are done.
                  ((let ((width
                          (save-excursion
-                           (with-restriction beg pt
-                             (- (car (window-text-pixel-size win pt beg))
-                                ;; Subtract the width of any
-                                ;; before strings
-                                (with-memoization beg-width
-                                  (car (window-text-pixel-size win pt pt))))))))
-                    ;; FIXME: This doesn't handle zero length
-                    ;;        overlays with after strings.
+                           (with-restriction pt beg
+                             (- (car (window-text-pixel-size window pt beg))
+                                (car (window-text-pixel-size window pt pt)))))))
                     (when (or (= pt (point-min))
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
                  ((conn--overlays-in-of-type (1- pt) pt
                                              'conn-target-overlay
-                                             win)
+                                             window)
                   (setq end pt))
-                 ((and (get-char-property pt 'after-string)
-                       (= pt (next-single-char-property-change
-                              (1- pt) 'after-string nil (1+ pt))))
-                  (setq end (1+ pt)))
+                 ((or (and (get-char-property pt 'before-string)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'before-string nil (1+ pt))))
+                      (and (get-char-property pt 'after-string)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'after-string nil (1+ pt))))
+                      (and (get-char-property pt 'display)
+                           (= pt (next-single-char-property-change
+                                  (1- pt) 'display nil (1+ pt)))))
+                  (setq end (min beg (1+ pt))))
                  ((get-text-property (1- pt) 'composition)
                   (setq pt (previous-single-property-change
-                            pt 'composition nil line-beg)))
+                            (1- pt) 'composition nil line-beg)))
                  (t (cl-decf pt))))
               (move-overlay overlay end beg)))
           (cond
@@ -1456,16 +1452,14 @@ Target overlays may override this default by setting the
                            prefix
                            suffix
                            (narrowed-string string)
-                           overlay
-                           target)
+                           overlay)
                 label)
-               (full-string (concat prefix string suffix)))
+               (full-string (concat prefix string suffix))
+               (win (overlay-get overlay 'window)))
     (unless (= (overlay-start overlay) (point-max))
-      (let* ((win (overlay-get overlay 'window))
-             (beg (overlay-start overlay))
+      (let* ((beg (overlay-start overlay))
              (end nil)
-             (line-end
-              (conn--dispatch-eovl beg win))
+             (line-end (conn--dispatch-eovl beg win))
              (pt beg))
         (while (not end)
           (cond
@@ -1483,14 +1477,24 @@ Target overlays may override this default by setting the
            ((or (= pt (point-max))
                 (= (- pt beg) (length full-string)))
             (setq end pt))
-           ((dolist (ov (overlays-in pt (1+ pt)) end)
-              (when (and (eq 'conn-target-overlay
-                             (overlay-get ov 'category))
-                         (or (/= (overlay-start target)
-                                 (overlay-start ov))
-                             (/= (overlay-end target)
-                                 (overlay-end ov))))
-                (setq end pt))))
+           ((and (/= beg pt)
+                 (conn--overlays-in-of-type pt (1+ pt)
+                                            'conn-target-overlay
+                                            win))
+            (setq end pt))
+           ((or (and (get-char-property pt 'display)
+                     (= pt (next-single-char-property-change
+                            (1- pt) 'display nil (1+ pt))))
+                (and (get-char-property pt 'after-string)
+                     (= pt (next-single-char-property-change
+                            (1- pt) 'after-string nil (1+ pt))))
+                (and (get-char-property pt 'before-string)
+                     (= pt (next-single-char-property-change
+                            (1- pt) 'before-string nil (1+ pt)))))
+            (setq end (max beg (1- pt))))
+           ((get-text-property pt 'composition)
+            (setq pt (next-single-property-change
+                      pt 'composition nil line-end)))
            (t (cl-incf pt))))
         (move-overlay overlay (overlay-start overlay) end)))
     (if (= (overlay-start overlay) (overlay-end overlay))
@@ -1506,7 +1510,7 @@ Target overlays may override this default by setting the
                            target)
                 label)
                (full-string (concat prefix string suffix)))
-    (unless (= (overlay-start overlay) (point-max))
+    (unless (= (overlay-start overlay) (point-min))
       (let* ((win (overlay-get overlay 'window))
              (beg (overlay-start target))
              (end nil)
@@ -1528,6 +1532,19 @@ Target overlays may override this default by setting the
                                          'conn-target-overlay
                                          win)
               (setq end pt))
+             ((or (and (get-char-property pt 'display)
+                       (= pt (next-single-char-property-change
+                              (1- pt) 'display nil (1+ pt))))
+                  (and (get-char-property pt 'after-string)
+                       (= pt (next-single-char-property-change
+                              (1- pt) 'after-string nil (1+ pt))))
+                  (and (get-char-property pt 'before-string)
+                       (= pt (next-single-char-property-change
+                              (1- pt) 'before-string nil (1+ pt)))))
+              (setq end (1+ pt)))
+             ((get-text-property (1- pt) 'composition)
+              (setq pt (previous-single-property-change
+                        (1- pt) 'composition nil line-beg)))
              (t (cl-decf pt)))))
         (move-overlay overlay end beg)))
     (if (= (overlay-start overlay) (overlay-end overlay))
@@ -1556,7 +1573,7 @@ Target overlays may override this default by setting the
           (setq prev (pos-bol))
           (while (and (<= prev (window-end window))
                       (not (eobp)))
-            (forward-line)
+            (vertical-motion 1)
             (push (cons prev (point)) lines)
             (setq prev (point)))))
       lines)))
@@ -3435,16 +3452,16 @@ contain targets."
                                   (goto-char (pos-bol))
                                   (cl-call-next-method))))))
       (conn-for-each-visible (window-start) (window-end)
-        (goto-char (point-max))
-        (while (let ((pt (point)))
-                 (forward-line -1)
-                 (conn--end-of-inner-line-1)
-                 (/= (point) pt))
-          (when (not (invisible-p (point)))
-            (conn-make-target-overlay
-             (point) 0
-             :properties `(label-before t)
-             :thing thing)))))))
+        (goto-char (point-min))
+        (when (looking-at-p "\n")
+          (forward-line 1))
+        (while (not (eobp))
+          (conn--end-of-inner-line-1)
+          (conn-make-target-overlay
+           (point) 0
+           :properties `(label-before t)
+           :thing thing)
+          (forward-line 1))))))
 
 (cl-defmethod conn-target-finder-other-end
   ((_ conn-dispatch-end-of-inner-line-targets))
@@ -3453,49 +3470,48 @@ contain targets."
 (conn-define-target-finder conn-dispatch-visual-line-targets
     () ()
   ( :default-update-handler (_state)
-    (save-excursion
-      (goto-char (window-start))
-      (vertical-motion 0)
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (if (looking-at-p "\n")
+          (vertical-motion 1)
+        (vertical-motion 0))
       (conn-make-target-overlay
        (point) 0
        :padding-function (lambda (ov width _face)
                            (conn--flush-left-padding ov width nil)))
       (vertical-motion 1)
-      (while (<= (point) (window-end))
-        (if (= (point) (point-max))
-            (conn-make-target-overlay
-             (point) 0
-             ;; hack to get the label displayed on its own line
-             :properties `(after-string
-                           ,(propertize " " 'display '(space :width 0))))
-          (conn-make-target-overlay
-           (point) 0
-           :padding-function (lambda (ov width _face)
-                               (conn--flush-left-padding ov width nil))))
-        (vertical-motion 1)))))
+      (cl-loop
+       (when (bolp)
+         (conn-make-target-overlay
+          (point) 0
+          :padding-function (lambda (ov width _face)
+                              (conn--flush-left-padding ov width nil))))
+       (when (eobp) (cl-return nil))
+       (vertical-motion 1)))))
 
 (conn-define-target-finder conn-dispatch-end-of-visual-line-targets
     () ()
   ( :default-update-handler (_state)
-    (save-excursion
-      (goto-char (window-start))
-      (vertical-motion 1)
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (if (looking-at-p "\n")
+          (vertical-motion 2)
+        (vertical-motion 1))
       (conn-make-target-overlay
        (if (bolp) (1- (point)) (point))
        0
        :padding-function (lambda (ov width _face)
                            (conn--flush-left-padding ov width nil))
        :properties `(label-before t))
-      (vertical-motion 1)
-      (while (and (<= (point) (window-end))
-                  (/= (point) (point-max)))
-        (conn-make-target-overlay
-         (if (bolp) (1- (point)) (point))
-         0
-         :properties `(label-before t)
-         :padding-function (lambda (ov width _face)
-                             (conn--flush-left-padding ov width nil)))
-        (vertical-motion 1)))))
+      (cl-loop
+       (conn-make-target-overlay
+        (if (bolp) (1- (point)) (point))
+        0
+        :properties `(label-before t)
+        :padding-function (lambda (ov width _face)
+                            (conn--flush-left-padding ov width nil)))
+       (when (eobp) (cl-return nil))
+       (vertical-motion 1)))))
 
 ;;;;; Dispatch Actions
 
