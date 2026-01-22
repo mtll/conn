@@ -1075,7 +1075,7 @@ Optionally the overlay may have an associated THING."
                    (make-overlay composition-start composition-start nil nil t))
                (make-overlay pt (min (+ pt length) (cdr line-bounds)) nil nil t))
              (delete-overlay ov)))
-      (overlay-put ov 'point (or point pt))
+      (when point (overlay-put ov 'point point))
       (overlay-put ov 'category 'conn-target-overlay)
       (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)

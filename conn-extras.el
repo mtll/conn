@@ -23,7 +23,7 @@
 
 ;;; State
 
-(defvar conn-special-modes
+(defvar conn-special-state-modes
   (list 'dired-mode
         'diff-mode
         'magit-section-mode
@@ -50,7 +50,7 @@
   "M-j" 'conn-command-state)
 
 (defun conn-setup-special-state ()
-  (when (derived-mode-p conn-special-modes)
+  (when (derived-mode-p conn-special-state-modes)
     (conn-push-state 'conn-special-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-special-state -20)
