@@ -162,14 +162,17 @@
   (list (point) (save-mark-and-excursion--save)
         (point-min) (point-max)
         (and-let* ((_(conn-ring-p conn-narrow-ring))
-                   (ring (conn--copy-ring conn-narrow-ring)))
-          (setf (conn-ring-copier ring) (pcase-lambda (`(,b . ,e))
-                                          (cons (marker-position b)
-                                                (marker-position e)))
+                   (ring (conn-copy-ring conn-narrow-ring)))
+          (setf (conn-ring-copier ring) (pcase-lambda ((cl-struct conn-narrowing
+                                                                  start
+                                                                  end
+                                                                  point))
+                                          (conn-narrowing
+                                           (marker-position start)
+                                           (marker-position end)
+                                           :point (marker-position point)))
                 ring (conn-copy-ring ring)
-                (conn-ring-copier ring) (pcase-lambda (`(,b . ,e))
-                                          (cons (copy-marker b)
-                                                (copy-marker e))))
+                (conn-ring-copier ring) #'conn-copy-narrowing)
           ring)))
 
 (defun conn--narrow-ring-restore-state (state)

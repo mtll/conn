@@ -376,7 +376,7 @@
   "b" conn-edit-remap
   "SPC" conn-edit-remap
   "d" 'conn-kill-thing
-  "W" 'widen
+  "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)

@@ -4077,22 +4077,50 @@ If CLEANUP-WHITESPACE is non-nil then also run
 
 (defvar conn-narrow-ring-max 14)
 
+(cl-defstruct (conn-narrowing
+               (:constructor conn-narrowing
+                             (start
+                              end
+                              &key
+                              (point (make-marker)))))
+  (start nil :type marker)
+  (end nil :type marker)
+  (point nil :type marker))
+
+(define-inline conn-copy-narrowing (narrowing)
+  (inline-letevals (narrowing)
+    (inline-quote
+     (conn-narrowing
+      (copy-marker (conn-narrowing-start ,narrowing))
+      (copy-marker (conn-narrowing-end ,narrowing))
+      :point (copy-marker (conn-narrowing-point ,narrowing))))))
+
+(define-inline conn-delete-narrowing (narrowing)
+  (inline-letevals (narrowing)
+    (inline-quote
+     (progn
+       (set-marker (conn-narrowing-start ,narrowing) nil)
+       (set-marker (conn-narrowing-end ,narrowing) nil)
+       (set-marker (conn-narrowing-point ,narrowing) nil)))))
+
 (conn-define-state conn-narrow-state (conn-read-thing-state)
   :lighter "NARROW")
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing narrow-ring))
                               _arg)
-  (cl-loop for (beg . end) in conn-narrow-ring
-           minimize beg into narrow-beg
-           maximize end into narrow-end
-           collect (conn-make-bounds
-                    'restriction nil
-                    (cons beg end))
-           into narrowings
-           finally return (conn-make-bounds
-                           'narrow-ring nil
-                           (cons narrow-beg narrow-end)
-                           :subregions narrowings)))
+  (cl-symbol-macrolet ((beg (conn-narrowing-start n))
+                       (end (conn-narrowing-end n)))
+    (cl-loop for n in (conn-ring-list conn-narrow-ring)
+             minimize beg into narrow-beg
+             maximize end into narrow-end
+             collect (conn-make-bounds
+                      'restriction nil
+                      (cons beg end))
+             into narrowings
+             finally return (conn-make-bounds
+                             'narrow-ring nil
+                             (cons narrow-beg narrow-end)
+                             :subregions narrowings))))
 
 (defun conn-thing-to-narrow-ring (thing
                                   arg
@@ -4119,55 +4147,73 @@ If CLEANUP-WHITESPACE is non-nil then also run
     ((conn-bounds `(,beg . ,end) transform)
      (conn--narrow-ring-record beg end))))
 
-(defun conn--narrow-ring-record (beg end)
+(defun conn--narrow-ring-record (beg end &optional point)
   (unless (conn-ring-p conn-narrow-ring)
     (setq conn-narrow-ring
           (conn-make-ring conn-narrow-ring-max
-                          :cleanup (pcase-lambda (`(,b . ,e))
-                                     (set-marker b nil)
-                                     (set-marker e nil))
-                          :copier (pcase-lambda (`(,b . ,e))
-                                    (cons (conn--copy-mark b)
-                                          (conn--copy-mark e))))))
-  (pcase-let ((`(,bf . ,ef) (conn-ring-head conn-narrow-ring))
-              (`(,bb . ,eb) (conn-ring-tail conn-narrow-ring)))
+                          :cleanup #'conn-delete-narrowing
+                          :copier #'conn-copy-narrowing)))
+  (pcase-let (((or 'nil (cl-struct conn-narrowing (start bf) (end ef)))
+               (conn-ring-head conn-narrow-ring))
+              ((or 'nil (cl-struct conn-narrowing (start bb) (end eb)))
+               (conn-ring-tail conn-narrow-ring)))
     (cond
      ((and bf (= beg bf) (= end ef)))
      ((and bb (= beg bb) (= end eb))
       (conn-ring-rotate-forward conn-narrow-ring))
-     (t (conn-ring-insert-front conn-narrow-ring
-                                (cons (conn--create-marker beg)
-                                      (conn--create-marker end)))))))
+     (t (conn-ring-insert-front
+         conn-narrow-ring
+         (conn-narrowing
+          (conn--create-marker beg)
+          (conn--create-marker end)
+          :point (or (copy-marker point)
+                     (make-marker))))))))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
   (interactive "p")
-  (cond ((= arg 0)
-         (conn-merge-narrow-ring))
-        ((> arg 0)
-         (pcase-let ((`(,beg . ,end)
-                      (conn-ring-head conn-narrow-ring)))
-           (unless (and (= (point-min) beg)
-                        (= (point-max) end))
-             (cl-decf arg)))
-         (dotimes (_ arg)
-           (conn-ring-rotate-forward conn-narrow-ring)))
-        ((< arg 0)
-         (dotimes (_ (abs arg))
-           (conn-ring-rotate-backward conn-narrow-ring))))
+  (unless (= arg 0)
+    (pcase (conn-ring-head conn-narrow-ring)
+      ((and head (cl-struct conn-narrowing start end))
+       (if (and (= (point-min) start)
+                (= (point-max) end))
+           (set-marker (conn-narrowing-point head) (point))
+         (cl-decf arg)))
+      (_ (user-error "Narrow ring empty")))
+    (cond ((> arg 0)
+           (dotimes (_ arg)
+             (conn-ring-rotate-forward conn-narrow-ring)))
+          ((< arg 0)
+           (dotimes (_ (abs arg))
+             (conn-ring-rotate-backward conn-narrow-ring))))
+    (pcase (conn-ring-head conn-narrow-ring)
+      ((cl-struct conn-narrowing start end point)
+       (widen)
+       (unless (and (<= start (point) end)
+                    (null (marker-position point)))
+         (push-mark (point) t)
+         (goto-char (or (marker-position point) start)))
+       (narrow-to-region start end))
+      (_ (user-error "Narrow ring empty")))))
+
+(defun conn-widen ()
+  (interactive)
   (pcase (conn-ring-head conn-narrow-ring)
-    (`(,beg . ,end)
-     (unless (<= beg (point) end)
-       (push-mark (point) t)
-       (goto-char beg))
-     (narrow-to-region beg end))
-    (_ (user-error "Narrow ring empty"))))
+    ((and head (cl-struct conn-narrowing start end))
+     (when (and (= (point-min) start)
+                (= (point-max) end))
+       (set-marker (conn-narrowing-point head) (point)))))
+  (widen))
 
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
-  (let ((new (conn--merge-overlapping-regions
-              (conn-ring-list conn-narrow-ring))))
+  (let* ((new (conn--merge-overlapping-regions
+               (cl-loop for n in (conn-ring-list conn-narrow-ring)
+                        collect (cons (conn-narrowing-start n)
+                                      (conn-narrowing-end n)))))
+         (new (cl-loop for (beg . end) in new
+                       collect (conn-narrowing beg end))))
     (setf (conn-ring-list conn-narrow-ring) new
           (conn-ring-history conn-narrow-ring) (copy-sequence new)))
   (when (and interactive (not executing-kbd-macro))
@@ -4177,10 +4223,8 @@ If CLEANUP-WHITESPACE is non-nil then also run
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
-  (cl-loop for (beg . end) in (conn-ring-list conn-narrow-ring)
-           do
-           (set-marker beg nil)
-           (set-marker end nil))
+  (mapc (conn-ring-cleanup conn-narrow-ring)
+        (conn-ring-list conn-narrow-ring))
   (setf (conn-ring-list conn-narrow-ring) nil
         (conn-ring-history conn-narrow-ring) nil))
 
@@ -4189,14 +4233,17 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (interactive)
   (pcase (conn-ring-head conn-narrow-ring)
     ('nil (widen))
-    ((and `(,beg . ,end)
-          (guard (= (point-min) beg))
+    ((and (cl-struct conn-narrowing start end)
+          (guard (= (point-min) start))
           (guard (= (point-max) end))
           narrowing)
      (conn-ring-delq narrowing conn-narrow-ring)
      (pcase (conn-ring-head conn-narrow-ring)
-       (`(,beg . ,end)
-        (narrow-to-region beg end))
+       ((cl-struct conn-narrowing start end point)
+        (unless (<= start (point) end)
+          (push-mark (point) t)
+          (goto-char (or (marker-position point) start)))
+        (narrow-to-region start end))
        (_ (widen))))))
 
 (defun conn--narrow-to-region (beg end &optional record)
