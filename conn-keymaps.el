@@ -123,7 +123,7 @@
   "a u" 'align-unhighlight-rule
   "TAB" 'conn-fill-prefix
   "f" 'conn-last-dispatch-to-register
-  "m" 'conn-kmacro-prefix
+  "k" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
   "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
