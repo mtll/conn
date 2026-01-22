@@ -25,16 +25,16 @@
 ┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
 ┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
-┃                      │ Z         │ X        │ C        │ V prev   │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │  exchange │  narrow  │  raise   │   mark   │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
-┃                      │  and mark │  prefix  │          │   state  │          │          │          │ register │          │          │                       ┃
+┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
+┃                      │  exchange │  narrow  │  raise   │          │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
+┃                      │  and mark │  prefix  │          │          │          │          │          │ register │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
 ┃                      │ z         │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │  exchange │   C-x    │   C-c    │   last   │ edit map │  ←sexp   │  →sexp   │  thing   │ register │   undo   │                       ┃
-┃                      │    mark   │          │          │   thing  │          │          │          │   map    │   load   │          │                       ┃
+┃                      │  exchange │   C-x    │   C-c    │   last   │ set mark │  ←sexp   │  →sexp   │ edit map │ register │   undo   │                       ┃
+┃                      │    mark   │          │          │   thing  │          │          │          │          │   load   │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
-                                                         ┃                 edit map                  ┃
+                                                         ┃                                           ┃
                                                          ┃                                           ┃
                                                          ┃                                           ┃
                                                          ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
