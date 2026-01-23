@@ -1573,7 +1573,8 @@ Only the background color is used."
                  (recenter-top-bottom (conn-read-args-prefix-arg)))
                (conn-read-args-handle))
               ('conn-exchange-mark-command
-               (conn-exchange-mark-command)
+               (exchange-point-and-mark
+                (bound-and-true-p exchange-point-and-mark-highlight-region))
                (conn-read-args-handle))
               ('conn-contract
                (setq curr (mod (1- curr) size))

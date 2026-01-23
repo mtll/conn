@@ -1025,10 +1025,11 @@ Currently selected window remains selected afterwards."
                                      (select-window owin)))
            (select-window window)
            (pcase (conn-bounds-of-dispatch thing arg pt)
-             ((conn-dispatch-bounds `(,beg . ,end)
-                                    (nconc dtform transform))
-              (push-mark end nil t)
-              (goto-char beg))
+             ((and (conn-dispatch-bounds `(,beg . ,end)
+                                         (nconc dtform transform))
+                   (conn-bounds-get :direction))
+              (goto-char (if (eql direction 1) end beg))
+              (push-mark (if (eql direction 1) beg end) t t))
              (_ (user-error "No %s found" thing))))))
      thing arg dtform
      :repeat repeat
