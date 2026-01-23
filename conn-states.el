@@ -1032,7 +1032,10 @@ To execute code when a state is exiting use `conn-state-on-exit'."
       (error "Attempting to enter abstract state %s" state))
     (let (conn-previous-state)
       (unwind-protect
-          (progn
+          (let ((re-entry-fns
+                 (cdr (gethash conn--state-stack
+                               conn--state-re-entry-functions))))
+            (remhash conn--state-stack conn--state-re-entry-functions)
             (let ((conn-next-state state))
               (conn--run-exit-fns signal))
             (cl-shiftf conn-previous-state conn-current-state state)
@@ -1044,7 +1047,8 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (conn--run-re-entry-fns signal))
+            (when re-entry-fns
+              (funcall (car re-entry-fns) signal (cdr re-entry-fns))))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
@@ -1531,10 +1535,10 @@ entering mark state.")
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
         conn-record-mark-state t)
   (conn-state-on-exit exit-type
-    (if (conn-mark-state-keep-mark-active-p exit-type)
-        (when (bound-and-true-p rectangle-mark-mode)
-          (conn-state-on-re-entry _type
-            (rectangle-mark-mode 1)))
+    (when (bound-and-true-p rectangle-mark-mode)
+      (conn-state-on-re-entry _type
+        (rectangle-mark-mode 1)))
+    (unless (conn-mark-state-keep-mark-active-p exit-type)
       (deactivate-mark))
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit)
