@@ -2386,7 +2386,6 @@ be displayed in the echo area during `conn-read-args'."
                   annotation
                   reference
                   display-prefix
-                  &aux
                   (value (car choices)))))
   (display-prefix nil :type (or nil string))
   (choices nil :type list :read-only t)

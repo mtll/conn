@@ -2510,7 +2510,8 @@ hook, which see."
    (conn-read-args (conn-kill-state
                     :interactive 'conn-kill-thing
                     :prompt "Thing"
-                    :reference conn-kill-reference)
+                    :reference conn-kill-reference
+                    :display-handler (conn-read-args-display-columns 5 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,fixup) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
@@ -3061,7 +3062,8 @@ append to that place."
    (conn-cycling-argument "append"
                           '(nil append prepend repeat)
                           'append
-                          :keymap conn-append-argument-map)
+                          :keymap conn-append-argument-map
+                          :value append)
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
