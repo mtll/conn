@@ -253,8 +253,7 @@
   "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
   "V" 'conn-mark-thing
-  "RET" 'conn-duplicate-thing
-  "SPC" 'conn-push-mark-command)
+  "b" 'conn-push-mark-command)
 
 ;;;;;; Emacs State
 
