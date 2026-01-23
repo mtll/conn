@@ -972,6 +972,10 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-mark-thing-state (conn-read-thing-state)
   :lighter "MARK")
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-mark-thing-state)
+  "p" 'point)
+
 (cl-defgeneric conn-mark-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :mark-op)))
 
@@ -1205,6 +1209,9 @@ selected by dispatch with it."))
        :other-end other-end
        :restrict-windows restrict-windows))))
 
+(defvar-keymap conn-swap-argument-map
+  "w" 'swap)
+
 (defun conn-yank-replace (thing
                           arg
                           transform
@@ -1217,7 +1224,7 @@ selected by dispatch with it."))
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
-        (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
+        (swap (conn-boolean-argument "swap" 'swap conn-swap-argument-map))
         (register (conn-read-argument
                    "register"
                    'register
@@ -1575,6 +1582,7 @@ selected by dispatch with it."))
                                                delimited)))
         (multi-file-replace-as-diff
          (project-files (project-current))
+         (list (or buffer-file-name (current-buffer)))
          from to regexp-flag delimited)
         (conn-push-command-history 'conn-replace
                                    thing
@@ -2445,7 +2453,6 @@ append to that place."
 
 (defvar-keymap conn-kill-thing-argument-map
   "w" 'copy
-  "q" 'yank-replace
   "/" 'filename
   "P" 'project-filename
   ">" 'kill-matching-lines
@@ -2474,10 +2481,6 @@ append to that place."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
                                        (_cmd (eql kill-matching-lines)))
-  t)
-
-(cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
-                                       (_cmd (eql yank-replace)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
@@ -3017,38 +3020,6 @@ hook, which see."
                         register
                         separator)))
 
-(cl-defmethod conn-kill-thing-do ((_cmd (eql yank-replace))
-                                  arg
-                                  transform
-                                  &optional
-                                  _append
-                                  _delete
-                                  register
-                                  _separator
-                                  _reformat
-                                  check-bounds)
-  (conn-read-args (conn-yank-replace-state
-                   :interactive 'conn-copy-thing
-                   :prefix arg
-                   :prompt "Yank Replace")
-      ((`(,thing ,arg) (conn-thing-argument-dwim))
-       (transform (conn-transform-argument transform))
-       (swap (conn-boolean-argument "swap" 'conn-copy-thing nil))
-       (register (conn-read-argument
-                  "register"
-                  'register
-                  conn-register-argument-map
-                  (lambda (_) (register-read-with-preview "Register:"))
-                  :formatter #'conn-argument-format-register
-                  :value register))
-       (check-bounds (conn-check-bounds-argument check-bounds)))
-    (conn-yank-replace-do thing
-                          arg
-                          transform
-                          swap
-                          register
-                          check-bounds)))
-
 (cl-defmethod conn-kill-thing-do :extra "rmm" ((_cmd (conn-thing region))
                                                _arg
                                                _transform
@@ -3562,10 +3533,10 @@ For how they are used to define the region see `conn-bounds-of' and
   "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
-  "D" 'conn-duplicate-repeat
-  "M-RET" 'conn-duplicate-repeat-toggle-padding
-  "M-<return>" 'conn-duplicate-repeat-toggle-padding
-  ";" 'conn-duplicate-repeat-comment)
+  "q" 'conn-duplicate-repeat
+  "RET" 'conn-duplicate-repeat-toggle-padding
+  "<return>" 'conn-duplicate-repeat-toggle-padding
+  "c" 'conn-duplicate-repeat-comment)
 
 (defun conn-duplicate-repeat ()
   "Repeat the previous duplicate.
@@ -3875,6 +3846,7 @@ Interactively REPEAT is given by the prefix argument."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "y" 'yank-replace
   "e" 'conn-emacs-state-overwrite
   "E" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
@@ -3906,6 +3878,10 @@ Interactively REPEAT is given by the prefix argument."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
                                        (_cmd (eql conn-replace)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
+                                       (_cmd (eql yank-replace)))
   t)
 
 (cl-defgeneric conn-change-thing-do (cmd arg transform)
@@ -3977,6 +3953,30 @@ Interactively REPEAT is given by the prefix argument."
                      backward
                      regexp-flag
                      subregions-p)))
+
+(cl-defmethod conn-change-thing-do ((_thing (eql yank-replace))
+                                    arg
+                                    transform)
+  (conn-read-args (conn-yank-replace-state
+                   :interactive 'conn-copy-thing
+                   :prefix arg
+                   :prompt "Yank Replace")
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument transform))
+       (swap (conn-boolean-argument "swap" 'swap conn-swap-argument-map))
+       (register (conn-read-argument
+                  "register"
+                  'register
+                  conn-register-argument-map
+                  (lambda (_) (register-read-with-preview "Register:"))
+                  :formatter #'conn-argument-format-register))
+       (check-bounds (conn-check-bounds-argument)))
+    (conn-yank-replace-do thing
+                          arg
+                          transform
+                          swap
+                          register
+                          check-bounds)))
 
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD, ARG, and TRANSFORM.

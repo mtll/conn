@@ -69,8 +69,8 @@
   "_" 'calc-grab-sum-across
   "M-DEL" 'clear-rectangle
   "<backspace>" 'clear-rectangle
-  "SPC d" 'delete-whitespace-rectangle
-  "SPC o" 'open-rectangle
+  "<conn-edit-map> d" 'delete-whitespace-rectangle
+  "<conn-edit-map> o" 'open-rectangle
   "#" 'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
@@ -125,7 +125,7 @@
   "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
   "d" 'conn-emacs-state-open-line
-  "x" 'conn-narrow-to-thing
+  "n" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
   "Y" 'yank-rectangle
   "s" 'conn-sort-things
@@ -252,8 +252,7 @@
   "*" 'calc-grab-region
   "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
-  "V" 'conn-mark-thing
-  "b" 'conn-push-mark-command)
+  "V" 'conn-mark-thing)
 
 ;;;;;; Emacs State
 
@@ -282,7 +281,7 @@
   "i" 'conn-backward-line
   "k" 'forward-line
   "h" conn-thing-remap
-  "y" conn-thing-inner-remap)
+  "q" conn-thing-inner-remap)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-read-thing-common-state 'outline-minor-mode)
@@ -334,10 +333,10 @@
   "C-5" (conn-remap-key "C-x 5" t)
   "S" 'conn-surround
   "<escape>" 'conn-pop-state
-  "D" 'conn-duplicate-thing
+  "q" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
   "E" 'conn-expand
-  "b" 'conn-set-mark-command
+  "b" 'conn-repeat
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
   "`" 'conn-wincontrol-mru-window
@@ -349,16 +348,16 @@
   "_" 'repeat-complex-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "w" 'conn-copy-thing
+  ;; "w" 'conn-copy-thing
   "r" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
   "." 'conn-register-load
-  "q" 'conn-yank-replace
+  ;; "q" 'conn-yank-replace
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
-  "," conn-edit-remap
+  "w" conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
