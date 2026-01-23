@@ -10,16 +10,16 @@
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │          │  query   │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←inner   │ →inner   │   shell  ┃
-┃              │          │          │          │  replace │          │   read   │          │          │          │          │  list    │  list    │   cmd    ┃
+┃              │          │  widen   │          │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←inner   │ →inner   │   shell  ┃
+┃              │          │          │          │          │          │   read   │          │          │          │          │  list    │  list    │   cmd    ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
 ┃              │   yank   │   copy   │  emacs   │  replace │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ←down   │  →down   │          ┃
 ┃              │  replace │          │  state   │          │          │          │          │          │          │   prefix │   list   │   list   │          ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │  adjust  │ duplicate│          │   add    │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │ surround │          │          │ surround │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │   M-X    │ surround │ duplicate│          │  adjust  │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │          │          │          │ surround │  region  │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
 ┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃

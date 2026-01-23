@@ -1540,7 +1540,7 @@ Only the background color is used."
                 (concat
                  (propertize prompt 'face 'minibuffer-prompt)
                  (if (> size 4)
-                     (propertize (format " [%s/%s]" curr size)
+                     (propertize (format " [%s/%s]" (1+ curr) size)
                                  'face 'minibuffer-prompt)
                    (cl-loop for i below size
                             concat " "

@@ -1258,7 +1258,8 @@ selected by dispatch with it."))
 (defvar-keymap conn-replace-thing-argument-map
   "p" 'project
   "/" 'multi-file
-  "'" 'kapply)
+  "'" 'kapply
+  "e" 'conn-emacs-state)
 
 (cl-defstruct (conn-replace-thing-argument
                (:include conn-thing-argument)
@@ -1285,6 +1286,10 @@ selected by dispatch with it."))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                        (_cmd (eql kapply)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                       (_cmd (eql conn-emacs-state)))
   t)
 
 (defvar-keymap conn-regexp-argument-map
@@ -1534,6 +1539,21 @@ selected by dispatch with it."))
                                &rest _)
   (without-restriction
     (cl-call-next-method)))
+
+(defvar conn-change-reference)
+
+(cl-defmethod conn-replace-do ((_thing (eql conn-emacs-state))
+                               arg
+                               transform
+                               &rest _)
+  (conn-read-args (conn-change-state
+                   :interactive 'conn-change-thing
+                   :prefix arg
+                   :prompt "Thing"
+                   :reference conn-change-reference)
+      ((`(,thing ,arg) (conn-change-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (conn-change-thing thing arg transform)))
 
 (static-if (<= 30 emacs-major-version)
     (progn
@@ -3823,7 +3843,9 @@ Interactively REPEAT is given by the prefix argument."
   "e" 'conn-emacs-state-overwrite
   "E" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
-  "l" conn-forward-char-remap)
+  "l" conn-forward-char-remap
+  "h" 'conn-replace
+  "q" 'conn-replace)
 
 (defvar-keymap conn-change-thing-argument-map)
 
@@ -3845,6 +3867,10 @@ Interactively REPEAT is given by the prefix argument."
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
                                        (_cmd (eql conn-emacs-state-overwrite)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
+                                       (_cmd (eql conn-replace)))
   t)
 
 (cl-defgeneric conn-change-thing-do (cmd arg transform)
@@ -3886,6 +3912,36 @@ Interactively REPEAT is given by the prefix argument."
      (if (= (- end beg) 1)
          (conn-push-state 'conn-one-emacs-state)
        (conn-push-state 'conn-emacs-state)))))
+
+(cl-defmethod conn-change-thing-do ((_cmd (eql conn-replace))
+                                    arg
+                                    transform)
+  (conn-read-args (conn-replace-state
+                   :prefix arg
+                   :reference conn-replace-reference
+                   :prompt "Replace in Thing")
+      ((`(,thing ,arg) (conn-replace-thing-argument))
+       (transform (conn-transform-argument transform))
+       (subregions-p (conn-subregions-argument (use-region-p)))
+       (regexp-flag
+        (conn-boolean-argument "regexp"
+                               'regexp
+                               conn-regexp-argument-map))
+       (delimited
+        (conn-boolean-argument "word delimited"
+                               'delimited
+                               conn-delimited-argument-map))
+       (backward
+        (conn-boolean-argument "backward"
+                               'backward
+                               conn-backward-argument-map)))
+    (conn-replace-do thing
+                     arg
+                     transform
+                     delimited
+                     backward
+                     regexp-flag
+                     subregions-p)))
 
 (defun conn-change-thing (cmd arg transform)
   "Change region defined by CMD, ARG, and TRANSFORM.
@@ -4090,21 +4146,16 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (end nil :type marker)
   (point nil :type marker))
 
-(define-inline conn-copy-narrowing (narrowing)
-  (inline-letevals (narrowing)
-    (inline-quote
-     (conn-narrowing
-      (copy-marker (conn-narrowing-start ,narrowing))
-      (copy-marker (conn-narrowing-end ,narrowing))
-      :point (copy-marker (conn-narrowing-point ,narrowing))))))
+(defun conn-copy-narrowing (narrowing)
+  (conn-narrowing
+   (copy-marker (conn-narrowing-start narrowing))
+   (copy-marker (conn-narrowing-end narrowing))
+   :point (copy-marker (conn-narrowing-point narrowing))))
 
-(define-inline conn-delete-narrowing (narrowing)
-  (inline-letevals (narrowing)
-    (inline-quote
-     (progn
-       (set-marker (conn-narrowing-start ,narrowing) nil)
-       (set-marker (conn-narrowing-end ,narrowing) nil)
-       (set-marker (conn-narrowing-point ,narrowing) nil)))))
+(defun conn-delete-narrowing (narrowing)
+  (set-marker (conn-narrowing-start narrowing) nil)
+  (set-marker (conn-narrowing-end narrowing) nil)
+  (set-marker (conn-narrowing-point narrowing) nil))
 
 (conn-define-state conn-narrow-state (conn-read-thing-state)
   :lighter "NARROW")

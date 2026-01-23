@@ -297,7 +297,6 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "R" 'conn-replace
   "#" 'eshell
   "$" 'project-eshell
   "=" 'conn-repeat
@@ -315,8 +314,6 @@
   "]" 'down-list
   "G" 'conn-adjust-surround
   "C" 'conn-surround-raise
-  ;; "{" conn-backward-sentence-remap
-  ;; "}" conn-forward-sentence-remap
   "I" conn-backward-paragraph-remap
   "i" conn-previous-line-remap
   "J" 'conn-backward-inner-line-dwim
