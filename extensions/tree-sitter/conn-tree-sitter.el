@@ -1329,5 +1329,11 @@
 (define-minor-mode conn-ts-things-mode
   "Minor mode for conn-ts thing bindings."
   :lighter nil)
+;;;###autoload
+(defun conn-ts-things-mode-maybe-enable ()
+  (when (treesit-parser-list)
+    (conn-ts-things-mode 1)))
+;;;###autoload
+(add-hook 'after-change-major-mode-hook #'conn-ts-things-mode-maybe-enable)
 
 (provide 'conn-tree-sitter)
