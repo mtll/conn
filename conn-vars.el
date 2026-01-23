@@ -316,7 +316,7 @@ See also `conn-repeat'.")
 
 (conn-define-remap-keymap conn-thing-inner-remap
     "Conn Inner Thing Map"
-  [conn-thing-map ?i])
+  [conn-inner-thing-map])
 
 (conn-define-remap-keymap conn-edit-remap
     "Conn Edit Map"

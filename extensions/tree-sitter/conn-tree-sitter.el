@@ -1160,110 +1160,110 @@
   "e" 'ignore)
 
 (defvar-keymap conn-ts-things-mode-map
-  "<conn-thing-map> i w l" 'conn-ts-assignment-inner-forward
-  "<conn-thing-map> i w j" 'conn-ts-assignment-inner-backward
-  "<conn-thing-map> i w k" 'conn-ts-assignment-inner-forward-flat
-  "<conn-thing-map> i w i" 'conn-ts-assignment-inner-backward-flat
+  "<conn-inner-thing-map> w l" 'conn-ts-assignment-inner-forward
+  "<conn-inner-thing-map> w j" 'conn-ts-assignment-inner-backward
+  "<conn-inner-thing-map> w k" 'conn-ts-assignment-inner-forward-flat
+  "<conn-inner-thing-map> w i" 'conn-ts-assignment-inner-backward-flat
   "<conn-thing-map> w m" 'conn-ts-assignment-side-forward
   "<conn-thing-map> w n" 'conn-ts-assignment-side-backward
   "<conn-thing-map> w l" 'conn-ts-assignment-outer-forward
   "<conn-thing-map> w j" 'conn-ts-assignment-outer-backward
   "<conn-thing-map> w k" 'conn-ts-assignment-outer-forward-flat
   "<conn-thing-map> w i" 'conn-ts-assignment-outer-backward-flat
-  "<conn-thing-map> i @ l" 'conn-ts-attribute-inner-forward
-  "<conn-thing-map> i @ j" 'conn-ts-attribute-inner-backward
-  "<conn-thing-map> i @ k" 'conn-ts-attribute-inner-forward-flat
-  "<conn-thing-map> i @ i" 'conn-ts-attribute-inner-backward-flat
+  "<conn-inner-thing-map> @ l" 'conn-ts-attribute-inner-forward
+  "<conn-inner-thing-map> @ j" 'conn-ts-attribute-inner-backward
+  "<conn-inner-thing-map> @ k" 'conn-ts-attribute-inner-forward-flat
+  "<conn-inner-thing-map> @ i" 'conn-ts-attribute-inner-backward-flat
   "<conn-thing-map> @ l" 'conn-ts-attribute-outer-forward
   "<conn-thing-map> @ j" 'conn-ts-attribute-outer-backward
   "<conn-thing-map> @ k" 'conn-ts-attribute-outer-forward-flat
   "<conn-thing-map> @ i" 'conn-ts-attribute-outer-backward-flat
-  "<conn-thing-map> i b l" 'conn-ts-block-inner-forward
-  "<conn-thing-map> i b j" 'conn-ts-block-inner-backward
-  "<conn-thing-map> i b k" 'conn-ts-block-inner-forward-flat
-  "<conn-thing-map> i b i" 'conn-ts-block-inner-backward-flat
+  "<conn-inner-thing-map> b l" 'conn-ts-block-inner-forward
+  "<conn-inner-thing-map> b j" 'conn-ts-block-inner-backward
+  "<conn-inner-thing-map> b k" 'conn-ts-block-inner-forward-flat
+  "<conn-inner-thing-map> b i" 'conn-ts-block-inner-backward-flat
   "<conn-thing-map> b l" 'conn-ts-block-outer-forward
   "<conn-thing-map> b j" 'conn-ts-block-outer-backward
   "<conn-thing-map> b k" 'conn-ts-block-outer-forward-flat
   "<conn-thing-map> b i" 'conn-ts-block-outer-backward-flat
-  "<conn-thing-map> i . l" 'conn-ts-call-inner-forward
-  "<conn-thing-map> i . j" 'conn-ts-call-inner-backward
-  "<conn-thing-map> i . k" 'conn-ts-call-inner-forward-flat
-  "<conn-thing-map> i . i" 'conn-ts-call-inner-backward-flat
+  "<conn-inner-thing-map> . l" 'conn-ts-call-inner-forward
+  "<conn-inner-thing-map> . j" 'conn-ts-call-inner-backward
+  "<conn-inner-thing-map> . k" 'conn-ts-call-inner-forward-flat
+  "<conn-inner-thing-map> . i" 'conn-ts-call-inner-backward-flat
   "<conn-thing-map> . l" 'conn-ts-call-outer-forward
   "<conn-thing-map> . j" 'conn-ts-call-outer-backward
   "<conn-thing-map> . k" 'conn-ts-call-outer-forward-flat
   "<conn-thing-map> . i" 'conn-ts-call-outer-backward-flat
-  "<conn-thing-map> i C l" 'conn-ts-class-inner-forward
-  "<conn-thing-map> i C j" 'conn-ts-class-inner-backward
-  "<conn-thing-map> i C k" 'conn-ts-class-inner-forward-flat
-  "<conn-thing-map> i C i" 'conn-ts-class-inner-backward-flat
+  "<conn-inner-thing-map> C l" 'conn-ts-class-inner-forward
+  "<conn-inner-thing-map> C j" 'conn-ts-class-inner-backward
+  "<conn-inner-thing-map> C k" 'conn-ts-class-inner-forward-flat
+  "<conn-inner-thing-map> C i" 'conn-ts-class-inner-backward-flat
   "<conn-thing-map> C l" 'conn-ts-class-outer-forward
   "<conn-thing-map> C j" 'conn-ts-class-outer-backward
   "<conn-thing-map> C k" 'conn-ts-class-outer-forward-flat
   "<conn-thing-map> C i" 'conn-ts-class-outer-backward-flat
-  "<conn-thing-map> i c l" 'conn-ts-comment-inner-forward
-  "<conn-thing-map> i c j" 'conn-ts-comment-inner-backward
-  "<conn-thing-map> i c k" 'conn-ts-comment-inner-forward-flat
-  "<conn-thing-map> i c i" 'conn-ts-comment-inner-backward-flat
+  "<conn-inner-thing-map> c l" 'conn-ts-comment-inner-forward
+  "<conn-inner-thing-map> c j" 'conn-ts-comment-inner-backward
+  "<conn-inner-thing-map> c k" 'conn-ts-comment-inner-forward-flat
+  "<conn-inner-thing-map> c i" 'conn-ts-comment-inner-backward-flat
   "<conn-thing-map> c l" 'conn-ts-comment-outer-forward
   "<conn-thing-map> c j" 'conn-ts-comment-outer-backward
   "<conn-thing-map> c k" 'conn-ts-comment-outer-forward-flat
   "<conn-thing-map> c i" 'conn-ts-comment-outer-backward-flat
-  "<conn-thing-map> i q l" 'conn-ts-conditional-inner-forward
-  "<conn-thing-map> i q j" 'conn-ts-conditional-inner-backward
-  "<conn-thing-map> i q k" 'conn-ts-conditional-inner-forward-flat
-  "<conn-thing-map> i q i" 'conn-ts-conditional-inner-backward-flat
+  "<conn-inner-thing-map> q l" 'conn-ts-conditional-inner-forward
+  "<conn-inner-thing-map> q j" 'conn-ts-conditional-inner-backward
+  "<conn-inner-thing-map> q k" 'conn-ts-conditional-inner-forward-flat
+  "<conn-inner-thing-map> q i" 'conn-ts-conditional-inner-backward-flat
   "<conn-thing-map> q l" 'conn-ts-conditional-outer-forward
   "<conn-thing-map> q j" 'conn-ts-conditional-outer-backward
   "<conn-thing-map> q k" 'conn-ts-conditional-outer-forward-flat
   "<conn-thing-map> q i" 'conn-ts-conditional-outer-backward-flat
-  "<conn-thing-map> i [ l" 'conn-ts-frame-inner-forward
-  "<conn-thing-map> i [ j" 'conn-ts-frame-inner-backward
-  "<conn-thing-map> i [ k" 'conn-ts-frame-inner-forward-flat
-  "<conn-thing-map> i [ i" 'conn-ts-frame-inner-backward-flat
+  "<conn-inner-thing-map> [ l" 'conn-ts-frame-inner-forward
+  "<conn-inner-thing-map> [ j" 'conn-ts-frame-inner-backward
+  "<conn-inner-thing-map> [ k" 'conn-ts-frame-inner-forward-flat
+  "<conn-inner-thing-map> [ i" 'conn-ts-frame-inner-backward-flat
   "<conn-thing-map> [ l" 'conn-ts-frame-outer-forward
   "<conn-thing-map> [ j" 'conn-ts-frame-outer-backward
   "<conn-thing-map> [ k" 'conn-ts-frame-outer-forward-flat
   "<conn-thing-map> [ i" 'conn-ts-frame-outer-backward-flat
-  "<conn-thing-map> i f l" 'conn-ts-function-inner-forward
-  "<conn-thing-map> i f j" 'conn-ts-function-inner-backward
-  "<conn-thing-map> i f k" 'conn-ts-function-inner-forward-flat
-  "<conn-thing-map> i f i" 'conn-ts-function-inner-backward-flat
+  "<conn-inner-thing-map> f l" 'conn-ts-function-inner-forward
+  "<conn-inner-thing-map> f j" 'conn-ts-function-inner-backward
+  "<conn-inner-thing-map> f k" 'conn-ts-function-inner-forward-flat
+  "<conn-inner-thing-map> f i" 'conn-ts-function-inner-backward-flat
   "<conn-thing-map> f l" 'conn-ts-function-outer-forward
   "<conn-thing-map> f j" 'conn-ts-function-outer-backward
   "<conn-thing-map> f k" 'conn-ts-function-outer-forward-flat
   "<conn-thing-map> f i" 'conn-ts-function-outer-backward-flat
-  "<conn-thing-map> i r l" 'conn-ts-loop-inner-forward
-  "<conn-thing-map> i r j" 'conn-ts-loop-inner-backward
-  "<conn-thing-map> i r k" 'conn-ts-loop-inner-forward-flat
-  "<conn-thing-map> i r i" 'conn-ts-loop-inner-backward-flat
+  "<conn-inner-thing-map> r l" 'conn-ts-loop-inner-forward
+  "<conn-inner-thing-map> r j" 'conn-ts-loop-inner-backward
+  "<conn-inner-thing-map> r k" 'conn-ts-loop-inner-forward-flat
+  "<conn-inner-thing-map> r i" 'conn-ts-loop-inner-backward-flat
   "<conn-thing-map> r l" 'conn-ts-loop-outer-forward
   "<conn-thing-map> r j" 'conn-ts-loop-outer-backward
   "<conn-thing-map> r k" 'conn-ts-loop-outer-forward-flat
   "<conn-thing-map> r i" 'conn-ts-loop-outer-backward-flat
   "<conn-thing-map> n l" 'conn-ts-number-forward
   "<conn-thing-map> n j" 'conn-ts-number-backward
-  "<conn-thing-map> i d l" 'conn-ts-parameter-inner-forward
-  "<conn-thing-map> i d j" 'conn-ts-parameter-inner-backward
-  "<conn-thing-map> i d k" 'conn-ts-parameter-inner-forward-flat
-  "<conn-thing-map> i d i" 'conn-ts-parameter-inner-backward-flat
+  "<conn-inner-thing-map> d l" 'conn-ts-parameter-inner-forward
+  "<conn-inner-thing-map> d j" 'conn-ts-parameter-inner-backward
+  "<conn-inner-thing-map> d k" 'conn-ts-parameter-inner-forward-flat
+  "<conn-inner-thing-map> d i" 'conn-ts-parameter-inner-backward-flat
   "<conn-thing-map> d l" 'conn-ts-parameter-outer-forward
   "<conn-thing-map> d j" 'conn-ts-parameter-outer-backward
   "<conn-thing-map> d k" 'conn-ts-parameter-outer-forward-flat
   "<conn-thing-map> d i" 'conn-ts-parameter-outer-backward-flat
-  "<conn-thing-map> i x l" 'conn-ts-regex-inner-forward
-  "<conn-thing-map> i x j" 'conn-ts-regex-inner-backward
-  "<conn-thing-map> i x k" 'conn-ts-regex-inner-forward-flat
-  "<conn-thing-map> i x i" 'conn-ts-regex-inner-backward-flat
+  "<conn-inner-thing-map> x l" 'conn-ts-regex-inner-forward
+  "<conn-inner-thing-map> x j" 'conn-ts-regex-inner-backward
+  "<conn-inner-thing-map> x k" 'conn-ts-regex-inner-forward-flat
+  "<conn-inner-thing-map> x i" 'conn-ts-regex-inner-backward-flat
   "<conn-thing-map> x l" 'conn-ts-regex-outer-forward
   "<conn-thing-map> x j" 'conn-ts-regex-outer-backward
   "<conn-thing-map> x k" 'conn-ts-regex-outer-forward-flat
   "<conn-thing-map> x i" 'conn-ts-regex-outer-backward-flat
-  "<conn-thing-map> i t l" 'conn-ts-return-inner-forward
-  "<conn-thing-map> i t j" 'conn-ts-return-inner-backward
-  "<conn-thing-map> i t k" 'conn-ts-return-inner-forward-flat
-  "<conn-thing-map> i t i" 'conn-ts-return-inner-backward-flat
+  "<conn-inner-thing-map> t l" 'conn-ts-return-inner-forward
+  "<conn-inner-thing-map> t j" 'conn-ts-return-inner-backward
+  "<conn-inner-thing-map> t k" 'conn-ts-return-inner-forward-flat
+  "<conn-inner-thing-map> t i" 'conn-ts-return-inner-backward-flat
   "<conn-thing-map> t l" 'conn-ts-return-outer-forward
   "<conn-thing-map> t j" 'conn-ts-return-outer-backward
   "<conn-thing-map> t k" 'conn-ts-return-outer-forward-flat
