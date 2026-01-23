@@ -250,7 +250,7 @@
                                    'eager))
     (remhash language conn-ts--compiled-query-cache)))
 
-(defun conn-ts-add-custom-query (language query)
+(defun conn-ts-add-query (language query)
   (pcase query
     ((pred stringp)
      (push query (alist-get language conn-ts--custom-queries)))

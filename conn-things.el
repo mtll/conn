@@ -710,15 +710,14 @@ check bounds in the current buffer."))
      ("reset" conn-transform-reset))))
 
 (defvar-keymap conn-transform-map
-  "V" 'conn-dispatch-bounds-between
-  "x" 'conn-bounds-trim
+  "<" 'conn-bounds-trim
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
-  "SPC" 'conn-bounds-last
+  "x" 'conn-bounds-last
   "X" 'conn-transform-reset
-  "t" 'conn-bounds-upto)
+  "," 'conn-bounds-upto)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)
@@ -804,7 +803,7 @@ check bounds in the current buffer."))
   "?" 'reference
   "M-?" 'reference
   "C-h" 'help
-  "," conn-thing-remap
+  "t" conn-thing-remap
   "h" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -1573,8 +1572,7 @@ Only the background color is used."
                  (recenter-top-bottom (conn-read-args-prefix-arg)))
                (conn-read-args-handle))
               ('conn-exchange-mark-command
-               (exchange-point-and-mark
-                (bound-and-true-p exchange-point-and-mark-highlight-region))
+               (exchange-point-and-mark)
                (conn-read-args-handle))
               ('conn-contract
                (setq curr (mod (1- curr) size))

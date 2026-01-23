@@ -821,8 +821,9 @@ that has just been exited.")
 (cl-defstruct (conn--stack-signal)
   (data nil :type list :read-only t))
 
-(defun conn--get-signal-struct-type (name)
-  (intern (concat "conn-stack--" (symbol-name name))))
+(eval-and-compile
+  (defun conn--get-signal-struct-type (name)
+    (intern (concat "conn-stack--" (symbol-name name)))))
 
 (defmacro conn-define-stack-signal (name &optional parent)
   (let ((name (conn--get-signal-struct-type name))

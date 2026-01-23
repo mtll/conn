@@ -41,7 +41,6 @@ potential expansions.  Functions may return invalid expansions
   "e" 'ignore
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
-  "h" 'conn-expand
   "l" 'conn-expand)
 
 (conn-register-thing 'expansion)
@@ -146,7 +145,6 @@ Expansions and contractions are provided by functions in
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand
-  "h" 'conn-expand
   "e" 'end
   "<mouse-3>" 'end
   "<mouse-1>" 'conn-expand
@@ -173,7 +171,7 @@ Expansions and contractions are provided by functions in
                      (conn-read-args-handle)))
                 (user-error
                  (conn-read-args-error (error-message-string err)))))
-            (display (prompt args &optional teardown)
+            (display (prompt args &optional _state teardown)
               (if teardown
                   (unless executing-kbd-macro
                     (message nil))

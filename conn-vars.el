@@ -36,7 +36,7 @@ disabled.")
 
 (defvar-keymap conn-goto-map)
 (defvar-keymap conn-default-thing-map)
-(defvar-keymap conn-default-region-map)
+(defvar-keymap conn-default-inner-thing-map)
 (defvar-keymap conn-default-edit-map)
 (defvar-keymap conn-search-map)
 (defvar-keymap conn-other-end-argument-map)
@@ -316,7 +316,8 @@ See also `conn-repeat'.")
 
 (conn-define-remap-keymap conn-thing-inner-remap
     "Conn Inner Thing Map"
-  [conn-inner-thing-map])
+  [conn-inner-thing-map]
+  conn-default-inner-thing-map)
 
 (conn-define-remap-keymap conn-edit-remap
     "Conn Edit Map"

@@ -29,12 +29,10 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "L" 'conn-forward-inner-line
-  "J" 'conn-backward-inner-line
+  "t" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
-  "," conn-thing-remap
-  "h" 'conn-things-in-region
+  ";" 'conn-things-in-region
   "@" 'kmacro-start-macro
   "#" 'kmacro-call-macro)
 
@@ -100,14 +98,13 @@
 (define-keymap
   :keymap conn-default-edit-map
   "," 'conn-dispatch-on-buttons
-  "h" 'conn-register-prefix
-  "<" #'conn-unset-register
+  "r" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
   "=" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-count-iterator
   "+" 'indent-relative-first-indent-point
-  ";" 'conn-comment-thing
+  "c" 'conn-comment-thing
   "_" 'indent-relative
   "L" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
@@ -122,13 +119,11 @@
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "TAB" 'conn-fill-prefix
-  "f" 'conn-last-dispatch-to-register
   "k" 'conn-kmacro-prefix
   "g" 'conn-rgrep-thing
   "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
   "d" 'conn-emacs-state-open-line
-  "r" 'conn-replace
   "x" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
   "Y" 'yank-rectangle
@@ -138,7 +133,7 @@
 
 (define-keymap
   :keymap conn-search-map
-  "f" 'conn-dispatch-thing-at-point
+  "F" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-on-highlights
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward
@@ -213,29 +208,17 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "c" 'comment
+  "l" 'list
   "k" 'forward-line
-  "i" 'conn-backward-line
-  "p" conn-thing-inner-remap
-  "," conn-thing-inner-remap
   "w" 'forward-whitespace
-  "W" 'conn-backward-whitespace
   "v" 'conn-forward-visual-line
-  "V" 'conn-backward-visible
-  "g" 'conn-goto-line
-  ")" 'forward-list
-  "(" 'backward-list
-  "a" 'beginning-of-buffer
-  "e" 'end-of-buffer
+  "s" 'conn-surround
   "h" 'outline-previous-visible-heading)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "<conn-thing-map> ;" 'comment
-  "<conn-thing-map> x" 'sexp
-  "<conn-thing-map> /" 'filename
-  "<conn-thing-map> U" 'uuid
-  "<conn-thing-map> s" 'string
-  "<conn-thing-map> @" 'email)
+  :keymap conn-default-inner-thing-map
+  "l" 'inner-list)
 
 (keymap-set
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
@@ -283,17 +266,25 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "<conn-thing-map> ;" 'comment
+  "<conn-thing-map> x" 'sexp
+  "<conn-thing-map> /" 'filename
+  "<conn-thing-map> U" 'uuid
+  "<conn-thing-map> s" 'string
+  "<conn-thing-map> @" 'email
+  "e" 'conn-expand
+  "L" 'conn-forward-inner-line
+  "J" 'conn-backward-inner-line
   "S" 'conn-thing-at-isearch
   "C-s" 'isearch-forward
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
-  ";" 'comment
+  "c" 'comment
   "i" 'conn-backward-line
   "k" 'forward-line
-  "," conn-thing-remap
-  "p" conn-thing-inner-remap
-  "e" 'end-of-buffer)
+  "h" conn-thing-remap
+  "y" conn-thing-inner-remap)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-read-thing-common-state 'outline-minor-mode)
@@ -350,7 +341,7 @@
   "<escape>" 'conn-pop-state
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
-  "H" 'conn-expand
+  "E" 'conn-expand
   "b" 'conn-set-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
@@ -389,7 +380,6 @@
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
-  "," conn-thing-remap
   "<conn-thing-map> b" (conn-anonymous-thing
                          'visual-line
                          :target-finder ( :method (_self _arg)
@@ -472,8 +462,8 @@
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from
-  "g" 'conn-dispatch-grab
-  "G" 'conn-dispatch-grab-replace
+  "x" 'conn-dispatch-grab
+  "X" 'conn-dispatch-grab-replace
   "d" 'conn-dispatch-send
   "D" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
@@ -485,18 +475,18 @@
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "e" (conn-anonymous-thing
-        'point
-        :pretty-print ( :method (_) "prev-emacs-state")
-        :default-action ( :method (_self)
-                          (let ((jump (conn-dispatch-jump)))
-                            (oclosure-lambda (conn-action
-                                              (action-description "Previous Emacs State")
-                                              (action-no-history t))
-                                ()
-                              (funcall jump)
-                              (conn-push-state 'conn-emacs-state))))
-        :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
+  "g e" (conn-anonymous-thing
+          'point
+          :pretty-print ( :method (_) "prev-emacs-state")
+          :default-action ( :method (_self)
+                            (let ((jump (conn-dispatch-jump)))
+                              (oclosure-lambda (conn-action
+                                                (action-description "Previous Emacs State")
+                                                (action-no-history t))
+                                  ()
+                                (funcall jump)
+                                (conn-push-state 'conn-emacs-state))))
+          :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point
   "S-SPC" (conn-anonymous-thing
             'point

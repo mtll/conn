@@ -555,9 +555,9 @@ themselves once the selection process has concluded."
 (defvar-keymap conn-dispatch-transform-argument-map
   "a" 'conn-dispatch-bounds-anchored
   "b" 'conn-dispatch-bounds-between
-  "x" 'conn-bounds-trim
+  "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
-  "X" 'conn-transform-reset)
+  "T" 'conn-transform-reset)
 
 (defun conn-dispatch-transform-argument (&optional value)
   (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))
