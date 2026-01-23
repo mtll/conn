@@ -303,6 +303,8 @@
   "F" 'dired-create-empty-file
   "TAB" 'dired-maybe-insert-subdir
   "M-TAB" 'dired-kill-subdir
+  "<backtab>" 'dired-hide-all
+  "C-<tab>" 'dired-hide-subdir
   "w" 'dired-do-kill-lines
   "s" conn-dired-search-remap
   "r" conn-dired-regexp-remap
