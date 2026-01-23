@@ -802,9 +802,7 @@ check bounds in the current buffer."))
   "M-<backspace>" 'reset-arg
   "?" 'reference
   "M-?" 'reference
-  "C-h" 'help
-  "t" conn-thing-remap
-  "h" 'conn-things-in-region)
+  "C-h" 'help)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 

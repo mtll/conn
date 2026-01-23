@@ -386,7 +386,7 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'outline-minor-mode)
-  "h" 'heading)
+  "<conn-thing-map> h" 'heading)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-thingatpt-state)

@@ -286,7 +286,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-dispatch-targets-state 'org-mode)
-  "h" 'heading)
+  "<conn-thing-map> h" 'heading)
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler
