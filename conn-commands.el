@@ -1557,6 +1557,40 @@ selected by dispatch with it."))
 
 (static-if (<= 30 emacs-major-version)
     (progn
+      (cl-defmethod conn-replace-do ((thing (eql as-diff-in-project))
+                                     arg
+                                     transform
+                                     &optional
+                                     delimited
+                                     backward
+                                     regexp-flag
+                                     subregions-p
+                                     from
+                                     to)
+        (when (or (null from) (null to))
+          (pcase-setq `(,from . ,to)
+                      (conn--replace-read-args regexp-flag
+                                               nil
+                                               nil
+                                               delimited)))
+        (multi-file-replace-as-diff
+         (project-files (project-current))
+         from to regexp-flag delimited)
+        (conn-push-command-history 'conn-replace
+                                   thing
+                                   arg
+                                   transform
+                                   delimited
+                                   backward
+                                   regexp-flag
+                                   subregions-p
+                                   from
+                                   to))
+
+      (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
+                                             (_cmd (eql as-diff-in-project)))
+        t)
+
       (cl-defmethod conn-replace-do ((thing (eql as-diff))
                                      arg
                                      transform
@@ -1632,7 +1666,8 @@ selected by dispatch with it."))
       (define-keymap
         :keymap conn-replace-thing-argument-map
         "D" 'as-diff
-        "F" 'multi-file-as-diff)))
+        "F" 'multi-file-as-diff
+        "P" 'as-diff-in-project)))
 
 (defun conn-replace (thing
                      arg
