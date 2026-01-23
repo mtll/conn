@@ -29,6 +29,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
+  "s" 'conn-surround
   "t" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
@@ -213,7 +214,6 @@
   "k" 'forward-line
   "w" 'forward-whitespace
   "v" 'conn-forward-visual-line
-  "s" 'conn-surround
   "h" 'outline-previous-visible-heading)
 
 (define-keymap
@@ -253,7 +253,6 @@
   "C-j" 'conn-join-lines
   "v" 'rectangle-mark-mode
   "V" 'conn-mark-thing
-  "g" 'conn-surround
   "RET" 'conn-duplicate-thing
   "SPC" 'conn-push-mark-command)
 
@@ -315,7 +314,7 @@
   ")" 'conn-forward-up-list
   "[" 'conn-backward-down-list
   "]" 'down-list
-  "S" 'conn-adjust-surround
+  "G" 'conn-adjust-surround
   "C" 'conn-surround-raise
   ;; "{" conn-backward-sentence-remap
   ;; "}" conn-forward-sentence-remap
@@ -337,7 +336,7 @@
   "x" (conn-remap-key "C-x" t)
   "C-4" (conn-remap-key "C-x 4" t)
   "C-5" (conn-remap-key "C-x 5" t)
-  "G" 'conn-surround
+  "S" 'conn-surround
   "<escape>" 'conn-pop-state
   "D" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
