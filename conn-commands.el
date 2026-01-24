@@ -639,9 +639,9 @@ for the meaning of prefix ARG."
 ;;;;; Yanking
 
 (defvar-keymap conn-yank-pop-repeat-map
-  "C-y" 'conn-yank-with-completion
+  "C-y" 'conn-yank-unpop
   "y" 'yank-pop
-  "Y" 'conn-yank-unpop)
+  "Y" 'conn-yank-with-completion)
 
 ;; Adapted from `yank-with-completion'
 (defun conn-yank-with-completion (string)
@@ -1060,15 +1060,17 @@ Currently selected window remains selected afterwards."
 (defun conn-yank-replace-subr (beg end)
   (let ((cg (prepare-change-group))
         (ad-sym (make-symbol "yank-advice")))
-    (fset ad-sym (lambda (&rest _)
+    (fset ad-sym (lambda (&rest app)
                    (cancel-change-group cg)
                    (setf cg (prepare-change-group))
-                   (delete-region beg end)))
+                   (delete-region beg end)
+                   (let ((yank-undo-function #'ignore))
+                     (apply app))))
     (delete-region beg end)
     (yank)
-    (advice-add 'yank-pop :before ad-sym)
-    (advice-add 'conn-yank-unpop :before ad-sym)
-    (advice-add 'conn-yank-with-completion :before ad-sym)
+    (advice-add 'yank-pop :around ad-sym)
+    (advice-add 'conn-yank-unpop :around ad-sym)
+    (advice-add 'conn-yank-with-completion :around ad-sym)
     (set-transient-map
      conn-yank-pop-repeat-map
      t
