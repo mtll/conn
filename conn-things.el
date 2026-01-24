@@ -717,7 +717,7 @@ check bounds in the current buffer."))
   "B" 'conn-bounds-before-point-exclusive
   "x" 'conn-bounds-last
   "X" 'conn-transform-reset
-  "," 'conn-bounds-upto)
+  "t" 'conn-bounds-upto)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)

@@ -30,7 +30,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "s" 'conn-surround
-  "t" 'end-of-buffer
+  "h" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
   ";" 'conn-things-in-region
@@ -209,16 +209,12 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "c" 'comment
-  "l" 'list
-  "k" 'forward-line
-  "w" 'forward-whitespace
+  "," conn-thing-inner-remap
+  "l" 'forward-line
+  ")" 'forward-list
+  "SPC" 'forward-whitespace
   "v" 'conn-forward-visual-line
   "h" 'outline-previous-visible-heading)
-
-(define-keymap
-  :keymap conn-default-inner-thing-map
-  "l" 'inner-list)
 
 (keymap-set
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
@@ -263,12 +259,16 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "<conn-thing-map> ;" 'comment
   "<conn-thing-map> x" 'sexp
   "<conn-thing-map> /" 'filename
   "<conn-thing-map> U" 'uuid
-  "<conn-thing-map> s" 'string
+  "<conn-thing-map> \"" 'string
   "<conn-thing-map> @" 'email
+  "<conn-thing-map> (" 'list
+  "<conn-thing-map> )" 'forward-list
+  "<conn-inner-thing-map> (" 'inner-list
+  "k" 'forward-line
+  "i" 'conn-backward-line
   "e" 'conn-expand
   "L" 'conn-forward-inner-line
   "J" 'conn-backward-inner-line
@@ -278,9 +278,6 @@
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   "c" 'comment
-  "i" 'conn-backward-line
-  "k" 'forward-line
-  "h" conn-thing-remap
   "q" conn-thing-inner-remap)
 
 (define-keymap
@@ -296,6 +293,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "," conn-thing-remap
   "#" 'eshell
   "$" 'project-eshell
   "=" 'conn-repeat
@@ -348,12 +346,10 @@
   "_" 'repeat-complex-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  ;; "w" 'conn-copy-thing
   "r" 'conn-change-thing
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
   "." 'conn-register-load
-  ;; "q" 'conn-yank-replace
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
