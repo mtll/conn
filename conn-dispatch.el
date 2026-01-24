@@ -842,11 +842,43 @@ themselves once the selection process has concluded."
 
 ;;;;; Bounds of Dispatch
 
-(defun conn-bounds-of-dispatch (thing arg location)
+(cl-defgeneric conn-bounds-of-dispatch (thing arg location))
+
+(cl-defmethod conn-bounds-of-dispatch (thing arg location)
   (when-let* ((bounds (save-excursion
                         (goto-char location)
                         (conn-bounds-of thing arg))))
     (setf (conn-bounds-get bounds :origin) (point))
+    bounds))
+
+(cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing point))
+                                       arg
+                                       location)
+  (when-let* ((bounds (save-excursion
+                        (goto-char location)
+                        (conn-bounds-of thing arg))))
+    (setf (conn-bounds-get bounds :origin) (point))
+    (pcase bounds
+      ((and (conn-bounds-get :origin nil
+                             (and origin (pred identity)))
+            (conn-bounds `(,beg . ,end)))
+       (setf (conn-bounds--whole bounds)
+             (cons (if conn-dispatch-other-end end beg) origin))))
+    bounds))
+
+(cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing char))
+                                       arg
+                                       location)
+  (when-let* ((bounds (save-excursion
+                        (goto-char location)
+                        (conn-bounds-of thing arg))))
+    (setf (conn-bounds-get bounds :origin) (point))
+    (pcase bounds
+      ((and (conn-bounds-get :origin nil
+                             (and origin (pred identity)))
+            (conn-bounds `(,beg . ,end)))
+       (setf (conn-bounds--whole bounds)
+             (cons (if conn-dispatch-other-end end beg) origin))))
     bounds))
 
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
@@ -918,42 +950,14 @@ created from the bounds of the two things.  The new beg and end are
 taken to be the points where point would be after dispatching on each
 thing.  Can only be used during `conn-dispatch'.")))
 
-(cl-defgeneric conn-dispatch-bounds (bounds &optional transforms))
-
-(cl-defmethod conn-dispatch-bounds (bounds &optional transforms)
-  (pcase (conn-transform-bounds bounds transforms)
-    ((and (guard conn-dispatch-other-end)
-          (conn-bounds `(,beg . ,end)))
-     (cons end beg))
-    ((conn-bounds bd) bd)))
-
-(cl-defmethod conn-dispatch-bounds ((bounds (conn-thing point))
-                                    &optional transforms)
-  (conn-bounds
-   (conn-transform-bounds
-    (pcase bounds
-      ((and (conn-bounds-get :origin nil
-                             (and origin (pred identity)))
-            (conn-bounds `(,beg . ,end)))
-       (conn-make-bounds
-        'point (conn-bounds-arg bounds)
-        (cons (if conn-dispatch-other-end end beg) origin)))
-      (_ bounds))
-    transforms)))
-
-(cl-defmethod conn-dispatch-bounds ((bounds (conn-thing char))
-                                    &optional transforms)
-  (conn-bounds
-   (conn-transform-bounds
-    (pcase bounds
-      ((and (conn-bounds-get :origin nil
-                             (and origin (pred identity)))
-            (conn-bounds `(,beg . ,end)))
-       (conn-make-bounds
-        'point (conn-bounds-arg bounds)
-        (cons (if conn-dispatch-other-end end beg) origin)))
-      (_ bounds))
-    transforms)))
+(define-inline conn-dispatch-bounds (bounds &optional transforms)
+  (inline-quote
+   (pcase (conn-transform-bounds ,bounds ,transforms)
+     ((and (guard conn-dispatch-other-end)
+           (conn-bounds `(,',beg . ,',end)))
+      (cons end beg))
+     ((conn-bounds bd)
+      bd))))
 
 (pcase-defmacro conn-dispatch-bounds (pattern &optional transforms)
   `(and (pred conn-bounds-p)
