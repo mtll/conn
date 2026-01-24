@@ -1058,46 +1058,44 @@ Currently selected window remains selected afterwards."
   :lighter "YANK-REPLACE")
 
 (defun conn-yank-replace-subr (beg end)
-  (let ((cg (prepare-change-group)))
-    (cl-flet ((remove-all-advice (symbol)
-                (setf (symbol-function symbol)
-                      (advice--cd*r (symbol-function symbol))))
-              (yank-ad (&rest _)
-                (cancel-change-group cg)
-                (setf cg (prepare-change-group))
-                (delete-region beg end)))
-      (delete-region beg end)
-      (yank)
-      (advice-add 'yank-pop :before #'yank-ad)
-      (advice-add 'conn-yank-unpop :before #'yank-ad)
-      (advice-add 'conn-yank-with-completion :before #'yank-ad)
-      (set-transient-map
-       conn-yank-pop-repeat-map
-       t
-       (lambda ()
-         (remove-all-advice 'yank-pop)
-         (remove-all-advice 'conn-yank-unpop)
-         (remove-all-advice 'conn-yank-with-completion)
-         (undo-amalgamate-change-group cg))
-       (format "%s yank pop; %s yank unpop; %s yank with completion"
-               (propertize
-                (key-description
-                 (where-is-internal 'yank-pop
-                                    (list conn-yank-pop-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-yank-unpop
-                                    (list conn-yank-pop-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-yank-with-completion
-                                    (list conn-yank-pop-repeat-map)
-                                    t))
-                'face 'help-key-binding))))))
+  (let ((cg (prepare-change-group))
+        (ad-sym (make-symbol "yank-advice")))
+    (fset ad-sym (lambda (&rest _)
+                   (cancel-change-group cg)
+                   (setf cg (prepare-change-group))
+                   (delete-region beg end)))
+    (delete-region beg end)
+    (yank)
+    (advice-add 'yank-pop :before ad-sym)
+    (advice-add 'conn-yank-unpop :before ad-sym)
+    (advice-add 'conn-yank-with-completion :before ad-sym)
+    (set-transient-map
+     conn-yank-pop-repeat-map
+     t
+     (lambda ()
+       (advice-remove 'yank-pop ad-sym)
+       (advice-remove 'conn-yank-unpop ad-sym)
+       (advice-remove 'conn-yank-with-completion ad-sym)
+       (undo-amalgamate-change-group cg))
+     (format "%s yank pop; %s yank unpop; %s yank with completion"
+             (propertize
+              (key-description
+               (where-is-internal 'yank-pop
+                                  (list conn-yank-pop-repeat-map)
+                                  t))
+              'face 'help-key-binding)
+             (propertize
+              (key-description
+               (where-is-internal 'conn-yank-unpop
+                                  (list conn-yank-pop-repeat-map)
+                                  t))
+              'face 'help-key-binding)
+             (propertize
+              (key-description
+               (where-is-internal 'conn-yank-with-completion
+                                  (list conn-yank-pop-repeat-map)
+                                  t))
+              'face 'help-key-binding)))))
 
 (cl-defgeneric conn-yank-replace-do (thing
                                      arg
