@@ -2014,7 +2014,7 @@ Exiting the recursive edit will resume the isearch."
               isearch-new-message (concat isearch-message
                                           (mapconcat 'isearch-text-char-description
                                                      string ""))))
-      (goto-char (if isearch-new-forward end beg))))))
+      (goto-char (if isearch-new-forward beg end))))))
 
 ;;;;; Transpose
 
