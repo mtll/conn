@@ -1057,6 +1057,48 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-yank-replace-state (conn-read-thing-state)
   :lighter "YANK-REPLACE")
 
+(defun conn-yank-replace-subr (beg end)
+  (let ((cg (prepare-change-group)))
+    (cl-flet ((remove-all-advice (symbol)
+                (setf (symbol-function symbol)
+                      (advice--cd*r (symbol-function symbol))))
+              (yank-ad (&rest _)
+                (cancel-change-group cg)
+                (setf cg (prepare-change-group))
+                (delete-region beg end)))
+      (delete-region beg end)
+      (yank)
+      (advice-add 'yank-pop :before #'yank-ad)
+      (advice-add 'conn-yank-unpop :before #'yank-ad)
+      (advice-add 'conn-yank-with-completion :before #'yank-ad)
+      (set-transient-map
+       conn-yank-pop-repeat-map
+       t
+       (lambda ()
+         (remove-all-advice 'yank-pop)
+         (remove-all-advice 'conn-yank-unpop)
+         (remove-all-advice 'conn-yank-with-completion)
+         (undo-amalgamate-change-group cg))
+       (format "%s yank pop; %s yank unpop; %s yank with completion"
+               (propertize
+                (key-description
+                 (where-is-internal 'yank-pop
+                                    (list conn-yank-pop-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-yank-unpop
+                                    (list conn-yank-pop-repeat-map)
+                                    t))
+                'face 'help-key-binding)
+               (propertize
+                (key-description
+                 (where-is-internal 'conn-yank-with-completion
+                                    (list conn-yank-pop-repeat-map)
+                                    t))
+                'face 'help-key-binding))))))
+
 (cl-defgeneric conn-yank-replace-do (thing
                                      arg
                                      transform
@@ -1093,32 +1135,7 @@ Currently selected window remains selected afterwards."
              (let ((str (filter-buffer-substring beg end t)))
                (yank)
                (kill-new str))
-           (let ((cg (prepare-change-group)))
-             (delete-region beg end)
-             (yank)
-             (set-transient-map
-              conn-yank-pop-repeat-map
-              t
-              (lambda () (undo-amalgamate-change-group cg))
-              (format "%s yank pop; %s yank unpop; %s yank with completion"
-                      (propertize
-                       (key-description
-                        (where-is-internal 'yank-pop
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding)
-                      (propertize
-                       (key-description
-                        (where-is-internal 'conn-yank-unpop
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding)
-                      (propertize
-                       (key-description
-                        (where-is-internal 'conn-yank-with-completion
-                                           (list conn-yank-pop-repeat-map)
-                                           t))
-                       'face 'help-key-binding)))))))
+           (conn-yank-replace-subr beg end))))
      (conn-push-command-history 'conn-yank-replace
                                 thing
                                 arg
@@ -2357,6 +2374,11 @@ append to that place."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kill-state)
+  "w" 'copy
+  "/" 'filename
+  "P" 'project-filename
+  ">" 'kill-matching-lines
+  "%" 'keep-lines
   "j" 'move-end-of-line)
 
 (defvar-keymap conn-append-argument-map
@@ -2451,20 +2473,12 @@ append to that place."
           nil))
   (cl-call-next-method))
 
-(defvar-keymap conn-kill-thing-argument-map
-  "w" 'copy
-  "/" 'filename
-  "P" 'project-filename
-  ">" 'kill-matching-lines
-  "%" 'keep-lines)
-
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-kill-thing-argument
                  (&optional
                   recursive-edit
                   &aux
-                  (keymap conn-kill-thing-argument-map)
                   (required t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
@@ -3598,7 +3612,10 @@ Only available during repeating duplicate."
        (commented nil))
     (set-marker-insertion-type m2 t)
     (cl-labels
-        ((dup ()
+        ((remove-all-advice (symbol)
+           (setf (symbol-function symbol)
+                 (advice--cd*r (symbol-function symbol))))
+         (dup ()
            (save-excursion
              (goto-char end-marker)
              (unless (looking-back regexp 1)
@@ -3629,12 +3646,11 @@ Only available during repeating duplicate."
            (set-marker m2 nil)
            (mapc #'delete-overlay regions)
            (undo-amalgamate-change-group cg)
-           (advice-remove 'conn-duplicate-indent-repeat #'indent)
-           (advice-remove 'conn-duplicate-repeat #'repeat)
-           (advice-remove 'conn-duplicate-delete-repeat #'delete)
-           (advice-remove 'conn-duplicate-repeat-comment #'comment)
-           (advice-remove 'conn-duplicate-repeat-toggle-padding
-                          (if block #'block-padding #'non-block-padding)))
+           (remove-all-advice 'conn-duplicate-indent-repeat)
+           (remove-all-advice 'conn-duplicate-repeat)
+           (remove-all-advice 'conn-duplicate-delete-repeat)
+           (remove-all-advice 'conn-duplicate-repeat-comment)
+           (remove-all-advice 'conn-duplicate-repeat-toggle-padding))
          (indent ()
            (interactive)
            (indent-region (overlay-start (car (last regions)))
@@ -3846,7 +3862,8 @@ Interactively REPEAT is given by the prefix argument."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
-  "y" 'yank-replace
+  "y" 'yank
+  "Y" 'yank-from-kill-ring
   "e" 'conn-emacs-state-overwrite
   "E" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
@@ -3954,7 +3971,7 @@ Interactively REPEAT is given by the prefix argument."
                      regexp-flag
                      subregions-p)))
 
-(cl-defmethod conn-change-thing-do ((_thing (eql yank-replace))
+(cl-defmethod conn-change-thing-do ((_thing (eql yank))
                                     arg
                                     transform)
   (conn-read-args (conn-yank-replace-state
@@ -4125,7 +4142,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (setq end (copy-marker end))
-     (cl-labels ((right ()
+     (cl-labels ((remove-all-advice (symbol)
+                   (setf (symbol-function symbol)
+                         (advice--cd*r (symbol-function symbol))))
+                 (right ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
@@ -4158,10 +4178,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
         t
         (lambda ()
           (set-marker end nil)
-          (advice-remove 'conn-indent-left #'left)
-          (advice-remove 'conn-indent-right #'right)
-          (advice-remove 'conn-indent-right-to-tab-stop #'rtts)
-          (advice-remove 'conn-indent-left-to-tab-stop #'ltts))
+          (remove-all-advice 'conn-indent-left)
+          (remove-all-advice 'conn-indent-right)
+          (remove-all-advice 'conn-indent-right-to-tab-stop)
+          (remove-all-advice 'conn-indent-left-to-tab-stop))
         "Type %k to indent region interactively")))))
 
 ;;;;; Narrowing Commands
