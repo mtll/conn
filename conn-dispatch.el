@@ -501,6 +501,7 @@ themselves once the selection process has concluded."
                           'dispatch-character-event)
     (cl-loop for i from ?\s below 256
              do (define-key map (vector i) 'dispatch-character-event))
+    (define-key map conn-undo-keys 'undo)
     (define-keymap
       :keymap map
       "C-\\" 'toggle-input-method
@@ -511,7 +512,6 @@ themselves once the selection process has concluded."
       "C-r" 'recursive-edit
       "<mouse-1>" 'act
       "<mouse-3>" 'undo
-      "C-/" 'undo
       "M-DEL" 'reset-arg
       "M-<backspace>" 'reset-arg
       "C-t" 'change-target-finder
@@ -522,6 +522,7 @@ themselves once the selection process has concluded."
       "C-v" 'scroll-up-command
       "M-v" 'scroll-down-command
       "C-q" 'quoted-insert
+      "M-?" 'help
       "?" 'help
       "C-g" 'keyboard-quit
       "C-w" 'restrict-windows
@@ -2391,13 +2392,10 @@ the meaning of depth."
          (conn-dispatch-handle-and-redisplay))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
-  (when conn--dispatch-change-groups
-    (if-let* ((curr (pop conn--dispatch-change-groups)))
-        (pcase-dolist (`(,_ . ,undo-fn) curr)
-          (funcall undo-fn :undo))
-      (pcase-dolist (`(,_ . ,undo-fn)
-                     (pop conn--dispatch-change-groups))
-        (funcall undo-fn :undo))))
+  (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
+                   (cl-callf2 drop 2 conn--dispatch-change-groups)))
+    (pcase-dolist (`(,_ . ,undo-fn) group)
+      (funcall undo-fn :undo)))
   (throw 'dispatch-undo nil))
 
 ;;;;; Dispatch Labels
@@ -5113,11 +5111,13 @@ for the dispatch."
                       (when repeat
                         (push (make-overlay beg end) ovs)
                         (conn-dispatch-undo-case
-                          ((or :cancel :undo) (delete-overlay (pop ovs))))
+                          ((or :cancel :undo)
+                           (delete-overlay (pop ovs))))
                         (overlay-put (car ovs) 'face 'region))
                       (push bound subregions)
                       (conn-dispatch-undo-case
-                        ((or :cancel :undo) (pop subregions))))
+                        ((or :cancel :undo)
+                         (pop subregions))))
                      (_
                       (user-error "No %s found at point" thing))))))
              thing arg transform
