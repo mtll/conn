@@ -974,7 +974,17 @@ Currently selected window remains selected afterwards."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-thing-state)
-  "p" 'point)
+  "p" 'point
+  "z" 'conn-exchange-mark-command)
+
+(cl-defstruct (conn-mark-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-mark-thing-argument
+                 (&aux (required t)))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-mark-thing-argument)
+                                       (_cmd (eql conn-exchange-mark-command)))
+  t)
 
 (cl-defgeneric conn-mark-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :mark-op)))
@@ -998,6 +1008,11 @@ Currently selected window remains selected afterwards."
        (goto-char beg))
      (push-mark (if (>= (point) end) beg end) t t)
      (conn-push-state 'conn-mark-state))))
+
+(cl-defmethod conn-mark-thing-do ((_thing (eql conn-exchange-mark-command))
+                                  _arg
+                                  _transform)
+  (conn-exchange-and-mark-command))
 
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -1047,7 +1062,7 @@ Currently selected window remains selected afterwards."
    (conn-read-args (conn-mark-thing-state
                     :interactive 'conn-mark-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument t))
+       ((`(,thing ,arg) (conn-mark-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (conn-mark-thing-do thing arg transform))

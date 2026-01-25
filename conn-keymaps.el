@@ -237,6 +237,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "z" 'conn-exchange-mark-command
   "e" 'conn-change-thing
   "r" 'conn-replace
   "M-n" 'conn-mark-ring-next
@@ -362,7 +363,7 @@
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
   "z" 'conn-yank-replace
-  "Z" 'conn-exchange-and-mark-command)
+  "Z" 'conn-exchange-mark-command)
 
 ;;;;;; Dispatch State
 
