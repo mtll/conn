@@ -410,8 +410,6 @@
                             :pretty-print ( :method (_) "conn-expand")
                             :bounds-op ( :method (_self arg)
                                          (conn-bounds-of 'conn-expand arg)))
-  "<conn-thing-map> e" 'move-end-of-line
-  "<conn-thing-map> a" 'move-beginning-of-line
   "O" (conn-anonymous-thing
         'word
         :pretty-print (:method (_self) "all-words")
