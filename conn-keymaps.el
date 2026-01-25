@@ -237,10 +237,12 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "e" 'conn-change-thing
+  "r" 'conn-replace
   "M-n" 'conn-mark-ring-next
   "M-p" 'conn-mark-ring-previous
   "DEL" 'kill-region
-  "e" 'conn-emacs-state
+  ;; "e" 'conn-emacs-state
   "TAB" 'indent-rigidly
   "Y" 'conn-completing-yank-replace
   "y" 'conn-yank-replace

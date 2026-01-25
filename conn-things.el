@@ -230,6 +230,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (cl-defstruct (conn--anonymous-thing
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
+               (:copier conn--copy-anonymous-thing)
                ;; This would be nice but cl-defsubst does not handle
                ;; &rest arguments properly and as a result PROPERTIES
                ;; gets evaluated twice in the expansion.

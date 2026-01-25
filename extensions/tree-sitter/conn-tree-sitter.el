@@ -496,73 +496,81 @@
   ( :default-update-handler (state)
     (let ((region-pred (ignore-error unbound-slot
                          (oref state region-predicate)))
-          (things (oref state things)))
-      (cl-flet ((make-bounds (bounds things)
+          (things (oref state things))
+          (bounds-thing
+           (conn-anonymous-thing
+             'conn-ts-thing
+             :target-finder ( :method (self _arg)
+                              (conn-ts-query-targets
+                               :things (conn-anonymous-thing-property
+                                        self :types)))
+             :pretty-print ( :method (self)
+                             (mapconcat
+                              #'conn-thing-pretty-print
+                              (conn-anonymous-thing-property self :types)
+                              " & "))
+             :bounds-op ( :method (self _)
+                          (conn-ts-select-expansion
+                           (lambda ()
+                             (conn-ts-filter-captures
+                              (conn-anonymous-thing-property
+                               self :types)
+                              (conn-ts-capture (point) (1+ (point)))
+                              (lambda (bd)
+                                (<= (car bd) (point) (cdr bd)))))
+                           'conn-ts-thing)))))
+      (cl-flet ((make-bounds (bounds types)
                   (conn-make-bounds
-                   (conn-anonymous-thing
-                     'conn-ts-thing
-                     :types things
-                     :target-finder ( :method (self _arg)
-                                      (conn-ts-query-targets
-                                       :things (conn-anonymous-thing-property
-                                                self :types)))
-                     :pretty-print ( :method (self)
-                                     (mapconcat
-                                      #'conn-thing-pretty-print
-                                      (conn-anonymous-thing-property self :types)
-                                      " & "))
-                     :bounds-op ( :method (self _)
-                                  (conn-ts-select-expansion
-                                   (lambda ()
-                                     (conn-ts-filter-captures
-                                      (conn-anonymous-thing-property
-                                       self :types)
-                                      (conn-ts-capture (point) (1+ (point)))
-                                      (lambda (bd)
-                                        (<= (car bd) (point) (cdr bd)))))
-                                   'conn-ts-thing)))
+                   (let ((th (conn--copy-anonymous-thing bounds-thing)))
+                     (setf (conn-anonymous-thing-property th :types) types)
+                     th)
                    nil bounds)))
         (pcase-dolist (`(,vbeg . ,vend)
                        (conn--visible-regions (window-start)
                                               (window-end)))
           (pcase-dolist (`(,type ,beg . ,end)
                          (conn-ts-capture vbeg vend))
-            (when-let* ((type-things (seq-intersection
-                                      (get type :conn-ts--member-of)
-                                      things))
-                        (_ (and (<= (window-start) beg (window-end))
-                                (or (null region-pred)
-                                    (funcall region-pred beg end)))))
-              (if-let* ((ov (car (conn--overlays-in-of-type
-                                  beg (1+ beg) 'conn-target-overlay
-                                  (selected-window)))))
-                  (if-let* ((b (seq-find
-                                (lambda (bound)
-                                  (pcase bound
-                                    ((conn-bounds `(,b . ,e))
-                                     (and (eql beg b) (eql end e)))))
-                                (conn-anonymous-thing-property
-                                 (overlay-get ov 'thing)
-                                 :bounds))))
-                      (cl-callf2 seq-union
-                          type-things
-                          (conn-anonymous-thing-property
-                           (conn-bounds-thing b)
-                           :types))
-                    (push (make-bounds (cons beg end) type-things)
-                          (conn-anonymous-thing-property
-                           (overlay-get ov 'thing)
-                           :bounds)))
+            (let (type-things ov bounds)
+              (cond
+               ((not (and
+                      (<= (window-start) beg (window-end))
+                      (or (null region-pred)
+                          (funcall region-pred beg end))
+                      (setq type-things (seq-intersection
+                                         (get type :conn-ts--member-of)
+                                         things)))))
+               ((not (setq ov (car (conn--overlays-in-of-type
+                                    beg (1+ beg) 'conn-target-overlay
+                                    (selected-window)))))
                 (conn-make-target-overlay
                  beg 0
-                 :thing (conn-anonymous-thing
-                          'conn-ts-thing
-                          :bounds (list (make-bounds (cons beg end) type-things))
-                          :bounds-op ( :method (self _arg)
-                                       (conn-with-dispatch-suspended
-                                         (conn-multi-thing-select
-                                          (conn-anonymous-thing-property self :bounds)
-                                          (funcall conn-ts-multi-always-prompt-p))))))))))))))
+                 :thing
+                 (conn-anonymous-thing
+                   'conn-ts-thing
+                   :bounds (list (make-bounds (cons beg end) type-things))
+                   :bounds-op ( :method (self _arg)
+                                (conn-with-dispatch-suspended
+                                  (conn-multi-thing-select
+                                   (conn-anonymous-thing-property self :bounds)
+                                   (funcall conn-ts-multi-always-prompt-p)))))))
+               ((not (setq bounds (seq-find
+                                   (lambda (bounds)
+                                     (pcase bounds
+                                       ((conn-bounds `(,b . ,e))
+                                        (and (eql beg b) (eql end e)))))
+                                   (conn-anonymous-thing-property
+                                    (overlay-get ov 'thing)
+                                    :bounds))))
+                (push (make-bounds (cons beg end) type-things)
+                      (conn-anonymous-thing-property
+                       (overlay-get ov 'thing)
+                       :bounds)))
+               (t
+                (cl-callf2 seq-union
+                    type-things
+                    (conn-anonymous-thing-property
+                     (conn-bounds-thing bounds)
+                     :types)))))))))))
 
 (conn-define-target-finder conn-ts-all-things
     ()

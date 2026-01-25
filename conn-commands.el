@@ -1195,7 +1195,7 @@ selected by dispatch with it."))
            ()
          (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                        (conn-select-target)))
-           (unless conn-dispatch-other-end
+           (unless (funcall conn-dispatch-other-end)
              (select-window window))
            (with-selected-window window
              (conn-dispatch-change-group)
@@ -1203,7 +1203,7 @@ selected by dispatch with it."))
                ((conn-bounds (and bounds `(,beg . ,end)) transform)
                 (when check-bounds
                   (conn-check-bounds bounds))
-                (unless conn-dispatch-other-end
+                (unless (funcall conn-dispatch-other-end)
                   (goto-char beg))
                 (if swap
                     (let ((newstr (filter-buffer-substring beg end)))
@@ -2935,7 +2935,7 @@ hook, which see."
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
-             (unless conn-dispatch-other-end
+             (unless (funcall conn-dispatch-other-end)
                (select-window window))
              (with-selected-window window
                (conn-dispatch-change-group)
@@ -2946,7 +2946,7 @@ hook, which see."
                                                ,@transform
                                                ,@(when check-bounds
                                                    (list 'conn-check-bounds)))))
-                  (unless conn-dispatch-other-end
+                  (unless (funcall conn-dispatch-other-end)
                     (push-mark (conn-bounds-get bounds :origin))
                     (goto-char beg))
                   (unless delete

@@ -144,7 +144,7 @@ If FACE is non-nil set label string face to FACE.  Otherwise label
 strings have `conn-dispatch-label-face'."
   (declare (side-effect-free t)
            (important-return-value t))
-  (let* ((blen (ceiling (log count (length conn-simple-label-characters))))
+  (let* ((blen (floor (1+ (log count (length conn-simple-label-characters)))))
          (buckets (make-vector blen nil))
          (i 0))
     (setf (aref buckets i) (thread-last
@@ -864,7 +864,8 @@ themselves once the selection process has concluded."
                              (and origin (pred identity)))
             (conn-bounds `(,beg . ,end)))
        (setf (conn-bounds--whole bounds)
-             (cons (if conn-dispatch-other-end end beg) origin))))
+             (cons (if (funcall conn-dispatch-other-end) end beg)
+                   origin))))
     bounds))
 
 (cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing char))
@@ -879,7 +880,8 @@ themselves once the selection process has concluded."
                              (and origin (pred identity)))
             (conn-bounds `(,beg . ,end)))
        (setf (conn-bounds--whole bounds)
-             (cons (if conn-dispatch-other-end end beg) origin))))
+             (cons (if (funcall conn-dispatch-other-end) end beg)
+                   origin))))
     bounds))
 
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
@@ -926,11 +928,11 @@ nearest to point.  Can only be used during `conn-dispatch'.")))
       'conn-dispatch-bounds-anchored
       bounds
       (if (< beg origin)
-          (if conn-dispatch-other-end
+          (if (funcall conn-dispatch-other-end)
               (cons (min origin end)
                     (max origin end))
             (cons beg origin))
-        (if conn-dispatch-other-end
+        (if (funcall conn-dispatch-other-end)
             (cons origin beg)
           (cons origin end)))))
     (_ bounds)))
@@ -954,7 +956,7 @@ thing.  Can only be used during `conn-dispatch'.")))
 (define-inline conn-dispatch-bounds (bounds &optional transforms)
   (inline-quote
    (pcase (conn-transform-bounds ,bounds ,transforms)
-     ((and (guard conn-dispatch-other-end)
+     ((and (guard (funcall conn-dispatch-other-end))
            (conn-bounds `(,',beg . ,',end)))
       (cons end beg))
      ((conn-bounds bd)
@@ -1613,7 +1615,9 @@ Target overlays may override this default by setting the
          (str (propertize string 'face face)))
       (setf (overlay-get ov 'category) 'conn-label-overlay
             (overlay-get ov 'window) window)
-      (make-conn-dispatch-label
+      (funcall
+       (or (overlay-get target 'label-ctor)
+           #'make-conn-dispatch-label)
        :setup-function (cond ((overlay-get target 'no-hide)
                               'conn-before-string-label)
                              ((conn-dispatch-pixelwise-label-p ov)
@@ -1831,10 +1835,7 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Loop
 
-(defvar conn-dispatch-in-progress nil
-  "Non-nil inside while execution of `conn-dispatch-perform-action'.
-
-`conn-with-dispatch-suspended' binds this variable to nil.")
+(defvar conn-dispatch-in-progress nil)
 
 (defvar conn-dispatch-current-action nil
   "The `oclosure-type' of the current dispatch action.")
@@ -1947,7 +1948,6 @@ depths will be sorted before greater depths.
         (conn--dispatch-label-state nil)
         (conn--dispatch-change-groups nil)
         (conn--read-args-error-message nil)
-        (conn-dispatch-in-progress t)
         (conn--current-dispatch-buffers (make-hash-table :test 'eq)))
     (setf (gethash (current-buffer) conn--current-dispatch-buffers)
           (point-marker))
@@ -2368,9 +2368,13 @@ the meaning of depth."
   (throw 'dispatch-exit nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql other-end)))
-  (unless conn-dispatch-no-other-end
-    (cl-callf not conn-dispatch-other-end)
-    (conn-dispatch-handle-and-redisplay nil)))
+  (if (advice-function-member-p 'toggle conn-dispatch-other-end)
+      (remove-function conn-dispatch-other-end 'toggle)
+    (add-function :around conn-dispatch-other-end
+                  (lambda (fn) (not (funcall fn)))
+                  '((name . toggle)
+                    (depth . 100))))
+  (conn-dispatch-handle-and-redisplay nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
   (conn-target-finder-retarget conn-dispatch-target-finder)
@@ -2480,8 +2484,39 @@ the meaning of depth."
    (window-predicate :initform #'always
                      :initarg :window-predicate)
    (reference :initform nil
-              :initarg :reference))
+              :initarg :reference)
+   (label-function :initform nil
+                   :initarg :label-function))
   :abstract t)
+
+(cl-defmethod make-instance :around ((_class (subclass conn-target-finder-base))
+                                     &rest _slots)
+  (unless conn-dispatch-in-progress
+    (error "No dispatch in progress"))
+  (let ((new-object (cl-call-next-method)))
+    (setf conn-dispatch-target-finder new-object)
+    (if-let* ((predicate (oref new-object window-predicate)))
+        (add-function :after-while conn-target-window-predicate predicate
+                      '((name . target-finder)))
+      (remove-function conn-target-window-predicate 'target))
+    (if-let* ((label-function (oref new-object label-function)))
+        (add-function :override conn-dispatch-label-function
+                      label-function
+                      '((name . target-finder)))
+      (remove-function conn-dispatch-label-function 'target-finder))
+    (pcase (conn-target-finder-other-end new-object)
+      (:no-other-end
+       (push :target conn-dispatch-no-other-end)
+       (remove-function conn-dispatch-other-end 'target-finder))
+      (_
+       (cl-callf2 delq :target conn-dispatch-no-other-end)
+       (add-function :around conn-dispatch-other-end
+                     (lambda (fn)
+                       (xor (funcall fn)
+                            (conn-target-finder-other-end
+                             conn-dispatch-target-finder)))
+                     '((name . target-finder)))))
+    new-object))
 
 (defvar conn-dispatch-post-update-functions nil
   "Abnormal hook run after a target finder updates in each window.
@@ -4339,7 +4374,7 @@ it."))
                   (conn-select-target)))
       (conn-dispatch-select-window window)
       (conn-dispatch-change-group)
-      (if (or conn-dispatch-other-end
+      (if (or (funcall conn-dispatch-other-end)
               transform)
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,_end) transform)
@@ -4489,7 +4524,7 @@ it."))
                                      conn-target-window-predicate))
                   (other-end (if conn-dispatch-no-other-end
                                  :no-other-end
-                               conn-dispatch-other-end))
+                               (funcall conn-dispatch-other-end)))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup-function
                    (let ((fns (conn-target-finder-save-state
@@ -4647,24 +4682,26 @@ it."))
        (conn--read-args-prefix-mag nil)
        (conn--read-args-prefix-sign nil)
        (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
-       (conn-dispatch-target-finder
-        (conn-get-target-finder thing arg))
+       (conn-dispatch-label-function conn-dispatch-label-function)
        (conn-dispatch-iteration-count 0)
        (conn--dispatch-always-retarget
         (or always-retarget
             (conn-action-always-retarget action)))
-       (target-other-end (conn-target-finder-other-end
-                          conn-dispatch-target-finder))
        (conn-dispatch-no-other-end
-        (or (eq other-end :no-other-end)
-            (eq target-other-end :no-other-end)))
-       (conn-dispatch-other-end
-        (unless conn-dispatch-no-other-end
-          (xor target-other-end (or other-end conn-dispatch-other-end))))
+        (when (eq other-end :no-other-end)
+          (list t)))
+       (conn-dispatch-other-end (lambda () (and other-end t)))
        (conn-dispatch-input-buffer (current-buffer))
        (prev-input-method current-input-method)
        (default-input-method default-input-method)
-       (input-method-history input-method-history))
+       (input-method-history input-method-history)
+       (conn-dispatch-in-progress t)
+       (conn-dispatch-target-finder
+        (conn-get-target-finder thing arg)))
+    (add-function :before-while conn-dispatch-other-end
+                  (lambda () (not conn-dispatch-no-other-end))
+                  '((depth . -100)
+                    (name . no-other-end)))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
       ( :message -99 (_)
@@ -4692,9 +4729,9 @@ it."))
       ( :message 0 (_keymap)
         (conn-target-finder-message-prefixes
          conn-dispatch-target-finder))
-      (unless conn-dispatch-no-other-end
-        ( :message 10 (keymap)
-          (when-let* ((_ conn-dispatch-other-end)
+      ( :message 10 (keymap)
+        (unless conn-dispatch-no-other-end
+          (when-let* ((_ (funcall conn-dispatch-other-end))
                       (binding
                        (where-is-internal 'other-end keymap t)))
             (concat
@@ -4747,10 +4784,6 @@ it."))
       (when restrict-windows
         (add-function :after-while conn-target-window-predicate
                       'conn--dispatch-restrict-windows))
-      (when-let* ((predicate (ignore-error invalid-slot-name
-                               (oref conn-dispatch-target-finder
-                                     window-predicate))))
-        (add-function :after-while conn-target-window-predicate predicate))
       (conn-with-recursive-stack 'conn-dispatch-state
         (let ((conn-disable-input-method-hooks t))
           (conn--unwind-protect-all
