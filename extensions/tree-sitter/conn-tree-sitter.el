@@ -344,8 +344,7 @@
     (conn-multi-thing-select things)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing))
-                              arg
-                              &key flat)
+                              arg)
   (setq arg (prefix-numeric-value arg))
   (unless (= 0 arg)
     (let* ((seen (when (> arg 100)
@@ -370,48 +369,80 @@
                           (conn-get-thing cmd)
                           (conn-ts-capture (min beg end) (max beg end)))
                 beg end)
-          (if flat
-              (progn
-                (cl-callf sort captures
-                  :key #'cadr
-                  :reverse (< arg 0)
-                  :in-place t)
-                (pcase-dolist (`(,_type . ,node) captures)
-                  (when (and (if (< arg 0)
-                                 (< (car node) at)
-                               (> (car node) at))
-                             (if seen
-                                 (or (not (gethash node seen))
-                                     (setf (gethash node seen) t))
-                               (not (member node nodes))))
-                    (cl-callf max max (cdr node))
-                    (cl-callf min min (car node))
-                    (push (conn-make-bounds cmd 1 node) nodes)
-                    (setq at (car node))
-                    (when (= (cl-incf count) (abs arg))
-                      (throw 'done nil)))))
-            (cl-callf sort captures
-              :key (if (< arg 0)
-                       (lambda (n)
-                         (if (>= at (cddr n)) (cddr n) (cadr n)))
+          (cl-callf sort captures
+            :key (if (< arg 0)
                      (lambda (n)
-                       (if (<= at (cadr n)) (cadr n) (cddr n))))
-              :reverse (< arg 0)
-              :in-place t)
-            (pcase-dolist (`(,_type . ,node) captures)
-              (when (and (if (< arg 0)
-                             (< (car node) at)
-                           (> (cdr node) at))
-                         (if seen
-                             (or (not (gethash node seen))
-                                 (setf (gethash node seen) t))
-                           (not (member node nodes))))
-                (cl-callf max max (cdr node))
-                (cl-callf min min (car node))
-                (push (conn-make-bounds cmd 1 node) nodes)
-                (setq at (if (< arg 0) (car node) (cdr node)))
-                (when (= (cl-incf count) (abs arg))
-                  (throw 'done nil)))))))
+                       (if (>= at (cddr n)) (cddr n) (cadr n)))
+                   (lambda (n)
+                     (if (<= at (cadr n)) (cadr n) (cddr n))))
+            :reverse (< arg 0)
+            :in-place t)
+          (pcase-dolist (`(,_type . ,node) captures)
+            (when (and (if (< arg 0)
+                           (< (car node) at)
+                         (> (cdr node) at))
+                       (if seen
+                           (or (not (gethash node seen))
+                               (setf (gethash node seen) t))
+                         (not (member node nodes))))
+              (cl-callf max max (cdr node))
+              (cl-callf min min (car node))
+              (push (conn-make-bounds cmd 1 node) nodes)
+              (setq at (if (< arg 0) (car node) (cdr node)))
+              (when (= (cl-incf count) (abs arg))
+                (throw 'done nil))))))
+      (when nodes
+        (conn-make-bounds
+         cmd arg
+         (cons min max)
+         :subregions (nreverse nodes)
+         :direction (cond ((< opoint at) 1)
+                          ((> opoint at) -1)))))))
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-flat-thing))
+                              arg)
+  (setq arg (prefix-numeric-value arg))
+  (unless (= 0 arg)
+    (let* ((seen (when (> arg 100)
+                   (make-hash-table :test 'equal :size arg)))
+           (captures nil)
+           (opoint (point))
+           (at (point))
+           (beg (point))
+           (end nil)
+           (count 0)
+           (nodes nil)
+           (max most-negative-fixnum)
+           (min most-positive-fixnum))
+      (catch 'done
+        (while (if (< arg 0)
+                   (> beg (point-min))
+                 (< beg (point-max)))
+          (setq end (if (< arg 0)
+                        (max (point-min) (- beg conn-ts--chunk-size))
+                      (min (point-max) (+ beg conn-ts--chunk-size)))
+                captures (conn-ts-filter-captures
+                          (conn-get-thing cmd)
+                          (conn-ts-capture (min beg end) (max beg end)))
+                beg end)
+          (cl-callf sort captures
+            :key #'cadr
+            :reverse (< arg 0)
+            :in-place t)
+          (pcase-dolist (`(,_type . ,node) captures)
+            (when (and (if (< arg 0)
+                           (< (car node) at)
+                         (> (car node) at))
+                       (if seen
+                           (or (not (gethash node seen))
+                               (setf (gethash node seen) t))
+                         (not (member node nodes))))
+              (cl-callf max max (cdr node))
+              (cl-callf min min (car node))
+              (push (conn-make-bounds cmd 1 node) nodes)
+              (setq at (car node))
+              (when (= (cl-incf count) (abs arg))
+                (throw 'done nil))))))
       (when nodes
         (conn-make-bounds
          cmd arg
@@ -421,6 +452,7 @@
                           ((> opoint at) -1)))))))
 
 (conn-register-thing 'conn-ts-thing)
+(conn-register-thing 'conn-ts-flat-thing :parent 'conn-ts-thing)
 
 (defvar conn-ts-multi-always-prompt-p
   (lambda ()
@@ -676,17 +708,6 @@
                (list (format-message "No more %S to move across" thing)
                      (point) (point))))))
 
-(defun conn-ts--thing-forward-flat (thing arg)
-  (pcase (thread-first
-           (conn-bounds-of thing arg :flat t)
-           (conn-bounds-get :subregions)
-           last car)
-    ((conn-bounds `(,beg . ,_end))
-     (goto-char beg))
-    (_ (signal 'scan-error
-               (list (format-message "No more %S to move across" thing)
-                     (point) (point))))))
-
 ;;;###autoload
 (defmacro conn-ts-define-thing (name group)
   (declare (indent defun)
@@ -695,6 +716,7 @@
         (forward-flat-cmd (intern (format "%s-forward-flat" name)))
         (backward-cmd (intern (format "%s-backward" name)))
         (backward-flat-cmd (intern (format "%s-backward-flat" name)))
+        (flat-thing (intern (format "%s-flat" name)))
         (groups (cl-loop for g in (ensure-list group)
                          collect (intern g))))
     `(progn
@@ -708,15 +730,18 @@
 
        (defun ,forward-flat-cmd (&optional arg)
          (interactive "p")
-         (conn-ts--thing-forward-flat ',name arg))
+         (conn-ts--thing-forward ',flat-thing arg))
 
        (defun ,backward-flat-cmd (&optional arg)
          (interactive "p")
-         (conn-ts--thing-forward-flat ',name (- arg)))
+         (conn-ts--thing-forward ',flat-thing (- arg)))
 
        (conn-register-thing ',name
                             :parent 'conn-ts-thing
                             :forward-op ',forward-cmd)
+       (conn-register-thing ',flat-thing
+                            :parent 'conn-ts-flat-thing
+                            :forward-op ',forward-flat-cmd)
 
        (conn-register-thing-commands
         ',name #'ignore
@@ -729,6 +754,9 @@
        (put ',name :conn-ts-thing (conn--make-ts-thing :groups ',groups))
        ,@(cl-loop for g in groups
                   collect `(push ',name (get ',g :conn-ts--member-of)))
+       (put ',flat-thing :conn-ts-thing (conn--make-ts-thing :groups ',groups))
+       ,@(cl-loop for g in groups
+                  collect `(push ',flat-thing (get ',g :conn-ts--member-of)))
        (put ',backward-flat-cmd 'repeat-check-key 'no)
        (put ',forward-flat-cmd 'repeat-check-key 'no)
        (put ',backward-cmd 'repeat-check-key 'no)
