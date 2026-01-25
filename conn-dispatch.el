@@ -2265,9 +2265,8 @@ the meaning of depth."
                                (funcall cont))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
-    (conn-target-finder-cleanup conn-dispatch-target-finder)
-    (setq conn-dispatch-target-finder (conn-get-target-finder thing arg)
-          conn--dispatch-current-thing (list thing arg transform))
+    (conn-get-target-finder thing arg)
+    (setq conn--dispatch-current-thing (list thing arg transform))
     (conn-dispatch-handle-and-redisplay)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
@@ -2489,35 +2488,6 @@ the meaning of depth."
                    :initarg :label-function))
   :abstract t)
 
-(cl-defmethod make-instance :around ((_class (subclass conn-target-finder-base))
-                                     &rest _slots)
-  (unless conn-dispatch-in-progress
-    (error "No dispatch in progress"))
-  (let ((new-object (cl-call-next-method)))
-    (setf conn-dispatch-target-finder new-object)
-    (if-let* ((predicate (oref new-object window-predicate)))
-        (add-function :after-while conn-target-window-predicate predicate
-                      '((name . target-finder)))
-      (remove-function conn-target-window-predicate 'target))
-    (if-let* ((label-function (oref new-object label-function)))
-        (add-function :override conn-dispatch-label-function
-                      label-function
-                      '((name . target-finder)))
-      (remove-function conn-dispatch-label-function 'target-finder))
-    (pcase (conn-target-finder-other-end new-object)
-      (:no-other-end
-       (push :target conn-dispatch-no-other-end)
-       (remove-function conn-dispatch-other-end 'target-finder))
-      (_
-       (cl-callf2 delq :target conn-dispatch-no-other-end)
-       (add-function :around conn-dispatch-other-end
-                     (lambda (fn)
-                       (xor (funcall fn)
-                            (conn-target-finder-other-end
-                             conn-dispatch-target-finder)))
-                     '((name . target-finder)))))
-    new-object))
-
 (defvar conn-dispatch-post-update-functions nil
   "Abnormal hook run after a target finder updates in each window.
 
@@ -2625,8 +2595,36 @@ updated.")
      (abs (- (overlay-end b) (point)))))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
-  (declare (conn-anonymous-thing-property :target-finder)
-           (important-return-value t)))
+  (declare (conn-anonymous-thing-property :target-finder)))
+
+(cl-defmethod conn-get-target-finder :around (_cmd _arg)
+  (unless conn-dispatch-in-progress
+    (error "No dispatch in progress"))
+  (when-let* ((tf (cl-call-next-method)))
+    (when conn-dispatch-target-finder
+      (conn-target-finder-cleanup conn-dispatch-target-finder))
+    (if-let* ((predicate (oref tf window-predicate)))
+        (add-function :after-while conn-target-window-predicate predicate
+                      '((name . target-finder)))
+      (remove-function conn-target-window-predicate 'target))
+    (if-let* ((label-function (oref tf label-function)))
+        (add-function :override conn-dispatch-label-function
+                      label-function
+                      '((name . target-finder)))
+      (remove-function conn-dispatch-label-function 'target-finder))
+    (pcase (conn-target-finder-other-end tf)
+      (:no-other-end
+       (push :target conn-dispatch-no-other-end)
+       (remove-function conn-dispatch-other-end 'target-finder))
+      (_
+       (cl-callf2 delq :target conn-dispatch-no-other-end)
+       (add-function :around conn-dispatch-other-end
+                     (lambda (fn)
+                       (xor (funcall fn)
+                            (conn-target-finder-other-end
+                             conn-dispatch-target-finder)))
+                     '((name . target-finder)))))
+    (setf conn-dispatch-target-finder tf)))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
@@ -2981,11 +2979,6 @@ contain targets."
     (mapc #'delete-overlay ovs))
   (setf (oref state hidden) nil))
 
-(cl-defmethod conn-target-finder-update :around ((state conn-dispatch-focus-mixin))
-  (let ((inhibit-redisplay t))
-    (cl-call-next-method state))
-  (redisplay))
-
 (cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,win ,tick . ,ovs) (oref state hidden))
     (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
@@ -3054,7 +3047,8 @@ contain targets."
               ('nil (setf (alist-get win (oref state cursor-location))
                           lines)
                     (recenter lines))
-              (loc (recenter loc)))))))))
+              (loc (recenter loc))))))))
+  (redisplay))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
@@ -3098,6 +3092,9 @@ contain targets."
             (when (<= prev (pos-bol) beg)
               (cl-incf line-count))
             (setq prev beg)))))))
+
+(cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-thing-at-point))
+  (conn-focus-targets-remove-overlays state))
 
 (conn-define-target-finder conn-dispatch-jump-ring
     (conn-dispatch-focus-mixin)
@@ -4522,7 +4519,7 @@ it."))
                   (restrict-windows (advice-function-member-p
                                      'conn--dispatch-restrict-windows
                                      conn-target-window-predicate))
-                  (other-end (if conn-dispatch-no-other-end
+                  (other-end (if (memq t conn-dispatch-no-other-end)
                                  :no-other-end
                                (funcall conn-dispatch-other-end)))
                   (always-retarget conn--dispatch-always-retarget)
@@ -4696,8 +4693,8 @@ it."))
        (default-input-method default-input-method)
        (input-method-history input-method-history)
        (conn-dispatch-in-progress t)
-       (conn-dispatch-target-finder
-        (conn-get-target-finder thing arg)))
+       (conn-dispatch-target-finder nil))
+    (conn-get-target-finder thing arg)
     (add-function :before-while conn-dispatch-other-end
                   (lambda () (not conn-dispatch-no-other-end))
                   '((depth . -100)
@@ -4847,14 +4844,7 @@ regions matching the contents of the region at point.
 INITIAL-ARG is the initial value of the prefix argument during
 `conn-read-args'.  Interactively the current prefix argument."
   (interactive)
-  (cl-letf ((conn--dispatch-action-always-prompt t)
-            ((symbol-function 'conn-get-target-finder)))
-    (advice-add 'conn-get-target-finder :override
-                (lambda (cmd arg)
-                  (pcase (ignore-errors (conn-bounds-of cmd arg))
-                    ((conn-bounds `(,beg . ,end))
-                     (conn-dispatch-focus-thing-at-point
-                      :string (buffer-substring-no-properties beg end))))))
+  (let ((conn--dispatch-action-always-prompt t))
     (conn-read-args (conn-dispatch-thingatpt-state
                      :prefix current-prefix-arg
                      :command-handler #'conn-dispatch-command-handler
@@ -4876,7 +4866,16 @@ INITIAL-ARG is the initial value of the prefix argument during
                                  conn-restrict-windows-argument-map))
          (`(,action ,repeat) (conn-dispatch-action-argument)))
       (conn-dispatch-setup
-       action thing arg transform
+       action
+       (conn-anonymous-thing
+         thing
+         :target-finder
+         ( :method (self arg)
+           (pcase (ignore-errors (conn-bounds-of self arg))
+             ((conn-bounds `(,beg . ,end))
+              (conn-dispatch-focus-thing-at-point
+               :string (buffer-substring-no-properties beg end))))))
+       arg transform
        :repeat repeat
        :other-end other-end
        :restrict-windows restrict-windows))))
