@@ -47,8 +47,6 @@
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
-(defvar conn--wincontrol-prev-eldoc-msg-fn)
-(defvar conn--previous-isearch-message-function nil)
 
 (put 'keyboard-quit :conn-wincontrol-preserve-arg t)
 
@@ -329,9 +327,7 @@
   (set-face-inverse-video 'mode-line-active t))
 
 (defun conn--wincontrol-exit ()
-  (setq isearch-message-function conn--previous-isearch-message-function
-        conn--previous-isearch-message-function nil
-        conn--wincontrol-message-newline t)
+  (setq conn--wincontrol-message-newline t)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)

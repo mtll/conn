@@ -101,7 +101,7 @@
   "," 'conn-dispatch-on-buttons
   "r" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
-  "=" 'conn-command-to-register
+  "b" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-count-iterator
   "+" 'indent-relative-first-indent-point
@@ -299,7 +299,6 @@
   "," conn-thing-remap
   "#" 'eshell
   "$" 'project-eshell
-  "=" 'conn-repeat
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
   "o" conn-forward-word-remap
@@ -460,6 +459,7 @@
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
+  "B" 'conn-dispatch-repeat-command
   "=" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch

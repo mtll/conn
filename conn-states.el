@@ -594,7 +594,6 @@ then an error is signaled."
 (put 'conn--input-method-title 'permanent-local t)
 
 (defvar-local conn--prev-mode-line-mule-info nil)
-(put 'conn--prev-mode-line-mule-info 'risky-local-variable t)
 
 (defun conn--toggle-input-method-ad (&rest app)
   (if (and conn-local-mode
@@ -672,26 +671,27 @@ is shown even if the input method is deactivated because a state is
 suppressing it."
   (cond
    (conn-local-mode
-    (setq conn--prev-mode-line-mule-info mode-line-mule-info
-          mode-line-mule-info
-          `(""
-            (conn--input-method
-             ( :propertize ("" conn--input-method-title)
-               help-echo (concat
-                          "Current input method: "
-                          conn--input-method
-                          "\n\
+    (setq conn--prev-mode-line-mule-info
+          (buffer-local-set-state
+           mode-line-mule-info `(""
+                                 (conn--input-method
+                                  ( :propertize ("" conn--input-method-title)
+                                    help-echo (concat
+                                               "Current input method: "
+                                               conn--input-method
+                                               "\n\
 mouse-2: Disable input method\n\
 mouse-3: Describe current input method")
-               local-map ,mode-line-input-method-map
-               mouse-face mode-line-highlight))
-            ,( propertize "%z"
-               'help-echo 'mode-line-mule-info-help-echo
-               'mouse-face 'mode-line-highlight
-               'local-map mode-line-coding-system-map)
-            (:eval (mode-line-eol-desc)))))
+                                    local-map ,mode-line-input-method-map
+                                    mouse-face mode-line-highlight))
+                                 ,( propertize "%z"
+                                    'help-echo 'mode-line-mule-info-help-echo
+                                    'mouse-face 'mode-line-highlight
+                                    'local-map mode-line-coding-system-map)
+                                 (:eval (mode-line-eol-desc))))))
    (conn--prev-mode-line-mule-info
-    (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
+    (buffer-local-restore-state
+     (cl-shiftf conn--prev-mode-line-mule-info nil)))))
 
 (defmacro conn-with-input-method (&rest body)
   "Run BODY ensuring `conn--input-method' is active."

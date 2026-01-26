@@ -1280,13 +1280,12 @@ the point is within the region then the entire region is returned.")))
   :global t
   (if conn-bounds-of-recursive-edit-mode
       (progn
-        (setq conn--eldoc-prev-msg-fn eldoc-message-function
-              eldoc-message-function #'ignore)
+        (setq conn--eldoc-prev-msg-fn
+              (buffer-local-set-state eldoc-message-function #'ignore))
         (conn--bounds-of-recursive-edit-message)
         (add-hook 'pre-command-hook #'conn--bounds-of-recursive-edit-message))
     (remove-hook 'pre-command-hook #'conn--bounds-of-recursive-edit-message)
-    (setq eldoc-message-function conn--eldoc-prev-msg-fn
-          conn--eldoc-prev-msg-fn nil)
+    (buffer-local-restore-state conn--eldoc-prev-msg-fn)
     (message nil)))
 
 (define-keymap
