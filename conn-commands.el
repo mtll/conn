@@ -1159,6 +1159,41 @@ Currently selected window remains selected afterwards."
                                 register
                                 check-bounds))))
 
+(cl-defmethod conn-yank-replace-do ((thing (conn-thing region))
+                                    arg
+                                    transform
+                                    &optional
+                                    swap
+                                    register
+                                    check-bounds)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (pcase (conn-bounds-of thing arg)
+        ((conn-bounds-get :subregions
+                          (append transform
+                                  (when check-bounds
+                                    (list 'conn-check-bounds))))
+         (atomic-change-group
+           (pcase-dolist ((conn-bounds `(,beg . ,end))
+                          (compat-call sort subregions
+                                       :key (lambda (b) (car (conn-bounds b)))
+                                       :reverse t))
+             (if register
+                 (let ((str (cond (swap (filter-buffer-substring beg end t))
+                                  (t (delete-region beg end)))))
+                   (register-val-insert (get-register register))
+                   (when swap (set-register register str)))
+               (goto-char beg)
+               (delete-region beg end)
+               (yank))))
+         (conn-push-command-history 'conn-yank-replace
+                                    thing
+                                    arg
+                                    transform
+                                    swap
+                                    register
+                                    check-bounds)))
+    (cl-call-next-method)))
+
 (cl-defmethod conn-yank-replace-do ((_thing (conn-thing dispatch))
                                     arg
                                     transform
