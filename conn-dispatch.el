@@ -2847,8 +2847,7 @@ to the key binding for that target."
                          (propertize "1 Char" 'face 'minibuffer-prompt)))
                (char-count 0)
                (trivial t)
-               (quote-flag nil)
-               (last-char nil))
+               (quote-flag nil))
           (while (or trivial (< char-count string-length))
             (unless trivial
               (while-no-input
@@ -2874,8 +2873,7 @@ to the key binding for that target."
                         conn-dispatch-read-n-chars-any-re)
                     (cl-callf concat string
                       (regexp-quote (char-to-string char)))
-                    (setf trivial nil
-                          last-char char)))
+                    (setf trivial nil)))
                 (cl-incf char-count)
                 (setf quote-flag nil)))
             (conn-cleanup-targets))
