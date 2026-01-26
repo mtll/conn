@@ -1260,6 +1260,7 @@ the point is within the region then the entire region is returned.")))
 
 (defun conn-check-bounds (bounds)
   "Run `conn-check-bounds-functions' with BOUNDS."
+  (cl-check-type bounds conn-bounds)
   (run-hook-with-args 'conn-check-bounds-functions bounds)
   bounds)
 

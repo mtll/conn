@@ -860,12 +860,10 @@ themselves once the selection process has concluded."
                         (conn-bounds-of thing arg))))
     (setf (conn-bounds-get bounds :origin) (point))
     (pcase bounds
-      ((and (conn-bounds-get :origin nil
-                             (and origin (pred identity)))
-            (conn-bounds `(,beg . ,end)))
+      ((conn-bounds `(,beg . ,end))
        (setf (conn-bounds--whole bounds)
              (cons (if (funcall conn-dispatch-other-end) end beg)
-                   origin))))
+                   (point)))))
     bounds))
 
 (cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing char))
@@ -876,12 +874,10 @@ themselves once the selection process has concluded."
                         (conn-bounds-of thing arg))))
     (setf (conn-bounds-get bounds :origin) (point))
     (pcase bounds
-      ((and (conn-bounds-get :origin nil
-                             (and origin (pred identity)))
-            (conn-bounds `(,beg . ,end)))
+      ((conn-bounds `(,beg . ,end))
        (setf (conn-bounds--whole bounds)
              (cons (if (funcall conn-dispatch-other-end) end beg)
-                   origin))))
+                   (point)))))
     bounds))
 
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
@@ -2832,10 +2828,13 @@ to the key binding for that target."
 (cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
 
+(defvar conn-dispatch-read-n-chars-glob-char ?,)
+
 (conn-define-target-finder conn-dispatch-read-n-chars
     (conn-dispatch-string-targets)
     ((string-length :initform 1
-                    :initarg :string-length))
+                    :initarg :string-length)
+     (regex-p :initform t))
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (if string
@@ -2844,24 +2843,42 @@ to the key binding for that target."
                (prompt (if (> string-length 1)
                            (propertize (format "%d Chars" string-length)
                                        'face 'minibuffer-prompt)
-                         (propertize "1 Char" 'face 'minibuffer-prompt))))
-          (while (length< string string-length)
-            (when (length> string 0)
+                         (propertize "1 Char" 'face 'minibuffer-prompt)))
+               (char-count 0)
+               (trivial t)
+               (quote-flag nil)
+               (last-char nil))
+          (while (or trivial (< char-count string-length))
+            (unless trivial
               (while-no-input
                 (conn-dispatch-call-update-handlers state)))
             (catch 'dispatch-redisplay
               (conn-with-dispatch-event-handlers
                 ( :handler (cmd)
-                  (when (eq cmd 'backspace)
-                    (when (length> string 0)
-                      (cl-callf substring string 0 -1))
-                    (:return)))
-                (:keymap (define-keymap "<backspace>" 'backspace))
-                (conn-threadf->
-                    string
-                  (conn-dispatch-read-char prompt t nil)
-                  (char-to-string)
-                  (concat string))))
+                  (pcase cmd
+                    ('backspace
+                     (when (length> string 0)
+                       (cl-callf substring string 0 -1))
+                     (:return))
+                    ('quote
+                     (setf quote-flag t)
+                     (:return))))
+                (:keymap (define-keymap
+                           "<backspace>" 'backspace
+                           "<remap> <quoted-insert>" 'quote))
+                (let ((char (conn-dispatch-read-char prompt t nil string)))
+                  (if (and (eql char conn-dispatch-read-n-chars-glob-char)
+                           (not quote-flag))
+                      (cl-callf concat string
+                        (if last-char
+                            (format "[^%c]" (cl-shiftf last-char nil))
+                          (rx anything)))
+                    (cl-callf concat string
+                      (regexp-quote (char-to-string char)))
+                    (setf trivial nil
+                          last-char char)))
+                (cl-incf char-count)
+                (setf quote-flag nil)))
             (conn-cleanup-targets))
           (conn-dispatch-call-update-handlers state 0))))))
 
@@ -5287,6 +5304,11 @@ lines."))))
    :reference (conn-reference-quote
                 ((:heading "Paragraph Targets")
                  "Dispatch on paragraphs."))))
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing char))
+                                      _arg)
+  (conn-dispatch-read-n-chars :string-length 2
+                              :thing 'forward-char))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       _arg)
