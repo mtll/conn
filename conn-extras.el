@@ -172,6 +172,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
   :suppress t
+  "TAB" 'outline-cycle
+  "<backstab>" 'outline-cycle-buffer
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol

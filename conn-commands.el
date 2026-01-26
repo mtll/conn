@@ -1019,6 +1019,7 @@ Currently selected window remains selected afterwards."
                                   transform)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix arg
+                   :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")
       ((`(,thing ,arg) (conn-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
@@ -2298,7 +2299,8 @@ Exiting the recursive edit will resume the isearch."
                                  (:method (_self _arg) bounds))))))
     (conn-read-args (conn-dispatch-transpose-state
                      :prompt "Transpose Dispatch"
-                     :prefix arg)
+                     :prefix arg
+                     :reference (list conn-dispatch-thing-reference))
         ((`(,thing ,arg) (conn-thing-argument t))
          (restrict-windows
           (conn-boolean-argument "this-win"

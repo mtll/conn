@@ -5217,8 +5217,7 @@ for the dispatch."
               (conn-bounds-thing bounds)
               (conn-bounds-arg bounds)
               (when (conn-transformed-bounds-p bounds)
-                (conn-transformed-bounds-transforms bounds))
-              :other-end nil))
+                (conn-transformed-bounds-transforms bounds))))
          (delete-overlay ov))
        (conn-make-transformed-bounds
         'conn-dispatch-bounds-between
