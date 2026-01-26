@@ -2828,7 +2828,8 @@ to the key binding for that target."
 (cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
 
-(defvar conn-dispatch-read-n-chars-glob-char ?,)
+(defvar conn-dispatch-read-n-chars-any-char ?,)
+(defvar conn-dispatch-read-n-chars-any-re "[^a-zA-A]")
 
 (conn-define-target-finder conn-dispatch-read-n-chars
     (conn-dispatch-string-targets)
@@ -2867,12 +2868,10 @@ to the key binding for that target."
                            "<backspace>" 'backspace
                            "<remap> <quoted-insert>" 'quote))
                 (let ((char (conn-dispatch-read-char prompt t nil string)))
-                  (if (and (eql char conn-dispatch-read-n-chars-glob-char)
+                  (if (and (eql char conn-dispatch-read-n-chars-any-char)
                            (not quote-flag))
                       (cl-callf concat string
-                        (if last-char
-                            (format "[^%c]" (cl-shiftf last-char nil))
-                          (rx anything)))
+                        conn-dispatch-read-n-chars-any-re)
                     (cl-callf concat string
                       (regexp-quote (char-to-string char)))
                     (setf trivial nil
