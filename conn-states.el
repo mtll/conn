@@ -824,6 +824,12 @@ that has just been exited.")
 (defconst conn--stack-op-table
   (make-hash-table :test 'eq))
 
+(cl-defstruct (conn--stack-op
+               (:constructor conn--stack-op))
+  (type nil :type symbol :read-only t)
+  (data nil :type list :read-only t)
+  (body #'ignore :type function :read-only t))
+
 (defmacro conn-define-stack-op (name &optional parent)
   `(setf (gethash ',name conn--stack-op-table)
          ',(or parent t)))
@@ -835,27 +841,42 @@ that has just been exited.")
 (conn-define-stack-op exit)
 (conn-define-stack-op clone exit)
 
-(define-inline conn-stack-subop-p (parent op)
-  (inline-letevals (parent)
-    (inline-quote
-     (cl-loop for type = ,op then (gethash type conn--stack-op-table)
-              while type
-              thereis (eq ,parent type)))))
+(define-inline conn-stack-op-get (op propname)
+  (inline-quote
+   (plist-get (conn--stack-op-data ,op) ,propname)))
 
-(pcase-defmacro conn-stack-op (name)
-  `(pred (conn-stack-subop-p ',name)))
+(define-inline conn-stack-subop-p (name val)
+  (inline-quote
+   (cl-loop for type = (conn--stack-op-type ,val)
+            then (gethash type conn--stack-op-table)
+            while type thereis (eq type ,name))))
 
-(defmacro conn-stack-op (name &rest body)
+(pcase-defmacro conn-stack-op (name &rest properties)
+  (if properties
+      `(and (pred (conn-stack-subop-p ',name))
+            (cl-struct
+             conn--stack-op
+             (data (map ,@properties))))
+    `(pred (conn-stack-subop-p ',name))))
+
+(defmacro conn-stack-op (name-and-properties &rest body)
   (declare (indent 1))
-  (cl-check-type name symbol)
-  (let ((expr `(lambda ()
-                 ,@body
-                 (conn--run-re-entry-fns ',name))))
-    (if (gethash name conn--stack-op-table)
-        expr
-      (macroexp-warn-and-return
-       (format "Undefined stack op %s" name)
-       expr nil nil name))))
+  (pcase name-and-properties
+    ((or (and name (pred symbolp) (let properties nil))
+         `(,name . ,properties))
+     (let ((expr `(conn--stack-op
+                   :type ',name
+                   :data ,(if properties `(list ,@properties))
+                   :body ,(if body `(lambda () ,@body) `#'ignore))))
+       (if (gethash name conn--stack-op-table)
+           expr
+         (macroexp-warn-and-return
+          (format "Undefined stack op %s" name)
+          expr nil nil name-and-properties))))))
+
+(define-inline conn--perform-op (op)
+  (inline-quote
+   (funcall (conn--stack-op-body ,op))))
 
 (defun conn--state-exit-default (_type _)
   (when conn-current-state
@@ -947,12 +968,9 @@ BODY will never be evaluated if the state is not re-entered."
                      (when ,rest (funcall (car ,rest) ,type (cdr ,rest)))))
                  (cdr ,fns)))))))
 
-(define-inline conn--run-re-entry-fns (operation)
-  (inline-quote
-   (when-let* ((fns (cdr (gethash conn--state-stack
-                                  conn--state-re-entry-functions))))
-     (remhash conn--state-stack conn--state-re-entry-functions)
-     (funcall (car fns) ,operation (cdr fns)))))
+(defun conn--run-re-entry-fns (type)
+  (when-let* ((fns (cdr (gethash conn--state-stack conn--state-re-entry-functions))))
+    (funcall (car fns) type (cdr fns))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
@@ -1046,7 +1064,11 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (funcall operation))
+            (conn--perform-op operation)
+            (when-let* ((fns (cdr (gethash conn--state-stack
+                                           conn--state-re-entry-functions))))
+              (remhash conn--state-stack conn--state-re-entry-functions)
+              (funcall (car fns) operation (cdr fns))))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
@@ -1543,9 +1565,9 @@ entering mark state.")
       (conn-state-on-re-entry _type
         (activate-mark)
         (rectangle-mark-mode 1)))
-    (if (conn-mark-state-keep-mark-active-p exit-type)
-        (setq conn-record-mark-state nil)
-      (deactivate-mark))
+    (unless (conn-mark-state-keep-mark-active-p exit-type)
+      (deactivate-mark)
+      (setq conn-record-mark-state nil))
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit)
                 (= (point) (mark t)))
