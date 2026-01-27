@@ -827,8 +827,8 @@ that has just been exited.")
   (make-hash-table :test 'eq))
 
 (cl-defstruct (conn-state-transition
-                  (:constructor conn-state-transition)
-                (:conc-name conn-state-transition--))
+               (:constructor conn-state-transition)
+               (:conc-name conn-state-transition--))
   (type nil :type symbol :read-only t)
   (data nil :type list :read-only t)
   (body #'ignore :type function :read-only t))
@@ -880,9 +880,9 @@ Can only be used within the body of `conn-stack-transition'."
                              ,@body))
                       `#'ignore))
               (expr `(conn-state-transition
-                         :type ',name
-                         :data ,(if properties `(list ,@properties))
-                         :body ,body)))
+                      :type ',name
+                      :data ,(if properties `(list ,@properties))
+                      :body ,body)))
          (if (gethash name conn--state-transition-table)
              expr
            (macroexp-warn-and-return
