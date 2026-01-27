@@ -1060,10 +1060,11 @@ When kapply finishes restore the restrictions in each buffer."
            (:cleanup
             (pcase-dolist (`(,buf . ,stack) buffer-stacks)
               (with-current-buffer buf
-                (setq conn--state-stack stack
-                      conn-lighter nil)
-                (conn-enter-state (car stack)
-                                  (conn-stack-signal exit-recursive))
+                (setq conn-lighter nil)
+                (conn-enter-state
+                 (car stack)
+                 (conn-stack-op exit-recursive
+                   (setq conn--state-stack stack)))
                 (conn-update-lighter))))
            ((and (or :record :next)
                  (guard ret))

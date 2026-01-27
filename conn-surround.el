@@ -32,9 +32,6 @@
                (:constructor conn--self-insert (id)))
   (id -1 :type integer))
 
-(keymap-set (conn-get-state-map 'conn-read-thing-state)
-            "g" 'conn-surround)
-
 (put 'conn-surround :conn-thing t)
 (put 'surround-self-insert :conn-thing t)
 
@@ -469,10 +466,6 @@
 
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-change-state)
-  "g" 'conn-surround)
 
 (cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
                                            arg)

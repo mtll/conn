@@ -1318,20 +1318,13 @@ the point is within the region then the entire region is returned.")))
 
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-previous-mark-command))
                               _arg)
-  (unless conn--previous-mark-state
-    (user-error "No previous mark state"))
-  (save-mark-and-excursion
-    (goto-char (nth 0 conn--previous-mark-state))
-    (push-mark (nth 1 conn--previous-mark-state) t t)
-    (pcase (nth 2 conn--previous-mark-state)
-      (`(,pc . ,mc)
-       (rectangle-mark-mode 1)
-       (rectangle--reset-crutches)
-       (save-excursion
-         (goto-char (mark))
-         (rectangle--col-pos mc 'mark))
-       (rectangle--col-pos pc 'point)))
-    (cl-call-next-method)))
+  (pcase (conn-ring-extract-head conn-mark-state-ring)
+    (`(,pt ,mk ,rmm)
+     (goto-char pt)
+     (push-mark mk t t)
+     (when rmm (rectangle-mark-mode 1))
+     (cl-call-next-method))
+    (_ (user-error "No previous mark state"))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
                               arg)

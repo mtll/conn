@@ -1312,7 +1312,8 @@ selected by dispatch with it."))
    (static-if (<= 30 emacs-major-version)
        (conn-reference-quote
          (("As diff" as-diff)
-          ("Multi file as diff" multi-file-as-diff))))))
+          ("Multi file as diff" multi-file-as-diff)
+          ("As diff in project" as-diff-in-project))))))
 
 (defvar conn-replace-reference
   (list (conn-reference-page

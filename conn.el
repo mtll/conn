@@ -48,14 +48,9 @@
         conn-jump-ring (conn-copy-ring conn-jump-ring)
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
         conn-mark-state-ring (conn-copy-ring conn-mark-state-ring))
-  (cl-loop for e in conn--previous-mark-state
-           if (markerp e)
-           collect (copy-marker (marker-position e)) into mstate
-           else collect e into mstate
-           finally do (setq conn--previous-mark-state mstate))
   (setq conn--state-stack nil)
   (let (conn-next-state)
-    (conn--run-exit-fns (conn-stack-signal clone)))
+    (conn--run-exit-fns (conn-stack-op clone)))
   (or (run-hook-with-args-until-success 'conn-setup-state-hook)
       (conn-push-state 'conn-emacs-state)))
 
@@ -94,7 +89,7 @@
         (setq conn--input-method current-input-method)
         (conn-setup-state-for-buffer))
     (let (conn-next-state)
-      (conn--run-exit-fns (conn-stack-signal exit)))
+      (conn--run-exit-fns (conn-stack-op exit)))
     (setq conn--state-stack nil)
     (kill-local-variable 'conn-lighter)
     (setq cursor-type t)
