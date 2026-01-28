@@ -823,62 +823,33 @@ that has just been exited.")
 
 (defvar-local conn--state-exit-functions-ids nil)
 
-(cl-defstruct (conn-state-transition
-               (:constructor conn-state-transition)
-               (:conc-name conn-state-transition--))
-  (data nil :type list :read-only t)
-  (body #'ignore :type function :read-only t))
+(oclosure-define (conn-stack-pop))
+(oclosure-define (conn-stack-exit-recursive
+                  (:parent conn-stack-pop)))
 
-(defmacro conn-define-state-transition (name &optional parent)
-  `(cl-defstruct (,name
-                  (:include ,(or parent 'conn-state-transition))
-                  (:constructor ,name))))
+(oclosure-define (conn-stack-push))
+(oclosure-define (conn-stack-enter-recursive
+                  (:parent conn-stack-push)))
 
-(conn-define-state-transition conn-stack-pop)
-(conn-define-state-transition conn-stack-exit-recursive conn-stack-pop)
-(conn-define-state-transition conn-stack-push)
-(conn-define-state-transition conn-stack-enter-recursive conn-stack-push)
-(conn-define-state-transition conn-stack-exit)
-(conn-define-state-transition conn-stack-clone conn-stack-exit)
-
-(define-inline conn-state-transition-get (op propname)
-  (inline-quote
-   (plist-get (conn-state-transition--data ,op) ,propname)))
-
-(pcase-defmacro conn-state-transition (name &rest properties)
-  (if properties
-      `(cl-struct
-        ,name
-        (data (map ,@properties)))
-    `(cl-type ,name)))
+(oclosure-define (conn-stack-exit))
+(oclosure-define (conn-stack-clone
+                  (:parent conn-stack-exit)))
 
 (defmacro conn-call-re-entry-fns ()
   "Call re-entry functions for the current stack state.
 Can only be used within the body of `conn-stack-transition'."
   (error "conn-call-re-entry-fns only allowed inside conn-stack-transition"))
 
-(defmacro conn-stack-transition (name-and-properties &rest body)
+(defmacro conn-stack-transition (name &rest body)
   (declare (indent 1))
-  (pcase name-and-properties
-    ((or (and name (pred symbolp) (let properties nil))
-         `(,name . ,properties))
-     `(,name
-       :data ,(if properties `(list ,@properties))
-       :body ,(pcase body
-                (`#',fn `#',fn)
-                ('nil '#'ignore)
-                (_
-                 (cl-with-gensyms (transition)
-                   `(lambda (,transition)
-                      (cl-macrolet ((conn-call-re-entry-fns ()
-                                      `(conn--run-re-entry-fns ,',transition)))
-                        ,@body)))))))
-    (_ (error "Malformed name-and-properties"))))
-
-(define-inline conn--call-transition (transition)
-  (inline-letevals (transition)
-    (inline-quote
-     (funcall (conn-state-transition--body ,transition) ,transition))))
+  (cl-with-gensyms (self)
+    `(letrec ((,self
+               (oclosure-lambda (,name)
+                   ()
+                 (cl-macrolet ((conn-call-re-entry-fns ()
+                                 `(conn--run-re-entry-fns ,',self)))
+                   ,@body))))
+       ,self)))
 
 (defun conn--state-exit-default (_type _)
   (when conn-current-state
@@ -1069,7 +1040,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (conn--call-transition transition))
+            (funcall transition))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
@@ -1428,7 +1399,8 @@ state.")
 
 ;;;;; Autopop State
 
-(conn-define-state-transition conn-stack-autopop conn-stack-pop)
+(oclosure-define (conn-stack-autopop
+                  (:parent conn-stack-pop)))
 
 (conn-define-state conn-autopop-state ()
   "Abstract state that automatically pops the state after executing a command.
@@ -1453,7 +1425,7 @@ command was a prefix command.")
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
                                 transition)
   (when (or (eq 'conn-stack-enter-recursive
-                (cl-type-of transition))
+                (oclosure-type transition))
             (null conn--state-stack))
     (error "%s cannot be the base state" state))
   (let ((prefix-command nil)
@@ -1490,8 +1462,8 @@ command was a prefix command.")
                           (conn-call-re-entry-fns))))))))
     (conn-state-on-exit exit-type
       (pcase exit-type
-        ((conn-state-transition conn-stack-enter-recursive))
-        ((conn-state-transition conn-stack-push)
+        ((cl-type conn-stack-enter-recursive))
+        ((cl-type conn-stack-push)
          (pop conn--state-stack)))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
@@ -1558,7 +1530,7 @@ entering mark state.")
 (defun conn-mark-state-keep-mark-active-p (transition)
   "When non-nil keep the mark active when exiting `conn-mark-state'."
   (or (conn-substate-p conn-next-state 'conn-emacs-state)
-      (eq (cl-type-of transition) 'conn-stack-enter-recursive)))
+      (eq (oclosure-type transition) 'conn-stack-enter-recursive)))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
                                 _transition)
