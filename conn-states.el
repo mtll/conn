@@ -760,7 +760,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
          (with-current-buffer ,buffer
            (conn-enter-state
             (car ,stack)
-            (conn-stack-transition exit-recursive
+            (conn-stack-transition conn-stack-exit-recursive
               (setq conn--state-stack ,stack)
               (conn-call-re-entry-fns)))
            (conn-update-lighter))))))
@@ -778,7 +778,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                  (progn
                    (conn-enter-state
                     (cadr tail)
-                    (conn-stack-transition exit-recursive
+                    (conn-stack-transition conn-stack-exit-recursive
                       (setq conn--state-stack (cdr tail))
                       (conn-call-re-entry-fns)))
                    (conn-update-lighter))
@@ -787,7 +787,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
          (with-current-buffer ,buffer
            (conn-enter-state
             (car ,stack)
-            (conn-stack-transition enter-recursive
+            (conn-stack-transition conn-stack-enter-recursive
               (setq conn--state-stack ,stack)))
            (conn-update-lighter))))))
 
@@ -823,44 +823,34 @@ that has just been exited.")
 
 (defvar-local conn--state-exit-functions-ids nil)
 
-(defconst conn--state-transition-table
-  (make-hash-table :test 'eq))
-
 (cl-defstruct (conn-state-transition
                (:constructor conn-state-transition)
                (:conc-name conn-state-transition--))
-  (type nil :type symbol :read-only t)
   (data nil :type list :read-only t)
   (body #'ignore :type function :read-only t))
 
 (defmacro conn-define-state-transition (name &optional parent)
-  `(setf (gethash ',name conn--state-transition-table)
-         ',(or parent t)))
+  `(cl-defstruct (,name
+                  (:include ,(or parent 'conn-state-transition))
+                  (:constructor ,name))))
 
-(conn-define-state-transition pop)
-(conn-define-state-transition exit-recursive pop)
-(conn-define-state-transition push)
-(conn-define-state-transition enter-recursive push)
-(conn-define-state-transition exit)
-(conn-define-state-transition clone exit)
+(conn-define-state-transition conn-stack-pop)
+(conn-define-state-transition conn-stack-exit-recursive conn-stack-pop)
+(conn-define-state-transition conn-stack-push)
+(conn-define-state-transition conn-stack-enter-recursive conn-stack-push)
+(conn-define-state-transition conn-stack-exit)
+(conn-define-state-transition conn-stack-clone conn-stack-exit)
 
 (define-inline conn-state-transition-get (op propname)
   (inline-quote
    (plist-get (conn-state-transition--data ,op) ,propname)))
 
-(define-inline conn-state-subtransition-p (name val)
-  (inline-quote
-   (cl-loop for type = (conn-state-transition--type ,val)
-            then (gethash type conn--state-transition-table)
-            while type thereis (eq type ,name))))
-
 (pcase-defmacro conn-state-transition (name &rest properties)
   (if properties
-      `(and (pred (conn-state-subtransition-p ',name))
-            (cl-struct
-             conn-state-transition
-             (data (map ,@properties))))
-    `(pred (conn-state-subtransition-p ',name))))
+      `(cl-struct
+        ,name
+        (data (map ,@properties)))
+    `(cl-type ,name)))
 
 (defmacro conn-call-re-entry-fns ()
   "Call re-entry functions for the current stack state.
@@ -873,21 +863,16 @@ Can only be used within the body of `conn-stack-transition'."
     ((or (and name (pred symbolp) (let properties nil))
          `(,name . ,properties))
      (cl-with-gensyms (transition)
-       (let* ((body (if body
-                        `(lambda (,transition)
-                           (cl-macrolet ((conn-call-re-entry-fns ()
-                                           `(conn--run-re-entry-fns ,',transition)))
-                             ,@body))
-                      `#'ignore))
-              (expr `(conn-state-transition
-                      :type ',name
-                      :data ,(if properties `(list ,@properties))
-                      :body ,body)))
-         (if (gethash name conn--state-transition-table)
-             expr
-           (macroexp-warn-and-return
-            (format "Undefined stack op %s" name)
-            expr nil nil name-and-properties)))))))
+       `(,name
+         :data ,(if properties `(list ,@properties))
+         :body ,(pcase body
+                  (`#',fn `#',fn)
+                  ('nil '#'ignore)
+                  (_
+                   `(lambda (,transition)
+                      (cl-macrolet ((conn-call-re-entry-fns ()
+                                      `(conn--run-re-entry-fns ,',transition)))
+                        ,@body)))))))))
 
 (define-inline conn--perform-transition (transition)
   (inline-letevals (transition)
@@ -1101,7 +1086,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
   (unless (symbol-value state)
     (conn-enter-state
      state
-     (conn-stack-transition push
+     (conn-stack-transition conn-stack-push
        (push state conn--state-stack)))))
 
 (defun conn-pop-state ()
@@ -1115,7 +1100,7 @@ current state does not have a :pop-alternate property then push
   (if-let* ((state (cadr conn--state-stack)))
       (conn-enter-state
        state
-       (conn-stack-transition pop
+       (conn-stack-transition conn-stack-pop
          (pop conn--state-stack)
          (conn-call-re-entry-fns)))
     (conn-push-state
@@ -1146,7 +1131,7 @@ current state does not have a :pop-alternate property then push
         (progn
           (conn-enter-state
            state
-           (conn-stack-transition enter-recursive
+           (conn-stack-transition conn-stack-enter-recursive
              (push nil conn--state-stack)
              (push state conn--state-stack)))
           ;; Ensure the lighter gets updates even if we haven't changed state
@@ -1163,7 +1148,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
       (progn
         (conn-enter-state
          (car conn--state-stack)
-         (conn-stack-transition enter-recursive
+         (conn-stack-transition conn-stack-enter-recursive
            (setq conn--state-stack cookie)))
         ;; Ensure the lighter gets updates
         ;; even if we haven't changed state
@@ -1442,7 +1427,7 @@ state.")
 
 ;;;;; Autopop State
 
-(conn-define-state-transition autopop pop)
+(conn-define-state-transition conn-stack-autopop conn-stack-pop)
 
 (conn-define-state conn-autopop-state ()
   "Abstract state that automatically pops the state after executing a command.
@@ -1466,7 +1451,8 @@ command was a prefix command.")
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
                                 transition)
-  (when (or (conn-state-subtransition-p 'enter-recursive transition)
+  (when (or (eq 'conn-stack-enter-recursive
+                (cl-type-of transition))
             (null conn--state-stack))
     (error "%s cannot be the base state" state))
   (let ((prefix-command nil)
@@ -1498,13 +1484,13 @@ command was a prefix command.")
                                     preserve-state)
                        (conn-enter-state
                         (conn-peek-state)
-                        (conn-stack-transition autopop
+                        (conn-stack-transition conn-stack-autopop
                           (pop conn--state-stack)
                           (conn-call-re-entry-fns))))))))
     (conn-state-on-exit exit-type
       (pcase exit-type
-        ((conn-state-transition enter-recursive))
-        ((conn-state-transition push)
+        ((conn-state-transition conn-stack-enter-recursive))
+        ((conn-state-transition conn-stack-push)
          (pop conn--state-stack)))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
@@ -1571,7 +1557,7 @@ entering mark state.")
 (defun conn-mark-state-keep-mark-active-p (transition)
   "When non-nil keep the mark active when exiting `conn-mark-state'."
   (or (conn-substate-p conn-next-state 'conn-emacs-state)
-      (conn-state-subtransition-p 'enter-recursive transition)))
+      (eq (cl-type-of transition) 'conn-stack-enter-recursive)))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
                                 _transition)
@@ -1599,7 +1585,7 @@ entering mark state.")
 (defun conn-setup-state-for-buffer (&optional no-major-mode-maps)
   (when conn--state-stack
     (let (conn-next-state)
-      (conn--run-exit-fns (conn-stack-transition exit)))
+      (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
     (setq conn--state-stack nil))
   (unless no-major-mode-maps
     (setq conn--active-major-mode-maps

@@ -50,7 +50,7 @@
         conn-mark-state-ring (conn-copy-ring conn-mark-state-ring))
   (setq conn--state-stack nil)
   (let (conn-next-state)
-    (conn--run-exit-fns (conn-stack-transition clone)))
+    (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
   (or (run-hook-with-args-until-success 'conn-setup-state-hook)
       (conn-push-state 'conn-emacs-state)))
 
@@ -89,7 +89,7 @@
         (setq conn--input-method current-input-method)
         (conn-setup-state-for-buffer))
     (let (conn-next-state)
-      (conn--run-exit-fns (conn-stack-transition exit)))
+      (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
     (setq conn--state-stack nil)
     (kill-local-variable 'conn-lighter)
     (setq cursor-type t)

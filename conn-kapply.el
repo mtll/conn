@@ -1063,7 +1063,7 @@ When kapply finishes restore the restrictions in each buffer."
                 (setq conn-lighter nil)
                 (conn-enter-state
                  (car stack)
-                 (conn-stack-transition exit-recursive
+                 (conn-stack-transition conn-stack-exit-recursive
                    (setq conn--state-stack stack)
                    (conn-call-re-entry-fns)))
                 (conn-update-lighter))))
