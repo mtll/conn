@@ -861,7 +861,7 @@ Can only be used within the body of `conn-stack-transition'."
           conn--state-exit-functions-ids nil)
     (funcall (car fns) type (cdr fns))))
 
-(defmacro conn-state-on-exit (type &rest body)
+(defmacro conn-state-on-exit (transition &rest body)
   "Defer evaluation of BODY until the current state is exited.
 
 Note that if a `conn-state-on-exit' form is evaluated multiple times in
@@ -877,68 +877,69 @@ is being entered after the current state has exited or nil if
 `conn-local-mode' is being exited or a cloned buffer is being setup."
   (declare (indent 1)
            (debug (def-body)))
-  (when (eql ?_ (string-to-char (symbol-name type)))
-    (setq type (gensym)))
+  (when (eql ?_ (string-to-char (symbol-name transition)))
+    (setq transition (gensym)))
   (cl-with-gensyms (rest)
-    `(push (lambda (,type ,rest)
+    `(push (lambda (,transition ,rest)
              (unwind-protect
                  ,(macroexp-progn body)
-               (funcall (car ,rest) ,type (cdr ,rest))))
+               (funcall (car ,rest) ,transition (cdr ,rest))))
            conn--state-exit-functions)))
 
-(defmacro conn-state-on-exit-once (name type &rest body)
+(defmacro conn-state-on-exit-once (name transition &rest body)
   "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
 
 For more information see `conn-state-on-exit'."
   (declare (indent 2)
            (debug (def-body)))
-  (when (eql ?_ (string-to-char (symbol-name type)))
-    (setq type (gensym)))
+  (when (eql ?_ (string-to-char (symbol-name transition)))
+    (setq transition (gensym)))
   (cl-with-gensyms (rest)
     `(unless (memq ',name conn--state-exit-functions-ids)
        (push ',name conn--state-exit-functions-ids)
-       (push (lambda (,type ,rest)
+       (push (lambda (,transition ,rest)
                (unwind-protect
                    ,(macroexp-progn body)
-                 (funcall (car ,rest) ,type (cdr ,rest))))
+                 (funcall (car ,rest) ,transition (cdr ,rest))))
              conn--state-exit-functions))))
 
 (defconst conn--state-re-entry-functions
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-on-re-entry (type &rest body)
+(defmacro conn-state-on-re-entry (transition &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
 
 BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
-  (when (eql ?_ (string-to-char (symbol-name type)))
-    (setq type (gensym)))
-  (cl-symbol-macrolet ((place '(gethash conn--state-stack conn--state-re-entry-functions)))
+  (when (eql ?_ (string-to-char (symbol-name transition)))
+    (setq transition (gensym)))
+  (cl-symbol-macrolet ((place '(gethash conn--state-stack
+                                        conn--state-re-entry-functions)))
     (cl-with-gensyms (rest fns)
       `(let ((,fns (or ,place (setf ,place (cons nil nil)))))
-         (push (lambda (,type ,rest)
+         (push (lambda (,transition ,rest)
                  (unwind-protect
                      ,(macroexp-progn body)
-                   (when ,rest (funcall (car ,rest) ,type (cdr ,rest)))))
+                   (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
                (cdr ,fns))))))
 
-(defmacro conn-state-on-re-entry-once (name type &rest body)
+(defmacro conn-state-on-re-entry-once (name transition &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
 
 BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
-  (when (eql ?_ (string-to-char (symbol-name type)))
-    (setq type (gensym)))
+  (when (eql ?_ (string-to-char (symbol-name transition)))
+    (setq transition (gensym)))
   (cl-symbol-macrolet ((place '(gethash conn--state-stack conn--state-re-entry-functions)))
     (cl-with-gensyms (rest fns)
       `(let ((,fns (or ,place (setf ,place (cons nil nil)))))
          (unless (memq ',name (car ,fns))
            (push ',name (car ,place))
-           (push (lambda (,type ,rest)
+           (push (lambda (,transition ,rest)
                    (unwind-protect
                        ,(macroexp-progn body)
-                     (when ,rest (funcall (car ,rest) ,type (cdr ,rest)))))
+                     (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
                  (cdr ,fns)))))))
 
 (define-inline conn--run-re-entry-fns (transition)
@@ -1349,7 +1350,7 @@ state.")
                                 _transition)
   (when-let* ((face (conn-state-get state :mode-line-face))
               (cookie (face-remap-add-relative 'mode-line face)))
-    (conn-state-on-exit _type
+    (conn-state-on-exit _transition
       (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
@@ -1391,7 +1392,7 @@ state.")
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state))
                                 _transition)
-  (conn-state-on-exit _exit-type
+  (conn-state-on-exit _transition
     (conn-ring-delete (point) conn-emacs-state-ring #'=)
     (let ((pt (conn--create-marker (point) nil t)))
       (conn-ring-insert-front conn-emacs-state-ring pt)))
@@ -1460,8 +1461,8 @@ command was a prefix command.")
                         (conn-stack-transition conn-stack-autopop
                           (pop conn--state-stack)
                           (conn-call-re-entry-fns))))))))
-    (conn-state-on-exit exit-type
-      (pcase exit-type
+    (conn-state-on-exit transition
+      (pcase transition
         ((cl-type conn-stack-enter-recursive))
         ((cl-type conn-stack-push)
          (pop conn--state-stack)))
@@ -1536,12 +1537,12 @@ entering mark state.")
                                 _transition)
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
         conn-record-mark-state t)
-  (conn-state-on-exit exit-type
+  (conn-state-on-exit transition
     (when (bound-and-true-p rectangle-mark-mode)
-      (conn-state-on-re-entry _type
+      (conn-state-on-re-entry _transition
         (activate-mark)
         (rectangle-mark-mode 1)))
-    (unless (conn-mark-state-keep-mark-active-p exit-type)
+    (unless (conn-mark-state-keep-mark-active-p transition)
       (deactivate-mark)
       (setq conn-record-mark-state nil))
     (unless (or (null conn-record-mark-state)
