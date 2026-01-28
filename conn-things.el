@@ -161,30 +161,24 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
               (get ,thing 'bounds-of-thing-at-point))
           ,thing))))
 
-(defconst conn--thing-all-parents-cache (make-hash-table :test 'eq))
+(defconst conn--thing-all-parents-cache
+  (make-hash-table :test 'eq
+                   :weakness 'key))
 
 (defun conn-thing-all-parents (thing)
   (declare (important-return-value t))
-  (pcase thing
-    ((let (and command-thing (pred identity))
-       (conn-command-thing thing))
-     (cons thing (conn-thing-all-parents command-thing)))
-    ((pred conn-bounds-p)
-     (conn-thing-all-parents (conn-bounds-thing thing)))
-    ((pred conn-anonymous-thing-p)
-     (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
-    ((pred conn-thing-p)
-     (cl-loop for p = thing then (conn-get-thing-parent p)
-              while p collect p))))
-
-(defun conn-set-thing-parent (thing parent)
-  (put thing :conn--thing-parent parent))
-
-(define-inline conn-get-thing-parent (thing)
-  (declare (gv-setter conn-set-thing-parent)
-           (important-return-value t)
-           (side-effect-free t))
-  (inline-quote (get ,thing :conn--thing-parent)))
+  (with-memoization (gethash thing conn--thing-all-parents-cache)
+    (pcase thing
+      ((let (and command-thing (pred identity))
+         (conn-command-thing thing))
+       (cons thing (conn-thing-all-parents command-thing)))
+      ((pred conn-bounds-p)
+       (conn-thing-all-parents (conn-bounds-thing thing)))
+      ((pred conn-anonymous-thing-p)
+       (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
+      ((pred conn-thing-p)
+       (cl-loop for p = thing then (get p :conn--thing-parent)
+                while p collect p)))))
 
 (defconst conn--thing-property-table (make-hash-table :test 'equal))
 
@@ -203,6 +197,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                               conn--key-missing)
            unless (eq conn--key-missing val) return val))
 
+(defconst conn--thing-children (make-hash-table :test 'eq))
+
 (cl-defun conn-register-thing (thing
                                &key
                                parent
@@ -213,8 +209,17 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                bounds-op)
   "Register a THING."
   (put thing :conn-thing t)
+  (let ((oparent (get thing :conn--thing-parent)))
+    (unless (eq oparent parent)
+      (when oparent
+        (cl-callf2 remq
+            thing
+            (gethash oparent conn--thing-children)))
+      (cl-loop for c in (cons thing (gethash thing conn--thing-children))
+               do (remhash c conn--thing-all-parents-cache))))
+  (put thing :conn--thing-parent parent)
   (when parent
-    (setf (conn-get-thing-parent thing) parent))
+    (cl-pushnew thing (gethash parent conn--thing-children)))
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -366,6 +371,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (unless (conn-thing-p thing)
     (error "%s is not a known thing" thing))
   (dolist (cmd commands)
+    (when-let* ((othing (conn-command-thing cmd))
+                (_ (not (eq othing thing))))
+      (cl-callf2 remq cmd (gethash othing conn--thing-children))
+      (remhash cmd conn--thing-all-parents-cache))
+    (cl-pushnew cmd (gethash thing conn--thing-children))
     (setf (conn-command-thing cmd) thing
           (conn-command-other-end-handler cmd) handler)))
 
@@ -405,13 +415,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(let ((th (conn-get-thing ,thing)))
-          (and (or (conn-thing-p th)
-                   (conn-thing-command-p th))
-               th)))
+       `(conn-thing-all-parents (conn-get-thing ,thing)))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for parent in (conn-thing-all-parents thing)
+      `(,@(cl-loop for parent in thing
                    collect `(conn-thing ,parent))
         (conn-thing t)))))
 
@@ -422,10 +429,12 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        `(let ((th (conn-get-thing ,thing)))
           (and (conn-anonymous-thing-p th)
                (with-memoization
-                   (gethash (conn-anonymous-thing-parent th)
+                   (gethash (conn-thing-all-parents
+                             (conn-anonymous-thing-parent th))
                             conn--anonymous-thing-tag-cache)
                  (cons 'anonymous-thing
-                       (conn-anonymous-thing-parent th))))))
+                       (conn-thing-all-parents
+                        (conn-anonymous-thing-parent th)))))))
   (lambda (thing &rest _)
     (when thing
       `((conn-thing internal--anonymous-thing-method)
