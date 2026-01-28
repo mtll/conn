@@ -862,19 +862,20 @@ Can only be used within the body of `conn-stack-transition'."
   (pcase name-and-properties
     ((or (and name (pred symbolp) (let properties nil))
          `(,name . ,properties))
-     (cl-with-gensyms (transition)
-       `(,name
-         :data ,(if properties `(list ,@properties))
-         :body ,(pcase body
-                  (`#',fn `#',fn)
-                  ('nil '#'ignore)
-                  (_
+     `(,name
+       :data ,(if properties `(list ,@properties))
+       :body ,(pcase body
+                (`#',fn `#',fn)
+                ('nil '#'ignore)
+                (_
+                 (cl-with-gensyms (transition)
                    `(lambda (,transition)
                       (cl-macrolet ((conn-call-re-entry-fns ()
                                       `(conn--run-re-entry-fns ,',transition)))
-                        ,@body)))))))))
+                        ,@body)))))))
+    (_ (error "Malformed name-and-properties"))))
 
-(define-inline conn--perform-transition (transition)
+(define-inline conn--call-transition (transition)
   (inline-letevals (transition)
     (inline-quote
      (funcall (conn-state-transition--body ,transition) ,transition))))
@@ -1068,7 +1069,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (conn--perform-transition transition))
+            (conn--call-transition transition))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
