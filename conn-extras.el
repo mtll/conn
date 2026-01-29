@@ -53,7 +53,15 @@
   (when (derived-mode-p conn-special-state-modes)
     (conn-push-state 'conn-special-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-special-state -20)
+
+;;;###autoload
+(define-minor-mode conn-special-state-mode
+  "Minor mode for `conn-special-state' integration."
+  :global t
+  :group 'conn
+  (if conn-special-state-mode
+      (add-hook 'conn-setup-state-hook 'conn-setup-special-state -20)
+    (remove-hook 'conn-setup-state-hook 'conn-setup-special-state)))
 
 ;;; Load Extensions
 
