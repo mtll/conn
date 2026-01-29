@@ -843,13 +843,18 @@ Can only be used within the body of `conn-stack-transition'."
 (defmacro conn-stack-transition (name &rest body)
   (declare (indent 1))
   (cl-with-gensyms (self)
-    `(letrec ((,self
-               (oclosure-lambda (,name)
-                   ()
-                 (cl-macrolet ((conn-call-re-entry-fns ()
-                                 `(conn--run-re-entry-fns ,',self)))
-                   ,@body))))
-       ,self)))
+    (let ((run-re-entry
+           ``(when-let* ((fns (cdr (gethash conn--state-stack
+                                            conn--state-re-entry-functions))))
+               (remhash conn--state-stack conn--state-re-entry-functions)
+               (funcall (car fns) ,',self (cdr fns)))))
+      `(letrec ((,self
+                 (oclosure-lambda (,name)
+                     ()
+                   (cl-macrolet ((conn-call-re-entry-fns ()
+                                   ,run-re-entry))
+                     ,@body))))
+         ,self))))
 
 (defun conn--state-exit-default (_type _)
   (when conn-current-state
@@ -942,13 +947,6 @@ BODY will never be evaluated if the state is not re-entered."
                      ,(macroexp-progn body)
                    (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
                (cdr ,fns))))))
-
-(define-inline conn--run-re-entry-fns (transition)
-  (inline-quote
-   (when-let* ((fns (cdr (gethash conn--state-stack
-                                  conn--state-re-entry-functions))))
-     (remhash conn--state-stack conn--state-re-entry-functions)
-     (funcall (car fns) ,transition (cdr fns)))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")

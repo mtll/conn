@@ -301,7 +301,13 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (pcase-let ((`(,methods . ,props)
                (conn--anonymous-thing-parse-properties properties)))
     `(conn--make-anonymous-thing
-      :parent ,parent
+      :parent (pcase ,parent
+                ((pred conn-anonymous-thing-p)
+                 (error "Cannot inherit from anonymous thing"))
+                ((app conn-get-thing (and thing (pred identity)))
+                 thing)
+                (thing
+                 (error "Not a valid thing: %s" thing)))
       :methods ,methods
       :properties ,props)))
 
@@ -530,7 +536,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (when (conn-argument-predicate arg sym)
     (pcase sym
       ((and (pred conn-anonymous-thing-p)
-            (let thing (conn-anonymous-thing-parent sym)))
+            (app conn-anonymous-thing-parent thing))
        (format " (<anonymous %s>)" thing))
       ((let (and thing (pred identity))
          (or (conn-command-thing sym)
