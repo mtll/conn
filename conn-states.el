@@ -914,15 +914,15 @@ BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name transition)))
     (setq transition (gensym)))
-  (cl-symbol-macrolet ((place '(gethash conn--state-stack
-                                        conn--state-re-entry-functions)))
-    (cl-with-gensyms (rest fns)
-      `(let ((,fns (or ,place (setf ,place (cons nil nil)))))
-         (push (lambda (,transition ,rest)
-                 (unwind-protect
-                     ,(macroexp-progn body)
-                   (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
-               (cdr ,fns))))))
+  (cl-with-gensyms (rest fns)
+    `(let ((,fns (with-memoization (gethash conn--state-stack
+                                            conn--state-re-entry-functions)
+                   (cons nil nil))))
+       (push (lambda (,transition ,rest)
+               (unwind-protect
+                   ,(macroexp-progn body)
+                 (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
+             (cdr ,fns)))))
 
 (defmacro conn-state-on-re-entry-once (name transition &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
@@ -931,16 +931,17 @@ BODY will never be evaluated if the state is not re-entered."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name transition)))
     (setq transition (gensym)))
-  (cl-symbol-macrolet ((place '(gethash conn--state-stack conn--state-re-entry-functions)))
-    (cl-with-gensyms (rest fns)
-      `(let ((,fns (or ,place (setf ,place (cons nil nil)))))
-         (unless (memq ',name (car ,fns))
-           (push ',name (car ,place))
-           (push (lambda (,transition ,rest)
-                   (unwind-protect
-                       ,(macroexp-progn body)
-                     (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
-                 (cdr ,fns)))))))
+  (cl-with-gensyms (rest fns)
+    `(let ((,fns (with-memoization (gethash conn--state-stack
+                                            conn--state-re-entry-functions)
+                   (cons nil nil))))
+       (unless (memq ',name (car ,fns))
+         (push ',name (car ,fns))
+         (push (lambda (,transition ,rest)
+                 (unwind-protect
+                     ,(macroexp-progn body)
+                   (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
+               (cdr ,fns))))))
 
 (define-inline conn--run-re-entry-fns (transition)
   (inline-quote
