@@ -177,8 +177,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
      (conn-thing-all-parents (conn-anonymous-thing-parent thing)))
     ((pred conn-thing-p)
      (with-memoization (gethash thing conn--thing-all-parents-cache)
-       (cl-loop for p = thing then (get p :conn--thing-parent)
-                while p collect p)))))
+       (cons thing
+             (merge-ordered-lists
+              (mapcar #'conn-thing-all-parents
+                      (get thing :conn--thing-parents))))))))
 
 (defconst conn--thing-property-table (make-hash-table :test 'equal))
 
@@ -209,21 +211,20 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                bounds-op)
   "Register a THING."
   (cl-check-type thing symbol)
-  (cl-assert (not (conn-thing-command-p thing)))
+  (setq parent (ensure-list parent))
+  (dolist (p parent)
+    (cl-check-type p conn-thing))
   (put thing :conn-thing t)
-  (let ((oparent (get thing :conn--thing-parent)))
-    (unless (eq oparent parent)
-      (when oparent
-        (cl-callf2 delq
-            thing
-            (gethash oparent conn--thing-children)))
-      (named-let clear ((children (list thing)))
-        (dolist (c children)
-          (remhash c conn--thing-all-parents-cache)
-          (clear (gethash c conn--thing-children))))))
-  (put thing :conn--thing-parent parent)
-  (when parent
-    (cl-pushnew thing (gethash parent conn--thing-children)))
+  (let ((oparents (get thing :conn--thing-parents)))
+    (dolist (p (seq-difference oparents parent))
+      (cl-callf2 delq thing (gethash p conn--thing-children))))
+  (named-let clear ((children (list thing)))
+    (dolist (c children)
+      (remhash c conn--thing-all-parents-cache)
+      (clear (gethash c conn--thing-children))))
+  (put thing :conn--thing-parents parent)
+  (dolist (p parent)
+    (cl-pushnew thing (gethash p conn--thing-children)))
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -424,39 +425,29 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 ;;;; Specializers
 
+(defconst conn--anonymous-thing-tag-cache (make-hash-table :test 'eq))
+
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(conn-thing-all-parents (conn-get-thing ,thing)))
+       `(let ((th (conn-get-thing ,thing)))
+          (cond ((null th))
+                ((conn-anonymous-thing-p th)
+                 (with-memoization
+                     (gethash (conn-thing-all-parents
+                               (conn-anonymous-thing-parent th))
+                              conn--anonymous-thing-tag-cache)
+                   (cons 'internal--anonymous-thing-method
+                         (conn-thing-all-parents th))))
+                (t (conn-thing-all-parents th)))))
   (lambda (thing &rest _)
     (when thing
       `(,@(cl-loop for parent in thing
                    collect `(conn-thing ,parent))
         (conn-thing t)))))
 
-(defconst conn--anonymous-thing-tag-cache (make-hash-table :test 'eq))
-
-(cl-generic-define-generalizer conn--anonymous-thing-generalizer
-  70 (lambda (thing &rest _)
-       `(let ((th (conn-get-thing ,thing)))
-          (and (conn-anonymous-thing-p th)
-               (with-memoization
-                   (gethash (conn-thing-all-parents
-                             (conn-anonymous-thing-parent th))
-                            conn--anonymous-thing-tag-cache)
-                 (cons 'anonymous-thing
-                       (conn-thing-all-parents
-                        (conn-anonymous-thing-parent th)))))))
-  (lambda (thing &rest _)
-    (when thing
-      `((conn-thing internal--anonymous-thing-method)
-        ,@(cl-loop for parent in (conn-thing-all-parents (cdr thing))
-                   collect `(conn-thing ,parent))
-        (conn-thing t)))))
-
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for (conn-thing THING) specializers."
-  (list conn--anonymous-thing-generalizer
-        conn--thing-generalizer))
+  (list conn--thing-generalizer))
 
 ;;;; Read Things
 
