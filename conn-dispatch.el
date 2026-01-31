@@ -2656,8 +2656,7 @@ updated.")
         (unless (overlay-get tar 'label-face)
           (if-let* ((thing (overlay-get tar 'thing))
                     (_ (and (conn-anonymous-thing-p thing)
-                            (length> (conn-anonymous-thing-property
-                                      thing :bounds)
+                            (length> (conn-get-thing-property thing :bounds)
                                      1))))
               (progn
                 (overlay-put tar 'label-face multi-face1)
@@ -3082,7 +3081,7 @@ contain targets."
            (line-count 0)
            (matches nil)
            (thing (conn-anonymous-thing
-                    'region
+                    '(region)
                     :bounds-op ( :method (_self _arg)
                                  (when-let* ((bd (assq (point) matches)))
                                    (conn-make-bounds 'region nil bd))))))
@@ -3299,7 +3298,7 @@ contain targets."
           (conn-make-target-overlay
            beg (or fixed-length (- end beg))
            :thing (conn-anonymous-thing
-                    'point
+                    '(point)
                     :bounds-op ( :method (_self _arg)
                                  (save-match-data
                                    (when (looking-at regexp)
@@ -3481,7 +3480,7 @@ contain targets."
     () ()
   ( :default-update-handler (_state)
     (let ((thing (conn-anonymous-thing
-                   'conn-forward-inner-line
+                   '(conn-forward-inner-line)
                    :pretty-print ( :method (_self) "inner-line")
                    :bounds-op ( :method (_self _arg)
                                 (goto-char (pos-bol))
@@ -3501,7 +3500,7 @@ contain targets."
     () ()
   ( :default-update-handler (_state)
     (let ((thing (conn-anonymous-thing
-                   'conn-forward-inner-line
+                   '(conn-forward-inner-line)
                    :pretty-print ( :method (_self) "end-of-inner-line")
                    :bounds-op ( :method (_self _arg)
                                 (save-excursion
@@ -4882,7 +4881,7 @@ INITIAL-ARG is the initial value of the prefix argument during
       (conn-dispatch-setup
        action
        (conn-anonymous-thing
-         thing
+         (list thing)
          :target-finder
          ( :method (self arg)
            (pcase (ignore-errors (conn-bounds-of self arg))
@@ -4963,7 +4962,7 @@ for the dispatch."
   (conn-dispatch-setup
    (conn-dispatch-push-button)
    (conn-anonymous-thing
-     'button
+     '(button)
      :pretty-print ( :method (_self) "all-buttons")
      :target-finder ( :method (_self _arg)
                       (conn-dispatch-button-targets))
@@ -4979,7 +4978,7 @@ for the dispatch."
   ( :default-update-handler (state)
     (let* ((matches nil)
            (thing (conn-anonymous-thing
-                    'region
+                    '(region)
                     :bounds-op ( :method (_self arg)
                                  (when-let* ((bd (assq (point) matches)))
                                    (conn-make-bounds 'region arg bd)))))
@@ -5039,7 +5038,7 @@ for the dispatch."
          (conn-dispatch-setup
           (conn-dispatch-jump)
           (conn-anonymous-thing
-            'region
+            '(region)
             :target-finder ( :method (_self _arg)
                              (conn-isearch-targets
                               :window-predicate (let ((owin (selected-window)))
@@ -5099,7 +5098,7 @@ for the dispatch."
              (conn-dispatch-setup
               action
               (conn-anonymous-thing
-                'region
+                '(region)
                 :target-finder ( :method (_self _arg)
                                  (conn-isearch-targets
                                   :window-predicate (let ((owin (selected-window)))
@@ -5271,7 +5270,7 @@ lines."))))
                 ((:heading "Visual Lines Targets")
                  "Dispatch on visual lines."))))
 
-(conn-register-thing-commands 'dispatch nil 'conn-dispatch)
+(conn-register-thing-commands '(dispatch) nil 'conn-dispatch)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing symbol))
                                       _arg)

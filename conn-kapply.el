@@ -526,7 +526,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
      :extra (conn-kapply-order-argument)
      :query t)))
 
-(cl-defmethod conn-kapply-on-matches ((_thing (eql widen))
+(cl-defmethod conn-kapply-on-matches ((_thing (conn-thing widen))
                                       &rest _)
   (without-restriction
     (cl-call-next-method)))

@@ -150,11 +150,11 @@
  :bounds-op (lambda () (org-in-regexp org-link-any-re)))
 
 (conn-register-thing-commands
- 'org-link 'conn-discrete-thing-handler
+ '(org-link) 'conn-discrete-thing-handler
  'org-next-link 'org-previous-link)
 
 (conn-register-thing-commands
- 'org-link nil
+ '(org-link) nil
  'org-insert-link-global 'org-store-link 'org-insert-link)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
@@ -178,7 +178,7 @@
                 ((:heading "Org Paragraph Targets")))))
 
 (conn-register-thing-commands
- 'org-paragraph 'conn-continuous-thing-handler
+ '(org-paragraph) 'conn-continuous-thing-handler
  'org-forward-paragraph 'org-backward-paragraph)
 
 (defun conn-open-org-link ()
@@ -203,7 +203,7 @@
 (put 'org-sentence 'forward-op 'conn-org-sentence-forward)
 
 (conn-register-thing-commands
- 'org-sentence 'conn-continuous-thing-handler
+ '(org-sentence) 'conn-continuous-thing-handler
  'conn-org-sentence-forward
  'org-forward-sentence 'org-backward-sentence)
 
@@ -217,7 +217,7 @@
 
 ;; FIXME: org-element all broken
 (conn-register-thing-commands
- 'org-element
+ '(org-element)
  (lambda (_beg)
    (cond ((eobp))
          ((org-with-limited-levels (org-at-heading-p))
@@ -241,7 +241,7 @@
 
 (conn-register-thing
  'org-heading
- :parent 'org-element
+ :parents 'org-element
  :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
  :forward-op 'org-next-visible-heading)
 
@@ -289,7 +289,7 @@
   "<conn-thing-map> h" 'heading)
 
 (conn-register-thing-commands
- 'org-heading 'conn-continuous-thing-handler
+ '(org-heading) 'conn-continuous-thing-handler
  'conn-org-heading-state-up-heading
  'org-next-visible-heading
  'org-previous-visible-heading
@@ -297,7 +297,7 @@
  'org-backward-heading-same-level)
 
 (conn-register-thing-commands
- 'org-element 'conn-discrete-thing-handler
+ '(org-element) 'conn-discrete-thing-handler
  'org-forward-element
  'org-backward-element
  'org-up-element

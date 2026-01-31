@@ -373,7 +373,7 @@
   "i" 'forward-line
   "k" 'next-line
   "<conn-thing-map> b" (conn-anonymous-thing
-                         'visual-line
+                         '(visual-line)
                          :target-finder ( :method (_self _arg)
                                           (conn-dispatch-end-of-visual-line-targets))
                          :bounds-op ( :method (_self _arg)
@@ -393,12 +393,12 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
   "O" (conn-anonymous-thing
-        'forward-word
+        '(forward-word)
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
                          (conn-all-things-targets :thing 'word)))
   "U" (conn-anonymous-thing
-        'forward-symbol
+        '(forward-symbol)
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
                          (conn-all-things-targets :thing 'symbol))))
@@ -406,22 +406,22 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
   "<remap> <conn-expand>" (conn-anonymous-thing
-                            'expansion
+                            '(expansion)
                             :pretty-print ( :method (_) "conn-expand")
                             :bounds-op ( :method (_self arg)
                                          (conn-bounds-of 'conn-expand arg)))
   "O" (conn-anonymous-thing
-        'word
+        '(word)
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self _arg)
                          (conn-all-things-targets :thing 'word)))
   "U" (conn-anonymous-thing
-        'symbol
+        '(symbol)
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self _arg)
                          (conn-all-things-targets :thing 'symbol)))
   ")" (conn-anonymous-thing
-        'sexp
+        '(sexp)
         :pretty-print (:method (_) "outer-list-or-string")
         :target-finder ( :method (_self _arg)
                          (conn-dispatch-things-with-re-prefix-targets
@@ -429,7 +429,7 @@
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote))))))
   "]" (conn-anonymous-thing
-        'inner-list
+        '(inner-list)
         :pretty-print (:method (_) "inner-list-or-string")
         :bounds-op ( :method (_self arg)
                      (pcase (conn-bounds-of 'inner-string arg)
@@ -467,7 +467,7 @@
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
   "g e" (conn-anonymous-thing
-          'point
+          '(point)
           :pretty-print ( :method (_) "prev-emacs-state")
           :default-action ( :method (_self)
                             (let ((jump (conn-dispatch-jump)))
@@ -480,11 +480,11 @@
           :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point
   "S-SPC" (conn-anonymous-thing
-            'point
+            '(point)
             :pretty-print ( :method (_) "global-mark-ring")
             :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
-        'point
+        '(point)
         :pretty-print ( :method (_) "position-registers")
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register))))
 

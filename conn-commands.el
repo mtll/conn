@@ -1889,10 +1889,7 @@ Exiting the recursive edit will resume the isearch."
             (or (/= depth (recursion-depth))
                 (cl-loop for (nbeg . nend) in regions
                          thereis (<= nbeg beg end nend)))))
-         (thing (upcase
-                 (symbol-name
-                  (or (conn-command-thing thing)
-                      thing))))
+         (thing (upcase (symbol-name thing)))
          (prefix (concat "[in " thing "] ")))
     (let ((setup (make-symbol "setup"))
           (cleanup (make-symbol "cleanup")))
@@ -2217,10 +2214,8 @@ Exiting the recursive edit will resume the isearch."
                   (conn-bounds-of cmd arg)))
        (transpose-regions beg1 end1 beg2 end2)))
     ((and (let (and thing (pred identity))
-            (or (conn-command-thing cmd)
-                (and (symbolp cmd)
-                     (get cmd 'forward-op)
-                     cmd)))
+            (cl-loop for th in (conn-thing-all-parents cmd)
+                     when (conn-simple-thing-p th) return th))
           (let arg (prefix-numeric-value arg)))
      (deactivate-mark)
      (transpose-subr (lambda (N) (forward-thing thing N)) arg)
@@ -2271,7 +2266,7 @@ Exiting the recursive edit will resume the isearch."
      buf
      (car bounds1)
      (conn-anonymous-thing
-       'region
+       '(region)
        :bounds-op ( :method (_self _arg)
                     (conn-make-bounds 'region nil bounds1)))
      nil nil
@@ -2281,7 +2276,7 @@ Exiting the recursive edit will resume the isearch."
                      'region nil
                      (cons (region-beginning) (region-end)))))
        (conn-anonymous-thing
-         'region
+         '(region)
          :bounds-op ( :method (_self _arg) bounds2)))
      nil nil)))
 
@@ -2292,7 +2287,7 @@ Exiting the recursive edit will resume the isearch."
         (buf1 (current-buffer))
         (thing1 (when (use-region-p)
                   (conn-anonymous-thing
-                    'region
+                    '(region)
                     :bounds-op (let ((bounds (conn-make-bounds
                                               'region nil
                                               (cons (region-beginning)
@@ -2329,7 +2324,7 @@ Exiting the recursive edit will resume the isearch."
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-transpose-state 'conn--replace-reading)
   ";" (conn-anonymous-thing
-        'sexp
+        '(sexp)
         :transpose-op ( :method (_self _arg _at-point-and-mark)
                         (conn--query-replace-read-transpose-from-to))))
 

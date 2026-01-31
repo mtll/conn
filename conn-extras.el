@@ -150,7 +150,7 @@
    :forward-op 'outline-next-visible-heading))
 
 (conn-register-thing-commands
- 'heading 'conn-discrete-thing-handler
+ '(heading) 'conn-discrete-thing-handler
  'conn-outline-state-up-heading
  'outline-up-heading
  'outline-next-heading
@@ -379,10 +379,10 @@
           (conn-make-target-overlay
            (+ 2 marker) (- (line-end-position) marker 2)))))))
 
-(conn-register-thing 'dired-line :parent 'line)
+(conn-register-thing 'dired-line :parents '(line))
 
 (conn-register-thing-commands
- 'dired-line nil
+ '(dired-line) nil
  'dired-previous-line 'dired-next-line)
 
 (defun conn--dispatch-dired-lines (try-next)
@@ -415,7 +415,7 @@
 (conn-register-thing 'dired-subdir)
 
 (conn-register-thing-commands
- 'dired-subdir nil
+ '(dired-subdir) nil
  'dired-next-subdir 'dired-prev-subdir
  'dired-tree-up 'dired-tree-down)
 
@@ -429,7 +429,7 @@
 (conn-register-thing 'dired-dirline)
 
 (conn-register-thing-commands
- 'dired-dirline nil
+ '(dired-dirline) nil
  'dired-next-dirline 'dired-prev-dirline)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline))
@@ -663,7 +663,7 @@
 (conn-register-thing 'ibuffer-line)
 
 (conn-register-thing-commands
- 'ibuffer-line nil
+ '(ibuffer-line) nil
  'ibuffer-backward-line 'ibuffer-forward-line)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line))
@@ -676,7 +676,7 @@
 (conn-register-thing 'ibuffer-filter-group)
 
 (conn-register-thing-commands
- 'ibuffer-filter-group nil
+ '(ibuffer-filter-group) nil
  'ibuffer-forward-filter-group
  'ibuffer-backward-filter-group)
 
@@ -854,7 +854,7 @@
   :keymap (conn-get-state-map 'conn-bmenu-dispatch-state)
   "f" 'conn-dispatch-bmenu-mark
   "k" (conn-anonymous-thing
-        'line
+        '(line)
         :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
 
 (defvar conn-bookmark-bmenu-ref
@@ -919,7 +919,7 @@
  :forward-op 'markdown-forward-paragraph)
 
 (conn-register-thing-commands
- 'md-paragraph 'conn-continuous-thing-handler
+ '(md-paragraph) 'conn-continuous-thing-handler
  'markdown-forward-paragraph
  'markdown-backward-paragraph)
 
@@ -929,7 +929,7 @@
 
 (static-if (<= 30 emacs-major-version)
     (conn-register-thing-commands
-     'defun 'conn-continuous-thing-handler
+     '(defun) 'conn-continuous-thing-handler
      'treesit-end-of-defun
      'treesit-beginning-of-defun))
 
@@ -991,7 +991,7 @@
        (goto-char pt)
        (Info-follow-nearest-node)))
    (conn-anonymous-thing
-     'point
+     '(point)
      :target-finder ( :method (_self _arg)
                       (save-excursion
                         (let ((last-pt (goto-char (window-end))))
