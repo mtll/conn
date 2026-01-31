@@ -930,7 +930,7 @@ TRANSFORM."
   (catch 'boundable
     (dolist (th (conn-thing-all-parents thing))
       (when (conn-thing-p th)
-        (throw 'boundable thing)))))
+        (throw 'boundable th)))))
 
 (cl-defgeneric conn-bounds-of (cmd arg &key &allow-other-keys)
   "Return the bounds of CMD as if called with prefix arg ARG.
