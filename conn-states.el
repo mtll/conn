@@ -208,8 +208,7 @@ are not inherited.
 See also `conn-declare-state-property'."
     (declare (side-effect-free t)
              (important-return-value t))
-    (inline-quote
-     (and (get ,property :conn-static-property) t)))
+    (inline-quote (get ,property :conn-static-property)))
 
   (defun conn-state-get--cmacro (exp
                                  state

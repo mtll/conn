@@ -2454,7 +2454,7 @@ append to that place."
                                           separator)
   (declare (important-return-value t)
            (side-effect-free t))
-  (cl-assert (memq append '(nil append prepend)))
+  (cl-assert (memq append '(nil append prepend repeat)))
   (cl-assert (not (and delete (or append register))))
   (cl-assert (not (and separator (null append))))
   (conn--kill-how-argument
@@ -2465,12 +2465,14 @@ append to that place."
    (conn-cycling-argument "append"
                           '(nil append prepend repeat)
                           'append
-                          :keymap conn-append-argument-map)
+                          :keymap conn-append-argument-map
+                          :value append)
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
                        (lambda (_) (register-read-with-preview "Register:"))
-                       :formatter #'conn-argument-format-register)
+                       :formatter #'conn-argument-format-register
+                       :value register)
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)

@@ -346,8 +346,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                        end-op
                        bounds-of-thing-at-point))
       `(get (car (conn-thing-all-parents ,thing)) ,property))
-     ((or no-inherit (and (symbolp property)
-                          (get property :conn-static-property)))
+     ((or (and (macroexp-const-p no-inherit)
+               (if (consp no-inherit) (cadr no-inherit) no-inherit))
+          (and (symbolp property)
+               (conn-property-static-p property)))
       (macroexp-let2* nil (thing property)
         `(cdr (or (when (conn-anonymous-thing-p ,thing)
                     (or (assq ,property (conn--anonymous-thing-properties ,thing))
@@ -725,12 +727,14 @@ current buffer."))
                   (keymap conn-reformat-argument-map)
                   (reference conn-fixup-whitepace-argument-reference)))))
 
-(cl-defsubst conn-reformat-argument (&optional value)
-  (unless (and (region-active-p) (null value))
-    (conn--reformat-argument
-     (or value
-         (and conn-kill-reformat-function
-              conn-reformat-default)))))
+(define-inline conn-reformat-argument (&optional value)
+  (inline-letevals (value)
+    (inline-quote
+     (unless (and (region-active-p) (null ,value))
+       (conn--reformat-argument
+        (or ,value
+            (and conn-kill-reformat-function
+                 conn-reformat-default)))))))
 
 (cl-defmethod conn-argument-update ((arg conn-reformat-argument)
                                     cmd updater)
@@ -787,13 +791,14 @@ check bounds in the current buffer."))
                   (keymap conn-check-bounds-argument-map)
                   (reference conn-check-bounds-argument-reference)))))
 
-(cl-defsubst conn-check-bounds-argument (&optional value)
-  (when (cl-loop for h on conn-check-bounds-functions
-                 thereis (pcase h
-                           ('t (default-value 'conn-check-bounds-functions))
-                           ('nil)
-                           (_ t)))
-    (conn--check-bounds-argument (or value conn-check-bounds-default))))
+(define-inline conn-check-bounds-argument (&optional value)
+  (inline-quote
+   (when (cl-loop for h on conn-check-bounds-functions
+                  thereis (pcase h
+                            ('t (default-value 'conn-check-bounds-functions))
+                            ('nil)
+                            (_ t)))
+     (conn--check-bounds-argument (or ,value conn-check-bounds-default)))))
 
 (cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
                                     _cmd
