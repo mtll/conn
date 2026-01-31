@@ -327,12 +327,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
 
-(defun conn-set-thing-property (thing property val)
-  (setf (if (conn-anonymous-thing-p thing)
-            (alist-get property (conn--anonymous-thing-properties thing))
-          (alist-get property (conn--thing-properties (conn--find-thing thing))))
-        val))
-
 (defun conn-unset-thing-property (thing property)
   (cl-callf2 assq-delete-all
       property
@@ -340,18 +334,64 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
           (conn--anonymous-thing-properties thing)
         (conn--thing-properties (conn--find-thing thing)))))
 
-(defun conn-get-thing-property (thing property)
-  (declare (gv-setter conn-set-thing-property))
-  (alist-get property
-             (pcase thing
-               ((pred conn-anonymous-thing-p)
-                (conn--anonymous-thing-properties thing))
-               ((pred conn-bounds-p)
-                (conn--thing-properties
-                 (conn--find-thing (conn-bounds-thing thing))))
-               (_
-                (conn--thing-properties
-                 (conn--find-thing thing))))))
+(defun conn-get-thing-property (thing property &optional no-inherit)
+  (declare (gv-setter
+            (lambda (val)
+              (ignore no-inherit)
+              `(setf (alist-get
+                      ,property
+                      (if (conn-anonymous-thing-p ,thing)
+                          (conn--anonymous-thing-properties ,thing)
+                        (conn--thing-properties (conn--find-thing ,thing))))
+                     ,val))))
+  (when (conn-bounds-p thing)
+    (setq thing (conn-bounds-thing thing)))
+  (catch 'val
+    (cond ((memq property '(forward-op
+                            beginning-op
+                            end-op
+                            bounds-of-thing-at-point))
+           (throw 'val (get (car (conn-thing-all-parents thing)) property)))
+          ((conn-anonymous-thing-p thing)
+           (if-let* ((v (assq property (conn--anonymous-thing-properties thing))))
+               (throw 'val (cdr v))
+             (setq thing (car (conn-thing-all-parents thing))))))
+    (if (or no-inherit (get property :conn-static-property))
+        (alist-get property (conn--thing-properties
+                             (conn--find-thing thing)))
+      (cl-loop for p in (conn-thing-all-parents thing)
+               for v = (assq property (conn--thing-properties
+                                       (conn--find-thing p)))
+               when v return (cdr v)))))
+
+(defun conn-declare-thing-property (property doc-string &optional static)
+  "Declare a thing property PROPERTY.
+
+DOC-STRING is displayed in the `conn-register-thing' doc-string when
+non-nil.
+
+If STATIC is non-nil then the property is declared static.  Static thing
+properties are not inherited."
+  (setf (get property :conn-static-property) static)
+  (when doc-string
+    (setf (alist-get property
+                     (get 'conn-register-thing :known-properties))
+          doc-string)))
+
+(conn-declare-thing-property
+ :command
+ "Thing is a command."
+ t)
+
+(conn-declare-thing-property
+ :other-end-handler
+ "Function to determine the other end of the things which the thing
+command moves over."
+ t)
+
+(conn-declare-thing-property
+ :linewise
+ "Thing is composed of whole lines.")
 
 (cl-defun conn-register-thing (thing
                                &key
@@ -395,7 +435,29 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
     (when bounds-op
       (put thing 'bounds-of-thing-at-point bounds-op))
     (cl-loop for (prop val) on properties by #'cddr
-             do (conn-set-thing-property thing prop val))))
+             do (setf (conn-get-thing-property thing prop) val))))
+
+(defun conn--make-register-thing-docstring ()
+  (let* ((main (documentation (symbol-function 'conn-define-state) 'raw))
+         (ud (help-split-fundoc main 'conn-define-state)))
+    (require 'help-fns)
+    (with-temp-buffer
+      (insert (or (cdr ud) main ""))
+      (insert "\n\n\tKnown properties for things:\n\n")
+      (pcase-dolist (`(,property . ,doc-string)
+                     (reverse (get 'conn-register-thing :known-properties)))
+        (insert (format "`%s' (static: %s)\n %s"
+                        (upcase (symbol-name property))
+                        (conn-property-static-p property)
+                        doc-string))
+        (insert "\n\n"))
+      (let ((combined-doc (buffer-string)))
+        (if ud
+            (help-add-fundoc-usage combined-doc (car ud))
+          combined-doc)))))
+
+(put 'conn-register-thing 'function-documentation
+     '(conn--make-register-thing-docstring))
 
 (defun conn-register-thing-commands (things handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
@@ -539,7 +601,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        (format " (<anonymous %s>)" thing))
       ((let (and thing (pred identity))
          (if (conn-get-thing-property sym :command)
-             (car (conn-thing-all-parents sym))
+             (seq-find #'conn-simple-thing-p
+                       (conn-thing-all-parents sym))
            (and (conn-thing-p sym) sym)))
        (format " (%s)" thing))
       (_ " (<thing arg>)"))))
@@ -949,12 +1012,6 @@ TRANSFORM."
       `(app (pcase--flip conn-transform-bounds ,transform) ,pat)
     `(app (conn-transform-bounds _ ,transform) ,pat)))
 
-(defun conn--get-boundable-thing (thing)
-  (catch 'boundable
-    (dolist (th (conn-thing-all-parents thing))
-      (when (conn-thing-p th)
-        (throw 'boundable th)))))
-
 (cl-defgeneric conn-bounds-of (cmd arg &key &allow-other-keys)
   "Return the bounds of CMD as if called with prefix arg ARG.
 
@@ -971,13 +1028,10 @@ Returns a `conn-bounds' struct."
 (defun conn--bounds-of-thing (bounds)
   (let ((thing (conn-bounds-thing bounds))
         (arg (conn-bounds-arg bounds)))
-    (pcase (conn--get-boundable-thing thing)
-      ((and thing (pred conn-simple-thing-p))
-       (setf (conn-bounds bounds)
-             (bounds-of-thing-at-point thing)))
+    (pcase (car (conn-thing-all-parents thing))
       ((and thing
-            (let (and handler (pred identity))
-              (conn-command-other-end-handler thing)))
+            (app conn-command-other-end-handler
+                 (and handler (pred identity))))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (n
@@ -998,13 +1052,18 @@ Returns a `conn-bounds' struct."
                    (setf (conn-bounds bounds) nil
                          (conn-bounds-get bounds :subregions) nil)))
               (set-marker start nil)))))
-       (conn-bounds bounds)))))
+       (conn-bounds bounds))
+      ((app (lambda (th)
+              (seq-find #'conn-simple-thing-p
+                        (conn-thing-all-parents th)))
+            thing)
+       (setf (conn-bounds bounds)
+             (bounds-of-thing-at-point thing))))))
 
 (defun conn--bounds-of-thing-subregions (bounds)
   (let ((thing (conn-bounds-thing bounds))
         (arg (conn-bounds-arg bounds)))
-    (pcase (conn--get-boundable-thing thing)
-      ((pred conn-simple-thing-p) nil)
+    (pcase (car (conn-thing-all-parents thing))
       ((and thing
             (let (and handler (pred identity))
               (conn-command-other-end-handler thing)))
@@ -1049,22 +1108,22 @@ Returns a `conn-bounds' struct."
                       (nreverse subregions)))
             (error
              (setf (conn-bounds bounds) nil
-                   (conn-bounds-get bounds :subregions) nil)))))))))
+                   (conn-bounds-get bounds :subregions) nil))))))
+      ((pred conn-simple-thing-p) nil))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing t))
                               arg)
-  (when (conn--get-boundable-thing cmd)
-    (let ((pt (point)))
-      (conn-make-bounds
-       cmd arg
-       (conn-bounds-delay bounds
-         (save-mark-and-excursion
-           (goto-char pt)
-           (conn--bounds-of-thing bounds)))
-       :subregions (conn-bounds-delay bounds
-                     (save-mark-and-excursion
-                       (goto-char pt)
-                       (conn--bounds-of-thing-subregions bounds)))))))
+  (let ((pt (point)))
+    (conn-make-bounds
+     cmd arg
+     (conn-bounds-delay bounds
+       (save-mark-and-excursion
+         (goto-char pt)
+         (conn--bounds-of-thing bounds)))
+     :subregions (conn-bounds-delay bounds
+                   (save-mark-and-excursion
+                     (goto-char pt)
+                     (conn--bounds-of-thing-subregions bounds))))))
 
 (conn-register-thing 'simple-motion)
 

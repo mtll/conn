@@ -2672,7 +2672,7 @@ hook, which see."
                                   &context
                                   (major-mode (derived-mode lisp-data-mode)))
   (cl-call-next-method)
-  (cond ((conn-get-thing-property (conn-bounds-thing bounds) :linewise))
+  (cond ((conn-get-thing-property bounds :linewise))
         ((save-excursion
            (beginning-of-line)
            (looking-at-p (rx (seq (* (syntax whitespace))
