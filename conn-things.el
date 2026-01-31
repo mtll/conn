@@ -334,6 +334,29 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
           (conn--anonymous-thing-properties thing)
         (conn--thing-properties (conn--find-thing thing)))))
 
+(eval-and-compile
+  (defun conn-get-thing-property--cmacro (exp
+                                          thing
+                                          property
+                                          &optional
+                                          no-inherit)
+    (cond
+     ((memq property '(forward-op
+                       beginning-op
+                       end-op
+                       bounds-of-thing-at-point))
+      `(get (car (conn-thing-all-parents ,thing)) ,property))
+     ((or no-inherit (and (symbolp property)
+                          (get property :conn-static-property)))
+      (macroexp-let2* nil (thing property)
+        `(cdr (or (when (conn-anonymous-thing-p ,thing)
+                    (or (assq ,property (conn--anonymous-thing-properties ,thing))
+                        (and (setq ,thing (car (conn-thing-all-parents ,thing)))
+                             nil)))
+                  (assq ,property (conn--thing-properties
+                                   (conn--find-thing ,thing)))))))
+     (t exp))))
+
 (defun conn-get-thing-property (thing property &optional no-inherit)
   (declare (gv-setter
             (lambda (val)
@@ -343,7 +366,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                       (if (conn-anonymous-thing-p ,thing)
                           (conn--anonymous-thing-properties ,thing)
                         (conn--thing-properties (conn--find-thing ,thing))))
-                     ,val))))
+                     ,val)))
+           (compiler-macro conn-get-thing-property--cmacro))
   (when (conn-bounds-p thing)
     (setq thing (conn-bounds-thing thing)))
   (catch 'val
