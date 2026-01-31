@@ -112,8 +112,14 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (parents nil :type list)
   (children nil :type list))
 
-(defmacro conn--find-thing (symbol)
-  `(get ,symbol :conn-thing))
+(define-inline conn--find-thing (symbol)
+  (declare (gv-setter
+            (lambda (val)
+              (macroexp-let2 nil val val
+                `(progn
+                   (cl-check-type ,val conn--thing)
+                   (put ,symbol :conn-thing ,val))))))
+  (inline-quote (get ,symbol :conn-thing)))
 
 (cl-defstruct (conn-bounds
                (:constructor conn--make-bounds)
@@ -359,7 +365,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (cl-check-type thing symbol)
   (dolist (p parents)
     (cl-assert (and (conn-thing-p p)
-                    (not (conn-anonymous-thing-p p)))))
+                    (not (conn-anonymous-thing-p p))))
+    (unless (conn--find-thing p)
+      (conn-register-thing p)))
   (let ((struct (with-memoization (conn--find-thing thing)
                   (conn--make-thing))))
     (setf (conn--thing-name struct) thing

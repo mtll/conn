@@ -116,11 +116,15 @@ function may setup any other necessary state as well.")
               (macroexp-let2 nil val val
                 `(progn
                    (cl-check-type ,val conn-state)
-                   (setf (get ,state :conn--state) ,val))))))
-  (inline-letevals (state)
-    (inline-quote
-     (or (get ,state :conn--state)
-         (error "%s is not a state" ,state)))))
+                   (put ,state :conn-state ,val))))))
+  (inline-quote (get ,state :conn-state)))
+
+(define-inline conn-state-name-p (state)
+  "Return non-nil if STATE is a conn-state."
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (inline-quote
+   (conn-state-p (get ,state :conn-state))))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
@@ -129,12 +133,6 @@ function may setup any other necessary state as well.")
   (inline-quote
    (conn-state--minor-mode-maps
     (conn--find-state ,state))))
-
-(define-inline conn-state-name-p (state)
-  "Return non-nil if STATE is a conn-state."
-  (declare (side-effect-free t)
-           (important-return-value t))
-  (inline-quote (get ,state :conn--state)))
 
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
@@ -308,6 +306,7 @@ Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
     (let ((parents (conn-state-all-keymap-parents state))
           (state-obj (conn--find-state state)))
+      (cl-check-type state-obj conn-state)
       (when-let* ((state-map (gethash state conn--composed-state-maps)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
@@ -1137,7 +1136,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
                 (cl-callf seq-union
                     (gethash :no-inherit-keymaps table)
                   no-inherit-keymaps)))
-    (if-let* ((state-obj (conn-state-name-p name)))
+    (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
           (clrhash (conn-state--properties state-obj))
