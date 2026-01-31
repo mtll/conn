@@ -155,7 +155,9 @@
 
 (conn-register-thing-commands
  '(org-link) nil
- 'org-insert-link-global 'org-store-link 'org-insert-link)
+ 'org-insert-link-global
+ 'org-store-link
+ 'org-insert-link)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
                                       _arg)
@@ -179,7 +181,8 @@
 
 (conn-register-thing-commands
  '(org-paragraph) 'conn-continuous-thing-handler
- 'org-forward-paragraph 'org-backward-paragraph)
+ 'org-forward-paragraph
+ 'org-backward-paragraph)
 
 (defun conn-open-org-link ()
   (declare (conn-dispatch-action))
@@ -205,7 +208,8 @@
 (conn-register-thing-commands
  '(org-sentence) 'conn-continuous-thing-handler
  'conn-org-sentence-forward
- 'org-forward-sentence 'org-backward-sentence)
+ 'org-forward-sentence
+ 'org-backward-sentence)
 
 (put 'org-element 'bounds-of-thing-at-point
      (lambda ()

@@ -105,6 +105,16 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 ;;;; Thing Types
 
+(cl-defstruct (conn--thing
+               (:constructor conn--make-thing))
+  (name nil :type symbol)
+  (properties nil :type list)
+  (parents nil :type list)
+  (children nil :type list))
+
+(defmacro conn--find-thing (symbol)
+  `(get ,symbol :conn-thing))
+
 (cl-defstruct (conn-bounds
                (:constructor conn--make-bounds)
                (:conc-name conn-bounds--))
@@ -112,6 +122,22 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (arg nil :type (or nil integer) :read-only t)
   (whole nil :type cons)
   (properties nil :type list))
+
+(cl-defstruct (conn--anonymous-thing
+               (:constructor nil)
+               (:constructor conn--make-anonymous-thing)
+               (:copier conn--copy-anonymous-thing)
+               ;; This would be nice but cl-defsubst does not handle
+               ;; &rest arguments properly and as a result PROPERTIES
+               ;; gets evaluated twice in the expansion.
+               ;; (:constructor conn-anonymous-thing (parent &rest properties))
+               )
+  (parents nil)
+  (methods nil :read-only t)
+  (properties nil))
+
+(defalias 'conn-anonymous-thing-parents 'conn--anonymous-thing-parents)
+(defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
 (oclosure-define (conn--bounds-delayed
                   (:predicate conn--bounds-delayed-p)))
@@ -178,23 +204,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        (cons thing
              (merge-ordered-lists
               (mapcar #'conn-thing-all-parents
-                      (get thing :conn--thing-parents))))))))
-
-(cl-defstruct (conn--anonymous-thing
-               (:constructor nil)
-               (:constructor conn--make-anonymous-thing)
-               (:copier conn--copy-anonymous-thing)
-               ;; This would be nice but cl-defsubst does not handle
-               ;; &rest arguments properly and as a result PROPERTIES
-               ;; gets evaluated twice in the expansion.
-               ;; (:constructor conn-anonymous-thing (parent &rest properties))
-               )
-  (parents nil)
-  (methods nil :read-only t)
-  (properties nil))
-
-(defalias 'conn-anonymous-thing-parents 'conn--anonymous-thing-parents)
-(defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
+                      (conn--thing-parents (conn--find-thing thing)))))))))
 
 (eval-and-compile
   (defun conn--anonymous-thing-parse-properties (properties)
@@ -311,32 +321,31 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
 
-(defconst conn--thing-property-table (make-hash-table :test 'equal))
-
 (defun conn-set-thing-property (thing property val)
   (setf (if (conn-anonymous-thing-p thing)
             (alist-get property (conn--anonymous-thing-properties thing))
-          (gethash (cons thing property) conn--thing-property-table))
+          (alist-get property (conn--thing-properties (conn--find-thing thing))))
         val))
 
 (defun conn-unset-thing-property (thing property)
-  (if (conn-anonymous-thing-p thing)
-      (cl-callf2 assq-delete-all
-          property
-          (conn--anonymous-thing-properties thing))
-    (remhash (cons thing property) conn--thing-property-table)))
+  (cl-callf2 assq-delete-all
+      property
+      (if (conn-anonymous-thing-p thing)
+          (conn--anonymous-thing-properties thing)
+        (conn--thing-properties (conn--find-thing thing)))))
 
 (defun conn-get-thing-property (thing property)
   (declare (gv-setter conn-set-thing-property))
-  (or (when (conn-anonymous-thing-p thing)
-        (alist-get property (conn--anonymous-thing-properties thing)))
-      (cl-loop for thing in (conn-thing-all-parents thing)
-               for val = (gethash (cons thing property)
-                                  conn--thing-property-table
-                                  conn--key-missing)
-               unless (eq conn--key-missing val) return val)))
-
-(defconst conn--thing-children (make-hash-table :test 'eq))
+  (alist-get property
+             (pcase thing
+               ((pred conn-anonymous-thing-p)
+                (conn--anonymous-thing-properties thing))
+               ((pred conn-bounds-p)
+                (conn--thing-properties
+                 (conn--find-thing (conn-bounds-thing thing))))
+               (_
+                (conn--thing-properties
+                 (conn--find-thing thing))))))
 
 (cl-defun conn-register-thing (thing
                                &key
@@ -351,28 +360,34 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (dolist (p parents)
     (cl-assert (and (conn-thing-p p)
                     (not (conn-anonymous-thing-p p)))))
-  (put thing :conn-thing t)
-  (let ((oparents (get thing :conn--thing-parents)))
-    (dolist (p (seq-difference oparents parents))
-      (cl-callf2 delq thing (gethash p conn--thing-children))))
-  (named-let clear ((children (list thing)))
-    (dolist (c children)
-      (remhash c conn--thing-all-parents-cache)
-      (clear (gethash c conn--thing-children))))
-  (put thing :conn--thing-parents parents)
-  (dolist (p parents)
-    (cl-pushnew thing (gethash p conn--thing-children)))
-  (when forward-op
-    (put thing 'forward-op forward-op))
-  (when (or beg-op end-op)
-    (cl-assert (and beg-op end-op)
-               nil "If either beg-op or end-op is specified then both must be")
-    (put thing 'beginning-op beg-op)
-    (put thing 'end-op end-op))
-  (when bounds-op
-    (put thing 'bounds-of-thing-at-point bounds-op))
-  (cl-loop for (prop val) on properties by #'cddr
-           do (conn-set-thing-property thing prop val)))
+  (let ((struct (with-memoization (conn--find-thing thing)
+                  (conn--make-thing))))
+    (setf (conn--thing-name struct) thing
+          (conn--thing-properties struct) nil)
+    (let ((oparents (conn--thing-parents struct)))
+      (dolist (p (seq-difference oparents parents))
+        (when-let* ((s (conn--find-thing p)))
+          (cl-callf2 delq thing (conn--thing-children s)))))
+    (named-let clear ((children (list thing)))
+      (dolist (c children)
+        (remhash c conn--thing-all-parents-cache)
+        (when-let* ((s (conn--find-thing c)))
+          (clear (conn--thing-children s)))))
+    (setf (conn--thing-parents struct) parents)
+    (dolist (p parents)
+      (when-let* ((s (conn--find-thing p)))
+        (cl-pushnew thing (conn--thing-children s))))
+    (when forward-op
+      (put thing 'forward-op forward-op))
+    (when (or beg-op end-op)
+      (cl-assert (and beg-op end-op)
+                 nil "If either beg-op or end-op is specified then both must be")
+      (put thing 'beginning-op beg-op)
+      (put thing 'end-op end-op))
+    (when bounds-op
+      (put thing 'bounds-of-thing-at-point bounds-op))
+    (cl-loop for (prop val) on properties by #'cddr
+             do (conn-set-thing-property thing prop val))))
 
 (defun conn-register-thing-commands (things handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
