@@ -417,7 +417,7 @@ properties are not inherited."
 
 (conn-declare-thing-property
  :other-end-handler
- "Function to determine the other end of the things which the thing
+ "Function to determine the other end of the things which a thing
 command moves over."
  t)
 
@@ -1650,7 +1650,7 @@ Only the background color is used."
                                  desc)
                                'face 'eldoc-highlight-function-argument))
                  ")"
-                 (when-let* ((msg (conn--read-args-display-prefix-arg)))
+                 (when-let* ((msg (conn--read-args-get-message)))
                    (concat ": " msg))
                  "\n\\[select] select; "
                  "\\[select-other-end] select other end; "

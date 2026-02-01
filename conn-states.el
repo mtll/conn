@@ -1715,7 +1715,7 @@ The duration of the message display is controlled by
         conn--read-args-error-flag t)
   (throw 'conn-read-args-handle nil))
 
-(defun conn--read-args-display-prefix-arg ()
+(defun conn--read-args-get-message ()
   (let ((msg (concat
               (when conn--read-args-message
                 (format "[%s] " conn--read-args-message))
@@ -1740,7 +1740,7 @@ The duration of the message display is controlled by
     "; \\[reference] reference"
     "; \\[help] help"
     ")"
-    (when-let* ((msg (conn--read-args-display-prefix-arg)))
+    (when-let* ((msg (conn--read-args-get-message)))
       (concat ": " msg)))))
 
 (defun conn--read-args-prompt (prompt arguments)
