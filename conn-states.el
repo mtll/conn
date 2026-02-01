@@ -216,16 +216,21 @@ See also `conn-declare-state-property'."
                                  &optional
                                  no-inherit
                                  default)
-    (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
-          (prop (macroexpand-all property macroexpand-all-environment)))
-      (if (or (and (macroexp-const-p no-inherit)
-                   (if (consp no-inherit) (cadr no-inherit) no-inherit))
-              (and (symbolp prop)
-                   (conn-property-static-p prop)))
-          `(gethash ,property
-                    (conn-state--properties (conn--find-state ,state))
-                    ,default)
-        exp))))
+    (if (or (and-let* ((ni (macroexpand-all no-inherit macroexpand-all-environment))
+                       (_ (macroexp-const-p ni)))
+              (if (consp ni) (cadr ni) ni))
+            (and-let* ((prop (macroexpand-all property macroexpand-all-environment))
+                       (_ (macroexp-const-p prop))
+                       (prop (or (and (symbolp prop)
+                                      prop)
+                                 (and (eq 'quote (car-safe prop))
+                                      (symbolp (cadr prop))
+                                      (cadr prop)))))
+              (conn-property-static-p prop)))
+        `(gethash ,property
+                  (conn-state--properties (conn--find-state ,state))
+                  ,default)
+      exp)))
 
 (defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
@@ -240,7 +245,10 @@ DEFAULT is a value to return if PROPERTY is not found."
   (declare (compiler-macro conn-state-get--cmacro)
            (side-effect-free t)
            (important-return-value t)
-           (gv-setter conn-state-set))
+           (gv-setter
+            (lambda (val)
+              (ignore no-inherit default)
+              `(conn-state-set ,state ,property ,val))))
   (if (or no-inherit (conn-property-static-p property))
       (gethash property
                (conn-state--properties (conn--find-state state))

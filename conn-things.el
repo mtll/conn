@@ -339,56 +339,62 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                           thing
                                           property
                                           &optional
-                                          no-inherit)
-    (cond
-     ((memq property '(forward-op
-                       beginning-op
-                       end-op
-                       bounds-of-thing-at-point))
-      `(get (car (conn-thing-all-parents ,thing)) ,property))
-     ((or (and (macroexp-const-p no-inherit)
-               (if (consp no-inherit) (cadr no-inherit) no-inherit))
-          (and (symbolp property)
-               (conn-property-static-p property)))
-      (macroexp-let2* nil (thing property)
-        `(cdr (or (when (conn-anonymous-thing-p ,thing)
-                    (or (assq ,property (conn--anonymous-thing-properties ,thing))
-                        (and (setq ,thing (car (conn-thing-all-parents ,thing)))
+                                          no-inherit
+                                          default)
+    (if (or (and-let* ((ni (macroexpand-all no-inherit macroexpand-all-environment))
+                       (_ (macroexp-const-p ni)))
+              (if (consp ni) (cadr ni) ni))
+            (and-let* ((prop (macroexpand-all property macroexpand-all-environment))
+                       (_ (macroexp-const-p prop))
+                       (prop (or (and (symbolp prop)
+                                      prop)
+                                 (and (eq 'quote (car-safe prop))
+                                      (symbolp (cadr prop))
+                                      (cadr prop)))))
+              (conn-property-static-p prop)))
+        (macroexp-let2* nil (thing property)
+          `(or
+            (cdr (or (when (conn-anonymous-thing-p ,thing)
+                       (or (assq ,property (conn--anonymous-thing-properties ,thing))
+                           (progn
+                             (setq ,thing (car (conn-thing-all-parents ,thing)))
                              nil)))
-                  (assq ,property (conn--thing-properties
-                                   (conn--find-thing ,thing)))))))
-     (t exp))))
+                     (assq ,property (conn--thing-properties
+                                      (conn--find-thing ,thing)))))
+            ,default))
+      exp)))
 
-(defun conn-get-thing-property (thing property &optional no-inherit)
-  (declare (gv-setter
+(defun conn-get-thing-property (thing property &optional no-inherit default)
+  (declare (compiler-macro conn-get-thing-property--cmacro)
+           (gv-setter
             (lambda (val)
-              (ignore no-inherit)
-              `(setf (alist-get
-                      ,property
+              (ignore no-inherit default)
+              `(conn-set-thing-property ,thing ,property ,val))))
+  (when (conn-bounds-p thing)
+    (setq thing (conn-bounds-thing thing)))
+  (or
+   (cdr (or (when (conn-anonymous-thing-p thing)
+              (or (assq property (conn--anonymous-thing-properties thing))
+                  (progn
+                    (setq thing (car (conn-thing-all-parents thing)))
+                    nil)))
+            (if (or no-inherit (get property :conn-static-property))
+                (assq property (conn--thing-properties
+                                (conn--find-thing thing)))
+              (cl-loop for p in (conn-thing-all-parents thing)
+                       for v = (assq property (conn--thing-properties
+                                               (conn--find-thing p)))
+                       when v return v))))
+   default))
+
+(define-inline conn-set-thing-property (thing property val)
+  (inline-letevals (thing)
+    (inline-quote
+     (setf (alist-get ,property
                       (if (conn-anonymous-thing-p ,thing)
                           (conn--anonymous-thing-properties ,thing)
                         (conn--thing-properties (conn--find-thing ,thing))))
-                     ,val)))
-           (compiler-macro conn-get-thing-property--cmacro))
-  (when (conn-bounds-p thing)
-    (setq thing (conn-bounds-thing thing)))
-  (catch 'val
-    (cond ((memq property '(forward-op
-                            beginning-op
-                            end-op
-                            bounds-of-thing-at-point))
-           (throw 'val (get (car (conn-thing-all-parents thing)) property)))
-          ((conn-anonymous-thing-p thing)
-           (if-let* ((v (assq property (conn--anonymous-thing-properties thing))))
-               (throw 'val (cdr v))
-             (setq thing (car (conn-thing-all-parents thing))))))
-    (if (or no-inherit (get property :conn-static-property))
-        (alist-get property (conn--thing-properties
-                             (conn--find-thing thing)))
-      (cl-loop for p in (conn-thing-all-parents thing)
-               for v = (assq property (conn--thing-properties
-                                       (conn--find-thing p)))
-               when v return (cdr v)))))
+           ,val))))
 
 (defun conn-declare-thing-property (property doc-string &optional static)
   "Declare a thing property PROPERTY.
