@@ -245,7 +245,7 @@
 
 (conn-register-thing
  'org-heading
- :parents 'org-element
+ :parents '(org-element)
  :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
  :forward-op 'org-next-visible-heading)
 
