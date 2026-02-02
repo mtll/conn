@@ -91,7 +91,6 @@ function may setup any other necessary state as well.")
                   docstring
                   parents
                   &aux
-                  (properties (make-hash-table :test 'eq))
                   (minor-mode-depths (make-hash-table :test 'eq))
                   (minor-mode-sort-tick conn--minor-mode-maps-sort-tick)
                   (minor-mode-maps (list :conn-minor-mode-map-alist))
@@ -102,7 +101,7 @@ function may setup any other necessary state as well.")
   (docstring nil :type string :read-only t)
   (parents nil :type (list-of symbol))
   (children nil :type (list-of symbol))
-  (properties nil :type hash-table :read-only t)
+  (properties nil :type list)
   (keymap nil :type (or nil keymap))
   (minor-mode-depths nil :type hash-table :read-only t)
   (minor-mode-sort-tick nil :type (or nil integer))
@@ -227,9 +226,9 @@ See also `conn-declare-state-property'."
                                       (symbolp (cadr prop))
                                       (cadr prop)))))
               (conn-property-static-p prop)))
-        `(gethash ,property
-                  (conn-state--properties (conn--find-state ,state))
-                  ,default)
+        `(alist-get ,property
+                    (conn-state--properties (conn--find-state ,state))
+                    ,default)
       exp)))
 
 (defun conn-state-get (state property &optional no-inherit default)
@@ -250,13 +249,13 @@ DEFAULT is a value to return if PROPERTY is not found."
               (ignore no-inherit default)
               `(conn-state-set ,state ,property ,val))))
   (if (or no-inherit (conn-property-static-p property))
-      (gethash property
-               (conn-state--properties (conn--find-state state))
-               default)
+      (alist-get property
+                 (conn-state--properties (conn--find-state state))
+                 default)
     (cl-loop for parent in (conn-state-all-parents state)
              for table = (conn-state--properties (conn--find-state parent))
-             for prop = (gethash property table conn--key-missing)
-             unless (eq prop conn--key-missing) return prop
+             for prop = (assq property table)
+             when prop return (cdr prop)
              finally return default)))
 
 (define-inline conn-state-set (state property value)
@@ -268,10 +267,9 @@ Returns VALUE."
      (progn
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (thread-last
-         (conn--find-state ,state)
-         conn-state--properties
-         (puthash ,property ,value))))))
+       (setf (alist-get ,property (conn-state--properties
+                                   (conn--find-state ,state)))
+             ,value)))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -283,20 +281,17 @@ property from its parents."
      (progn
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (remhash (conn-state--properties (conn--find-state ,state))
-                ,property)))))
+       (cl-callf2 assq-delete-all
+           ,property
+           (conn-state--properties (conn--find-state ,state)))))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if STATE has an explicit value set for PROPERTY."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-quote
-   (thread-first
-     (gethash ,property
-              (conn-state--properties (conn--find-state ,state))
-              conn--key-missing)
-     (eq conn--key-missing)
-     not)))
+   (and (assq ,property (conn-state--properties (conn--find-state ,state)))
+        t)))
 
 ;;;;; Keymaps
 
@@ -1135,20 +1130,15 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
 
 ;;;;; Definitions
 
-(defun conn--define-state (name docstring parents properties no-inherit-keymaps)
-  (cl-labels ((setup-properties (table)
-                (cl-loop with kvs = properties
-                         for (k v) on kvs by #'cddr
-                         do (puthash k v table))
-                (cl-callf seq-union
-                    (gethash :no-inherit-keymaps table)
-                  no-inherit-keymaps)))
+(defun conn--define-state (name docstring parents properties)
+  (let ((props (cl-loop with kvs = properties
+                        for (k v) on kvs by #'cddr
+                        collect (cons k v))))
     (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
-          (clrhash (conn-state--properties state-obj))
-          (setup-properties (conn-state--properties state-obj))
-          (setf (conn-state--parents state-obj) parents)
+          (setf (conn-state--properties state-obj) props
+                (conn-state--parents state-obj) parents)
           (dolist (former (seq-difference prev-parents parents))
             (cl-callf2 delq name (conn-state--children
                                   (conn--find-state former))))
@@ -1166,8 +1156,8 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
                 (conn--ensure-minor-mode-map child mode))
               (conn--rebuild-state-keymaps child))))
       (let ((state-obj (conn--make-state name docstring parents)))
-        (setf (conn--find-state name) state-obj)
-        (setup-properties (conn-state--properties state-obj))
+        (setf (conn--find-state name) state-obj
+              (conn-state--properties state-obj) props)
         (dolist (parent parents)
           (cl-pushnew name (conn-state--children
                             (conn--find-state parent))))
@@ -1233,11 +1223,7 @@ can only be changed by redefining a state and are not inherited.
                          nconc (pcase key
                                  ((pred keywordp) (list key value))
                                  ((pred symbolp) `(',key ,value))
-                                 (_ (error "State property name must be a symbol")))))
-        (list ,@(cl-loop for p in parents
-                         when (and (consp p)
-                                   (eq (cadr p) :no-inherit-keymap))
-                         collect `',(car p))))
+                                 (_ (error "State property name must be a symbol"))))))
        (defvar-local ,name nil)
        (conn--make-state-docstring ',name ,docstring)
        ',name)))
