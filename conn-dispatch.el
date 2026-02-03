@@ -1719,47 +1719,48 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
+(defun conn--with-dispatch-labels (labels body)
+  (conn-cleanup-labels)
+  (let ((conn-dispatch-hide-labels nil))
+    (unwind-protect
+        (conn-with-dispatch-event-handlers
+          ( :handler (cmd)
+            (when (eq cmd 'toggle-labels)
+              (cl-callf not conn-dispatch-hide-labels)
+              (while-no-input
+                (mapc #'conn-label-redisplay labels))
+              (conn-dispatch-handle)))
+          ( :message -50 (keymap)
+            (when-let* ((_ conn-dispatch-hide-labels)
+                        (binding
+                         (where-is-internal 'toggle-labels keymap t)))
+              (concat
+               (propertize (key-description binding)
+                           'face 'help-key-binding)
+               " "
+               (propertize
+                "hide labels"
+                'face 'eldoc-highlight-function-argument))))
+          (:keymap conn-toggle-label-argument-map)
+          (let ((fn (make-symbol "cleanup")))
+            (fset fn (lambda (&rest _)
+                       (unwind-protect
+                           (mapc #'conn-label-delete labels)
+                         (setq conn--previous-labels-cleanup nil)
+                         (remove-hook 'pre-redisplay-functions fn))))
+            (setq conn--previous-labels-cleanup fn))
+          (funcall body labels))
+      (clrhash conn--pixelwise-window-cache)
+      (clrhash conn--dispatch-window-lines-cache)
+      (when conn--previous-labels-cleanup
+        (add-hook 'pre-redisplay-functions
+                  conn--previous-labels-cleanup)))))
+
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(progn
-        (conn-cleanup-labels)
-        (let ((,var ,val)
-              (conn-dispatch-hide-labels nil))
-          (unwind-protect
-              (conn-with-dispatch-event-handlers
-                ( :handler (cmd)
-                  (when (eq cmd 'toggle-labels)
-                    (cl-callf not conn-dispatch-hide-labels)
-                    (while-no-input
-                      (mapc #'conn-label-redisplay ,var))
-                    (conn-dispatch-handle)))
-                ( :message -50 (keymap)
-                  (when-let* ((_ conn-dispatch-hide-labels)
-                              (binding
-                               (where-is-internal 'toggle-labels keymap t)))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " "
-                     (propertize
-                      "hide labels"
-                      'face 'eldoc-highlight-function-argument))))
-                (:keymap conn-toggle-label-argument-map)
-                (let ((fn (make-symbol "cleanup")))
-                  (fset fn (lambda (&rest _)
-                             (unwind-protect
-                                 (mapc #'conn-label-delete ,(car binder))
-                               (setq conn--previous-labels-cleanup nil)
-                               (remove-hook 'pre-redisplay-functions fn))))
-                  (setq conn--previous-labels-cleanup fn))
-                ,@body)
-            (clrhash conn--pixelwise-window-cache)
-            (clrhash conn--dispatch-window-lines-cache)
-            (when conn--previous-labels-cleanup
-              (add-hook 'pre-redisplay-functions
-                        conn--previous-labels-cleanup))))))
+     `(conn--with-dispatch-labels ,val (lambda (,var) ,@body)))
     (_ (error "Unexpected binder form"))))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
@@ -2656,7 +2657,7 @@ updated.")
         (unless (overlay-get tar 'label-face)
           (if-let* ((thing (overlay-get tar 'thing))
                     (_ (and (conn-anonymous-thing-p thing)
-                            (length> (conn-get-thing-property thing :bounds)
+                            (length> (conn-thing-get thing :bounds)
                                      1))))
               (progn
                 (overlay-put tar 'label-face multi-face1)

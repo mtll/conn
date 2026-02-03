@@ -38,8 +38,7 @@
                                  (setq ,success t))))
       (pcase binding
         ('nil body)
-        ((and `(,var ,val . ,cleanup)
-              (guard cleanup))
+        (`(,var ,val . ,(and cleanup (pred identity)))
          (protect (car rest) (cdr rest)
                   `(let* ((,var ,val))
                      (unwind-protect
@@ -327,7 +326,7 @@ See `quail-add-unread-command-events'."
     (inline-quote
      (conn-threadf->
          (conn-ring-history ,ring)
-       (cl-delete ,item)
+       (delq ,item)
        (cons ,item)))))
 
 (defun conn-copy-ring (ring)
@@ -428,6 +427,18 @@ If ring is (1 2 3 4) 4 would be returned."
 
 ;;;;; Region Utils
 
+(defun conn--shadow-outside-regions (regions)
+  (conn-protected-let* ((overlays nil (mapc #'delete-overlay overlays)))
+    (when-let* ((r (sort (conn--merge-overlapping-regions regions t))))
+      (setf r `(,(point-min) ,@(flatten-tree r) ,(point-max)))
+      (while r
+        (pcase-let* ((`(,beg ,end) r)
+                     (ov (make-overlay beg end)))
+          (overlay-put ov 'face 'shadow)
+          (push ov overlays))
+        (cl-callf cddr r)))
+    overlays))
+
 (defmacro conn-with-region-emphasis (regions &rest body)
   "Run BODY with the text in the complement of REGIONS shadowed."
   (declare (debug (form form body))
@@ -436,14 +447,7 @@ If ring is (1 2 3 4) 4 would be returned."
     `(let (,overlays)
        (unwind-protect
            (progn
-             (when-let* ((r (sort (conn--merge-overlapping-regions ,regions t))))
-               (setf r `(,(point-min) ,@(flatten-tree r) ,(point-max)))
-               (while r
-                 (pcase-let* ((`(,beg ,end) r)
-                              (ov (make-overlay beg end)))
-                   (overlay-put ov 'face 'shadow)
-                   (push ov ,overlays))
-                 (cl-callf cddr r)))
+             (setf ,overlays (conn--shadow-outside-regions ,regions))
              ,@body)
          (mapc #'delete-overlay ,overlays)))))
 

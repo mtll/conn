@@ -46,7 +46,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
     (inline-quote
      (and (symbolp ,command)
           (or (alist-get ,command conn-other-end-handler-overrides-alist)
-              (conn-get-thing-property ,command :other-end-handler))))))
+              (conn-thing-get ,command :other-end-handler))))))
 
 (defun conn-set-command-other-end-handler (command handler)
   (function-put command :conn-other-end-handler handler))
@@ -327,31 +327,32 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
 
-(defun conn-unset-thing-property (thing property)
-  (cl-callf2 assq-delete-all
-      property
-      (if (conn-anonymous-thing-p thing)
-          (conn--anonymous-thing-properties thing)
-        (conn--thing-properties (conn--find-thing thing)))))
+(define-inline conn-thing-unset (thing property)
+  "Unset THING property PROPERTY."
+  (inline-letevals (thing)
+    (inline-quote
+     (cl-callf2 assq-delete-all
+         ,property
+         (if (conn-anonymous-thing-p ,thing)
+             (conn--anonymous-thing-properties ,thing)
+           (conn--thing-properties (conn--find-thing ,thing)))))))
 
 (eval-and-compile
-  (defun conn-get-thing-property--cmacro (exp
-                                          thing
-                                          property
-                                          &optional
-                                          no-inherit
-                                          default)
-    (if (or (and-let* ((ni (macroexpand-all no-inherit macroexpand-all-environment))
-                       (_ (macroexp-const-p ni)))
-              (if (consp ni) (cadr ni) ni))
-            (and-let* ((prop (macroexpand-all property macroexpand-all-environment))
-                       (_ (macroexp-const-p prop))
-                       (prop (or (and (symbolp prop)
-                                      prop)
-                                 (and (eq 'quote (car-safe prop))
-                                      (symbolp (cadr prop))
-                                      (cadr prop)))))
-              (conn-property-static-p prop)))
+  (defun conn-thing-get--cmacro (exp
+                                 thing
+                                 property
+                                 &optional
+                                 no-inherit
+                                 default)
+    (if (or (and (macroexp-const-p no-inherit)
+                 (if (consp no-inherit)
+                     (cadr no-inherit)
+                   no-inherit))
+            (and (macroexp-const-p property)
+                 (conn-property-static-p
+                  (if (consp property)
+                      (cadr property)
+                    property))))
         (macroexp-let2* nil (thing property)
           `(or
             (cdr (or (when (conn-anonymous-thing-p ,thing)
@@ -364,12 +365,12 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
             ,default))
       exp)))
 
-(defun conn-get-thing-property (thing property &optional no-inherit default)
-  (declare (compiler-macro conn-get-thing-property--cmacro)
+(defun conn-thing-get (thing property &optional no-inherit default)
+  (declare (compiler-macro conn-thing-get--cmacro)
            (gv-setter
             (lambda (val)
               (ignore no-inherit default)
-              `(conn-set-thing-property ,thing ,property ,val))))
+              `(conn-thing-set ,thing ,property ,val))))
   (when (conn-bounds-p thing)
     (setq thing (conn-bounds-thing thing)))
   (or
@@ -387,39 +388,19 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                        when v return v))))
    default))
 
-(eval-and-compile
-  (defun conn-set-thing-property--cmacro (exp thing property val)
-    (pcase (macroexpand-all property macroexpand-all-environment)
-      (`(quote ,(or 'forward-op
-                    'beginning-op
-                    'end-op
-                    'bounds-of-thing-at-point))
-       `(put ,thing ,property ,val))
-      ((pred macroexp-const-p)
-       (macroexp-let2* nil (thing)
-         `(setf (alist-get ,property
-                           (if (conn-anonymous-thing-p ,thing)
-                               (conn--anonymous-thing-properties ,thing)
-                             (conn--thing-properties
-                              (conn--find-thing ,thing))))
-                ,val)))
-      (_ exp))))
-
-(defun conn-set-thing-property (thing property val)
-  (declare (compiler-macro conn-set-thing-property--cmacro))
-  (cond ((conn-anonymous-thing-p thing)
-         (setf (alist-get property
-                          (conn--anonymous-thing-properties thing))
-               val))
-        ((memq property '(forward-op
-                          beginning-op
-                          end-op
-                          bounds-of-thing-at-point))
-         (put thing property val))
-        (t (setf (alist-get property
-                            (conn--thing-properties
-                             (conn--find-thing thing)))
-                 val))))
+(define-inline conn-thing-set (thing property val)
+  (if (memq (inline-const-val property)
+            '(forward-op beginning-op end-op bounds-of-thing-at-point))
+      (inline-quote
+       (put ,thing ,property ,val))
+    (inline-letevals (thing)
+      (inline-quote
+       (setf (alist-get ,property
+                        (if (conn-anonymous-thing-p ,thing)
+                            (conn--anonymous-thing-properties ,thing)
+                          (conn--thing-properties
+                           (conn--find-thing ,thing))))
+             ,val)))))
 
 (defun conn-declare-thing-property (property doc-string &optional static)
   "Declare a thing property PROPERTY.
@@ -483,16 +464,16 @@ command moves over."
       (when-let* ((s (conn--find-thing p)))
         (cl-pushnew thing (conn--thing-children s))))
     (when forward-op
-      (setf (conn-get-thing-property thing 'forward-op) forward-op))
+      (setf (conn-thing-get thing 'forward-op) forward-op))
     (when (or beg-op end-op)
       (cl-assert (and beg-op end-op)
                  nil "If either beg-op or end-op is specified then both must be")
-      (setf (conn-get-thing-property thing 'beginning-op) beg-op
-            (conn-get-thing-property thing 'end-op) end-op))
+      (setf (conn-thing-get thing 'beginning-op) beg-op
+            (conn-thing-get thing 'end-op) end-op))
     (when bounds-op
-      (setf (conn-get-thing-property thing 'bounds-of-thing-at-point) bounds-op))
+      (setf (conn-thing-get thing 'bounds-of-thing-at-point) bounds-op))
     (cl-loop for (prop val) on properties by #'cddr
-             do (setf (conn-get-thing-property thing prop) val))))
+             do (setf (conn-thing-get thing prop) val))))
 
 (defun conn--make-register-thing-docstring ()
   (let* ((main (documentation (symbol-function 'conn-define-state) 'raw))
@@ -657,7 +638,7 @@ command moves over."
             (app conn-anonymous-thing-parents thing))
        (format " (<anonymous %s>)" thing))
       ((let (and thing (pred identity))
-         (if (conn-get-thing-property sym :command)
+         (if (conn-thing-get sym :command)
              (seq-find #'conn-simple-thing-p
                        (conn-thing-all-parents sym))
            (and (conn-thing-p sym) sym)))
@@ -1471,7 +1452,7 @@ the point is within the region then the entire region is returned.")))
     (unwind-protect
         (save-mark-and-excursion
           (add-hook 'isearch-mode-end-hook quit)
-          (if (conn-get-thing-property cmd :command)
+          (if (conn-thing-get cmd :command)
               (progn
                 (call-interactively cmd)
                 (when isearch-mode
@@ -1498,7 +1479,7 @@ the point is within the region then the entire region is returned.")))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)
-            (if (conn-get-thing-property cmd :command)
+            (if (conn-thing-get cmd :command)
                 (progn
                   (call-interactively cmd)
                   (when isearch-mode

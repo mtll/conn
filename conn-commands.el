@@ -1610,7 +1610,7 @@ selected by dispatch with it."))
                                from
                                to)))
 
-(cl-defmethod conn-replace-do ((_thing (eql widen))
+(cl-defmethod conn-replace-do ((_thing (conn-thing widen))
                                &rest _)
   (without-restriction
     (cl-call-next-method)))
@@ -2674,7 +2674,7 @@ hook, which see."
                                   &context
                                   (major-mode (derived-mode lisp-data-mode)))
   (cl-call-next-method)
-  (cond ((conn-get-thing-property bounds :linewise))
+  (cond ((conn-thing-get bounds :linewise))
         ((save-excursion
            (beginning-of-line)
            (looking-at-p (rx (seq (* (syntax whitespace))
@@ -2718,7 +2718,7 @@ hook, which see."
              (forward-char 1)))
           ((looking-at (rx (syntax whitespace)))
            (fixup-whitespace)))
-    (when (and (conn-get-thing-property bounds :linewise)
+    (when (and (conn-thing-get bounds :linewise)
                (save-excursion
                  (beginning-of-line)
                  (looking-at-p (rx eol))))
