@@ -2732,8 +2732,14 @@ hook, which see."
                           append
                           register
                           separator)
-  (when (eq append 'repeat)
-    (setq append (and conn-repeating-command 'append)))
+  (pcase append
+    ('repeat
+     (setq append (and conn-repeating-command 'append)))
+    ((and 'nil
+          (guard (and conn-repeating-command
+                      (eq last-command this-command))))
+     (setq append 'append
+           separator (or separator t))))
   (if register
       (pcase append
         ('nil
@@ -2756,8 +2762,14 @@ hook, which see."
         (copy-region-as-kill beg end)))))
 
 (defun conn--kill-string (string &optional append register separator)
-  (when (eq append 'repeat)
-    (setq append (and conn-repeating-command 'append)))
+  (pcase append
+    ('repeat
+     (setq append (and conn-repeating-command 'append)))
+    ((and 'nil
+          (guard (and conn-repeating-command
+                      (eq last-command this-command))))
+     (setq append 'append
+           separator (or separator t))))
   (if register
       (if append
           (let ((reg (get-register register))
