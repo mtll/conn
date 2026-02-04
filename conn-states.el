@@ -1220,8 +1220,10 @@ can only be changed by redefining a state and are not inherited.
         (list ,@(mapcar (lambda (p) `',(or (car-safe p) p)) parents))
         (list ,@(cl-loop for (key value) on properties by #'cddr
                          nconc (pcase key
-                                 ((pred keywordp) (list key value))
-                                 ((pred symbolp) `(',key ,value))
+                                 ((pred symbolp)
+                                  `(,(macroexp-quote key) ,value))
+                                 (`(quote ,(pred symbolp))
+                                  `(,key ,value))
                                  (_ (error "State property name must be a symbol"))))))
        (defvar-local ,name nil)
        (conn--make-state-docstring ',name ,docstring)

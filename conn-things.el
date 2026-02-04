@@ -462,10 +462,12 @@ non-nil.
 
 If STATIC is non-nil then the property is declared static.  Static thing
 properties are not inherited."
-  (cl-assert (not (memq property '(forward-op
-                                   beginning-op
-                                   end-op
-                                   bounds-of-thing-at-point))))
+  (cl-assert (not (and static
+                       (memq property '(forward-op
+                                        beginning-op
+                                        end-op
+                                        bounds-of-thing-at-point))))
+             nil "Thing at point properties cannot be declared static.")
   (setf (get property :conn-static-property) static)
   (when doc-string
     (setf (alist-get property
@@ -589,7 +591,8 @@ command moves over."
 (define-inline conn-subthing-p (thing parent)
   (declare (side-effect-free t)
            (important-return-value t))
-  (inline-quote (memq ,parent (conn-thing-all-parents ,thing))))
+  (inline-quote
+   (memq ,parent (conn-thing-all-parents ,thing))))
 
 ;;;; Specializers
 
