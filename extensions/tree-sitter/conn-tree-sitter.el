@@ -294,8 +294,7 @@
 
 (defun conn-ts--get-thing-groups (thing)
   (conn-ts--thing-groups
-   (conn-thing-get (conn-get-thing thing)
-                            :conn-ts-thing)))
+   (conn-thing-get thing :conn-ts-thing)))
 
 (defun conn-ts-filter-captures (things captures &optional predicate)
   (let ((groups (cl-loop for thing in (ensure-list things)
@@ -359,7 +358,7 @@
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
-                          (conn-get-thing cmd)
+                          cmd
                           (conn-ts-capture (min beg end) (max beg end)))
                 beg end)
           (cl-callf sort captures
@@ -415,7 +414,7 @@
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
-                          (conn-get-thing cmd)
+                          cmd
                           (conn-ts-capture (min beg end) (max beg end)))
                 beg end)
           (cl-callf sort captures

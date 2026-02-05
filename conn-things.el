@@ -261,13 +261,16 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (pcase-let ((`(,methods . ,props)
                (conn--anonymous-thing-parse-properties properties)))
     `(conn--make-anonymous-thing
-      :parents (let ((parents (mapcar #'conn-get-thing ,parents)))
-                 (dolist (p parents)
-                   (cond ((conn-anonymous-thing-p p)
-                          (error "Cannot inherit from anonymous thing"))
-                         ((not (conn-thing-p p))
-                          (error "Unknown thing %s" p))))
-                 parents)
+      :parents (cl-loop for p in ,parents
+                        for parent = (pcase p
+                                       ((pred conn-bounds-p)
+                                        (conn-bounds-thing p))
+                                       ((pred conn-thing-p)
+                                        p)
+                                       (_ (error "Unknown thing %s" p)))
+                        do (when (conn-anonymous-thing-p parent)
+                             (error "Cannot inherit from anonymous thing"))
+                        collect parent)
       :methods ,methods
       :properties ,props)))
 
@@ -322,7 +325,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
                          &rest rest)
-         (if-let* ((thing (conn-get-thing ,(car args)))
+         (if-let* ((thing (pcase-exhaustive ,(car args)
+                            ((pred conn-bounds-p)
+                             (conn-bounds-thing ,(car args)))
+                            ((pred conn-thing-p)
+                             ,(car args))))
                    (op (conn--anonymous-thing-method thing ',f)))
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
@@ -576,17 +583,6 @@ command moves over."
 ;;;###autoload
   (setf (alist-get 'conn-thing-command defun-declarations-alist)
         (list #'conn--declare-thing-command)))
-
-(define-inline conn-get-thing (thing)
-  (declare (side-effect-free t)
-           (important-return-value t))
-  (inline-letevals (thing)
-    (inline-quote
-     (pcase ,thing
-       ((pred conn-bounds-p)
-        (conn-bounds-thing ,thing))
-       ((pred conn-thing-p)
-        ,thing)))))
 
 (define-inline conn-subthing-p (thing parent)
   (declare (side-effect-free t)
@@ -1017,14 +1013,22 @@ check bounds in the current buffer."))
             (lambda (_exp)
               (macroexp-let2 nil thing thing
                 `(conn--make-bounds
-                  :thing (or (conn-get-thing ,thing)
-                             (error "Not a valid thing: %s" ,thing))
+                  :thing (pcase ,thing
+                           ((pred conn-bounds-p)
+                            (conn-bounds-thing ,thing))
+                           ((pred conn-thing-p)
+                            ,thing)
+                           (_ (error "Not a valid thing: %s" ,thing)))
                   :arg ,arg
                   :whole ,whole
                   :properties (list ,@properties))))))
   (conn--make-bounds
-   :thing (or (conn-get-thing thing)
-              (error "Not a valid thing: %s" thing))
+   :thing (pcase thing
+            ((pred conn-bounds-p)
+             (conn-bounds-thing thing))
+            ((pred conn-thing-p)
+             thing)
+            (_ (error "Not a valid thing: %s" thing)))
    :arg arg
    :whole whole
    :properties properties))
