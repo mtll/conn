@@ -350,12 +350,12 @@
   "A" 'execute-extended-command-for-buffer
   "r" 'conn-change-thing
   "f" 'conn-dispatch
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "." 'conn-register-load
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
-  "w" conn-edit-remap
+  "h" conn-edit-remap
   "d" 'conn-kill-thing
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix

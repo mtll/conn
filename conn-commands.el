@@ -919,6 +919,14 @@ determine which window to display the buffer in."
         (window-swap-states nil window)
       (user-error "No other visible windows"))))
 
+(defun conn-delete-window (window)
+  "Prompt for window and delete it."
+  (interactive
+   (list (conn-prompt-for-window
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
+  (delete-window window))
+
 (defun conn-throw-buffer ()
   "Send current buffer to another window and `switch-to-prev-buffer'."
   (interactive)

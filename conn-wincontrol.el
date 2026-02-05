@@ -50,6 +50,11 @@
 
 (put 'keyboard-quit :conn-wincontrol-preserve-arg t)
 
+(defalias 'conn-bury-buffer #'bury-buffer)
+(defalias 'conn-unbury-buffer #'unbury-buffer)
+(defalias 'conn-previous-buffer #'previous-buffer)
+(defalias 'conn-next-buffer #'next-buffer)
+
 ;;;;; Wincontrol Internals
 
 (defvar-keymap conn-window-resize-map
@@ -74,16 +79,21 @@
   :repeat t
   "o" 'other-window)
 
+(defvar-keymap conn-other-window-tab-repeat-map
+  :repeat t
+  "TAB" 'other-window
+  "<tab>" 'other-window)
+
 (defvar-keymap conn-wincontrol-next-window-repeat-map
   :repeat t
   "o" 'conn-wincontrol-next-window)
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
-  "i" 'conn-wincontrol-scroll-down
-  "k" 'conn-wincontrol-scroll-up
-  "K" 'conn-wincontrol-other-window-scroll-up
-  "I" 'conn-wincontrol-other-window-scroll-down)
+  "n" 'conn-wincontrol-scroll-down
+  "m" 'conn-wincontrol-scroll-up
+  "N" 'conn-wincontrol-other-window-scroll-up
+  "M" 'conn-wincontrol-other-window-scroll-down)
 
 (defvar-keymap conn-wincontrol-text-scale-repeat-map
   :repeat t
@@ -92,7 +102,7 @@
 
 (defvar-keymap conn-wincontrol-tab-repeat-map
   :repeat t
-  "C" 'tab-bar-duplicate-tab
+  "Q" 'tab-bar-duplicate-tab
   "O" 'tab-new
   "o" 'tab-next
   "U" 'tab-close
@@ -100,38 +110,35 @@
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
+;; (defvar-keymap conn-windmove-repeat-map
+;;   :repeat (:exit (ignore))
+;;   "e" 'ignore
+;;   "K" 'windmove-swap-states-down
+;;   "J" 'windmove-swap-states-left
+;;   "L" 'windmove-swap-states-right
+;;   "I" 'windmove-swap-states-up
+;;   "k" 'conn-wincontrol-windmove-down
+;;   "j" 'conn-wincontrol-windmove-left
+;;   "l" 'conn-wincontrol-windmove-right
+;;   "i" 'conn-wincontrol-windmove-up)
+
 (defvar-keymap conn-windmove-repeat-map
   :repeat t
-  "M-<down>" 'windmove-swap-states-down
-  "M-<left>" 'windmove-swap-states-left
-  "M-<right>" 'windmove-swap-states-right
-  "M-<up>" 'windmove-swap-states-up
-  "<down>" 'conn-wincontrol-windmove-down
-  "<left>" 'conn-wincontrol-windmove-left
-  "<right>" 'conn-wincontrol-windmove-right
-  "<up>" 'conn-wincontrol-windmove-up
-  "M-I" 'windmove-swap-states-up
-  "M-J" 'windmove-swap-states-left
-  "M-K" 'windmove-swap-states-down
-  "M-L" 'windmove-swap-states-right
-  "M-i" 'conn-wincontrol-windmove-up
-  "M-j" 'conn-wincontrol-windmove-left
-  "M-k" 'conn-wincontrol-windmove-down
-  "M-l" 'conn-wincontrol-windmove-right)
-
-(defalias 'conn-next-buffer 'next-buffer)
-(defalias 'conn-previous-buffer 'previous-buffer)
+  "K" 'windmove-swap-states-down
+  "J" 'windmove-swap-states-left
+  "L" 'windmove-swap-states-right
+  "I" 'windmove-swap-states-up)
 
 (defvar-keymap conn-buffer-repeat-map
   :repeat t
-  "l" 'conn-next-buffer
-  "j" 'conn-previous-buffer)
+  "{" 'conn-bury-buffer
+  "}" 'conn-unbury-buffer
+  "[" 'conn-previous-buffer
+  "]" 'conn-next-buffer)
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
-  "M-s" conn-search-remap
-  "M-g" conn-goto-remap
   "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
@@ -156,21 +163,9 @@
   "<backspace>" 'conn-wincontrol-backward-delete-arg
   "M-/" 'undelete-frame
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
-  "M-<down>" 'windmove-swap-states-down
-  "M-<left>" 'windmove-swap-states-left
-  "M-<right>" 'windmove-swap-states-right
-  "M-<up>" 'windmove-swap-states-up
   "M-DEL" 'conn-wincontrol-digit-argument-reset
-  "M-I" 'windmove-swap-states-up
-  "M-J" 'windmove-swap-states-left
-  "M-K" 'windmove-swap-states-down
-  "M-L" 'windmove-swap-states-right
   "M-c" 'clone-frame
   "M-d" 'delete-frame
-  "M-i" 'conn-wincontrol-windmove-up
-  "M-j" 'conn-wincontrol-windmove-left
-  "M-k" 'conn-wincontrol-windmove-down
-  "M-l" 'conn-wincontrol-windmove-right
   "M-o" 'other-frame
   "<escape>" 'conn-wincontrol-exit
   "<down>" 'conn-wincontrol-windmove-down
@@ -179,40 +174,45 @@
   "<up>" 'conn-wincontrol-windmove-up
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "h" 'conn-other-place-prefix
+  "w" 'conn-other-place-prefix
   "<tab>" 'other-window
   "TAB" 'other-window
   "B" 'tab-bar-move-window-to-tab
-  "C" 'tab-bar-duplicate-tab
+  "Q" 'tab-bar-duplicate-tab
   "D" 'tab-bar-detach-tab
   "F" 'toggle-frame-fullscreen
   "H" 'conn-kill-this-buffer
-  "I" 'conn-wincontrol-other-window-scroll-down
-  "J" 'bury-buffer
-  "K" 'conn-wincontrol-other-window-scroll-up
-  "L" 'unbury-buffer
+  "k" 'conn-wincontrol-windmove-down
+  "j" 'conn-wincontrol-windmove-left
+  "l" 'conn-wincontrol-windmove-right
+  "i" 'conn-wincontrol-windmove-up
+  "K" 'windmove-swap-states-down
+  "J" 'windmove-swap-states-left
+  "L" 'windmove-swap-states-right
+  "I" 'windmove-swap-states-up
+  "N" 'conn-wincontrol-other-window-scroll-down
+  "M" 'conn-wincontrol-other-window-scroll-up
   "O" 'tab-new
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "U" 'tab-close
   "Z" 'text-scale-increase
   "T" 'tear-off-window
-  "{" 'shrink-window-if-larger-than-buffer
+  "[" 'conn-previous-buffer
+  "]" 'conn-next-buffer
+  "{" 'conn-bury-buffer
+  "}" 'conn-unbury-buffer
   "`" 'conn-wincontrol-mru-window
-  "b" 'switch-to-buffer
-  "c" (conn-remap-key "C-c" nil t)
-  "d" 'delete-window
+  "c" 'delete-window
+  "d" 'conn-delete-window
   "e" 'conn-wincontrol-exit
+  "b" 'delete-other-windows
   "f" 'conn-goto-window
   "g" (conn-remap-key "M-g" t t)
-  "X" 'kill-buffer-and-window
-  "[" 'kill-buffer-and-window
-  "i" 'conn-wincontrol-scroll-down
-  "j" 'conn-previous-buffer
-  "k" 'conn-wincontrol-scroll-up
-  "l" 'conn-next-buffer
-  "m" 'end-of-buffer
-  "n" 'beginning-of-buffer
+  "x" (conn-remap-key "C-x" t t)
+  "C" 'kill-buffer-and-window
+  "n" 'conn-wincontrol-scroll-down
+  "m" 'conn-wincontrol-scroll-up
   "o" 'tab-next
   "," 'conn-register-prefix
   "." 'conn-register-load
@@ -222,8 +222,7 @@
   "t" 'conn-transpose-window
   "u" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
-  "w" 'conn-throw-buffer
-  "x" 'delete-other-windows
+  "h" 'conn-throw-buffer
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
   "C-g" 'keyboard-quit)
