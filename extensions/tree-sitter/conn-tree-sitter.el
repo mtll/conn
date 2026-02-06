@@ -676,8 +676,9 @@
       fsym)))
 
 (defun conn-ts--thing-node-query (thing)
-  `(((_) @node
-     (:pred? ,(conn-ts--thing-predicate thing) @node))))
+  (let ((name (intern (format "@%s" thing))))
+    `(((_) ,name
+       (:pred? ,(conn-ts--thing-predicate thing) ,name)))))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
                                       _arg)
@@ -1350,10 +1351,12 @@
 (define-minor-mode conn-ts-things-mode
   "Minor mode for conn-ts thing bindings."
   :lighter nil)
+
 ;;;###autoload
 (defun conn-ts-things-mode-maybe-enable ()
   (when (treesit-parser-list)
     (conn-ts-things-mode 1)))
+
 ;;;###autoload
 (add-hook 'after-change-major-mode-hook #'conn-ts-things-mode-maybe-enable)
 
