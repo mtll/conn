@@ -110,19 +110,19 @@
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
-(defvar-keymap conn-windmove-repeat-map
-  :repeat t
-  "K" 'windmove-swap-states-down
-  "J" 'windmove-swap-states-left
-  "L" 'windmove-swap-states-right
-  "I" 'windmove-swap-states-up)
-
 (defvar-keymap conn-buffer-repeat-map
   :repeat t
   "{" 'conn-bury-buffer
   "}" 'conn-unbury-buffer
   "[" 'conn-previous-buffer
   "]" 'conn-next-buffer)
+
+(defvar-keymap conn-buffer-one-command-repeat-map
+  :repeat t
+  "J" 'bury-buffer
+  "L" 'unbury-buffer
+  "l" 'next-buffer
+  "j" 'previous-buffer)
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -156,10 +156,10 @@
   "M-d" 'delete-frame
   "M-o" 'other-frame
   "<escape>" 'conn-wincontrol-exit
-  "<down>" 'conn-wincontrol-windmove-down
-  "<left>" 'conn-wincontrol-windmove-left
-  "<right>" 'conn-wincontrol-windmove-right
-  "<up>" 'conn-wincontrol-windmove-up
+  "<down>" 'windmove-down
+  "<left>" 'windmove-left
+  "<right>" 'windmove-right
+  "<up>" 'windmove-up
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "w" 'conn-other-place-prefix
@@ -170,10 +170,10 @@
   "D" 'tab-bar-detach-tab
   "F" 'toggle-frame-fullscreen
   "H" 'conn-kill-this-buffer
-  "k" 'conn-wincontrol-windmove-down
-  "j" 'conn-wincontrol-windmove-left
-  "l" 'conn-wincontrol-windmove-right
-  "i" 'conn-wincontrol-windmove-up
+  "k" 'windmove-down
+  "j" 'windmove-left
+  "l" 'windmove-right
+  "i" 'windmove-up
   "K" 'windmove-swap-states-down
   "J" 'windmove-swap-states-left
   "L" 'windmove-swap-states-right
@@ -214,13 +214,24 @@
   "y" 'conn-yank-window
   "z" 'text-scale-decrease)
 
+(defvar-keymap conn-wincontrol-one-command-map
+  "i" 'kill-buffer-and-window
+  "k" 'conn-kill-this-buffer
+  "I" 'undefined
+  "K" 'undefined
+  "j" 'previous-buffer
+  "l" 'next-buffer
+  "J" 'bury-buffer
+  "L" 'unbury-buffer)
+
 (defconst conn--wincontrol-map-alist
-  `((conn-wincontrol-mode . ,conn-wincontrol-map)))
+  `((conn-wincontrol-one-command-mode . ,conn-wincontrol-one-command-map)
+    (conn-wincontrol-mode . ,conn-wincontrol-map)))
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
 (define-minor-mode conn-wincontrol-mode
-  "Global minor mode for window control."
+  "Global minor mode for wincontrol."
   :global t
   :lighter " WinC"
   :interactive nil
@@ -229,6 +240,7 @@
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
 
+;;;###autoload
 (defun conn-wincontrol ()
   "Enable `conn-wincontrol-mode'."
   (interactive)
@@ -329,6 +341,13 @@
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn-wincontrol-mode 1)))
 
+(define-minor-mode conn-wincontrol-one-command-mode
+  "Global minor mode for wincontrol one command."
+  :global t
+  :interactive nil
+  :group 'conn-wincontrol)
+
+;;;###autoload
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
@@ -342,9 +361,11 @@
                                  conn-wincontrol-universal-arg
                                  conn-wincontrol-quick-ref))
                    (remove-hook 'pre-command-hook hook)
+                   (conn-wincontrol-one-command-mode -1)
                    (conn-wincontrol-exit))))
     (add-hook 'pre-command-hook hook 99))
   (setq conn--wincontrol-message-newline nil)
+  (conn-wincontrol-one-command-mode 1)
   (conn-wincontrol))
 
 ;;;;; Wincontrol Quick Ref
@@ -403,10 +424,10 @@
   (conn-reference-page
     (((:heading "Windmove")
       ("up/down/left/right"
-       conn-wincontrol-windmove-up
-       conn-wincontrol-windmove-down
-       conn-wincontrol-windmove-left
-       conn-wincontrol-windmove-right)
+       windmove-up
+       windmove-down
+       windmove-left
+       windmove-right)
       ("swap states up/down/left/right"
        windmove-swap-states-up
        windmove-swap-states-down
@@ -546,6 +567,7 @@
 
 (defvar conn-goto-window-cycle-limit 2)
 
+;;;###autoload
 (defun conn-goto-window (&optional arg)
   "Prompt for a window and then select it."
   (interactive "p")
@@ -567,33 +589,12 @@
           (select-window window)
         (user-error "No other windows available to select")))))
 
+;;;###autoload
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
   (when-let* ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
-
-;;;;; Windmove
-
-(defun conn-wincontrol-windmove-up ()
-  "`windmove-up'."
-  (interactive)
-  (windmove-up))
-
-(defun conn-wincontrol-windmove-down ()
-  "`windmove-down'."
-  (interactive)
-  (windmove-down))
-
-(defun conn-wincontrol-windmove-right ()
-  "`windmove-right'."
-  (interactive)
-  (windmove-right))
-
-(defun conn-wincontrol-windmove-left ()
-  "`windmove-left'."
-  (interactive)
-  (windmove-left))
 
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
   "`quit-window' in `other-window-for-scrolling'."
@@ -723,6 +724,7 @@ Operates with the selected windows parent window."
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise)))
 
+;;;###autoload
 (defun conn-kill-this-buffer ()
   (interactive)
   (kill-buffer))

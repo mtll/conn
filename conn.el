@@ -34,7 +34,6 @@
 (require 'conn-states)
 (require 'conn-kapply)
 (require 'conn-expand)
-(require 'conn-wincontrol)
 (require 'conn-dispatch)
 (require 'conn-commands)
 (require 'conn-keymaps)
