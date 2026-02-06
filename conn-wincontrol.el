@@ -110,18 +110,6 @@
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
-;; (defvar-keymap conn-windmove-repeat-map
-;;   :repeat (:exit (ignore))
-;;   "e" 'ignore
-;;   "K" 'windmove-swap-states-down
-;;   "J" 'windmove-swap-states-left
-;;   "L" 'windmove-swap-states-right
-;;   "I" 'windmove-swap-states-up
-;;   "k" 'conn-wincontrol-windmove-down
-;;   "j" 'conn-wincontrol-windmove-left
-;;   "l" 'conn-wincontrol-windmove-right
-;;   "i" 'conn-wincontrol-windmove-up)
-
 (defvar-keymap conn-windmove-repeat-map
   :repeat t
   "K" 'windmove-swap-states-down
@@ -224,10 +212,9 @@
   "v" 'conn-wincontrol-split-vertically
   "h" 'conn-throw-buffer
   "y" 'conn-yank-window
-  "z" 'text-scale-decrease
-  "C-g" 'keyboard-quit)
+  "z" 'text-scale-decrease)
 
-(defvar conn--wincontrol-map-alist
+(defconst conn--wincontrol-map-alist
   `((conn-wincontrol-mode . ,conn-wincontrol-map)))
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
