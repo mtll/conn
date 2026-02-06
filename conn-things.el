@@ -175,7 +175,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                        (intern-soft (format "forward-%s" ,thing))
                        (get ,thing 'end-op)
                        (get ,thing 'bounds-of-thing-at-point))))
-          ,thing))))
+          t))))
 
 (define-inline conn-simple-thing-p (thing)
   (declare (side-effect-free t)
@@ -187,7 +187,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
               (intern-soft (format "forward-%s" ,thing))
               (get ,thing 'end-op)
               (get ,thing 'bounds-of-thing-at-point))
-          ,thing))))
+          t))))
 
 (defconst conn--thing-all-parents-cache
   (make-hash-table :test 'eq))

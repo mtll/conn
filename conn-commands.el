@@ -2403,7 +2403,7 @@ region after a `recursive-edit'."
 
 (defvar conn-kill-special-ref
   (conn-reference-quote
-    (("copy filename" filename)
+    (("copy filename" kill-filename)
      ("kill matching lines" kill-matching-lines)
      ("keep matching lines" keep-lines)
      ("surround" conn-surround)
@@ -2430,7 +2430,7 @@ append to that place."
 (define-keymap
   :keymap (conn-get-state-map 'conn-kill-state)
   "w" 'copy
-  "/" 'filename
+  "/" 'kill-filename
   "P" 'project-filename
   ">" 'kill-matching-lines
   "%" 'keep-lines
@@ -2539,7 +2539,7 @@ append to that place."
                   (required t)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
-                                       (_cmd (eql filename)))
+                                       (_cmd (eql kill-filename)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-thing-argument)
@@ -2816,7 +2816,7 @@ hook, which see."
                                   &rest _)
   (cl-call-next-method))
 
-(cl-defmethod conn-kill-thing-do ((_cmd (eql filename))
+(cl-defmethod conn-kill-thing-do ((_cmd (eql kill-filename))
                                   _arg
                                   transform
                                   &optional
@@ -3125,7 +3125,7 @@ hook, which see."
 
 (defvar conn-copy-special-ref
   (conn-reference-quote
-    (("copy filename" filename)
+    (("copy filename" kill-filename)
      ("kill matching lines" copy-matching-lines)
      ("surround" conn-surround))))
 
@@ -3208,7 +3208,7 @@ append to that place."
   (cl-call-next-method))
 
 (defvar-keymap conn-copy-thing-argument-map
-  "/" 'filename
+  "/" 'kill-filename
   "P" 'project-filename
   ">" 'copy-matching-lines)
 
@@ -3226,7 +3226,7 @@ append to that place."
                   (set-flag (use-region-p))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
-                                       (_cmd (eql filename)))
+                                       (_cmd (eql kill-filename)))
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-copy-thing-argument)
@@ -3315,7 +3315,7 @@ that place."
         (conn-read-regexp "Copy lines containing match for regexp" region)
         beg end t)))))
 
-(cl-defmethod conn-copy-thing-do ((_cmd (eql filename))
+(cl-defmethod conn-copy-thing-do ((_cmd (eql kill-filename))
                                   _arg
                                   &optional
                                   transform
