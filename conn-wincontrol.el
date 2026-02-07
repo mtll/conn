@@ -568,26 +568,16 @@
 (defvar conn-goto-window-cycle-limit 2)
 
 ;;;###autoload
-(defun conn-goto-window (&optional arg)
+(defun conn-goto-window ()
   "Prompt for a window and then select it."
-  (interactive "p")
+  (interactive)
   (let ((windows (delq (selected-window)
                        (conn--get-windows
                         nil 'nomini
                         (if current-prefix-arg 'visible)))))
-    (if (length< windows conn-goto-window-cycle-limit)
-        (progn
-          (setq this-command 'conn-other-window)
-          (put 'conn-other-window 'repeat-map
-               (let ((map (make-sparse-keymap)))
-                 (define-key map
-                             (vector last-command-event)
-                             'conn-other-window)
-                 map))
-          (other-window arg))
-      (if-let* ((window (conn-prompt-for-window windows)))
-          (select-window window)
-        (user-error "No other windows available to select")))))
+    (if-let* ((window (conn-prompt-for-window windows)))
+        (select-window window)
+      (user-error "No other windows available to select"))))
 
 ;;;###autoload
 (defun conn-wincontrol-mru-window ()

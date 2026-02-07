@@ -205,12 +205,14 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        (with-memoization (gethash parents conn--anonymous-thing-all-parents-cache)
          (merge-ordered-lists
           (mapcar #'conn-thing-all-parents parents)))))
-    ((app conn--find-thing (and struct (pred identity)))
+    ((pred conn-thing-p)
      (with-memoization (gethash thing conn--thing-all-parents-cache)
        (cons thing
              (merge-ordered-lists
               (mapcar #'conn-thing-all-parents
-                      (conn--thing-parents struct))))))))
+                      (ignore-errors
+                        (conn--thing-parents
+                         (conn--find-thing thing))))))))))
 
 (eval-and-compile
   (defun conn--anonymous-thing-parse-properties (properties)
