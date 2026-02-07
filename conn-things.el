@@ -1091,6 +1091,10 @@ check bounds in the current buffer."))
                 `(conn-bounds _ ,transform))
              ,pattern)))
 
+(pcase-defmacro conn-bounds-thing (pattern)
+  `(and (pred conn-bounds-p)
+        (app conn-bounds-thing ,pattern)))
+
 (defun conn-transform-bounds (bounds transforms)
   "Transform BOUNDS with TRANSFORMS.
 

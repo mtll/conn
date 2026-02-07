@@ -2543,7 +2543,7 @@ append to that place."
        (cl-call-next-method)
        (when register
          (setf delete nil)))
-      ((and 'separator (guard append))
+      ('separator
        (cl-call-next-method)))))
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
@@ -2553,15 +2553,11 @@ append to that place."
                        (separator (conn-kill-how-argument-separator arg)))
     (mapcar #'conn-argument-display
             (list append
-                  (and (conn-argument-value append) separator)
+                  (when (or (conn-argument-value append)
+                            (conn-argument-value separator))
+                    separator)
                   register
                   delete))))
-
-(cl-defmethod conn-argument-extract-value ((arg conn-kill-how-argument))
-  (unless (conn-argument-value (conn-kill-how-argument-append arg))
-    (setf (conn-argument-value (conn-kill-how-argument-separator arg))
-          nil))
-  (cl-call-next-method))
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
@@ -2851,6 +2847,40 @@ hook, which see."
                                    reformat
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
+
+(cl-defmethod conn-kill-thing-do ((cmd (conn-thing conn-things-in-region))
+                                  arg
+                                  transform
+                                  &optional
+                                  append
+                                  delete
+                                  register
+                                  separator
+                                  reformat
+                                  check-bounds)
+  (pcase (conn-bounds-of cmd arg)
+    ((and (conn-bounds-get :subregions
+                           `(,@transform
+                             ,@(when check-bounds
+                                 (list 'conn-check-bounds))))
+          (conn-bounds `(,beg . ,end))
+          bounds)
+     (unless delete
+       (let ((strings nil))
+         (pcase-dolist ((conn-bounds `(,beg . ,end)) subregions)
+           (push (filter-buffer-substring beg end) strings))
+         (conn--kill-string
+          (string-join (nreverse strings)
+                       (conn-kill-separator-for-strings
+                        strings
+                        (or separator 'default)))
+          append
+          register
+          separator)))
+     (delete-region beg end)
+     (when reformat
+       (goto-char beg)
+       (funcall conn-kill-reformat-function bounds)))))
 
 (cl-defmethod conn-kill-thing-do ((_cmd (conn-thing expansion))
                                   &rest _)
@@ -3218,30 +3248,15 @@ append to that place."
                        :value register)
    (conn-separator-argument separator)))
 
-(cl-defmethod conn-argument-update ((arg conn-copy-how-argument)
-                                    cmd
-                                    _updater)
-  (pcase cmd
-    ((and 'separator
-          (guard (conn-argument-value
-                  (conn-copy-how-argument-append arg))))
-     (cl-call-next-method))
-    (_ (cl-call-next-method))))
-
 (cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
   (cl-symbol-macrolet ((separator (conn-copy-how-argument-separator arg))
                        (register (conn-copy-how-argument-register arg))
                        (append (conn-copy-how-argument-append arg)))
     (list (conn-argument-display append)
-          (when (conn-argument-value append)
+          (when (or (conn-argument-value append)
+                    (conn-argument-value separator))
             (conn-argument-display separator))
           (conn-argument-display register))))
-
-(cl-defmethod conn-argument-extract-value ((arg conn-copy-how-argument))
-  (unless (conn-argument-value (conn-copy-how-argument-append arg))
-    (setf (conn-argument-value (conn-copy-how-argument-separator arg))
-          nil))
-  (cl-call-next-method))
 
 (defvar-keymap conn-copy-thing-argument-map
   "/" 'buffer-filename
