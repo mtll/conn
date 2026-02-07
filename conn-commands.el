@@ -2436,11 +2436,48 @@ append to that place."
   "%" 'keep-lines
   "j" 'move-end-of-line)
 
-(defvar-keymap conn-append-argument-map
-  "p" 'append)
-
 (defvar-keymap conn-delete-argument-map
   "d" 'delete)
+
+(defvar-keymap conn-kill-append-argument-map
+  "p" 'append
+  "z" 'append-on-repeat)
+
+(cl-defstruct (conn-kill-append-argument
+               (:include conn-cycling-argument)
+               ( :constructor conn-kill-append-argument
+                 (&key
+                  value
+                  (formatter #'conn-format-cycling-argument)
+                  required
+                  annotation
+                  reference
+                  display-prefix
+                  &aux
+                  (name "append")
+                  (choices '(nil append prepend repeat))
+                  (cycling-command 'append)
+                  (keymap conn-kill-append-argument-map)))))
+
+(cl-defmethod conn-argument-update ((arg conn-kill-append-argument)
+                                    cmd
+                                    updater)
+  (pcase cmd
+    ('append-on-repeat
+     (conn-threadf<- (conn-cycling-argument-value arg)
+       (eq 'repeat)
+       not
+       (and 'repeat))
+     (funcall updater arg))
+    (_ (cl-call-next-method))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kill-append-argument)
+                                       (_sym (eql append-on-repeat)))
+  t)
+
+(cl-defmethod conn-argument-display ((_arg conn-kill-append-argument))
+  (concat (substitute-command-keys "\\[append-on-repeat], ")
+          (cl-call-next-method)))
 
 (cl-defstruct (conn-kill-how-argument
                (:include conn-composite-argument)
@@ -2470,11 +2507,7 @@ append to that place."
                           'delete
                           conn-delete-argument-map
                           delete)
-   (conn-cycling-argument "append"
-                          '(nil append prepend repeat)
-                          'append
-                          :keymap conn-append-argument-map
-                          :value append)
+   (conn-kill-append-argument :value append)
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
@@ -2495,7 +2528,7 @@ append to that place."
                        (separator (conn-argument-value
                                    (conn-kill-how-argument-separator arg))))
     (pcase cmd
-      ('append
+      ((or 'append 'append-on-repeat)
        (cl-call-next-method)
        (if append
            (setf delete nil)
@@ -2609,7 +2642,8 @@ append to that place."
                         register
                         separator
                         reformat
-                        check-bounds)
+                        check-bounds
+                        repeat-count)
   "Kill a region defined by CMD, ARG, and TRANSFORM.
 
 For how the region is determined using CMD, ARG, and TRANSFORM see
@@ -2647,19 +2681,25 @@ hook, which see."
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform append delete
-           register separator fixup check-bounds)))
+           register separator fixup check-bounds
+           (prefix-numeric-value current-prefix-arg))))
   (cl-assert (not (and delete (or register append))))
   (cl-callf and reformat (null transform))
-  (conn-kill-thing-do cmd
-                      arg
-                      transform
-                      append
-                      delete
-                      register
-                      separator
-                      reformat
-                      check-bounds)
-  (setq this-command 'conn-kill-thing))
+  (let ((last-command last-command)
+        (conn-repeating-command conn-repeating-command))
+    (dotimes (_ (abs repeat-count))
+      (conn-kill-thing-do cmd
+                          arg
+                          transform
+                          append
+                          delete
+                          register
+                          separator
+                          reformat
+                          check-bounds)
+      (setq this-command 'conn-kill-thing
+            last-command 'conn-kill-thing
+            conn-repeating-command t))))
 
 (cl-defgeneric conn-kill-reformat (bounds))
 
@@ -3169,11 +3209,7 @@ append to that place."
   (cl-assert (memq append '(nil append prepend)))
   (cl-assert (not (and separator (null append))))
   (conn--copy-how-argument
-   (conn-cycling-argument "append"
-                          '(nil append prepend repeat)
-                          'append
-                          :keymap conn-append-argument-map
-                          :value append)
+   (conn-kill-append-argument :value append)
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
