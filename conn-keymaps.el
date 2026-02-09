@@ -134,7 +134,7 @@
 
 (define-keymap
   :keymap conn-search-map
-  "F" 'conn-dispatch-thing-at-point
+  "f" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-on-highlights
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward

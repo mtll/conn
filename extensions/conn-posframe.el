@@ -497,9 +497,7 @@
        bufname
        :string (propertize string 'face 'conn-posframe-window-label-face)
        :poshandler conn-posframe-window-label-poshandler)
-      (let ((overlay (make-overlay (window-start)
-                                   (window-end)
-                                   (current-buffer))))
+      (let ((overlay (make-overlay (point-min) (point-max) (current-buffer))))
         (overlay-put overlay 'window window)
         (overlay-put overlay 'face 'shadow)
         (conn--make-posframe-window-label string window bufname overlay)))))

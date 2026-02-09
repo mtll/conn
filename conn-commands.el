@@ -2501,7 +2501,6 @@ append to that place."
            (side-effect-free t))
   (cl-assert (memq append '(nil append prepend repeat)))
   (cl-assert (not (and delete (or append register))))
-  (cl-assert (not (and separator (null append))))
   (conn--kill-how-argument
    (conn-boolean-argument "delete"
                           'delete
@@ -3237,7 +3236,6 @@ append to that place."
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq append '(nil append prepend)))
-  (cl-assert (not (and separator (null append))))
   (conn--copy-how-argument
    (conn-kill-append-argument :value append)
    (conn-read-argument "register"
@@ -3346,6 +3344,27 @@ that place."
      (conn--kill-region beg end nil append register separator)
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))))
+
+(cl-defmethod conn-copy-thing-do ((cmd (conn-thing conn-things-in-region))
+                                  arg
+                                  &optional
+                                  transform
+                                  append
+                                  register
+                                  separator)
+  (pcase (conn-bounds-of cmd arg)
+    ((conn-bounds-get :subregions transform)
+     (let ((strings nil))
+       (pcase-dolist ((conn-bounds `(,beg . ,end)) subregions)
+         (push (filter-buffer-substring beg end) strings))
+       (conn--kill-string
+        (string-join (nreverse strings)
+                     (conn-kill-separator-for-strings
+                      strings
+                      (or separator 'default)))
+        append
+        register
+        separator)))))
 
 (cl-defmethod conn-copy-thing-do ((_cmd (eql copy-matching-lines))
                                   arg

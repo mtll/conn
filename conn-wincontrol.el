@@ -222,7 +222,8 @@
   "j" 'previous-buffer
   "l" 'next-buffer
   "J" 'bury-buffer
-  "L" 'unbury-buffer)
+  "L" 'unbury-buffer
+  "e" 'delete-other-windows)
 
 (defconst conn--wincontrol-map-alist
   `((conn-wincontrol-one-command-mode . ,conn-wincontrol-one-command-map)

@@ -199,12 +199,12 @@
   "B" 'outline-show-branches
   "c" (conn-remap-key "C-c" t)
   "d" 'conn-kill-thing
-  "w h" 'outline-hide-by-heading-regexp
-  "w s" 'outline-show-by-heading-regexp
+  "h h" 'outline-hide-by-heading-regexp
+  "h s" 'outline-show-by-heading-regexp
   "e" 'conn-pop-state
   "f" 'conn-dispatch
   "g" (conn-remap-key "M-g" t)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "i" 'outline-previous-visible-heading
   "j" 'outline-backward-same-level
   "k" 'outline-next-visible-heading
@@ -213,7 +213,7 @@
   "n" 'outline-hide-leaves
   "o" 'outline-hide-other
   "q" 'conn-transpose-things
-  "s" (conn-remap-key "M-s" t)
+  "s" conn-search-remap
   "t" 'outline-hide-body
   "u" 'outline-up-heading
   "x" (conn-remap-key "C-x" t)
@@ -293,7 +293,7 @@
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
   "<conn-dired-search-map> q" 'dired-do-find-regexp
   "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   ;; "A" 'dired-find-alternate-file
@@ -315,7 +315,7 @@
   "M-TAB" 'dired-kill-subdir
   "<backtab>" 'dired-hide-all
   "C-<tab>" 'dired-hide-subdir
-  "w" 'dired-do-kill-lines
+  "h" 'dired-do-kill-lines
   "s" conn-dired-search-remap
   "r" conn-dired-regexp-remap
   "," conn-dired-mark-remap
@@ -539,7 +539,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
   ";" 'conn-wincontrol
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "M-?" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
@@ -559,7 +559,7 @@
   "d" 'diff-revert-and-kill-hunk
   "u" 'diff-context->unified
   "U" 'diff-unified->context
-  "w" 'diff-ignore-whitespace-hunk
+  "h" 'diff-ignore-whitespace-hunk
   "m" 'next-error-follow-minor-mode
   "f" 'diff-refine-hunk
   "g" 'diff-refresh-hunk
@@ -590,12 +590,12 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
   "M-?" 'conn-magit-quick-ref
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "," 'magit-dispatch
   "i" 'magit-section-backward
   "k" 'magit-section-forward
   "d" 'magit-delete-thing
-  "w" 'magit-diff
+  "h" 'magit-diff
   "p" 'magit-reset-quickly
   "n" 'magit-gitignore
   "`" 'conn-wincontrol-mru-window
@@ -753,7 +753,7 @@
   "M-DEL" 'ibuffer-unmark-all-marks
   "f" 'conn-ibuffer-dispatch-state
   "M-?" 'conn-ibuffer-quick-ref
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   ";" 'conn-wincontrol
@@ -769,11 +769,11 @@
   "n" 'conn-ibuffer-filter-prefix
   "k" 'ibuffer-forward-line
   "i" 'ibuffer-backward-line
-  "w" 'ibuffer-do-kill-lines
+  "h" 'ibuffer-do-kill-lines
   "u" 'ibuffer-do-kill-on-deletion-marks
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
-  "s" (conn-remap-key "M-s" t)
+  "s" conn-search-remap
   "t a" 'ibuffer-do-sort-by-alphabetic
   "t f" 'ibuffer-do-sort-by-filename/process
   "t i" 'ibuffer-invert-sorting
@@ -900,11 +900,11 @@
   "I" 'scroll-down-command
   "i" 'previous-line
   "k" 'next-line
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   ";" 'conn-wincontrol
   "j" 'bookmark-bmenu-select
   "f" 'conn-bmenu-dispatch-state
-  "w" 'bookmark-bmenu-this-window
+  "h" 'bookmark-bmenu-this-window
   "D" 'bookmark-bmenu-delete-backwards
   "C-d" 'bookmark-bmenu-unmark
   "M-DEL" 'bookmark-bmenu-unmark-all
@@ -937,7 +937,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'help-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -954,7 +954,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'helpful-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -1023,7 +1023,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
   "M-?" 'conn-info-quick-ref
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward
   "L" 'Info-next
@@ -1050,7 +1050,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'treemacs-select-window
@@ -1065,7 +1065,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -1082,7 +1082,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
@@ -1099,7 +1099,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
@@ -1118,7 +1118,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
@@ -1135,7 +1135,7 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
-  "h" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command
   ";" 'conn-wincontrol
   "i" 'pdf-view-scroll-down-or-previous-page
   "k" 'pdf-view-scroll-up-or-next-page
