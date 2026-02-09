@@ -110,27 +110,8 @@
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
-(defvar-keymap conn-buffer-repeat-map
-  :repeat t
-  "{" 'conn-bury-buffer
-  "}" 'conn-unbury-buffer
-  "[" 'conn-previous-buffer
-  "]" 'conn-next-buffer)
-
 (defvar-keymap conn-buffer-one-command-repeat-map
   :repeat t
-  "J" 'bury-buffer
-  "L" 'unbury-buffer
-  "l" 'next-buffer
-  "j" 'previous-buffer)
-
-(defvar-keymap conn-kill-buffer-repeat-map
-  :repeat ( :enter (conn-kill-this-buffer)
-            :continue (bury-buffer
-                       unbury-buffer
-                       next-buffer
-                       previous-buffer))
-  "k" 'conn-kill-this-buffer
   "J" 'bury-buffer
   "L" 'unbury-buffer
   "l" 'next-buffer
@@ -607,6 +588,7 @@
 
 ;;;;; Window Scroll Commands
 
+;;;###autoload
 (defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -619,6 +601,7 @@
                    (command-remapping #'conn-scroll-down)
                    #'conn-scroll-down)))))
 
+;;;###autoload
 (defun conn-wincontrol-other-window-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -631,6 +614,7 @@
                    (command-remapping #'conn-scroll-up)
                    #'conn-scroll-up)))))
 
+;;;###autoload
 (defun conn-wincontrol-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -640,6 +624,7 @@
              next-screen-context-lines)))
     (conn-scroll-down)))
 
+;;;###autoload
 (defun conn-wincontrol-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -727,9 +712,17 @@ Operates with the selected windows parent window."
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise)))
 
+(defvar-keymap conn-kill-buffer-repeat-map
+  "k" 'conn-kill-this-buffer
+  "J" 'conn-bury-buffer
+  "L" 'conn-unbury-buffer
+  "l" 'conn-next-buffer
+  "j" 'conn-previous-buffer)
+
 ;;;###autoload
 (defun conn-kill-this-buffer ()
   (interactive)
-  (kill-buffer))
+  (kill-buffer)
+  (set-transient-map conn-kill-buffer-repeat-map t nil t))
 
 (provide 'conn-wincontrol)

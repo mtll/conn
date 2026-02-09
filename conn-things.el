@@ -119,7 +119,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                 `(progn
                    (cl-check-type ,val conn--thing)
                    (put ,symbol :conn-thing ,val))))))
-  (inline-quote (get ,symbol :conn-thing)))
+  (inline-quote
+   (get ,symbol :conn-thing)))
 
 (cl-defstruct (conn-bounds
                (:constructor conn--make-bounds)
