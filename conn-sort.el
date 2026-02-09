@@ -133,33 +133,6 @@
                         reverse
                         fold-case))
 
-(cl-defmethod conn-sort-things-do ((_thing (conn-thing conn-things-in-region))
-                                   arg
-                                   _transform
-                                   &optional
-                                   _reverse
-                                   _fold-case)
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Things in Region"
-                   :prefix arg)
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument))
-       (reverse
-        (conn-boolean-argument "reverse"
-                               'reverse
-                               conn-sort-reverse-map))
-       (fold-case
-        (conn-boolean-argument "fold case"
-                               'sort-fold-case
-                               conn-sort-fold-case-map
-                               (bound-and-true-p sort-fold-case))))
-    (conn--sort-in-bounds (conn-get-things-in-region
-                           thing arg transform
-                           (region-beginning) (region-end))
-                          nil
-                          reverse
-                          fold-case)))
-
 (cl-defmethod conn-sort-things-do ((_thing (eql sort-numeric-fields))
                                    arg
                                    transform

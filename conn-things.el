@@ -636,11 +636,13 @@ command moves over."
                ( :constructor conn-thing-argument
                  (&optional
                   recursive-edit
+                  in-region
                   &aux
                   (required t)))
                ( :constructor conn-thing-argument-dwim
                  (&optional
                   recursive-edit
+                  in-region
                   &aux
                   (required t)
                   (value (when (use-region-p)
@@ -649,6 +651,7 @@ command moves over."
                ( :constructor conn-thing-argument-dwim-rectangle
                  (&optional
                   recursive-edit
+                  in-region
                   &aux
                   (required t)
                   (value
@@ -659,7 +662,8 @@ command moves over."
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode))))))
   "Thing argument for thing commands."
-  (recursive-edit nil))
+  (recursive-edit nil :type boolean :read-only t)
+  (in-region nil :type boolean))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
   (if (conn-thing-argument-recursive-edit arg)
@@ -669,11 +673,15 @@ command moves over."
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     cmd updater)
-  (when (conn-argument-predicate arg cmd)
-    (setf (conn-argument-set-flag arg) t
-          (conn-argument-value arg)
-          (list cmd (conn-read-args-consume-prefix-arg)))
-    (funcall updater arg)))
+  (pcase cmd
+    ('conn-things-in-region
+     (cl-callf not (conn-thing-argument-in-region arg))
+     (funcall updater))
+    ((guard (conn-argument-predicate arg cmd))
+     (setf (conn-argument-set-flag arg) t
+           (conn-argument-value arg)
+           (list cmd (conn-read-args-consume-prefix-arg)))
+     (funcall updater))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -686,6 +694,12 @@ command moves over."
 (cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
                                        (_sym (eql recursive-edit)))
   (conn-thing-argument-recursive-edit arg))
+
+(cl-defmethod conn-argument-display ((arg conn-thing-argument))
+  (when (conn-thing-argument-in-region arg)
+    (concat (substitute-command-keys "\\[conn-things-in-region] ")
+            (propertize "in-region"
+                        'face 'conn-argument-active-face))))
 
 (cl-defmethod conn-argument-completion-annotation ((arg conn-thing-argument)
                                                    sym)
@@ -703,15 +717,23 @@ command moves over."
       (_ " (<thing arg>)"))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
-  (when-let* ((cmd (conn-argument-value arg)))
-    ;; Autoload cmd here so that any `conn-bounds-of' methods defined
-    ;; for cmd are get loaded.
-    (when-let* ((fundef (and (symbolp cmd)
-                             (fboundp cmd)
-                             (symbol-function cmd)))
-                (_ (autoloadp fundef)))
-      (autoload-do-load fundef cmd))
-    cmd))
+  (pcase (conn-thing-argument-value arg)
+    ((and val `(,cmd ,prefix))
+     (when-let* ((fundef (and (symbolp cmd)
+                              (fboundp cmd)
+                              (symbol-function cmd)))
+                 (_ (autoloadp fundef)))
+       (autoload-do-load fundef cmd))
+     (if (conn-thing-argument-in-region arg)
+         (list (conn-anonymous-thing
+                 '(conn-things-in-region)
+                 :bounds-op ( :method (_self arg)
+                              (conn-get-things-in-region
+                               cmd arg nil
+                               (region-beginning)
+                               (region-end))))
+               prefix)
+       val))))
 
 ;;;;;; Subregions
 
@@ -1085,6 +1107,8 @@ check bounds in the current buffer."))
                           property))))))
 
 (pcase-defmacro conn-bounds (pattern &optional transform)
+  "Pcase pattern that match the bounds of a `conn-bounds' object.
+Optionally transform the bounds with TRANSFORM."
   `(and (pred conn-bounds-p)
         (app ,(static-if (< emacs-major-version 30)
                   `(pcase--flip conn-bounds ,transform)
@@ -1092,6 +1116,7 @@ check bounds in the current buffer."))
              ,pattern)))
 
 (pcase-defmacro conn-bounds-thing (pattern)
+  "Pcase pattern that match the thing of a `conn-bounds' object."
   `(and (pred conn-bounds-p)
         (app conn-bounds-thing ,pattern)))
 

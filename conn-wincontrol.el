@@ -124,6 +124,18 @@
   "l" 'next-buffer
   "j" 'previous-buffer)
 
+(defvar-keymap conn-kill-buffer-repeat-map
+  :repeat ( :enter (conn-kill-this-buffer)
+            :continue (bury-buffer
+                       unbury-buffer
+                       next-buffer
+                       previous-buffer))
+  "k" 'conn-kill-this-buffer
+  "J" 'bury-buffer
+  "L" 'unbury-buffer
+  "l" 'next-buffer
+  "j" 'previous-buffer)
+
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits

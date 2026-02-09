@@ -1947,11 +1947,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (update-args newcmd))
                (let (valid)
                  (cl-loop for as on arguments
-                          do (conn-argument-update (car as)
-                                                   cmd
-                                                   (lambda (newval)
-                                                     (setf (car as) newval
-                                                           valid t))))
+                          do (conn-argument-update
+                              (car as) cmd
+                              (lambda (&optional newval)
+                                (when newval (setf (car as) newval))
+                                (setf valid t))))
                  (unless valid
                    (setf conn--read-args-error-message
                          (format "Invalid Command <%s>" cmd)))))))
