@@ -630,7 +630,9 @@ command moves over."
 ;;;;; Thing Args
 
 (defvar-keymap conn-recursive-edit-thing-map
-  "`" 'recursive-edit)
+  "R" 'recursive-edit
+  "`" 'recursive-edit
+  "V" 'recursive-edit-mark)
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
@@ -694,6 +696,10 @@ command moves over."
 
 (cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
                                        (_sym (eql recursive-edit)))
+  (conn-thing-argument-recursive-edit arg))
+
+(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
+                                       (_sym (eql recursive-edit-mark)))
   (conn-thing-argument-recursive-edit arg))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-argument))
@@ -1510,6 +1516,17 @@ the point is within the region then the entire region is returned.")))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-mark))
+                              _arg)
+  (unwind-protect
+      (progn
+        (conn-bounds-of-recursive-edit-mode 1)
+        (conn-with-recursive-stack 'conn-command-state
+          (call-interactively #'conn-mark-thing)
+          (recursive-edit))
+        (conn-bounds-of 'region nil))
+    (conn-bounds-of-recursive-edit-mode -1)))
+
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
   (setq arg (prefix-numeric-value arg))
@@ -1922,7 +1939,9 @@ Only the background color is used."
 
 (conn-register-thing-commands
  '(recursive-edit-thing) nil
- 'recursive-edit 'exit-recursive-edit)
+ 'recursive-edit
+ 'recursive-edit-mark
+ 'exit-recursive-edit)
 
 (conn-register-thing
  'isearch
