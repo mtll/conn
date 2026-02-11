@@ -569,12 +569,15 @@
 
 ;;;; Adjust Surround
 
+(conn-define-state conn-adjust-surround-state (conn-change-surround-state)
+  :lighter "ADJUST")
+
 (defvar-keymap conn-surround-trim-argument-map
   "q" 'trim)
 
 (defun conn-adjust-surround ()
   (interactive)
-  (conn-read-args (conn-change-surround-state
+  (conn-read-args (conn-adjust-surround-state
                    :prompt "Adjust Surrounding")
       ((`(,thing ,arg) (conn-change-surround-argument))
        (transform (conn-transform-argument))
@@ -611,9 +614,12 @@
                    (funcall cleanup (if success :accept :cancel))))))
             (_ (user-error "No surround found"))))))))
 
+(conn-define-state conn-surround-raise-state (conn-read-thing-state)
+  :lighter "RAISE")
+
 (defun conn-surround-raise ()
   (interactive)
-  (conn-read-args (conn-read-thing-state
+  (conn-read-args (conn-surround-raise-state
                    :prompt "Thing"
                    :prefix current-prefix-arg)
       ((`(,thing ,arg) (conn-thing-argument-dwim))
