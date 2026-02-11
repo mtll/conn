@@ -88,7 +88,6 @@ function may setup any other necessary state as well.")
                (:constructor nil)
                ( :constructor conn--make-state
                  (name
-                  docstring
                   parents
                   &aux
                   (minor-mode-depths (make-hash-table :test 'eq))
@@ -98,10 +97,9 @@ function may setup any other necessary state as well.")
                (:conc-name conn-state--)
                (:copier nil))
   (name nil :type symbol :read-only t)
-  (docstring nil :type string :read-only t)
   (parents nil :type (list-of symbol))
   (children nil :type (list-of symbol))
-  (properties nil :type list)
+  (properties nil :type alist)
   (keymap nil :type (or nil keymap))
   (minor-mode-depths nil :type hash-table :read-only t)
   (minor-mode-sort-tick nil :type (or nil integer))
@@ -116,7 +114,8 @@ function may setup any other necessary state as well.")
                 `(progn
                    (cl-check-type ,val conn-state)
                    (put ,state :conn-state ,val))))))
-  (inline-quote (get ,state :conn-state)))
+  (inline-quote
+   (get ,state :conn-state)))
 
 (define-inline conn-state-name-p (state)
   "Return non-nil if STATE is a conn-state."
@@ -1129,7 +1128,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
 
 ;;;;; Definitions
 
-(defun conn--define-state (name docstring parents properties)
+(defun conn--define-state (name parents properties)
   (let ((props (cl-loop with kvs = properties
                         for (k v) on kvs by #'cddr
                         collect (cons k v))))
@@ -1154,7 +1153,7 @@ COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
               (dolist (mode new-mode-maps)
                 (conn--ensure-minor-mode-map child mode))
               (conn--rebuild-state-keymaps child))))
-      (let ((state-obj (conn--make-state name docstring parents)))
+      (let ((state-obj (conn--make-state name parents)))
         (setf (conn--find-state name) state-obj
               (conn-state--properties state-obj) props)
         (dolist (parent parents)
@@ -1216,7 +1215,6 @@ can only be changed by redefining a state and are not inherited.
         nil "Cycle detected in %s inheritance hierarchy" ',name)
        (conn--define-state
         ',name
-        ,docstring
         (list ,@(mapcar (lambda (p) `',(or (car-safe p) p)) parents))
         (list ,@(cl-loop for (key value) on properties by #'cddr
                          nconc (pcase key
