@@ -631,8 +631,7 @@ command moves over."
 
 (defvar-keymap conn-recursive-edit-thing-map
   "R" 'recursive-edit
-  "`" 'recursive-edit
-  "V" 'recursive-edit-mark)
+  "r" 'recursive-edit-mark)
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
@@ -812,7 +811,7 @@ with a prefix argument then set the default value of reformat in the
 current buffer."))
 
 (defvar-keymap conn-reformat-argument-map
-  "r" 'reformat)
+  "TAB" 'reformat)
 
 (defvar conn-reformat-default t)
 
@@ -874,7 +873,7 @@ being killed is valid.  With a prefix argument set the default value for
 check bounds in the current buffer."))
 
 (defvar-keymap conn-check-bounds-argument-map
-  "!" 'check-bounds)
+  "q" 'check-bounds)
 
 (defvar conn-check-bounds-default t)
 
@@ -926,9 +925,9 @@ check bounds in the current buffer."))
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
-  "x" 'conn-bounds-last
-  "X" 'conn-transform-reset
-  "t" 'conn-bounds-upto)
+  "t" 'conn-bounds-last
+  "T" 'conn-bounds-upto
+  "X" 'conn-transform-reset)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)
@@ -1523,6 +1522,7 @@ the point is within the region then the entire region is returned.")))
         (conn-bounds-of-recursive-edit-mode 1)
         (conn-with-recursive-stack 'conn-command-state
           (call-interactively #'conn-mark-thing)
+          (conn--bounds-of-recursive-edit-message)
           (recursive-edit))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))

@@ -1291,7 +1291,7 @@ selected by dispatch with it."))
        :restrict-windows restrict-windows))))
 
 (defvar-keymap conn-swap-argument-map
-  "w" 'swap)
+  "~" 'swap)
 
 (defun conn-yank-replace (thing
                           arg
@@ -2446,8 +2446,8 @@ append to that place."
   "d" 'delete)
 
 (defvar-keymap conn-kill-append-argument-map
-  "p" 'append
-  "z" 'append-on-repeat)
+  "z" 'append
+  "Z" 'append-on-repeat)
 
 (cl-defstruct (conn-kill-append-argument
                (:include conn-cycling-argument)
@@ -3264,7 +3264,7 @@ append to that place."
 
 (defvar-keymap conn-copy-thing-argument-map
   "/" 'buffer-filename
-  "P" 'project-filename
+  "p" 'project-filename
   ">" 'copy-matching-lines)
 
 (cl-defstruct (conn-copy-thing-argument
