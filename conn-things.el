@@ -674,7 +674,8 @@ command moves over."
     (conn-thing-argument-keymap arg)))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    cmd updater)
+                                    cmd
+                                    updater)
   (pcase cmd
     ('conn-things-in-region
      (cl-callf not (conn-thing-argument-in-region arg))
@@ -684,6 +685,40 @@ command moves over."
            (conn-argument-value arg)
            (list cmd (conn-read-args-consume-prefix-arg)))
      (funcall updater))))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-argument)
+                                    (cmd (conn-thing kbd-macro))
+                                    updater)
+  (setf (conn-argument-set-flag arg) t
+        (conn-argument-value arg)
+        (list (conn-anonymous-thing
+                '(kbd-macro)
+                :bounds-op
+                ( :method (self _arg)
+                  (let ((buffer-read-only t)
+                        (buf (current-buffer))
+                        (conn-command-history conn-command-history))
+                    (if-let* ((macro (conn-thing-get self :kmacro)))
+                        (conn-with-recursive-stack 'conn-command-state
+                          (execute-kbd-macro macro))
+                      (let ((last-kbd-macro nil))
+                        (start-kbd-macro nil)
+                        (unwind-protect
+                            (conn-with-recursive-stack 'conn-command-state
+                              (recursive-edit))
+                          (if defining-kbd-macro
+                              (end-kbd-macro)
+                            (error "Not defining kbd macro"))
+                          (setf (conn-thing-get self :kmacro) last-kbd-macro))))
+                    (if (eq buf (current-buffer))
+                        (conn-make-bounds
+                         self nil
+                         (cons (region-beginning) (region-end))
+                         :subregions (cl-loop for r in (region-bounds)
+                                              collect (conn-make-bounds cmd nil r)))
+                      (error "Buffer change during keyboard macro")))))
+              nil))
+  (funcall updater))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -1294,39 +1329,6 @@ Returns a `conn-bounds' struct."
 (cl-defmethod conn-bounds-of ((cmd (conn-thing visible))
                               arg)
   (conn-make-bounds cmd arg (cons (window-start) (window-end))))
-
-(defvar conn--bounds-last-kbd-macro nil)
-
-(cl-defmethod conn-bounds-of ((cmd (conn-thing kbd-macro))
-                              _arg)
-  (let ((buf (current-buffer)))
-    (save-mark-and-excursion
-      (pcase cmd
-        ((and (or 'start-kbd-macro
-                  'kmacro-start-macro
-                  'kmacro-start-macro-or-insert-counter)
-              (guard (not (and (fboundp 'repeat-is-really-this-command)
-                               (repeat-is-really-this-command)))))
-         (let ((buffer-read-only t)
-               (last-kbd-macro conn--bounds-last-kbd-macro))
-           (start-kbd-macro nil)
-           (unwind-protect
-               (conn-with-recursive-stack 'conn-command-state
-                 (recursive-edit))
-             (if defining-kbd-macro
-                 (end-kbd-macro)
-               (error "Not defining kbd macro"))
-             (setq conn--bounds-last-kbd-macro last-kbd-macro))))
-        (_
-         (conn-with-recursive-stack 'conn-command-state
-           (execute-kbd-macro conn--bounds-last-kbd-macro))))
-      (if (eq buf (current-buffer))
-          (conn-make-bounds
-           cmd nil
-           (cons (region-beginning) (region-end))
-           :subregions (cl-loop for r in (region-bounds)
-                                collect (conn-make-bounds cmd nil r)))
-        (error "Buffer change during keyboard macro")))))
 
 ;;;;; Bounds Transformations
 
