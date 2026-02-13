@@ -25,6 +25,7 @@
 
 (declare-function conn--end-of-inner-line-1 "conn-commands")
 (declare-function conn-exchange-mark-command "conn-command")
+(declare-function conn-mark-thing "conn-command")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 
@@ -614,442 +615,6 @@ command moves over."
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for (conn-thing THING) specializers."
   (list conn--thing-generalizer))
-
-;;;; Read Things
-
-(cl-defgeneric conn-thing-pretty-print (thing)
-  (declare (conn-anonymous-thing-property :pretty-print)
-           (side-effect-free t))
-  (:method (thing) (format "%s" thing))
-  (:method ((thing symbol)) (copy-sequence (symbol-name thing)))
-  ( :method ((thing conn--anonymous-thing))
-    (format "<anonymous %s %s>"
-            (conn-anonymous-thing-parents thing)
-            (substring (secure-hash 'sha1 (prin1-to-string thing)) 0 8))))
-
-;;;;; Thing Args
-
-(defvar-keymap conn-recursive-edit-thing-map
-  "R" 'recursive-edit
-  "r" 'recursive-edit-mark)
-
-(cl-defstruct (conn-thing-argument
-               (:include conn-argument)
-               ( :constructor conn-thing-argument
-                 (&optional
-                  recursive-edit
-                  in-region
-                  &aux
-                  (required t)))
-               ( :constructor conn-thing-argument-dwim
-                 (&optional
-                  recursive-edit
-                  in-region
-                  &aux
-                  (required t)
-                  (value (when (use-region-p)
-                           (list 'region nil)))
-                  (set-flag (use-region-p))))
-               ( :constructor conn-thing-argument-dwim-rectangle
-                 (&optional
-                  recursive-edit
-                  in-region
-                  &aux
-                  (required t)
-                  (value
-                   (when (and (use-region-p)
-                              (bound-and-true-p rectangle-mark-mode))
-                     (list 'region nil)))
-                  (set-flag
-                   (and (use-region-p)
-                        (bound-and-true-p rectangle-mark-mode))))))
-  "Thing argument for thing commands."
-  (recursive-edit nil :type boolean :read-only t)
-  (in-region nil :type boolean))
-
-(cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
-  (if (conn-thing-argument-recursive-edit arg)
-      (make-composed-keymap conn-recursive-edit-thing-map
-                            (conn-thing-argument-keymap arg))
-    (conn-thing-argument-keymap arg)))
-
-(cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    cmd
-                                    updater)
-  (pcase cmd
-    ('conn-things-in-region
-     (cl-callf not (conn-thing-argument-in-region arg))
-     (funcall updater))
-    ((guard (conn-argument-predicate arg cmd))
-     (setf (conn-argument-set-flag arg) t
-           (conn-argument-value arg)
-           (list cmd (conn-read-args-consume-prefix-arg)))
-     (funcall updater))))
-
-(cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    (cmd (conn-thing kbd-macro))
-                                    updater)
-  (setf (conn-argument-set-flag arg) t
-        (conn-argument-value arg)
-        (list (conn-anonymous-thing
-                '(kbd-macro)
-                :bounds-op
-                ( :method (self _arg)
-                  (let ((buffer-read-only t)
-                        (buf (current-buffer))
-                        (conn-command-history conn-command-history))
-                    (if-let* ((macro (conn-thing-get self :kmacro)))
-                        (conn-with-recursive-stack 'conn-command-state
-                          (execute-kbd-macro macro))
-                      (let ((last-kbd-macro nil))
-                        (start-kbd-macro nil)
-                        (unwind-protect
-                            (conn-with-recursive-stack 'conn-command-state
-                              (recursive-edit))
-                          (if defining-kbd-macro
-                              (end-kbd-macro)
-                            (error "Not defining kbd macro"))
-                          (setf (conn-thing-get self :kmacro) last-kbd-macro))))
-                    (if (eq buf (current-buffer))
-                        (conn-make-bounds
-                         self nil
-                         (cons (region-beginning) (region-end))
-                         :subregions (cl-loop for r in (region-bounds)
-                                              collect (conn-make-bounds cmd nil r)))
-                      (error "Buffer change during keyboard macro")))))
-              nil))
-  (funcall updater))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
-                                       (_sym (conn-thing t)))
-  t)
-
-(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
-                                       (_sym (conn-thing dispatch)))
-  (not (or defining-kbd-macro executing-kbd-macro)))
-
-(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
-                                       (_sym (eql recursive-edit)))
-  (conn-thing-argument-recursive-edit arg))
-
-(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
-                                       (_sym (eql recursive-edit-mark)))
-  (conn-thing-argument-recursive-edit arg))
-
-(cl-defmethod conn-argument-display ((arg conn-thing-argument))
-  (when (conn-thing-argument-in-region arg)
-    (concat (substitute-command-keys "\\[conn-things-in-region] ")
-            (propertize "in-region"
-                        'face 'conn-argument-active-face))))
-
-(cl-defmethod conn-argument-completion-annotation ((arg conn-thing-argument)
-                                                   sym)
-  (when (conn-argument-predicate arg sym)
-    (pcase sym
-      ((and (pred conn-anonymous-thing-p)
-            (app conn-anonymous-thing-parents thing))
-       (format " (<anonymous %s>)" thing))
-      ((let (and thing (pred identity))
-         (if (conn-thing-get sym :command)
-             (seq-find #'conn-simple-thing-p
-                       (conn-thing-all-parents sym))
-           (and (conn-thing-p sym) sym)))
-       (format " (%s)" thing))
-      (_ " (<thing arg>)"))))
-
-(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
-  (pcase (conn-thing-argument-value arg)
-    ((and val `(,cmd ,prefix))
-     (when-let* ((fundef (and (symbolp cmd)
-                              (fboundp cmd)
-                              (symbol-function cmd)))
-                 (_ (autoloadp fundef)))
-       (autoload-do-load fundef cmd))
-     (if (conn-thing-argument-in-region arg)
-         (list (conn-anonymous-thing
-                 '(conn-things-in-region)
-                 :bounds-op ( :method (_self arg)
-                              (conn-get-things-in-region
-                               cmd arg nil
-                               (region-beginning)
-                               (region-end))))
-               prefix)
-       val))))
-
-;;;;;; Subregions
-
-(defvar conn-subregions-argument-reference
-  (conn-reference-page
-    :depth 70
-    (:heading "Subregions Argument")
-    "If this argument is non-nil then operate on the subregions defined by
-the thing command. By default the subregions of a thing command are the
-individual things that are moved over. For example the subregions of
-`forward-word' with a prefix argument of 3 are the 3 regions containing
-the 3 individual words, as opposed to the single region containing all 3
-words."))
-
-(defvar-keymap conn-subregions-map
-  "~" 'toggle-subregions)
-
-(cl-defstruct (conn-subregions-argument
-               (:include conn-argument)
-               ( :constructor conn-subregions-argument
-                 (&optional
-                  value
-                  &aux
-                  (keymap conn-subregions-map)
-                  (reference conn-subregions-argument-reference)))))
-
-(cl-defmethod conn-argument-update ((arg conn-subregions-argument)
-                                    cmd
-                                    updater)
-  (if (eq cmd 'toggle-subregions)
-      (progn
-        (cl-callf not (conn-argument-value arg))
-        (funcall updater arg))
-    (conn-subregions-default-value cmd arg)))
-
-(cl-defgeneric conn-subregions-default-value (cmd arg)
-  ( :method (_ _) nil))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing conn-things-in-region))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
-                                       (_sym (eql toggle-subregions)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-subregions-argument))
-  (concat (substitute-command-keys "\\[toggle-subregions] ")
-          (propertize "subregions"
-                      'face (when (conn-argument-value arg)
-                              'conn-argument-active-face))))
-
-;;;;;; Reformat Argument
-
-(defvar conn-fixup-whitepace-argument-reference
-  (conn-reference-page
-    :depth 70
-    (:heading "Reformat")
-    "Attempt to reformat the buffer around the killed region.  If toggled
-with a prefix argument then set the default value of reformat in the
-current buffer."))
-
-(defvar-keymap conn-reformat-argument-map
-  "TAB" 'reformat)
-
-(defvar conn-reformat-default t)
-
-(cl-defstruct (conn-reformat-argument
-               (:include conn-argument)
-               ( :constructor conn--reformat-argument
-                 (&optional
-                  value
-                  &aux
-                  (keymap conn-reformat-argument-map)
-                  (reference conn-fixup-whitepace-argument-reference)))))
-
-(define-inline conn-reformat-argument (&optional value)
-  (inline-letevals (value)
-    (inline-quote
-     (unless (and (region-active-p) (null ,value))
-       (conn--reformat-argument
-        (or ,value
-            (and conn-kill-reformat-function
-                 conn-reformat-default)))))))
-
-(cl-defmethod conn-argument-update ((arg conn-reformat-argument)
-                                    cmd updater)
-  (when (eq cmd 'reformat)
-    (cl-callf null (conn-argument-value arg))
-    (when (conn-read-args-consume-prefix-arg)
-      (setq-local conn-reformat-default (conn-argument-value arg)))
-    (funcall updater arg)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
-                                       (_sym (eql reformat)))
-  t)
-
-(cl-defmethod conn-argument-display ((arg conn-reformat-argument))
-  (substitute-command-keys
-   (concat
-    (substitute-command-keys "\\[reformat] ")
-    (if-let* ((ts (conn-argument-value arg)))
-        (propertize
-         "reformat"
-         'face 'eldoc-highlight-function-argument)
-      "reformat"))))
-
-;;;;;; Check Bounds Argument
-
-(defvar conn-check-bounds-functions nil
-  "Abnormal hook to check the bounds of a region before deleting it.
-
-Each function in the hook is called with a single argument, a
-`conn-bounds' struct, and should signal an error if the region should
-not be delete.  The the value returned by each function is ignored.")
-
-(defvar conn-check-bounds-argument-reference
-  (conn-reference-page
-    :depth 70
-    (:heading "Check Bounds Argument")
-    "Toggle running `conn-check-bounds-functions' to ensure that the region
-being killed is valid.  With a prefix argument set the default value for
-check bounds in the current buffer."))
-
-(defvar-keymap conn-check-bounds-argument-map
-  "q" 'check-bounds)
-
-(defvar conn-check-bounds-default t)
-
-(cl-defstruct (conn-check-bounds-argument
-               (:include conn-boolean-argument)
-               ( :constructor conn--check-bounds-argument
-                 (&optional
-                  value
-                  &key
-                  (name "check bounds")
-                  (toggle-command 'check-bounds)
-                  (keymap conn-check-bounds-argument-map)
-                  (reference conn-check-bounds-argument-reference)))))
-
-(define-inline conn-check-bounds-argument (&optional value)
-  (inline-quote
-   (when (cl-loop for h on conn-check-bounds-functions
-                  thereis (pcase h
-                            ('t (default-value 'conn-check-bounds-functions))
-                            ('nil)
-                            (_ t)))
-     (conn--check-bounds-argument (or ,value conn-check-bounds-default)))))
-
-(cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
-                                    _cmd
-                                    _updater)
-  (cl-call-next-method)
-  (when (conn-read-args-consume-prefix-arg)
-    (setq-local conn-check-bounds-default (conn-argument-value arg))))
-
-;;;;;; Thing Transform Argument
-
-(defvar conn-transformations-quick-ref
-  (conn-reference-quote
-    (("upto" conn-bounds-upto)
-     ("after point/exclusive"
-      conn-bounds-after-point
-      conn-bounds-after-point-exclusive)
-     ("trim" conn-bounds-trim)
-     ("last" conn-bounds-last)
-     ("before point/exclusive"
-      conn-bounds-before-point
-      conn-bounds-before-point-exclusive)
-     ("reset" conn-transform-reset))))
-
-(defvar-keymap conn-transform-map
-  "<" 'conn-bounds-trim
-  "a" 'conn-bounds-after-point
-  "A" 'conn-bounds-after-point-exclusive
-  "b" 'conn-bounds-before-point
-  "B" 'conn-bounds-before-point-exclusive
-  "t" 'conn-bounds-last
-  "T" 'conn-bounds-upto
-  "X" 'conn-transform-reset)
-
-(cl-defstruct (conn-transform-argument
-               (:include conn-argument)
-               ( :constructor conn-transform-argument
-                 (&optional
-                  value
-                  &key
-                  (keymap conn-transform-map)
-                  (annotation "transform")))))
-
-(defun conn--transforms-get-references (transforms)
-  (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
-    (conn--with-work-buffer
-      (dolist (tform transforms)
-        (when-let* ((doc (alist-get tform doc-strings)))
-          (let ((pt (point)))
-            (insert (propertize
-                     (concat (get tform :conn-transform-description) ":\n")
-                     'face 'conn-quick-ref-heading-face))
-            (capitalize-region pt (point)))
-          (insert doc "\n")))
-      (when (buffer-modified-p)
-        (substring (buffer-string) 0 -1)))))
-
-(cl-defmethod conn-argument-get-reference ((arg conn-transform-argument))
-  (when-let* ((tforms (conn-argument-value arg))
-              (ref (conn--transforms-get-references tforms)))
-    (conn-reference-page
-      :depth -50
-      (:eval ref)
-      (:heading "Transform Bindings")
-      (:eval (conn-quick-ref-to-cols
-              conn-transformations-quick-ref 3)))))
-
-(cl-defmethod conn-argument-update ((arg conn-transform-argument)
-                                    cmd updater)
-  (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
-    (pcase cmd
-      ('conn-transform-reset
-       (setf transforms nil)
-       (funcall updater arg))
-      ((and (let ts
-              (if (and (symbolp cmd)
-                       (get cmd :conn-bounds-transformation))
-                  (if (memq cmd transforms)
-                      (remq cmd transforms)
-                    (cons cmd transforms))
-                transforms))
-            (guard (not (eq ts transforms))))
-       (setf transforms ts)
-       (funcall updater arg)))))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
-                                       sym)
-  (and (symbolp sym)
-       (get sym :conn-bounds-transformation)))
-
-(cl-defmethod conn-argument-display ((arg conn-transform-argument))
-  (when-let* ((ts (conn-argument-value arg)))
-    (concat
-     "T: "
-     (propertize
-      (mapconcat (lambda (tf)
-                   (or (get tf :conn-transform-description) ""))
-                 ts "∘")
-      'face 'eldoc-highlight-function-argument))))
-
-(cl-defmethod conn-argument-extract-value ((_arg conn-transform-argument))
-  (nreverse (cl-call-next-method)))
-
-;;;;; Read Mover State
-
-(conn-define-state conn-read-thing-state (conn-read-thing-common-state)
-  "A state for reading things."
-  :lighter "THG")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-read-thing-state)
-  "DEL" 'backward-delete-arg
-  "<backspace>" 'backward-delete-arg
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "?" 'reference
-  "M-?" 'reference
-  "C-h" 'help)
-
-(put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
 ;;;; Bounds of Thing
 
@@ -1696,7 +1261,445 @@ the point is within the region then the entire region is returned.")))
      thing arg transform
      (region-beginning) (region-end))))
 
-;;;; Multi Things
+;;;; Pretty Print Thing
+
+(cl-defgeneric conn-thing-pretty-print (thing)
+  (declare (conn-anonymous-thing-property :pretty-print)
+           (side-effect-free t))
+  (:method (thing) (format "%s" thing))
+  (:method ((thing symbol)) (copy-sequence (symbol-name thing)))
+  ( :method ((thing conn--anonymous-thing))
+    (format "<anonymous %s %s>"
+            (conn-anonymous-thing-parents thing)
+            (substring (secure-hash 'sha1 (prin1-to-string thing)) 0 8))))
+
+;;;; Read-Args Arguments
+
+;;;;; Read Thing State
+
+(conn-define-state conn-read-thing-state (conn-read-thing-common-state)
+  "A state for reading things."
+  :lighter "THG")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-thing-state)
+  "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "?" 'reference
+  "M-?" 'reference
+  "C-h" 'help)
+
+(put 'reset-arg :advertised-binding (key-parse "M-DEL"))
+
+;;;;; Thing Argument
+
+(defvar-keymap conn-recursive-edit-thing-map
+  "R" 'recursive-edit
+  "r" 'recursive-edit-mark)
+
+(cl-defstruct (conn-thing-argument
+               (:include conn-argument)
+               ( :constructor conn-thing-argument
+                 (&optional
+                  recursive-edit
+                  in-region
+                  &aux
+                  (required t)))
+               ( :constructor conn-thing-argument-dwim
+                 (&optional
+                  recursive-edit
+                  in-region
+                  &aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))
+               ( :constructor conn-thing-argument-dwim-rectangle
+                 (&optional
+                  recursive-edit
+                  in-region
+                  &aux
+                  (required t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode))))))
+  "Thing argument for thing commands."
+  (recursive-edit nil :type boolean :read-only t)
+  (in-region nil :type boolean))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
+  (if (conn-thing-argument-recursive-edit arg)
+      (make-composed-keymap conn-recursive-edit-thing-map
+                            (conn-thing-argument-keymap arg))
+    (conn-thing-argument-keymap arg)))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-argument)
+                                    cmd
+                                    updater)
+  (pcase cmd
+    ('conn-things-in-region
+     (cl-callf not (conn-thing-argument-in-region arg))
+     (funcall updater))
+    ((guard (conn-argument-predicate arg cmd))
+     (setf (conn-argument-set-flag arg) t
+           (conn-argument-value arg)
+           (list cmd (conn-read-args-consume-prefix-arg)))
+     (funcall updater))))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-argument)
+                                    (cmd (conn-thing kbd-macro))
+                                    updater)
+  (setf (conn-argument-set-flag arg) t
+        (conn-argument-value arg)
+        (list (conn-anonymous-thing
+                (list 'kbd-macro)
+                :bounds-op
+                ( :method (self _arg)
+                  (let ((buffer-read-only t)
+                        (buf (current-buffer))
+                        (conn-command-history conn-command-history))
+                    (if-let* ((macro (conn-thing-get self :kmacro)))
+                        (conn-with-recursive-stack 'conn-command-state
+                          (execute-kbd-macro macro))
+                      (let ((last-kbd-macro nil))
+                        (start-kbd-macro nil)
+                        (unwind-protect
+                            (conn-with-recursive-stack 'conn-command-state
+                              (recursive-edit))
+                          (if defining-kbd-macro
+                              (end-kbd-macro)
+                            (error "Not defining kbd macro"))
+                          (setf (conn-thing-get self :kmacro) last-kbd-macro))))
+                    (if (eq buf (current-buffer))
+                        (conn-make-bounds
+                         self nil
+                         (cons (region-beginning) (region-end))
+                         :subregions (cl-loop for r in (region-bounds)
+                                              collect (conn-make-bounds cmd nil r)))
+                      (error "Buffer change during keyboard macro")))))
+              nil))
+  (funcall updater))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
+                                       (_sym (conn-thing t)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
+                                       (_sym (conn-thing dispatch)))
+  (not (or defining-kbd-macro executing-kbd-macro)))
+
+(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
+                                       (_sym (eql recursive-edit)))
+  (conn-thing-argument-recursive-edit arg))
+
+(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
+                                       (_sym (eql recursive-edit-mark)))
+  (conn-thing-argument-recursive-edit arg))
+
+(cl-defmethod conn-argument-display ((arg conn-thing-argument))
+  (when (conn-thing-argument-in-region arg)
+    (concat (substitute-command-keys "\\[conn-things-in-region] ")
+            (propertize "in-region"
+                        'face 'conn-argument-active-face))))
+
+(cl-defmethod conn-argument-completion-annotation ((arg conn-thing-argument)
+                                                   sym)
+  (when (conn-argument-predicate arg sym)
+    (pcase sym
+      ((and (pred conn-anonymous-thing-p)
+            (app conn-anonymous-thing-parents thing))
+       (format " (<anonymous %s>)" thing))
+      ((let (and thing (pred identity))
+         (if (conn-thing-get sym :command)
+             (seq-find #'conn-simple-thing-p
+                       (conn-thing-all-parents sym))
+           (and (conn-thing-p sym) sym)))
+       (format " (%s)" thing))
+      (_ " (<thing arg>)"))))
+
+(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
+  (pcase (conn-thing-argument-value arg)
+    ((and val `(,cmd ,prefix))
+     (when-let* ((fundef (and (symbolp cmd)
+                              (fboundp cmd)
+                              (symbol-function cmd)))
+                 (_ (autoloadp fundef)))
+       (autoload-do-load fundef cmd))
+     (if (conn-thing-argument-in-region arg)
+         (list (conn-anonymous-thing
+                 '(conn-things-in-region)
+                 :bounds-op ( :method (_self arg)
+                              (conn-get-things-in-region
+                               cmd arg nil
+                               (region-beginning)
+                               (region-end))))
+               prefix)
+       val))))
+
+;;;;; Subregions Argument
+
+(defvar conn-subregions-argument-reference
+  (conn-reference-page
+    :depth 70
+    (:heading "Subregions Argument")
+    "If this argument is non-nil then operate on the subregions defined by
+the thing command. By default the subregions of a thing command are the
+individual things that are moved over. For example the subregions of
+`forward-word' with a prefix argument of 3 are the 3 regions containing
+the 3 individual words, as opposed to the single region containing all 3
+words."))
+
+(defvar-keymap conn-subregions-map
+  "~" 'toggle-subregions)
+
+(cl-defstruct (conn-subregions-argument
+               (:include conn-argument)
+               ( :constructor conn-subregions-argument
+                 (&optional
+                  value
+                  &aux
+                  (keymap conn-subregions-map)
+                  (reference conn-subregions-argument-reference)))))
+
+(cl-defmethod conn-argument-update ((arg conn-subregions-argument)
+                                    cmd
+                                    updater)
+  (if (eq cmd 'toggle-subregions)
+      (progn
+        (cl-callf not (conn-argument-value arg))
+        (funcall updater arg))
+    (conn-subregions-default-value cmd arg)))
+
+(cl-defgeneric conn-subregions-default-value (cmd arg)
+  ( :method (_ _) nil))
+
+(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing conn-things-in-region))
+                                             arg)
+  (setf (conn-argument-value arg) t))
+
+(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
+                                             arg)
+  (setf (conn-argument-value arg) t))
+
+(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
+                                             arg)
+  (setf (conn-argument-value arg) t))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
+                                       (_sym (eql toggle-subregions)))
+  t)
+
+(cl-defmethod conn-argument-display ((arg conn-subregions-argument))
+  (concat (substitute-command-keys "\\[toggle-subregions] ")
+          (propertize "subregions"
+                      'face (when (conn-argument-value arg)
+                              'conn-argument-active-face))))
+
+;;;;; Reformat Argument
+
+(defvar conn-fixup-whitepace-argument-reference
+  (conn-reference-page
+    :depth 70
+    (:heading "Reformat")
+    "Attempt to reformat the buffer around the killed region.  If toggled
+with a prefix argument then set the default value of reformat in the
+current buffer."))
+
+(defvar-keymap conn-reformat-argument-map
+  "TAB" 'reformat)
+
+(defvar conn-reformat-default t)
+
+(cl-defstruct (conn-reformat-argument
+               (:include conn-argument)
+               ( :constructor conn--reformat-argument
+                 (&optional
+                  value
+                  &aux
+                  (keymap conn-reformat-argument-map)
+                  (reference conn-fixup-whitepace-argument-reference)))))
+
+(define-inline conn-reformat-argument (&optional value)
+  (inline-letevals (value)
+    (inline-quote
+     (unless (and (region-active-p) (null ,value))
+       (conn--reformat-argument
+        (or ,value
+            (and conn-kill-reformat-function
+                 conn-reformat-default)))))))
+
+(cl-defmethod conn-argument-update ((arg conn-reformat-argument)
+                                    cmd updater)
+  (when (eq cmd 'reformat)
+    (cl-callf null (conn-argument-value arg))
+    (when (conn-read-args-consume-prefix-arg)
+      (setq-local conn-reformat-default (conn-argument-value arg)))
+    (funcall updater arg)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
+                                       (_sym (eql reformat)))
+  t)
+
+(cl-defmethod conn-argument-display ((arg conn-reformat-argument))
+  (substitute-command-keys
+   (concat
+    (substitute-command-keys "\\[reformat] ")
+    (if-let* ((ts (conn-argument-value arg)))
+        (propertize
+         "reformat"
+         'face 'eldoc-highlight-function-argument)
+      "reformat"))))
+
+;;;;; Check Bounds Argument
+
+(defvar conn-check-bounds-functions nil
+  "Abnormal hook to check the bounds of a region before deleting it.
+
+Each function in the hook is called with a single argument, a
+`conn-bounds' struct, and should signal an error if the region should
+not be delete.  The the value returned by each function is ignored.")
+
+(defvar conn-check-bounds-argument-reference
+  (conn-reference-page
+    :depth 70
+    (:heading "Check Bounds Argument")
+    "Toggle running `conn-check-bounds-functions' to ensure that the region
+being killed is valid.  With a prefix argument set the default value for
+check bounds in the current buffer."))
+
+(defvar-keymap conn-check-bounds-argument-map
+  "q" 'check-bounds)
+
+(defvar conn-check-bounds-default t)
+
+(cl-defstruct (conn-check-bounds-argument
+               (:include conn-boolean-argument)
+               ( :constructor conn--check-bounds-argument
+                 (&optional
+                  value
+                  &key
+                  (name "check bounds")
+                  (toggle-command 'check-bounds)
+                  (keymap conn-check-bounds-argument-map)
+                  (reference conn-check-bounds-argument-reference)))))
+
+(define-inline conn-check-bounds-argument (&optional value)
+  (inline-quote
+   (when (cl-loop for h on conn-check-bounds-functions
+                  thereis (pcase h
+                            ('t (default-value 'conn-check-bounds-functions))
+                            ('nil)
+                            (_ t)))
+     (conn--check-bounds-argument (or ,value conn-check-bounds-default)))))
+
+(cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
+                                    _cmd
+                                    _updater)
+  (cl-call-next-method)
+  (when (conn-read-args-consume-prefix-arg)
+    (setq-local conn-check-bounds-default (conn-argument-value arg))))
+
+;;;;; Thing Transform Argument
+
+(defvar conn-transformations-quick-ref
+  (conn-reference-quote
+    (("upto" conn-bounds-upto)
+     ("after point/exclusive"
+      conn-bounds-after-point
+      conn-bounds-after-point-exclusive)
+     ("trim" conn-bounds-trim)
+     ("last" conn-bounds-last)
+     ("before point/exclusive"
+      conn-bounds-before-point
+      conn-bounds-before-point-exclusive)
+     ("reset" conn-transform-reset))))
+
+(defvar-keymap conn-transform-map
+  "<" 'conn-bounds-trim
+  "a" 'conn-bounds-after-point
+  "A" 'conn-bounds-after-point-exclusive
+  "b" 'conn-bounds-before-point
+  "B" 'conn-bounds-before-point-exclusive
+  "t" 'conn-bounds-last
+  "T" 'conn-bounds-upto
+  "X" 'conn-transform-reset)
+
+(cl-defstruct (conn-transform-argument
+               (:include conn-argument)
+               ( :constructor conn-transform-argument
+                 (&optional
+                  value
+                  &key
+                  (keymap conn-transform-map)
+                  (annotation "transform")))))
+
+(defun conn--transforms-get-references (transforms)
+  (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
+    (conn--with-work-buffer
+      (dolist (tform transforms)
+        (when-let* ((doc (alist-get tform doc-strings)))
+          (let ((pt (point)))
+            (insert (propertize
+                     (concat (get tform :conn-transform-description) ":\n")
+                     'face 'conn-quick-ref-heading-face))
+            (capitalize-region pt (point)))
+          (insert doc "\n")))
+      (when (buffer-modified-p)
+        (substring (buffer-string) 0 -1)))))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-transform-argument))
+  (when-let* ((tforms (conn-argument-value arg))
+              (ref (conn--transforms-get-references tforms)))
+    (conn-reference-page
+      :depth -50
+      (:eval ref)
+      (:heading "Transform Bindings")
+      (:eval (conn-quick-ref-to-cols
+              conn-transformations-quick-ref 3)))))
+
+(cl-defmethod conn-argument-update ((arg conn-transform-argument)
+                                    cmd updater)
+  (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
+    (pcase cmd
+      ('conn-transform-reset
+       (setf transforms nil)
+       (funcall updater arg))
+      ((and (let ts
+              (if (and (symbolp cmd)
+                       (get cmd :conn-bounds-transformation))
+                  (if (memq cmd transforms)
+                      (remq cmd transforms)
+                    (cons cmd transforms))
+                transforms))
+            (guard (not (eq ts transforms))))
+       (setf transforms ts)
+       (funcall updater arg)))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
+                                       sym)
+  (and (symbolp sym)
+       (get sym :conn-bounds-transformation)))
+
+(cl-defmethod conn-argument-display ((arg conn-transform-argument))
+  (when-let* ((ts (conn-argument-value arg)))
+    (concat
+     "T: "
+     (propertize
+      (mapconcat (lambda (tf)
+                   (or (get tf :conn-transform-description) ""))
+                 ts "∘")
+      'face 'eldoc-highlight-function-argument))))
+
+(cl-defmethod conn-argument-extract-value ((_arg conn-transform-argument))
+  (nreverse (cl-call-next-method)))
+
+;;;;; Multi Things
 
 (conn-define-state conn-multi-thing-select-state (conn-mode-line-face-state)
   "State for selecting a tree sit node."
