@@ -2062,11 +2062,6 @@ Once the loop ends `conn-argument-extract-value' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
-INTERACTIVE if non-nil should be a command and means that
-`conn-read-args' is being called to produce a list for the interactive
-form that command.  This causes the command, along with the arguments
-read, to be added to `conn-command-history' when the command is run.
-
 OVERRIDING-MAP if non-nil should be a keymap which will be active during
 the read args loop and take precedence over the ARGUMENT keymaps.  Note
 that `conn-read-args-map' will still take precedence over
