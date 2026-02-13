@@ -1712,8 +1712,7 @@ finishing showing the buffers that were visited."))
    (conn-read-args (conn-read-thing-state
                     :prompt (if (region-active-p)
                                 "Things in Regions"
-                              "Thing")
-                    :interactive 'conn-kapply-on-things)
+                              "Thing"))
        ((`(,thing ,arg) (conn-thing-argument t t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -1725,7 +1724,11 @@ finishing showing the buffers that were visited."))
       (conn-kapply-region-iterator
        (cl-loop for b in (or subregions (list bounds))
                 for (beg . end) = (conn-bounds b)
-                collect (conn-kapply-make-region beg end)))))))
+                collect (conn-kapply-make-region beg end))))
+     (conn-push-command-history 'conn-kapply-on-things
+                                thing
+                                arg
+                                transform))))
 
 (defun conn-kapply-count-iterator (&optional count)
   (interactive "P")

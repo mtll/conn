@@ -1891,7 +1891,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                            arglist
                            callback
                            &key
-                           interactive
                            command-handler
                            (display-handler #'conn--read-args-display-prompt)
                            around
@@ -1902,8 +1901,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                            post
                            reference)
   (let ((arguments arglist)
-        (interactive (and (eq this-command interactive)
-                          interactive))
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
         (keymap (thread-last
@@ -1912,7 +1909,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (delq nil)
                   make-composed-keymap))
         (display-state nil)
-        (quit-event (car (last (current-input-mode)))))
+        (quit-event (car (last (current-input-mode))))
+        (argument-values nil))
     (cl-labels
         ((continue-p ()
            (cl-loop for arg in arguments
@@ -2009,28 +2007,19 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (display-message))
                  (read-command))
                (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
-      (let* ((local-exit nil)
-             (vals nil)
-             (ret (apply
-                   (catch 'conn-read-args-return
-                     (conn--unwind-protect-all
-                       (let ((conn-read-args-last-prefix nil))
-                         (if around (funcall around #'cont) (cont))
-                         (setq vals (mapcar #'conn-argument-extract-value
-                                            arguments))
-                         (setq local-exit t))
-                       (unless local-exit
-                         (mapc #'conn-argument-cancel arguments))
-                       (unless executing-kbd-macro
-                         (funcall display-handler nil nil display-state t)))
-                     (mapc #'conn-argument-accept arguments)
-                     (cons callback vals)))))
-        (when interactive
-          (add-to-history 'conn-command-history
-                          (cons interactive ret)
-                          conn-command-history-max
-                          t))
-        ret))))
+      (apply
+       (catch 'conn-read-args-return
+         (conn--unwind-protect-all
+           (let ((conn-read-args-last-prefix nil))
+             (if around (funcall around #'cont) (cont))
+             (setq argument-values (mapcar #'conn-argument-extract-value
+                                           arguments)))
+           (unless argument-values
+             (mapc #'conn-argument-cancel arguments))
+           (unless executing-kbd-macro
+             (funcall display-handler nil nil display-state t)))
+         (mapc #'conn-argument-accept arguments)
+         (cons callback argument-values))))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.
