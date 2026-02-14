@@ -1228,7 +1228,6 @@ The iterator must be the first argument in ARGLIST.
 (defvar conn-kapply-appliers-ref-list
   (conn-reference-quote
     (("record a new macro in the current state" record)
-     ("record a new macro in emacs state" record-emacs-state)
      ("apply the previous macro" apply)
      ("apply and then append to the previous macro" append)
      ("step edit the previous macro" step-edit))))
@@ -1710,10 +1709,9 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-on-things (thing arg transform)
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :prompt (if (region-active-p)
-                                "Things in Regions"
-                              "Thing"))
-       ((`(,thing ,arg) (conn-thing-argument t t))
+                    :prompt "Thing")
+       ((`(,thing ,arg)
+         (conn-thing-argument-dwim-rectangle t (use-region-p)))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)

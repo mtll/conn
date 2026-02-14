@@ -1634,6 +1634,9 @@ entering mark state.")
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
 
+(defvar-keymap conn-read-args-previous-map
+  "RET" 'previous-args)
+
 (defvar conn-read-args-ref-bindings
   (conn-reference-quote
     ((:keymap conn-read-args-map)
@@ -1891,6 +1894,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            arglist
                            callback
                            &key
+                           history-var
                            command-handler
                            (display-handler #'conn--read-args-display-prompt)
                            around
@@ -1975,6 +1979,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                          conn-read-args-reference-page
                          (mapcar #'conn-argument-get-reference
                                  arguments)))
+                 ('previous-args
+                  (if-let* ((_ (and history-var (symbolp history-var)))
+                            (prev (get history-var :conn-read-args-history)))
+                      (throw 'conn-read-args-return
+                             (cons callback prev))
+                    (conn-read-args-error "No previous arguments")))
                  ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
                                     state
@@ -1998,8 +2008,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn-reading-args t)
-                   (emulation-mode-map-alists (cons `((,state . ,keymap))
-                                                    emulation-mode-map-alists))
+                   (emulation-mode-map-alists
+                    (cons `((,state . ,keymap)
+                            ,@(when history-var
+                                `((,state . ,conn-read-args-previous-map))))
+                          emulation-mode-map-alists))
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
                (while (continue-p)
@@ -2013,7 +2026,9 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((conn-read-args-last-prefix nil))
              (if around (funcall around #'cont) (cont))
              (setq argument-values (mapcar #'conn-argument-extract-value
-                                           arguments)))
+                                           arguments))
+             (when (and history-var (symbolp history-var))
+               (put history-var :conn-read-args-history argument-values)))
            (unless argument-values
              (mapc #'conn-argument-cancel arguments))
            (unless executing-kbd-macro

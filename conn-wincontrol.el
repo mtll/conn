@@ -580,6 +580,7 @@
   (when-let* ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
 
+;;;###autoload
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
   "`quit-window' in `other-window-for-scrolling'."
   (interactive)

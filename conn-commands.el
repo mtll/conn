@@ -1804,6 +1804,7 @@ For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
+                    :history-var 'conn-replace
                     :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg) (conn-replace-thing-argument))
@@ -2702,6 +2703,7 @@ hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
+                    :history-var 'conn-kill-thing
                     :reference conn-kill-reference
                     :display-handler (conn-read-args-display-columns 5 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
@@ -4143,6 +4145,7 @@ Interactively REPEAT is given by the prefix argument."
                                     arg
                                     transform)
   (conn-read-args (conn-replace-state
+                   :history-var 'conn-replace
                    :prefix arg
                    :reference conn-replace-reference
                    :prompt "Replace in Thing")
