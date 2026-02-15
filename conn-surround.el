@@ -312,12 +312,9 @@
   (conn-read-args (conn-surround-thing-state
                    :prompt "Surround"
                    :prefix arg)
-      ((`(,thing ,arg) (if (use-region-p)
-                           (list 'region nil)
-                         (conn-thing-argument t)))
-       (transform (conn-transform-argument '(conn-bounds-trim)))
-       (subregions (conn-subregions-argument
-                    (use-region-p))))
+      ((`(,thing ,arg ,subregions)
+        (conn-thing-with-subregions-argument-dwim t))
+       (transform (conn-transform-argument '(conn-bounds-trim))))
     (atomic-change-group
       (save-mark-and-excursion
         (pcase-let* ((`(,regions . ,prep-keys)

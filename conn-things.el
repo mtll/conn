@@ -1447,7 +1447,7 @@ the point is within the region then the entire region is returned.")))
                prefix)
        val))))
 
-;;;;; Subregions Argument
+;;;;;; Thing With Subregions Argument
 
 (defvar conn-subregions-argument-reference
   (conn-reference-page
@@ -1460,51 +1460,112 @@ individual things that are moved over. For example the subregions of
 the 3 individual words, as opposed to the single region containing all 3
 words."))
 
-(defvar-keymap conn-subregions-map
+(defvar-keymap conn-subregions-argument-map
   "~" 'toggle-subregions)
 
-(cl-defstruct (conn-subregions-argument
-               (:include conn-argument)
-               ( :constructor conn-subregions-argument
+(cl-defstruct (conn-thing-with-subregions-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-thing-with-subregions-argument
                  (&optional
-                  value
+                  recursive-edit
+                  in-region
+                  (subregions in-region)
                   &aux
-                  (keymap conn-subregions-map)
-                  (reference conn-subregions-argument-reference)))))
+                  (subregions-explicit-flag subregions)
+                  (reference conn-subregions-argument-reference)
+                  (required t)))
+               ( :constructor conn-thing-with-subregions-argument-dwim
+                 (&optional
+                  recursive-edit
+                  in-region
+                  (subregions (or (use-region-p)
+                                  in-region))
+                  &aux
+                  (subregions-explicit-flag subregions)
+                  (reference conn-subregions-argument-reference)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))
+               ( :constructor conn-thing-with-subregions-argument-dwim-rectangle
+                 (&optional
+                  recursive-edit
+                  in-region
+                  (subregions
+                   (or (and (use-region-p)
+                            (bound-and-true-p rectangle-mark-mode))
+                       in-region))
+                  &aux
+                  (reference conn-subregions-argument-reference)
+                  (required t)
+                  (subregions-explicit-flag subregions)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode))))))
+  "Thing argument for thing commands."
+  (subregions nil :type boolean)
+  (subregions-explicit-flag nil :type boolean))
 
-(cl-defmethod conn-argument-update ((arg conn-subregions-argument)
+(cl-defmethod conn-argument-compose-keymap ((_arg conn-thing-with-subregions-argument))
+  (make-composed-keymap conn-subregions-argument-map (cl-call-next-method)))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
+                                    (_cmd (eql toggle-subregions))
+                                    updater)
+  (cl-callf not (conn-thing-with-subregions-argument-subregions arg))
+  (setf (conn-thing-with-subregions-argument-subregions-explicit-flag arg) t)
+  (funcall updater))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
+                                    (_cmd (conn-thing region))
+                                    _updater)
+  (unless (conn-thing-with-subregions-argument-subregions-explicit-flag arg)
+    (setf (conn-thing-with-subregions-argument-subregions arg) t))
+  (cl-call-next-method))
+
+(cl-defgeneric conn-subregions-argument-default (thing)
+  (:method (_thing) nil)
+  (:method ((_thing (conn-thing region))) t)
+  (:method ((_thing (conn-thing conn-things-in-region))) t))
+
+(cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
                                     cmd
                                     updater)
-  (if (eq cmd 'toggle-subregions)
-      (progn
-        (cl-callf not (conn-argument-value arg))
-        (funcall updater arg))
-    (conn-subregions-default-value cmd arg)))
+  (cond ((conn-thing-with-subregions-argument-subregions-explicit-flag arg)
+         (cl-call-next-method))
+        ((eq cmd 'conn-things-in-region)
+         (cl-call-next-method)
+         (setf (conn-thing-with-subregions-argument-subregions arg)
+               (conn-thing-argument-in-region arg)))
+        (t
+         (let* ((updated nil)
+                (ufn (lambda (&rest rest)
+                       (setf updated t)
+                       (apply updater rest))))
+           (cl-call-next-method arg cmd ufn)
+           (when (and updated (conn-argument-value arg))
+             (setf (conn-thing-with-subregions-argument-subregions arg)
+                   (conn-subregions-argument-default (car (conn-argument-value arg)))))))))
 
-(cl-defgeneric conn-subregions-default-value (cmd arg)
-  ( :method (_ _) nil))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing conn-things-in-region))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing region))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-subregions-default-value ((_cmd (conn-thing recursive-edit-thing))
-                                             arg)
-  (setf (conn-argument-value arg) t))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-subregions-argument)
+(cl-defmethod conn-argument-predicate ((_arg conn-thing-with-subregions-argument)
                                        (_sym (eql toggle-subregions)))
   t)
 
-(cl-defmethod conn-argument-display ((arg conn-subregions-argument))
-  (concat (substitute-command-keys "\\[toggle-subregions] ")
-          (propertize "subregions"
-                      'face (when (conn-argument-value arg)
-                              'conn-argument-active-face))))
+(cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
+  (cons (concat
+         (substitute-command-keys "\\[toggle-subregions] ")
+         (propertize "subregions"
+                     'face (when (conn-thing-with-subregions-argument-subregions arg)
+                             'conn-argument-active-face)))
+        (cl-call-next-method)))
+
+(cl-defmethod conn-argument-extract-value ((arg conn-thing-with-subregions-argument))
+  (nconc (cl-call-next-method)
+         (list (conn-thing-with-subregions-argument-subregions arg))))
 
 ;;;;; Reformat Argument
 

@@ -1374,9 +1374,11 @@ selected by dispatch with it."))
   "e" 'conn-emacs-state)
 
 (cl-defstruct (conn-replace-thing-argument
-               (:include conn-thing-argument)
+               (:include conn-thing-with-subregions-argument)
                ( :constructor conn-replace-thing-argument
-                 (&aux
+                 (&optional
+                  subregions-default
+                  &aux
                   (required t)
                   (keymap conn-replace-thing-argument-map)
                   (recursive-edit t)
@@ -1384,6 +1386,11 @@ selected by dispatch with it."))
                    (when (and (use-region-p)
                               (bound-and-true-p rectangle-mark-mode))
                      (list 'region nil)))
+                  (subregions
+                   (or (and (use-region-p)
+                            (bound-and-true-p rectangle-mark-mode))
+                       subregions-default))
+                  (subregions-explicit-flag subregions-default)
                   (set-flag
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
@@ -1815,9 +1822,8 @@ For more information about how the replacement is carried out see
                     :history-var 'conn-replace
                     :reference conn-replace-reference
                     :prompt "Replace in Thing")
-       ((`(,thing ,arg) (conn-replace-thing-argument))
+       ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
         (transform (conn-transform-argument))
-        (subregions-p (conn-subregions-argument (use-region-p)))
         (regexp-flag
          (conn-boolean-argument "regexp"
                                 'regexp
@@ -1874,7 +1880,7 @@ For more information about how the replacement is carried out see
   "p" 'project)
 
 (cl-defstruct (conn-isearch-thing-argument
-               (:include conn-thing-argument)
+               (:include conn-thing-with-subregions-argument)
                ( :constructor conn-isearch-thing-argument
                  (&aux
                   (keymap conn-isearch-thing-map)
@@ -1884,6 +1890,9 @@ For more information about how the replacement is carried out see
                    (when (and (use-region-p)
                               (bound-and-true-p rectangle-mark-mode))
                      (list 'region nil)))
+                  (subregions
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode)))
                   (set-flag
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
@@ -1960,8 +1969,7 @@ Exiting the recursive edit will resume the isearch."
                       :history-var 'conn-isearch-thing
                       :prompt "Isearch in Thing"
                       :reference conn-isearch-reference)
-         ((`(,thing ,arg) (conn-isearch-thing-argument))
-          (subregions (conn-subregions-argument (use-region-p)))
+         ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
           (transform (conn-transform-argument)))
        (conn-isearch-restrict-to-thing-subr thing
                                             arg
@@ -2047,8 +2055,7 @@ Exiting the recursive edit will resume the isearch."
                     :history-var 'conn-isearch-thing
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
-       ((`(,thing ,arg) (conn-isearch-thing-argument))
-        (subregions (conn-subregions-argument (use-region-p)))
+       ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument "regexp"
                                        'regexp
@@ -2079,8 +2086,7 @@ Exiting the recursive edit will resume the isearch."
                     :history-var 'conn-isearch-thing
                     :prompt "Isearch in Thing"
                     :reference conn-isearch-reference)
-       ((`(,thing ,arg) (conn-isearch-thing-argument))
-        (subregions (conn-subregions-argument (use-region-p)))
+       ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument
                  "regexp"
@@ -4173,9 +4179,8 @@ Interactively REPEAT is given by the prefix argument."
                    :prefix arg
                    :reference conn-replace-reference
                    :prompt "Replace in Thing")
-      ((`(,thing ,arg) (conn-replace-thing-argument))
+      ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
        (transform (conn-transform-argument transform))
-       (subregions-p (conn-subregions-argument (use-region-p)))
        (regexp-flag
         (conn-boolean-argument "regexp"
                                'regexp
@@ -4479,9 +4484,9 @@ If CLEANUP-WHITESPACE is non-nil then also run
    (conn-read-args (conn-narrow-state
                     :history-var 'conn-narrow-to-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument))
-        (subregions (conn-subregions-argument (use-region-p))))
+       ((`(,thing ,arg ,subregions)
+         (conn-thing-with-subregions-argument-dwim))
+        (transform (conn-transform-argument)))
      (list thing arg transform subregions)))
   (pcase (conn-bounds-of thing arg)
     ((and (guard subregions-p)
@@ -4677,9 +4682,9 @@ subregion."
    (conn-read-args (conn-join-lines-state
                     :history-var 'conn-join-lines
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim t))
-        (transform (conn-transform-argument))
-        (subregions (conn-subregions-argument (use-region-p))))
+       ((`(,thing ,arg ,subregions)
+         (conn-thing-with-subregions-argument-dwim t))
+        (transform (conn-transform-argument)))
      (list thing arg transform subregions)))
   (save-mark-and-excursion
     (pcase (conn-bounds-of thing arg)
@@ -4721,11 +4726,8 @@ subregion."
    (conn-read-args (conn-join-lines-state
                     :history-var 'conn-shell-command-on-thing
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim t))
+       ((`(,thing ,arg ,subregions) (conn-thing-with-subregions-argument-dwim t))
         (transform (conn-transform-argument))
-        (subregions (conn-subregions-argument
-                     (and (use-region-p)
-                          (region-noncontiguous-p))))
         (replace (conn-boolean-argument "replace"
                                         'replace
                                         conn-shell-command-replace-map)))

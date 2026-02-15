@@ -1686,9 +1686,9 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-replace-state
                    :reference conn-replace-reference
                    :prompt "Kapply in Thing")
-      ((`(,thing ,arg) (conn-replace-thing-argument))
+      ((`(,thing ,arg ,subregions-p)
+        (conn-replace-thing-argument subregions-p))
        (transform (conn-transform-argument transform))
-       (subregions-p (conn-subregions-argument subregions-p))
        (regexp-flag
         (conn-boolean-argument "regexp"
                                'regexp
