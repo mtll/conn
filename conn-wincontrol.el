@@ -284,7 +284,7 @@
    (format (substitute-command-keys
             (if conn--wincontrol-message-newline
                 (concat conn--wincontrol-help-format "\n")
-              conn--wincontrol-help-format))
+              (concat conn--wincontrol-help-format " ")))
            (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                    (if (= conn--wincontrol-arg-sign -1) "-" "")
                    conn--wincontrol-arg))
@@ -341,19 +341,29 @@
   :interactive nil
   :group 'conn-wincontrol)
 
+(defvar conn-wincontrol-one-command-stay-command
+  (list 'conn-wincontrol-backward-delete-arg
+        'conn-wincontrol-digit-argument-reset
+        'conn-wincontrol-invert-argument
+        'conn-wincontrol-digit-argument
+        'conn-wincontrol-universal-arg
+        'conn-wincontrol-quick-ref
+        'conn-other-window-prefix
+        'other-tab-prefix
+        'other-window-prefix
+        'other-frame-prefix
+        'conn-other-place-prefix))
+
+(defun conn-wincontrol-one-command-stay-p ()
+  (memq this-command conn-wincontrol-one-command-stay-command))
+
 ;;;###autoload
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
   (let ((hook (make-symbol "hook")))
     (fset hook (lambda ()
-                 (unless (memq this-command
-                               '(conn-wincontrol-backward-delete-arg
-                                 conn-wincontrol-digit-argument-reset
-                                 conn-wincontrol-invert-argument
-                                 conn-wincontrol-digit-argument
-                                 conn-wincontrol-universal-arg
-                                 conn-wincontrol-quick-ref))
+                 (unless (conn-wincontrol-one-command-stay-p)
                    (remove-hook 'pre-command-hook hook)
                    (conn-wincontrol-one-command-mode -1)
                    (conn-wincontrol-exit))))
