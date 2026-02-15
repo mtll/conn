@@ -1352,15 +1352,22 @@ the point is within the region then the entire region is returned.")))
            (list cmd (conn-read-args-consume-prefix-arg)))
      (funcall updater))))
 
+(defvar conn--last-thing-kbd-macro nil)
+
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     (cmd (conn-thing kbd-macro))
                                     updater)
-  (setf (conn-argument-set-flag arg) t
-        (conn-argument-value arg)
-        (list (conn-anonymous-thing
-                (list 'kbd-macro)
-                :bounds-op
-                ( :method (self _arg)
+  (unless (and conn--last-thing-kbd-macro
+               (memq cmd '(kmacro-call-macro
+                           call-last-kbd-macro
+                           kmacro-end-and-call-macro)))
+    (setf conn--last-thing-kbd-macro
+          (conn-anonymous-thing
+            (list 'kbd-macro)
+            :bounds-op
+            ( :method (self _arg)
+              (save-mark-and-excursion
+                (save-current-buffer
                   (let ((buffer-read-only t)
                         (buf (current-buffer))
                         (conn-command-history conn-command-history))
@@ -1382,8 +1389,9 @@ the point is within the region then the entire region is returned.")))
                          (cons (region-beginning) (region-end))
                          :subregions (cl-loop for r in (region-bounds)
                                               collect (conn-make-bounds cmd nil r)))
-                      (error "Buffer change during keyboard macro")))))
-              nil))
+                      (error "Buffer change during keyboard macro")))))))))
+  (setf (conn-argument-set-flag arg) t
+        (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
   (funcall updater))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
@@ -1867,7 +1875,8 @@ Only the background color is used."
  'kmacro-end-macro
  'kmacro-call-macro
  'start-kbd-macro
- 'end-kbd-macro)
+ 'end-kbd-macro
+ 'call-last-kbd-macro)
 
 (conn-register-thing 'restriction
                      :parents '(buffer))

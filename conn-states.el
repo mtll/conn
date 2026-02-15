@@ -1895,6 +1895,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            callback
                            &key
                            history-var
+                           (history-len 1)
                            command-handler
                            (display-handler #'conn--read-args-display-prompt)
                            around
@@ -1981,7 +1982,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                                  arguments)))
                  ('previous-args
                   (if-let* ((_ (and history-var (symbolp history-var)))
-                            (prev (get history-var :conn-read-args-history)))
+                            (prev (car-safe (get history-var :conn-read-args-history))))
                       (throw 'conn-read-args-return
                              (cons callback prev))
                     (conn-read-args-error "No previous arguments")))
@@ -2028,7 +2029,10 @@ This skips executing the body of the `conn-read-args' form entirely."
              (setq argument-values (mapcar #'conn-argument-extract-value
                                            arguments))
              (when (and history-var (symbolp history-var))
-               (put history-var :conn-read-args-history argument-values)))
+               (conn-threadf->
+                   (get history-var :conn-read-args-history)
+                 (cons argument-values)
+                 (take history-len))))
            (unless argument-values
              (mapc #'conn-argument-cancel arguments))
            (unless executing-kbd-macro
