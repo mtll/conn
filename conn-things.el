@@ -128,6 +128,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                (:conc-name conn-bounds--))
   (thing nil :type symbol :read-only t)
   (arg nil :type (or nil integer) :read-only t)
+  (point (point) :type integer :read-only t)
+  (buffer (current-buffer) :type buffer :read-only t)
+  (tick (buffer-chars-modified-tick) :type integer :read-only t)
   (whole nil :type cons)
   (properties nil :type list))
 
@@ -152,15 +155,15 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defmacro conn-bounds-delay (bounds &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (buffer tick)
-    `(let ((,buffer (current-buffer))
-           (,tick (buffer-chars-modified-tick)))
-       (oclosure-lambda (conn--bounds-delayed)
-           (,bounds)
-         (unless (eql ,tick (buffer-chars-modified-tick))
-           (error "Cannot take bounds buffer modified"))
-         (with-current-buffer ,buffer
-           ,@body)))))
+  `(oclosure-lambda (conn--bounds-delayed)
+       (,bounds)
+     (with-current-buffer (conn-bounds--buffer ,bounds)
+       (unless (eql (conn-bounds--tick ,bounds)
+                    (buffer-chars-modified-tick))
+         (error "Cannot take bounds buffer modified"))
+       (save-excursion
+         (goto-char (conn-bounds--point ,bounds))
+         ,@body))))
 
 (defalias 'conn-bounds-thing 'conn-bounds--thing)
 (defalias 'conn-bounds-arg 'conn-bounds--arg)
@@ -854,30 +857,24 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing t))
                               arg)
-  (let ((pt (point)))
-    (conn-make-bounds
-     cmd arg
-     (conn-bounds-delay bounds
-       (save-mark-and-excursion
-         (goto-char pt)
-         (conn--bounds-of-thing bounds)))
-     :subregions (conn-bounds-delay bounds
-                   (save-mark-and-excursion
-                     (goto-char pt)
-                     (conn--bounds-of-thing-subregions bounds))))))
+  (conn-make-bounds
+   cmd arg
+   (conn-bounds-delay bounds
+     (conn--bounds-of-thing bounds))
+   :subregions (conn-bounds-delay bounds
+                 (conn--bounds-of-thing-subregions bounds))))
 
 (conn-register-thing 'simple-motion)
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing simple-motion))
                               arg)
-  (let ((pt (point)))
-    (conn-make-bounds
-     cmd arg
-     (conn-bounds-delay bounds
-       (save-mark-and-excursion
-         (goto-char pt)
-         (funcall cmd arg)
-         (setf (conn-bounds bounds) (cons pt (point))))))))
+  (conn-make-bounds
+   cmd arg
+   (conn-bounds-delay bounds
+     (let ((pt (point)))
+       (funcall cmd arg)
+       (setf (conn-bounds bounds)
+             (cons pt (point)))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region))
                               arg)
