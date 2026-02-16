@@ -102,8 +102,8 @@
 
 (defvar-keymap conn-wincontrol-tab-repeat-map
   :repeat t
-  "Q" 'tab-bar-duplicate-tab
-  "O" 'tab-new
+  "O" 'tab-bar-duplicate-tab
+  "E" 'tab-new
   "o" 'tab-next
   "U" 'tab-close
   "u" 'tab-previous
@@ -159,7 +159,7 @@
   "<tab>" 'other-window
   "TAB" 'other-window
   "B" 'tab-bar-move-window-to-tab
-  "Q" 'tab-bar-duplicate-tab
+  "O" 'tab-bar-duplicate-tab
   "D" 'tab-bar-detach-tab
   "F" 'toggle-frame-fullscreen
   "H" 'conn-kill-this-buffer
@@ -173,7 +173,7 @@
   "I" 'windmove-swap-states-up
   "N" 'conn-wincontrol-other-window-scroll-down
   "M" 'conn-wincontrol-other-window-scroll-up
-  "O" 'tab-new
+  "E" 'tab-new
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "U" 'tab-close
@@ -335,42 +335,40 @@
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn-wincontrol-mode 1)))
 
-(define-minor-mode conn-wincontrol-one-command-mode
-  "Global minor mode for wincontrol one command."
-  :global t
-  :interactive nil
-  :group 'conn-wincontrol)
-
 (defvar conn-wincontrol-one-command-stay-command
   (list 'conn-wincontrol-backward-delete-arg
         'conn-wincontrol-digit-argument-reset
         'conn-wincontrol-invert-argument
         'conn-wincontrol-digit-argument
         'conn-wincontrol-universal-arg
-        'conn-wincontrol-quick-ref
-        'conn-other-window-prefix
-        'other-tab-prefix
-        'other-window-prefix
-        'other-frame-prefix
-        'conn-other-place-prefix))
+        'conn-wincontrol-quick-ref))
 
 (defun conn-wincontrol-one-command-stay-p ()
   (memq this-command conn-wincontrol-one-command-stay-command))
+
+(defun conn--wincontrol-one-command-hook ()
+  (when (and conn-wincontrol-mode
+             (not (conn-wincontrol-one-command-stay-p)))
+    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (conn-wincontrol-one-command-mode -1)))
+
+(define-minor-mode conn-wincontrol-one-command-mode
+  "Global minor mode for wincontrol one command."
+  :global t
+  :interactive nil
+  :group 'conn-wincontrol
+  (if conn-wincontrol-one-command-mode
+      (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (conn-wincontrol-mode -1)))
 
 ;;;###autoload
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
-  (let ((hook (make-symbol "hook")))
-    (fset hook (lambda ()
-                 (unless (conn-wincontrol-one-command-stay-p)
-                   (remove-hook 'pre-command-hook hook)
-                   (conn-wincontrol-one-command-mode -1)
-                   (conn-wincontrol-exit))))
-    (add-hook 'pre-command-hook hook 99))
-  (setq conn--wincontrol-message-newline nil)
+  (conn-wincontrol)
   (conn-wincontrol-one-command-mode 1)
-  (conn-wincontrol))
+  (setq conn--wincontrol-message-newline nil))
 
 ;;;;; Wincontrol Quick Ref
 
