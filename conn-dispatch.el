@@ -1310,12 +1310,17 @@ Target overlays may override this default by setting the
                            (= pt (next-single-char-property-change
                                   (1- pt) 'before-string nil (1+ pt))))
                       (and (get-char-property pt 'after-string)
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'after-string nil (1+ pt))))
-                      (and (get-char-property pt 'display)
+                           (= (1+ pt) (next-single-char-property-change
+                                       pt 'after-string nil (+ 2 pt))))
+                      (and (pcase (get-char-property (1- pt) 'display)
+                             ('nil)
+                             ((pred stringp) t)
+                             (`(,(or 'image 'slice `(margin nil))
+                                . ,_)
+                              t))
                            (= pt (next-single-char-property-change
                                   (1- pt) 'display nil (1+ pt)))))
-                  (setq end (max beg (1- pt))))
+                  (setq end pt))
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
                             pt 'composition nil line-end)))
@@ -1431,7 +1436,12 @@ Target overlays may override this default by setting the
                       (and (get-char-property pt 'after-string)
                            (= pt (next-single-char-property-change
                                   (1- pt) 'after-string nil (1+ pt))))
-                      (and (get-char-property pt 'display)
+                      (and (pcase (get-char-property (1- pt) 'display)
+                             ('nil)
+                             ((pred stringp) t)
+                             (`(,(or 'image 'slice `(margin nil))
+                                . ,_)
+                              t))
                            (= pt (next-single-char-property-change
                                   (1- pt) 'display nil (1+ pt)))))
                   (setq end (min beg (1+ pt))))
