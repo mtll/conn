@@ -1699,8 +1699,7 @@ check bounds in the current buffer."))
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
   "t" 'conn-bounds-last
-  "T" 'conn-bounds-upto
-  "X" 'conn-transform-reset)
+  "T" 'conn-bounds-upto)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)

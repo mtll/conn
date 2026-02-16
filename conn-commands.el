@@ -2495,8 +2495,8 @@ append to that place."
   "d" 'delete)
 
 (defvar-keymap conn-kill-append-argument-map
-  "z" 'append
-  "Z" 'append-on-repeat)
+  "x" 'append
+  "X" 'append-on-repeat)
 
 (cl-defstruct (conn-kill-append-argument
                (:include conn-cycling-argument)
