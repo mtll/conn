@@ -25,7 +25,8 @@
 
 (declare-function conn--end-of-inner-line-1 "conn-commands")
 (declare-function conn-exchange-mark-command "conn-command")
-(declare-function conn-mark-thing "conn-command")
+(declare-function conn-mark-thing-do "conn-commands")
+(declare-function conn-mark-thing-argument "conn-commands")
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 
