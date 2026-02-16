@@ -1287,6 +1287,23 @@ Target overlays may override this default by setting the
                       (overlay-put overlay 'after-string str))))
                  ;; If the label overlay is wider than the label
                  ;; string we are done.
+                 ((and (/= pt (point-min))
+                       (or (and (/= pt beg)
+                                (get-char-property pt 'before-string)
+                                (= pt (next-single-char-property-change
+                                       (1- pt) 'before-string nil (1+ pt))))
+                           (and (get-char-property (1- pt) 'after-string)
+                                (= pt (next-single-char-property-change
+                                       (- pt 2) 'after-string nil (1+ pt))))
+                           (and (pcase (get-char-property (1- pt) 'display)
+                                  ('nil)
+                                  ((pred stringp) t)
+                                  (`(,(or 'image 'slice `(margin nil))
+                                     . ,_)
+                                   t))
+                                (= pt (next-single-char-property-change
+                                       (1- pt) 'display nil (1+ pt))))))
+                  (setq end pt))
                  ((let ((width
                          (save-excursion
                            (with-restriction beg pt
@@ -1305,21 +1322,6 @@ Target overlays may override this default by setting the
                        (conn--overlays-in-of-type pt (1+ pt)
                                                   'conn-target-overlay
                                                   window))
-                  (setq end pt))
-                 ((or (and (get-char-property pt 'before-string)
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'before-string nil (1+ pt))))
-                      (and (get-char-property pt 'after-string)
-                           (= (1+ pt) (next-single-char-property-change
-                                       pt 'after-string nil (+ 2 pt))))
-                      (and (pcase (get-char-property (1- pt) 'display)
-                             ('nil)
-                             ((pred stringp) t)
-                             (`(,(or 'image 'slice `(margin nil))
-                                . ,_)
-                              t))
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'display nil (1+ pt)))))
                   (setq end pt))
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
@@ -1417,6 +1419,24 @@ Target overlays may override this default by setting the
                 (cond
                  ((= line-beg pt)
                   (setq end pt))
+                 ((and (/= pt (point-min))
+                       (or (and (get-char-property pt 'before-string)
+                                (= pt (next-single-char-property-change
+                                       (1- pt) 'before-string nil (1+ pt))))
+                           (and (pcase (get-char-property (1- pt) 'display)
+                                  ('nil)
+                                  ((pred stringp) t)
+                                  (`(,(or 'image 'slice `(margin nil))
+                                     . ,_)
+                                   t))
+                                (= pt (next-single-char-property-change
+                                       (1- pt) 'display nil (1+ pt))))))
+                  (setq end (min beg (1+ pt))))
+                 ((and (/= pt (point-min))
+                       (get-char-property (1- pt) 'after-string)
+                       (= pt (next-single-char-property-change
+                              (1- pt) 'after-string nil (1+ pt))))
+                  (setq end pt))
                  ((let ((width
                          (save-excursion
                            (with-restriction pt beg
@@ -1430,21 +1450,6 @@ Target overlays may override this default by setting the
                                              'conn-target-overlay
                                              window)
                   (setq end pt))
-                 ((or (and (get-char-property pt 'before-string)
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'before-string nil (1+ pt))))
-                      (and (get-char-property pt 'after-string)
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'after-string nil (1+ pt))))
-                      (and (pcase (get-char-property (1- pt) 'display)
-                             ('nil)
-                             ((pred stringp) t)
-                             (`(,(or 'image 'slice `(margin nil))
-                                . ,_)
-                              t))
-                           (= pt (next-single-char-property-change
-                                  (1- pt) 'display nil (1+ pt)))))
-                  (setq end (min beg (1+ pt))))
                  ((get-text-property (1- pt) 'composition)
                   (setq pt (previous-single-property-change
                             (1- pt) 'composition nil line-beg)))
