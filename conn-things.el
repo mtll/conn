@@ -138,12 +138,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (cl-defstruct (conn--anonymous-thing
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
-               (:copier conn--copy-anonymous-thing)
-               ;; This would be nice but cl-defsubst does not handle
-               ;; &rest arguments properly and as a result PROPERTIES
-               ;; gets evaluated twice in the expansion.
-               ;; (:constructor conn-anonymous-thing (parent &rest properties))
-               )
+               (:copier conn--copy-anonymous-thing))
   (parents nil)
   (methods nil :read-only t)
   (properties nil))
@@ -1907,6 +1902,40 @@ Only the background color is used."
                       (setf (conn-bounds-get bounds :direction) 1)
                       (funcall updater (conn-argument bounds))))))))
            bound))))))
+
+;;;; Read Thing Regions
+
+(defmacro conn-read-thing-region (pattern-and-keys &rest body)
+  (declare (indent 1))
+  (pcase pattern-and-keys
+    (`(,pat . ,(and keys (pred plistp)))
+     (cl-with-gensyms (thing arg transform)
+       `(conn--read-args
+         ,(or (plist-get keys :state)
+              'conn-read-thing-state)
+         (list (conn-thing-argument
+                ,(plist-get keys :recursive-edit)
+                ,(plist-get keys :in-region))
+               (conn-transform-argument))
+         (pcase-lambda (`(,,thing ,,arg) ,transform)
+           (pcase (conn-bounds-of ,thing ,arg)
+             ((conn-bounds ,pat ,transform)
+              ,@body)
+             (_ (error "Invalid thing region"))))
+         ,@(cl-loop for key on keys by #'cddr
+                    when (memq (car key) '(:history-var
+                                           :history-len
+                                           :command-handler
+                                           :display-handler
+                                           :around
+                                           :overriding-map
+                                           :prompt
+                                           :prefix
+                                           :pre
+                                           :post
+                                           :reference))
+                    append (take 2 key)))))
+    (_ (error "Invalid pattern-and-keys"))))
 
 ;;;; Thing Definitions
 
