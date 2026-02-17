@@ -1285,8 +1285,6 @@ Target overlays may override this default by setting the
                        `(invisible ,(get-char-property pt 'invisible win))
                        str)
                       (overlay-put overlay 'after-string str))))
-                 ;; If the label overlay is wider than the label
-                 ;; string we are done.
                  ((and (/= pt (point-min))
                        (or (and (/= pt beg)
                                 (get-char-property pt 'before-string)
@@ -1304,6 +1302,8 @@ Target overlays may override this default by setting the
                                 (= pt (next-single-char-property-change
                                        (1- pt) 'display nil (1+ pt))))))
                   (setq end pt))
+                 ;; If the label overlay is wider than the label
+                 ;; string we are done.
                  ((let ((width
                          (save-excursion
                            (with-restriction beg pt
@@ -1318,10 +1318,9 @@ Target overlays may override this default by setting the
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
-                 ((and (/= beg pt)
-                       (conn--overlays-in-of-type pt (1+ pt)
-                                                  'conn-target-overlay
-                                                  window))
+                 ((cl-loop for ov in (conn--overlays-in-of-type
+                                      pt (1+ pt) 'conn-target-overlay window)
+                           thereis (not (eq ov target)))
                   (setq end pt))
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
@@ -4675,8 +4674,6 @@ it."))
                                thing
                                arg
                                transform
-                               &rest
-                               keys
                                &key
                                repeat
                                restrict-windows
