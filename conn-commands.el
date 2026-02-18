@@ -35,6 +35,7 @@
 (autoload 'multi-isearch-read-buffers "misearch")
 (autoload 'multi-isearch-read-matching-buffers "misearch")
 (autoload 'kmacro-ring-head "kmacro")
+(autoload 'pulse-momentary-highlight-overlay "pulse")
 
 (declare-function outline-insert-heading "outline")
 (declare-function project-files "project")
