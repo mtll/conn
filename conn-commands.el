@@ -194,7 +194,12 @@ Pulses line that was the first visible line before scrolling."
     (let ((start (window-start)))
       (scroll-down arg)
       (unless executing-kbd-macro
-        (pulse-momentary-highlight-one-line start)))))
+        (let ((o (save-excursion
+                   (goto-char start)
+                   (make-overlay (pos-bol) (pos-bol 2)))))
+          (overlay-put o 'pulse-delete t)
+          (overlay-put o 'window (selected-window))
+          (pulse-momentary-highlight-overlay o))))))
 (put 'conn-scroll-down 'scroll-command t)
 
 (defun conn-scroll-up (&optional arg)
@@ -209,7 +214,12 @@ Pulses line that was the last visible line before scrolling."
     (let ((end (window-end)))
       (scroll-up arg)
       (unless executing-kbd-macro
-        (pulse-momentary-highlight-one-line (1- end))))))
+        (let ((o (save-excursion
+                   (goto-char end)
+                   (make-overlay (pos-bol) (pos-bol 0)))))
+          (overlay-put o 'pulse-delete t)
+          (overlay-put o 'window (selected-window))
+          (pulse-momentary-highlight-overlay o))))))
 (put 'conn-scroll-up 'scroll-command t)
 
 (defun conn-backward-line (N)
