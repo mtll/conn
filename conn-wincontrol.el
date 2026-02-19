@@ -105,8 +105,9 @@
   "o" 'tab-next
   "U" 'tab-close
   "u" 'tab-previous
-  "B" 'tab-bar-move-window-to-tab
-  "D" 'tab-bar-detach-tab)
+  "G" 'tab-bar-move-window-to-tab
+  "D" 'tab-bar-detach-tab
+  "B" 'tab-bar-switch-to-tab)
 
 (defvar-keymap conn-buffer-one-command-repeat-map
   :repeat t
@@ -156,7 +157,8 @@
   "w" 'conn-other-place-prefix
   "<tab>" 'other-window
   "TAB" 'other-window
-  "B" 'tab-bar-move-window-to-tab
+  "G" 'tab-bar-move-window-to-tab
+  "B" 'tab-bar-switch-to-tab
   "O" 'tab-bar-duplicate-tab
   "D" 'tab-bar-detach-tab
   "F" 'toggle-frame-fullscreen
