@@ -21,8 +21,6 @@
 (require 'conn-states)
 (require 'conn-things)
 (require 'conn-jump-ring)
-(eval-when-compile
-  (require 'cl-lib))
 
 (defvar outline-heading-end-regexp)
 (defvar treesit-defun-type-regexp)

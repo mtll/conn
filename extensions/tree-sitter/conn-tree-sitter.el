@@ -23,8 +23,6 @@
 (require 'conn-things)
 (require 'conn-dispatch)
 (require 'treesit)
-(eval-when-compile
-  (require 'cl-lib))
 
 (cl-defstruct (conn-ts--thing
                (:constructor conn--make-ts-thing))

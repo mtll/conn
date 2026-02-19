@@ -22,8 +22,6 @@
 (require 'conn-utils)
 (require 'conn-dispatch)
 (require 'conn-commands)
-(eval-when-compile
-  (require 'cl-lib))
 
 ;;;; WinControl
 

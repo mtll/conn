@@ -21,8 +21,7 @@
 (require 'kmacro)
 (require 'conn-vars)
 (eval-when-compile
-  (require 'subr-x)
-  (require 'cl-lib))
+  (require 'subr-x))
 
 (autoload 'make-vtable "vtable")
 

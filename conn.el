@@ -38,7 +38,8 @@
 (require 'conn-commands)
 (require 'conn-keymaps)
 (require 'conn-surround)
-(eval-when-compile (require 'cl-lib))
+(eval-when-compile
+  (require 'cl-lib))
 
 ;;;; Mode Definition
 

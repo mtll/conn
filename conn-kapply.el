@@ -25,8 +25,6 @@
 (require 'conn-states)
 (require 'conn-things)
 (require 'conn-commands)
-(eval-when-compile
-  (require 'cl-lib))
 
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function project-files "project")

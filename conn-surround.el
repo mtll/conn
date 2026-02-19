@@ -23,8 +23,6 @@
 (require 'conn-dispatch)
 (require 'conn-expand)
 (require 'conn-commands)
-(eval-when-compile
-  (require 'cl-lib))
 
 ;;;;; Bounds
 

@@ -19,8 +19,6 @@
 
 (require 'compat)
 (require 'conn-things)
-(eval-when-compile
-  (require 'cl-lib))
 
 (declare-function conn-exchange-mark-command "conn-commands")
 

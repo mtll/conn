@@ -25,6 +25,8 @@
 (require 'conn-quick-ref)
 (require 'conn-things)
 (require 'posframe)
+(eval-when-compile
+  (require 'cl-lib))
 
 (defvar conn-read-pair-function)
 (defvar kmacro-counter)

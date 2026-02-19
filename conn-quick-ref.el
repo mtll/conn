@@ -18,8 +18,6 @@
 ;;; Code
 
 (require 'conn-utils)
-(eval-when-compile
-  (require 'cl-lib))
 
 ;;;;; Quick Reference
 

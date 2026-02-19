@@ -21,8 +21,7 @@
 (require 'conn-vars)
 (require 'conn-utils)
 (eval-when-compile
-  (require 'subr-x)
-  (require 'cl-lib))
+  (require 'subr-x))
 
 (defvar-local conn-jump-ring nil
   "Ring of previous jump positions in a buffer.")
