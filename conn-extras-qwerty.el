@@ -18,6 +18,16 @@
 (require 'conn-extras)
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-special-state)
+  :suppress t
+  "SPC" 'conn-one-emacs-state
+  "<escape>" 'conn-pop-state
+  "M-j" 'conn-command-state
+  "w" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol
+  "`" 'conn-wincontrol-mru-window)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
   :suppress t
   "TAB" 'outline-cycle
@@ -142,168 +152,6 @@
   "% s" 'dired-do-symlink-regexp
   "% y" 'dired-do-relsymlink-regexp
   "% t" 'dired-flag-garbage-files)
-
-(defvar dired-subdir-alist)
-(defvar dired-movement-style)
-(defvar dired-mode-map)
-
-(declare-function dired-mark "dired")
-(declare-function dired-unmark "dired")
-(declare-function dired-next-line "dired")
-(declare-function dired-next-dirline "dired")
-(declare-function dired-marker-regexp "dired")
-(declare-function dired-kill-subdir "dired-aux")
-(declare-function dired-kill-line "dired-aux")
-
-(defun conn--dispatch-dired-dirline ()
-  (save-excursion
-    (with-restriction (window-start) (window-end)
-      (goto-char (point-min))
-      (while (/= (point)
-                 (progn
-                   (dired-next-dirline 1)
-                   (point)))
-        (conn-make-target-overlay (point) 0)))))
-
-(defun conn--dispatch-dired-subdir ()
-  (let ((start (window-start))
-        (end (window-end)))
-    (save-excursion
-      (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
-        (when (<= start marker end)
-          (goto-char marker)
-          (conn-make-target-overlay
-           (+ 2 marker) (- (line-end-position) marker 2)))))))
-
-(conn-register-thing 'dired-line :parents '(line))
-
-(conn-register-thing-commands
- '(dired-line) nil
- 'dired-previous-line 'dired-next-line)
-
-(defun conn--dispatch-dired-lines (try-next)
-  (if (derived-mode-p '(dired-mode))
-      (lambda (_state)
-        (save-excursion
-          (goto-char (window-start))
-          (vertical-motion (cons 1 0))
-          (when (< (point) (window-end))
-            (conn-make-target-overlay
-             (point) 0
-             :padding-function #'conn--flush-left-padding))
-          (while (progn
-                   (vertical-motion (cons 1 1))
-                   (< (point) (window-end)))
-            (conn-make-target-overlay
-             (point) 0
-             :padding-function #'conn--flush-left-padding))))
-    (funcall try-next)))
-
-(conn-add-update-handler 'conn-dispatch-line-targets
-                         #'conn--dispatch-dired-lines)
-
-(conn-add-update-handler 'conn-dispatch-column-targets
-                         #'conn--dispatch-dired-lines)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
-  (conn-dispatch-jump))
-
-(conn-register-thing 'dired-subdir)
-
-(conn-register-thing-commands
- '(dired-subdir) nil
- 'dired-next-subdir 'dired-prev-subdir
- 'dired-tree-up 'dired-tree-down)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir))
-                                      _arg)
-  #'conn--dispatch-dired-subdir)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
-  (conn-dispatch-jump))
-
-(conn-register-thing 'dired-dirline)
-
-(conn-register-thing-commands
- '(dired-dirline) nil
- 'dired-next-dirline 'dired-prev-dirline)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline))
-                                      _arg)
-  #'conn--dispatch-dired-dirline)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
-  (conn-dispatch-jump))
-
-(defun conn-dispatch-dired-mark ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (save-excursion
-          (let ((regexp (dired-marker-regexp)))
-            (goto-char pt)
-            (goto-char (line-beginning-position))
-            (if (looking-at regexp)
-                (dired-unmark 1)
-              (dired-mark 1))))))))
-
-(defun conn-dispatch-dired-kill-line ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Kill Line")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (dired-kill-line))))))
-
-(defun conn-dispatch-dired-kill-subdir ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Kill Subdir")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (dired-kill-subdir))))))
-
-(defvar-local conn--wdired-stack-cookie nil)
-
-(with-eval-after-load 'wdired
-  (defun conn--wdired-cleanup ()
-    (conn-set-major-mode-maps
-     (conn--derived-mode-all-parents major-mode))
-    (conn-exit-recursive-stack conn--wdired-stack-cookie))
-  (advice-add 'wdired-change-to-dired-mode :after 'conn--wdired-cleanup)
-
-  (defun conn--wdired-setup ()
-    (conn-set-major-mode-maps (list 'wdired-mode))
-    (setq conn--wdired-stack-cookie
-          (conn-enter-recursive-stack 'conn-command-state)))
-  (add-hook 'wdired-mode-hook 'conn--wdired-setup))
 
 ;;;; Diff
 

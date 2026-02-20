@@ -49,11 +49,7 @@
   :global t
   :group 'conn
   (if conn-special-state-mode
-      (progn
-        (pcase conn-keymaps-defined
-          ('qwerty (require 'conn-extras-qwerty))
-          ('generic (require 'conn-extras-generic)))
-        (add-hook 'conn-setup-state-hook #'conn-setup-special-state -20))
+      (add-hook 'conn-setup-state-hook #'conn-setup-special-state -20)
     (remove-hook 'conn-setup-state-hook #'conn-setup-special-state)))
 
 ;;; Load Extensions

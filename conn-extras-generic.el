@@ -22,8 +22,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
-  "h" 'conn-one-command
-  "SPC" 'conn-one-emacs-state
+  "h" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state
   "w" 'conn-wincontrol-one-command
