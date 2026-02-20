@@ -1285,7 +1285,7 @@ Target overlays may override this default by setting the
                                        (1- pt) 'before-string nil (1+ pt))))
                            (and (get-char-property (1- pt) 'after-string)
                                 (= pt (next-single-char-property-change
-                                       (- pt 2) 'after-string nil (1+ pt))))
+                                       (- pt 1) 'after-string nil (1+ pt))))
                            (and (pcase (get-char-property pt 'display)
                                   ('nil)
                                   ((pred stringp) t)

@@ -774,20 +774,6 @@
   "D" 'tab-bar-detach-tab
   "B" 'tab-bar-switch-to-tab)
 
-(defvar-keymap conn-buffer-one-command-repeat-map
-  :repeat t
-  "J" 'bury-buffer
-  "L" 'unbury-buffer
-  "l" 'next-buffer
-  "j" 'previous-buffer)
-
-(defvar-keymap conn-buffer-one-command-repeat-map
-  :repeat t
-  "P" 'bury-buffer
-  "N" 'unbury-buffer
-  "n" 'next-buffer
-  "p" 'previous-buffer)
-
 (define-keymap
   :keymap conn-wincontrol-map
   "M-?" 'conn-wincontrol-quick-ref
@@ -848,10 +834,10 @@
   "B" 'tab-close
   "Z" 'text-scale-increase
   "T" 'tear-off-window
-  "[" 'conn-previous-buffer
-  "]" 'conn-next-buffer
-  "{" 'conn-bury-buffer
-  "}" 'conn-unbury-buffer
+  "[" 'previous-buffer
+  "]" 'next-buffer
+  "{" 'bury-buffer
+  "}" 'unbury-buffer
   "`" 'conn-wincontrol-mru-window
   "c" 'delete-window
   "k" 'conn-delete-window
@@ -862,8 +848,8 @@
   "g" (conn-remap-key "M-g" t t)
   "x" (conn-remap-key "C-x" t t)
   "C" 'kill-buffer-and-window
-  "P" 'conn-wincontrol-scroll-down
-  "N" 'conn-wincontrol-scroll-up
+  "p" 'conn-wincontrol-scroll-down
+  "n" 'conn-wincontrol-scroll-up
   "f" 'tab-next
   "," 'conn-register-prefix
   "." 'conn-register-load
@@ -881,21 +867,15 @@
   :keymap conn-wincontrol-one-command-map
   "d" 'kill-buffer-and-window
   "u" 'conn-kill-this-buffer
-  "U" 'undefined
-  "D" 'undefined
-  "p" 'previous-buffer
-  "n" 'next-buffer
-  "P" 'bury-buffer
-  "N" 'unbury-buffer
   "e" 'delete-other-windows)
 
-(defvar-keymap conn-kill-buffer-repeat-map
+(defvar-keymap conn-buffer-repeat-map
   :repeat t
   "u" 'conn-kill-this-buffer
-  "P" 'conn-bury-buffer
-  "N" 'conn-unbury-buffer
-  "n" 'conn-next-buffer
-  "p" 'conn-previous-buffer)
+  "{" 'conn-bury-buffer
+  "}" 'conn-unbury-buffer
+  "]" 'next-buffer
+  "[" 'previous-buffer)
 
 (static-if (<= 31 emacs-major-version)
     (progn

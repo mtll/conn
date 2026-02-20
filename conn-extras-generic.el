@@ -22,9 +22,13 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
+  "h" 'conn-one-command
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
-  "M-j" 'conn-command-state)
+  "M-j" 'conn-command-state
+  "w" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol
+  "`" 'conn-wincontrol-mru-window)
 
 ;;; Load Extensions
 
@@ -37,7 +41,6 @@
   "<backstab>" 'outline-cycle-buffer
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
-  ";" 'conn-wincontrol
   "/" (conn-remap-key conn-undo-keys t)
   "?" (conn-remap-key conn-undo-redo-keys t)
   "W" 'widen
@@ -57,7 +60,6 @@
   "e" 'conn-pop-state
   "d" 'conn-dispatch
   "g" (conn-remap-key "M-g" t)
-  "w" 'conn-wincontrol-one-command
   "p" 'outline-previous-visible-heading
   "b" 'outline-backward-same-level
   "n" 'outline-next-visible-heading
@@ -85,35 +87,26 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)
   "M-?" 'conn-dired-quick-ref
   "M-w" 'dired-copy-filename-as-kill
-  "w" 'conn-wincontrol-one-command
   "/" 'dired-undo
-  "C-." 'conn-register-load
-  ";" 'conn-wincontrol
-  "`" 'conn-wincontrol-mru-window)
+  "C-." 'conn-register-load)
 
 ;;;; Diff
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
-  ";" 'conn-wincontrol
-  "w" 'conn-wincontrol-one-command
   "M-w" 'diff-kill-ring-save
   "M-?" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
   "TAB" 'diff-goto-source
-  "<tab>" 'diff-goto-source
-  "`" 'conn-wincontrol-mru-window)
+  "<tab>" 'diff-goto-source)
 
 ;;;; Magit
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
   "M-?" 'conn-magit-quick-ref
-  "@" 'magit-am
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
-  "`" 'conn-wincontrol-mru-window)
+  "@" 'magit-am)
 
 ;;;; Ibuffer
 
@@ -123,10 +116,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
   "M-?" 'conn-ibuffer-quick-ref
-  "w" 'conn-wincontrol-one-command
   "M-w" 'ibuffer-copy-filename-as-kill
-  ";" 'conn-wincontrol
-  "`" 'conn-wincontrol-mru-window
   "y" 'ibuffer-yank)
 
 ;;;; Bookmark Bmenu
@@ -140,91 +130,59 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
-  "M-?" 'conn-bookmark-bmenu-quick-ref
-  "`" 'conn-wincontrol-mru-window
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol)
+  "M-?" 'conn-bookmark-bmenu-quick-ref)
 
 ;;;; Help
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'help-mode)
-  "w" 'conn-wincontrol-one-command
-  "d" 'conn-dispatch-on-buttons
-  "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch-on-buttons)
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'helpful-mode)
-  "w" 'conn-wincontrol-one-command
-  "a" 'execute-extended-command
-  "A" 'execute-extended-command-for-buffer
-  "d" 'conn-dispatch-on-buttons
-  "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch-on-buttons)
 
 ;;;; Info
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
   "M-?" 'conn-info-quick-ref
-  "w" 'conn-wincontrol-one-command
-  "d" 'dispatch-on-info-refs
-  "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol)
+  "d" 'dispatch-on-info-refs)
 
 ;;;; Treemacs
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
-  "w" 'conn-wincontrol-one-command
-  "`" 'treemacs-select-window
-  "d" 'conn-dispatch
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch)
 
 ;;;; Messages
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
-  "w" 'conn-wincontrol-one-command
-  "`" 'conn-wincontrol-mru-window
-  "d" 'conn-dispatch
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch)
 
 ;;;; Debugger mode
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
-  "w" 'conn-wincontrol-one-command
-  "`" 'conn-wincontrol-mru-window
-  "d" 'conn-dispatch
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch)
 
 ;;;; Occur mode
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
-  "w" 'conn-wincontrol-one-command
-  "`" 'conn-wincontrol-mru-window
-  "d" 'conn-dispatch
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch)
 
 ;;;; Compile mode
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
-  "w" 'conn-wincontrol-one-command
-  "`" 'conn-wincontrol-mru-window
-  "d" 'conn-dispatch
-  ";" 'conn-wincontrol)
+  "d" 'conn-dispatch)
 
 ;;;; pdf-tools
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
-  "`" 'conn-wincontrol-mru-window
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
   ">" 'pdf-view-position-to-register
   "." 'pdf-view-jump-to-register
   "<escape>" 'undefined
