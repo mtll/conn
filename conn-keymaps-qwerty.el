@@ -20,12 +20,9 @@
 ;;; Code
 
 (require 'compat)
-(require 'conn-states)
-(require 'conn-things)
-(require 'conn-commands)
-(require 'conn-dispatch)
+(require 'conn)
 
-;;;; Keymaps
+(setq conn-keymaps-defined 'qwerty)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
@@ -41,7 +38,7 @@
   :keymap conn-other-end-argument-map
   "z" 'other-end)
 
-;;;;; Repeat Map
+;;;; Repeat Map
 
 (defvar-keymap conn-mru-window-repeat-map
   :repeat t
@@ -52,7 +49,7 @@
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
 
-;;;;; Mode Keymaps
+;;;; Mode Keymaps
 
 (defvar-keymap conn-error-repeat-map
   :repeat (:exit (ignore))
@@ -89,7 +86,7 @@
     "C-." 'conn-dispatch-isearch-with-action
     "C-'" 'conn-isearch-open-recursive-edit))
 
-;;;;; Top-level Command State Maps
+;;;; Top-level Command State Maps
 
 (defvar-keymap conn-indent-relative-repeat-map
   :repeat t
@@ -173,13 +170,7 @@
   "<" 'xref-go-back
   ">" 'xref-go-forward)
 
-;;;;; Global Bindings
-
-(defvar-keymap conn-dispatch-cycle-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
-  "l" 'conn-dispatch-cycle-ring-next
-  "j" 'conn-dispatch-cycle-ring-previous)
+;;;; Global Bindings
 
 (defvar-keymap conn-last-emacs-state-repeat-map
   :repeat t
@@ -189,23 +180,10 @@
 (put 'conn-next-emacs-state 'repeat-check-key 'no)
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
 
-(defvar-keymap conn-local-mode-map
-  "C-<escape>" 'exit-recursive-edit)
-
 (defvar-keymap conn-whitespace-repeat-map
   :repeat t
   "w" 'forward-whitespace
   "W" 'conn-backward-whitespace)
-
-(defvar-keymap conn-line-repeat-map
-  :repeat t
-  "k" 'forward-line
-  "i" 'conn-backward-line)
-
-(defvar-keymap conn-list-repeat-map
-  :repeat t
-  ")" 'forward-list
-  "(" 'backward-list)
 
 (define-keymap
   :keymap conn-default-thing-map
@@ -221,7 +199,7 @@
    (make-sparse-keymap))
  "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
-;;;;; Minibuffer
+;;;; Minibuffer
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'minibuffer-mode)
@@ -231,9 +209,9 @@
   :keymap (conn-get-major-mode-map 'conn-command-state 'minibuffer-mode)
   "C-t" 'conn-yank-thing-to-minibuffer)
 
-;;;;; State Keymaps
+;;;; State Keymaps
 
-;;;;;; Mark State
+;;;;; Mark State
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
@@ -253,12 +231,12 @@
   "v" 'rectangle-mark-mode
   "V" 'conn-mark-thing)
 
-;;;;;; Emacs State
+;;;;; Emacs State
 
 (keymap-set (conn-get-state-map 'conn-emacs-state)
             "<escape>" 'conn-pop-state)
 
-;;;;;; Read Thing State
+;;;;; Read Thing State
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
@@ -291,7 +269,7 @@
   :keymap (conn-get-major-mode-map 'conn-read-thing-common-state 'outline-mode)
   "M-h" 'outline-up-heading)
 
-;;;;;; Command State
+;;;;; Command State
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
@@ -364,7 +342,7 @@
   "z" 'conn-yank-replace
   "Z" 'conn-exchange-mark-command)
 
-;;;;;; Dispatch State
+;;;;; Dispatch State
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
@@ -488,4 +466,471 @@
         :pretty-print ( :method (_) "position-registers")
         :target-finder (:method (_self _arg) (conn-dispatch-mark-register))))
 
-(provide 'conn-keymaps)
+;;;;; Other States
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-change-state)
+  "y" 'yank
+  "Y" 'yank-from-kill-ring
+  "e" 'conn-emacs-state-overwrite
+  "E" 'conn-emacs-state-overwrite-binary
+  "j" conn-backward-char-remap
+  "l" conn-forward-char-remap
+  "q" 'conn-replace)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-kill-state)
+  "w" 'copy
+  "/" 'buffer-filename
+  "P" 'project-filename
+  ">" 'kill-matching-lines
+  "%" 'keep-lines
+  "j" 'move-end-of-line)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-copy-state)
+  "j" 'move-end-of-line)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-duplicate-state)
+  "c" 'copy-from-above-command)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-mark-thing-state)
+  "z" 'conn-exchange-mark-command)
+
+(static-if (<= 30 emacs-major-version)
+    (define-keymap
+      :keymap conn-replace-thing-argument-map
+      "D" 'as-diff
+      "F" 'multi-file-as-diff
+      "P" 'as-diff-in-project))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-transpose-state)
+  "u" 'forward-symbol
+  "f" 'conn-dispatch)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
+  "TAB" 'repeat-dispatch
+  "C-w" 'restrict-windows
+  "SPC" 'scroll-up-command
+  "DEL" 'scroll-down-command
+  "C-o" 'other-window)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-transpose-state 'conn--replace-reading)
+  ";" (conn-anonymous-thing
+        '(sexp)
+        :transpose-op ( :method (_self _arg _at-point-and-mark)
+                        (conn--query-replace-read-transpose-from-to))))
+
+;;;; Argument Keymaps
+
+(define-keymap
+  :keymap conn-register-argument-map
+  "." 'register)
+
+(define-keymap
+  :keymap conn-swap-argument-map
+  "~" 'swap)
+
+(define-keymap
+  :keymap conn-replace-thing-argument-map
+  "p" 'project
+  "/" 'multi-file
+  "'" 'kapply
+  "e" 'conn-emacs-state)
+
+(define-keymap
+  :keymap conn-regexp-argument-map
+  "q" 'regexp)
+
+(define-keymap
+  :keymap conn-delimited-argument-map
+  "d" 'delimited)
+
+(define-keymap
+  :keymap conn-backward-argument-map
+  "z" 'backward)
+
+(define-keymap
+  :keymap conn-transpose-point-and-mark-argument-map
+  "z" 'transpose-at-point-and-mark)
+
+(define-keymap
+  :keymap conn-delete-argument-map
+  "d" 'delete)
+
+(define-keymap
+  :keymap conn-kill-append-argument-map
+  "x" 'append
+  "X" 'append-on-repeat)
+
+(define-keymap
+  :keymap conn-copy-thing-argument-map
+  "/" 'buffer-filename
+  "p" 'project-filename
+  ">" 'copy-matching-lines)
+
+(define-keymap
+  :keymap conn-sort-reverse-argument-map
+  "r" 'reverse)
+
+(define-keymap
+  :keymap conn-sort-fold-case-argument-map
+  "g" 'sort-fold-case)
+
+(define-keymap
+  :keymap conn-kapply-state-argument-map
+  "s" 'kapply-state)
+
+(define-keymap
+  :keymap conn-kapply-order-argument-map
+  "o" 'kapply-order)
+
+(define-keymap
+  :keymap conn-kapply-empty-argument-map
+  "," 'kapply-empty)
+
+(define-keymap
+  :keymap conn-kapply-ibuffer-argument-map
+  "b" 'kapply-ibuffer)
+
+(define-keymap
+  :keymap conn-kapply-undo-argument-map
+  "u" 'kapply-undo)
+
+(define-keymap
+  :keymap conn-kapply-excursions-argument-map
+  "x" 'save-excursions)
+
+(define-keymap
+  :keymap conn-kapply-restrictions-argument-map
+  "n" 'save-restrictions)
+
+(define-keymap
+  :keymap conn-kapply-window-conf-argument-map
+  "w" 'save-window-conf)
+
+(define-keymap
+  :keymap conn-kapply-query-argument-map
+  "q" 'query)
+
+(define-keymap
+  :keymap conn-restrict-argument-map
+  "v" 'restrict)
+
+(define-keymap
+  :keymap conn-read-pattern-map
+  "p" 'read-pattern)
+
+(define-keymap
+  :keymap conn-yank-pop-repeat-map
+  "C-y" 'conn-yank-unpop
+  "y" 'yank-pop
+  "Y" 'conn-yank-with-completion)
+
+(define-keymap
+  :keymap conn-replace-from-map
+  "C-M-;" 'conn-replace-insert-separator)
+
+(define-keymap
+  :keymap conn-isearch-thing-map
+  "/" 'multi-file
+  "*" 'multi-buffer
+  "p" 'project)
+
+(define-keymap
+  :keymap conn-transpose-repeat-map
+  "?" 'conn-transpose-repeat-help
+  "t" 'conn-transpose-repeat
+  "T" 'conn-transpose-repeat-inverse)
+
+(define-keymap
+  :keymap conn-kill-dispatch-append-map
+  "C-p" 'append)
+
+(define-keymap
+  :keymap conn-duplicate-repeat-map
+  "M-?" 'conn-duplicate-repeat-help
+  "TAB" 'conn-duplicate-indent-repeat
+  "<tab>" 'conn-duplicate-indent-repeat
+  "DEL" 'conn-duplicate-delete-repeat
+  "<backspace>" 'conn-duplicate-delete-repeat
+  "q" 'conn-duplicate-repeat
+  "RET" 'conn-duplicate-repeat-toggle-padding
+  "<return>" 'conn-duplicate-repeat-toggle-padding
+  "c" 'conn-duplicate-repeat-comment)
+
+(define-keymap
+  :keymap conn-indent-cleanup-whitespace-map
+  "w" 'cleanup-whitespace)
+
+(define-keymap
+  :keymap conn-indent-thing-rigidly-map
+  "l" #'conn-indent-right
+  "j" #'conn-indent-left
+  "L" #'conn-indent-right-to-tab-stop
+  "J" #'conn-indent-left-to-tab-stop
+  "?" #'conn-indent-rigidly-reference)
+
+(define-keymap
+  :keymap conn-indirect-map
+  "d" 'indirect)
+
+(define-keymap
+  :keymap conn-shell-command-replace-map
+  "w" 'replace)
+
+(define-keymap
+  :keymap conn-surround-padding-argument-map
+  "TAB" 'conn-padding-flag)
+
+(define-keymap
+  :keymap conn-surround-trim-argument-map
+  "q" 'trim)
+
+;;;; Expand
+
+(define-keymap
+  :keymap conn-expand-repeat-map
+  "e" 'ignore
+  "z" 'exchange-point-and-mark
+  "j" 'conn-contract
+  "l" 'conn-expand)
+
+;;;; Dispatch
+
+(define-keymap
+  :keymap conn-dispatch-transform-argument-map
+  "a" 'conn-dispatch-bounds-anchored
+  "B" 'conn-dispatch-bounds-between
+  "<" 'conn-bounds-trim
+  "c" 'conn-dispatch-bounds-over
+  "T" 'conn-transform-reset)
+
+;;;; Things
+
+(define-keymap
+  :keymap conn-recursive-edit-thing-map
+  "R" 'recursive-edit
+  "r" 'recursive-edit-mark)
+
+(define-keymap
+  :keymap conn-subregions-argument-map
+  "~" 'toggle-subregions)
+
+(define-keymap
+  :keymap conn-reformat-argument-map
+  "TAB" 'reformat)
+
+(define-keymap
+  :keymap conn-check-bounds-argument-map
+  "q" 'check-bounds)
+
+(define-keymap
+  :keymap conn-transform-map
+  "<" 'conn-bounds-trim
+  "a" 'conn-bounds-after-point
+  "A" 'conn-bounds-after-point-exclusive
+  "b" 'conn-bounds-before-point
+  "B" 'conn-bounds-before-point-exclusive
+  "t" 'conn-bounds-last
+  "T" 'conn-bounds-upto)
+
+;;;; Wincontrol
+
+(define-keymap
+  :keymap conn-window-resize-map
+  "v" 'conn-wincontrol-maximize-vertically
+  "r" 'conn-wincontrol-maximize-horizontally
+  "m" 'maximize-window
+  "b" 'balance-windows
+  "n" 'conn-wincontrol-narrow-window
+  "s" 'conn-wincontrol-shorten-window
+  "h" 'conn-wincontrol-heighten-window
+  "w" 'conn-wincontrol-widen-window)
+
+(defvar-keymap conn-window-resize-repeat-map
+  :repeat (:exit (ignore))
+  "e" 'ignore
+  "n" 'conn-wincontrol-narrow-window
+  "s" 'conn-wincontrol-shorten-window
+  "h" 'conn-wincontrol-heighten-window
+  "w" 'conn-wincontrol-widen-window)
+
+(defvar-keymap conn-other-window-repeat-map
+  :repeat t
+  "o" 'other-window)
+
+(defvar-keymap conn-other-window-tab-repeat-map
+  :repeat t
+  "TAB" 'other-window
+  "<tab>" 'other-window)
+
+(defvar-keymap conn-wincontrol-next-window-repeat-map
+  :repeat t
+  "o" 'conn-wincontrol-next-window)
+
+(defvar-keymap conn-wincontrol-scroll-repeat-map
+  :repeat t
+  "n" 'conn-wincontrol-scroll-down
+  "m" 'conn-wincontrol-scroll-up
+  "N" 'conn-wincontrol-other-window-scroll-up
+  "M" 'conn-wincontrol-other-window-scroll-down)
+
+(defvar-keymap conn-wincontrol-text-scale-repeat-map
+  :repeat t
+  "z" 'text-scale-decrease
+  "Z" 'text-scale-increase)
+
+(defvar-keymap conn-wincontrol-tab-repeat-map
+  :repeat t
+  "O" 'tab-bar-duplicate-tab
+  "E" 'tab-new
+  "o" 'tab-next
+  "U" 'tab-close
+  "u" 'tab-previous
+  "G" 'tab-bar-move-window-to-tab
+  "D" 'tab-bar-detach-tab
+  "B" 'tab-bar-switch-to-tab)
+
+(defvar-keymap conn-buffer-one-command-repeat-map
+  :repeat t
+  "J" 'bury-buffer
+  "L" 'unbury-buffer
+  "l" 'next-buffer
+  "j" 'previous-buffer)
+
+(define-keymap
+  :keymap conn-wincontrol-map
+  "M-?" 'conn-wincontrol-quick-ref
+  "C-l" 'recenter-top-bottom
+  "-" 'conn-wincontrol-invert-argument
+  "0" 'conn-wincontrol-digit-argument
+  "1" 'conn-wincontrol-digit-argument
+  "2" 'conn-wincontrol-digit-argument
+  "3" 'conn-wincontrol-digit-argument
+  "4" 'conn-wincontrol-digit-argument
+  "5" 'conn-wincontrol-digit-argument
+  "6" 'conn-wincontrol-digit-argument
+  "7" 'conn-wincontrol-digit-argument
+  "8" 'conn-wincontrol-digit-argument
+  "9" 'conn-wincontrol-digit-argument
+  ";" 'conn-wincontrol-exit-to-initial-win
+  "/" 'tab-bar-history-back
+  "?" 'tab-bar-history-forward
+  "C-M-d" 'delete-other-frames
+  "M-r" 'move-to-window-line-top-bottom
+  "C-]" 'conn-wincontrol-abort
+  "C-u" 'conn-wincontrol-universal-arg
+  "DEL" 'conn-wincontrol-backward-delete-arg
+  "<backspace>" 'conn-wincontrol-backward-delete-arg
+  "M-/" 'undelete-frame
+  "M-<backspace>" 'conn-wincontrol-digit-argument-reset
+  "M-DEL" 'conn-wincontrol-digit-argument-reset
+  "M-c" 'clone-frame
+  "M-d" 'delete-frame
+  "M-o" 'other-frame
+  "<escape>" 'conn-wincontrol-exit
+  "<down>" 'windmove-down
+  "<left>" 'windmove-left
+  "<right>" 'windmove-right
+  "<up>" 'windmove-up
+  "<next>" 'conn-wincontrol-scroll-up
+  "<prior>" 'conn-wincontrol-scroll-down
+  "w" 'conn-other-place-prefix
+  "<tab>" 'other-window
+  "TAB" 'other-window
+  "G" 'tab-bar-move-window-to-tab
+  "B" 'tab-bar-switch-to-tab
+  "O" 'tab-bar-duplicate-tab
+  "D" 'tab-bar-detach-tab
+  "F" 'toggle-frame-fullscreen
+  "H" 'conn-kill-this-buffer
+  "k" 'windmove-down
+  "j" 'windmove-left
+  "l" 'windmove-right
+  "i" 'windmove-up
+  "K" 'windmove-swap-states-down
+  "J" 'windmove-swap-states-left
+  "L" 'windmove-swap-states-right
+  "I" 'windmove-swap-states-up
+  "N" 'conn-wincontrol-other-window-scroll-down
+  "M" 'conn-wincontrol-other-window-scroll-up
+  "E" 'tab-new
+  "R" 'conn-wincontrol-isearch-other-window-backward
+  "S" 'conn-wincontrol-isearch-other-window
+  "U" 'tab-close
+  "Z" 'text-scale-increase
+  "T" 'tear-off-window
+  "[" 'conn-previous-buffer
+  "]" 'conn-next-buffer
+  "{" 'conn-bury-buffer
+  "}" 'conn-unbury-buffer
+  "`" 'conn-wincontrol-mru-window
+  "c" 'delete-window
+  "d" 'conn-delete-window
+  "e" 'conn-wincontrol-exit
+  "b" 'delete-other-windows
+  "f" 'conn-goto-window
+  "g" (conn-remap-key "M-g" t t)
+  "x" (conn-remap-key "C-x" t t)
+  "C" 'kill-buffer-and-window
+  "n" 'conn-wincontrol-scroll-down
+  "m" 'conn-wincontrol-scroll-up
+  "o" 'tab-next
+  "," 'conn-register-prefix
+  "." 'conn-register-load
+  "q" 'quit-window
+  "s" 'conn-wincontrol-split-right
+  "r" conn-window-resize-map
+  "t" 'conn-transpose-window
+  "u" 'tab-previous
+  "v" 'conn-wincontrol-split-vertically
+  "h" 'conn-throw-buffer
+  "y" 'conn-yank-window
+  "z" 'text-scale-decrease)
+
+(define-keymap
+  :keymap conn-wincontrol-one-command-map
+  "i" 'kill-buffer-and-window
+  "k" 'conn-kill-this-buffer
+  "I" 'undefined
+  "K" 'undefined
+  "j" 'previous-buffer
+  "l" 'next-buffer
+  "J" 'bury-buffer
+  "L" 'unbury-buffer
+  "e" 'delete-other-windows)
+
+(static-if (<= 31 emacs-major-version)
+    (progn
+      (define-keymap
+        :keymap conn-wincontrol-map
+        "\\" 'window-layout-transpose
+        "|" 'window-layout-flip-leftright
+        "_" 'window-layout-flip-topdown
+        "<" 'rotate-windows-back
+        ">" 'rotate-windows)
+
+      (define-keymap
+        :keymap conn-window-resize-map
+        "<" 'window-layout-rotate-anticlockwise
+        ">" 'window-layout-rotate-clockwise)
+
+      (defvar-keymap conn-window-rotate-repeat-map
+        :repeat t
+        "<" 'window-layout-rotate-anticlockwise
+        ">" 'window-layout-rotate-clockwise)))
+
+(defvar-keymap conn-kill-buffer-repeat-map
+  "k" 'conn-kill-this-buffer
+  "J" 'conn-bury-buffer
+  "L" 'conn-unbury-buffer
+  "l" 'conn-next-buffer
+  "j" 'conn-previous-buffer)
+
+(provide 'conn-keymaps-qwerty)

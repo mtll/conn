@@ -36,12 +36,14 @@
 (require 'conn-expand)
 (require 'conn-dispatch)
 (require 'conn-commands)
-(require 'conn-keymaps)
 (require 'conn-surround)
 (eval-when-compile
   (require 'cl-lib))
 
 ;;;; Mode Definition
+
+(defvar-keymap conn-local-mode-map
+  "C-<escape>" 'exit-recursive-edit)
 
 (defun conn--clone-buffer-setup ()
   (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
@@ -107,6 +109,8 @@
   conn-local-mode conn--initialize-buffer
   :group 'conn
   (progn
+    (unless conn-keymaps-defined
+      (require 'conn-keymaps-generic))
     (conn--setup-keymaps)
     (if conn-mode
         (progn

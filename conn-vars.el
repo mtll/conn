@@ -24,6 +24,8 @@
 (defvar conn-local-mode nil)
 (defvar conn-lighter " Conn")
 
+(defvar conn-keymaps-defined nil)
+
 (defvar conn-kill-reformat-function 'conn-kill-reformat
   "Function to reformat the buffer after killing a region.
 
@@ -40,6 +42,13 @@ disabled.")
 (defvar-keymap conn-default-edit-map)
 (defvar-keymap conn-search-map)
 (defvar-keymap conn-other-end-argument-map)
+(defvar-keymap conn-sort-reverse-argument-map)
+(defvar-keymap conn-sort-fold-case-argument-map)
+(defvar-keymap conn-window-resize-map)
+(defvar-keymap conn-wincontrol-one-command-map)
+(defvar-keymap conn-wincontrol-map
+  :doc "Map active in `conn-wincontrol-mode'."
+  :suppress 'nodigits)
 
 ;;;; Custom Variables
 

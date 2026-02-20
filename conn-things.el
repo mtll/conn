@@ -1293,9 +1293,7 @@ the point is within the region then the entire region is returned.")))
 
 ;;;;; Thing Argument
 
-(defvar-keymap conn-recursive-edit-thing-map
-  "R" 'recursive-edit
-  "r" 'recursive-edit-mark)
+(defvar-keymap conn-recursive-edit-thing-map)
 
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
@@ -1461,8 +1459,7 @@ individual things that are moved over. For example the subregions of
 the 3 individual words, as opposed to the single region containing all 3
 words."))
 
-(defvar-keymap conn-subregions-argument-map
-  "~" 'toggle-subregions)
+(defvar-keymap conn-subregions-argument-map)
 
 (cl-defstruct (conn-thing-with-subregions-argument
                (:include conn-thing-argument)
@@ -1578,8 +1575,7 @@ words."))
 with a prefix argument then set the default value of reformat in the
 current buffer."))
 
-(defvar-keymap conn-reformat-argument-map
-  "TAB" 'reformat)
+(defvar-keymap conn-reformat-argument-map)
 
 (defvar conn-reformat-default t)
 
@@ -1640,8 +1636,7 @@ not be delete.  The the value returned by each function is ignored.")
 being killed is valid.  With a prefix argument set the default value for
 check bounds in the current buffer."))
 
-(defvar-keymap conn-check-bounds-argument-map
-  "q" 'check-bounds)
+(defvar-keymap conn-check-bounds-argument-map)
 
 (defvar conn-check-bounds-default t)
 
@@ -1687,14 +1682,7 @@ check bounds in the current buffer."))
       conn-bounds-before-point-exclusive)
      ("reset" conn-transform-reset))))
 
-(defvar-keymap conn-transform-map
-  "<" 'conn-bounds-trim
-  "a" 'conn-bounds-after-point
-  "A" 'conn-bounds-after-point-exclusive
-  "b" 'conn-bounds-before-point
-  "B" 'conn-bounds-before-point-exclusive
-  "t" 'conn-bounds-last
-  "T" 'conn-bounds-upto)
+(defvar-keymap conn-transform-map)
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)

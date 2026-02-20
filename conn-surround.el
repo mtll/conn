@@ -215,8 +215,7 @@
 
 ;;;;;; Padding Arg
 
-(defvar-keymap conn-surround-padding-argument-map
-  "TAB" 'conn-padding-flag)
+(defvar-keymap conn-surround-padding-argument-map)
 
 (defun conn-surround-padding-argument ()
   (conn-read-argument
@@ -567,8 +566,7 @@
 (conn-define-state conn-adjust-surround-state (conn-change-surround-state)
   :lighter "ADJUST")
 
-(defvar-keymap conn-surround-trim-argument-map
-  "q" 'trim)
+(defvar-keymap conn-surround-trim-argument-map)
 
 (defun conn-adjust-surround ()
   (interactive)

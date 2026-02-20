@@ -551,12 +551,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-dispatch-thingatpt-state (conn-dispatch-state))
 
-(defvar-keymap conn-dispatch-transform-argument-map
-  "a" 'conn-dispatch-bounds-anchored
-  "b" 'conn-dispatch-bounds-between
-  "<" 'conn-bounds-trim
-  "c" 'conn-dispatch-bounds-over
-  "T" 'conn-transform-reset)
+(defvar-keymap conn-dispatch-transform-argument-map)
 
 (defun conn-dispatch-transform-argument (&optional value)
   (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))

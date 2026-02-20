@@ -593,9 +593,6 @@ With arg N, insert N newlines."
 
 ;;;;; Register Setting and Loading
 
-(defvar-keymap conn-register-argument-map
-  "." 'register)
-
 (defun conn-set-register-separator (string)
   "Set `register-separator' register to string STRING."
   (interactive
@@ -660,10 +657,7 @@ for the meaning of prefix ARG."
 
 ;;;;; Yanking
 
-(defvar-keymap conn-yank-pop-repeat-map
-  "C-y" 'conn-yank-unpop
-  "y" 'yank-pop
-  "Y" 'conn-yank-with-completion)
+(defvar-keymap conn-yank-pop-repeat-map)
 
 ;; Adapted from `yank-with-completion'
 (defun conn-yank-with-completion (string)
@@ -1010,11 +1004,6 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-mark-thing-state (conn-read-thing-state)
   :lighter "MARK")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-mark-thing-state)
-  "p" 'point
-  "z" 'conn-exchange-mark-command)
-
 (cl-defstruct (conn-mark-thing-argument
                (:include conn-thing-argument)
                ( :constructor conn-mark-thing-argument
@@ -1316,9 +1305,6 @@ selected by dispatch with it."))
        :other-end other-end
        :restrict-windows restrict-windows))))
 
-(defvar-keymap conn-swap-argument-map
-  "~" 'swap)
-
 (defun conn-yank-replace (thing
                           arg
                           transform
@@ -1378,11 +1364,7 @@ selected by dispatch with it."))
 (conn-define-state conn-replace-state (conn-read-thing-state)
   :lighter "REPLACE")
 
-(defvar-keymap conn-replace-thing-argument-map
-  "p" 'project
-  "/" 'multi-file
-  "'" 'kapply
-  "e" 'conn-emacs-state)
+(defvar-keymap conn-replace-thing-argument-map)
 
 (cl-defstruct (conn-replace-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -1422,17 +1404,7 @@ selected by dispatch with it."))
                                        (_cmd (eql conn-emacs-state)))
   t)
 
-(defvar-keymap conn-regexp-argument-map
-  "q" 'regexp)
-
-(defvar-keymap conn-delimited-argument-map
-  "d" 'delimited)
-
-(defvar-keymap conn-backward-argument-map
-  "z" 'backward)
-
-(defvar-keymap conn-replace-from-map
-  "C-M-;" 'conn-replace-insert-separator)
+(defvar-keymap conn-replace-from-map)
 
 (defun conn-replace-insert-separator ()
   "Insert `query-replace-from-to-separator'."
@@ -1792,13 +1764,11 @@ selected by dispatch with it."))
 
       (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                              (_cmd (eql multi-file-as-diff)))
-        t)
+        t)))
 
-      (define-keymap
-        :keymap conn-replace-thing-argument-map
-        "D" 'as-diff
-        "F" 'multi-file-as-diff
-        "P" 'as-diff-in-project)))
+(defvar-keymap conn-regexp-argument-map)
+(defvar-keymap conn-delimited-argument-map)
+(defvar-keymap conn-backward-argument-map)
 
 (defun conn-replace (thing
                      arg
@@ -1885,10 +1855,7 @@ For more information about how the replacement is carried out see
 (conn-define-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
 
-(defvar-keymap conn-isearch-thing-map
-  "/" 'multi-file
-  "*" 'multi-buffer
-  "p" 'project)
+(defvar-keymap conn-isearch-thing-map)
 
 (cl-defstruct (conn-isearch-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -2170,22 +2137,8 @@ Exiting the recursive edit will resume the isearch."
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-transpose-state)
-  "i" 'conn-backward-line
-  "u" 'forward-symbol
-  "f" 'conn-dispatch)
-
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
-  "TAB" 'repeat-dispatch
-  "C-w" 'restrict-windows
-  "SPC" 'scroll-up-command
-  "DEL" 'scroll-down-command
-  "C-o" 'other-window)
 
 (defvar conn-transpose-repeat-commands-ref
   (conn-reference-quote
@@ -2212,10 +2165,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive)
   (user-error "Not repeating transpose"))
 
-(defvar-keymap conn-transpose-repeat-map
-  "?" 'conn-transpose-repeat-help
-  "t" 'conn-transpose-repeat
-  "T" 'conn-transpose-repeat-inverse)
+(defvar-keymap conn-transpose-repeat-map)
 
 (defun conn-transpose-setup-repeat-map (repeat repeat-inverse)
   (advice-add 'conn-transpose-repeat :override repeat)
@@ -2391,13 +2341,6 @@ Exiting the recursive edit will resume the isearch."
        :other-end :no-other-end
        :restrict-windows restrict-windows))))
 
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-transpose-state 'conn--replace-reading)
-  ";" (conn-anonymous-thing
-        '(sexp)
-        :transpose-op ( :method (_self _arg _at-point-and-mark)
-                        (conn--query-replace-read-transpose-from-to))))
-
 ;; Coming in emacs 31
 (defun conn--query-replace-read-transpose-from-to ()
   (let* ((from-beg (minibuffer-prompt-end))
@@ -2431,8 +2374,7 @@ Exiting the recursive edit will resume the isearch."
                   (required t)
                   (keymap conn-transpose-thing-argument-map)))))
 
-(defvar-keymap conn-transpose-point-and-mark-argument-map
-  "z" 'transpose-at-point-and-mark)
+(defvar-keymap conn-transpose-point-and-mark-argument-map)
 
 (defun conn-transpose-things (thing arg at-point-and-mark)
   "Exchange the current THING and the previous, leaving point after both.
@@ -2493,21 +2435,7 @@ append to that place."
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-kill-state)
-  "w" 'copy
-  "/" 'buffer-filename
-  "P" 'project-filename
-  ">" 'kill-matching-lines
-  "%" 'keep-lines
-  "j" 'move-end-of-line)
-
-(defvar-keymap conn-delete-argument-map
-  "d" 'delete)
-
-(defvar-keymap conn-kill-append-argument-map
-  "x" 'append
-  "X" 'append-on-repeat)
+(defvar-keymap conn-kill-append-argument-map)
 
 (cl-defstruct (conn-kill-append-argument
                (:include conn-cycling-argument)
@@ -2544,6 +2472,9 @@ append to that place."
 (cl-defmethod conn-argument-display ((_arg conn-kill-append-argument))
   (concat (substitute-command-keys "\\[append-on-repeat], ")
           (cl-call-next-method)))
+
+(defvar-keymap conn-register-argument-map)
+(defvar-keymap conn-delete-argument-map)
 
 (cl-defstruct (conn-kill-how-argument
                (:include conn-composite-argument)
@@ -3078,8 +3009,7 @@ hook, which see."
              (throw 'sep "\n")))
          " "))))
 
-(defvar-keymap conn-kill-dispatch-append-map
-  "C-p" 'append)
+(defvar-keymap conn-kill-dispatch-append-map)
 
 (cl-defmethod conn-kill-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -3294,10 +3224,6 @@ append to that place."
 (conn-define-state conn-copy-state (conn-read-thing-state)
   :lighter "COPY")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-copy-state)
-  "j" 'move-end-of-line)
-
 (cl-defstruct (conn-copy-how-argument
                (:include conn-composite-argument)
                ( :constructor conn--copy-how-argument
@@ -3336,10 +3262,7 @@ append to that place."
             (conn-argument-display separator))
           (conn-argument-display register))))
 
-(defvar-keymap conn-copy-thing-argument-map
-  "/" 'buffer-filename
-  "p" 'project-filename
-  ">" 'copy-matching-lines)
+(defvar-keymap conn-copy-thing-argument-map)
 
 (cl-defstruct (conn-copy-thing-argument
                (:include conn-thing-argument)
@@ -3773,20 +3696,7 @@ For how they are used to define the region see `conn-bounds-of' and
 (conn-define-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-duplicate-state)
-  "c" 'copy-from-above-command)
-
-(defvar-keymap conn-duplicate-repeat-map
-  "M-?" 'conn-duplicate-repeat-help
-  "TAB" 'conn-duplicate-indent-repeat
-  "<tab>" 'conn-duplicate-indent-repeat
-  "DEL" 'conn-duplicate-delete-repeat
-  "<backspace>" 'conn-duplicate-delete-repeat
-  "q" 'conn-duplicate-repeat
-  "RET" 'conn-duplicate-repeat-toggle-padding
-  "<return>" 'conn-duplicate-repeat-toggle-padding
-  "c" 'conn-duplicate-repeat-comment)
+(defvar-keymap conn-duplicate-repeat-map)
 
 (defun conn-duplicate-repeat ()
   "Repeat the previous duplicate.
@@ -4101,16 +4011,7 @@ Interactively REPEAT is given by the prefix argument."
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-change-state)
-  "y" 'yank
-  "Y" 'yank-from-kill-ring
-  "e" 'conn-emacs-state-overwrite
-  "E" 'conn-emacs-state-overwrite-binary
-  "j" conn-backward-char-remap
-  "l" conn-forward-char-remap
-  "h" 'conn-replace
-  "q" 'conn-replace)
+(defvar-keymap conn-swap-argument-map)
 
 (defvar-keymap conn-change-thing-argument-map)
 
@@ -4274,8 +4175,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 (conn-define-state conn-indent-state (conn-read-thing-state)
   :lighter "INDENT")
 
-(defvar-keymap conn-indent-cleanup-whitespace-map
-  "w" 'cleanup-whitespace)
+(defvar-keymap conn-indent-cleanup-whitespace-map)
 
 (defvar-keymap conn-indent-thing-argument-map)
 
@@ -4358,12 +4258,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (interactive)
   (user-error "Not currently indenting"))
 
-(defvar-keymap conn-indent-thing-rigidly-map
-  "l" #'conn-indent-right
-  "j" #'conn-indent-left
-  "L" #'conn-indent-right-to-tab-stop
-  "J" #'conn-indent-left-to-tab-stop
-  "?" #'conn-indent-rigidly-reference)
+(defvar-keymap conn-indent-thing-rigidly-map)
 
 (defvar conn-indent-thing-rigidly-reference
   (conn-reference-page
@@ -4633,8 +4528,7 @@ of `conn-narrow-ring'."
     (conn--narrow-to-region beg end record)
     (deactivate-mark)))
 
-(defvar-keymap conn-indirect-map
-  "d" 'indirect)
+(defvar-keymap conn-indirect-map)
 
 (defun conn-narrow-to-thing (thing arg transform &optional indirect)
   "Narrow to the region defined by THING, ARG, and TRANSFORM.
@@ -4721,8 +4615,7 @@ subregion."
 
 ;;;;; Shell Command
 
-(defvar-keymap conn-shell-command-replace-map
-  "w" 'replace)
+(defvar-keymap conn-shell-command-replace-map)
 
 (conn-define-state conn-join-lines-state (conn-read-thing-state)
   :lighter "SHELL")

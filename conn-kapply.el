@@ -1207,8 +1207,8 @@ The iterator must be the first argument in ARGLIST.
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kapply-state)
-  "M-n" 'kmacro-cycle-ring-next
-  "M-p" 'kmacro-cycle-ring-previous
+  "M-p" 'kmacro-cycle-ring-next
+  "M-n" 'kmacro-cycle-ring-previous
   "M-h" 'conn-display-kmacro-ring
   "M-t" 'kmacro-swap-ring
   "M-d" 'kmacro-delete-ring-head
@@ -1308,7 +1308,7 @@ The iterator must be the first argument in ARGLIST.
        (let ((macro (when register (get-register register))))
          (lambda (it) (conn-kmacro-apply it nil macro))))
       ('apply
-       (let ((macro (when register (get-register register))))
+       (let ((macro (if register (get-register register) last-kbd-macro)))
          (lambda (it) (conn-kmacro-apply it nil macro))))
       ('append
        (when register
@@ -1328,8 +1328,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;;; State Argument
 
-(defvar-keymap conn-kapply-state-argument-map
-  "s" 'kapply-state)
+(defvar-keymap conn-kapply-state-argument-map)
 
 (defun conn--format-state-argument (val)
   (conn-state-get val :lighter))
@@ -1360,8 +1359,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;;; Order Argument
 
-(defvar-keymap conn-kapply-order-argument-map
-  "o" 'kapply-order)
+(defvar-keymap conn-kapply-order-argument-map)
 
 (cl-defstruct (conn-kapply-order-argument
                (:include conn-cycling-argument)
@@ -1387,8 +1385,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;;; Empty Argument
 
-(defvar-keymap conn-kapply-empty-argument-map
-  "," 'kapply-empty)
+(defvar-keymap conn-kapply-empty-argument-map)
 
 (cl-defstruct (conn-kapply-empty-argument
                (:include conn-boolean-argument)
@@ -1413,8 +1410,7 @@ The iterator must be the first argument in ARGLIST.
     "When multiple buffers are visited pop up an ibuffer buffer after
 finishing showing the buffers that were visited."))
 
-(defvar-keymap conn-kapply-ibuffer-argument-map
-  "b" 'kapply-ibuffer)
+(defvar-keymap conn-kapply-ibuffer-argument-map)
 
 (cl-defstruct (conn-kapply-ibuffer-argument
                (:include conn-boolean-argument)
@@ -1438,8 +1434,7 @@ finishing showing the buffers that were visited."))
     :depth 70
     (:heading "Undo")))
 
-(defvar-keymap conn-kapply-undo-argument-map
-  "u" 'kapply-undo)
+(defvar-keymap conn-kapply-undo-argument-map)
 
 (cl-defstruct (conn-kapply-undo-argument
                (:include conn-cycling-argument)
@@ -1474,8 +1469,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Save Excursions Argument
 
-(defvar-keymap conn-kapply-excursions-argument-map
-  "x" 'save-excursions)
+(defvar-keymap conn-kapply-excursions-argument-map)
 
 (cl-defstruct (conn-kapply-excursions-argument
                (:include conn-boolean-argument)
@@ -1493,8 +1487,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Save Restrictions Argument
 
-(defvar-keymap conn-kapply-restrictions-argument-map
-  "n" 'save-restrictions)
+(defvar-keymap conn-kapply-restrictions-argument-map)
 
 (cl-defstruct (conn-kapply-restrictions-argument
                (:include conn-boolean-argument)
@@ -1512,8 +1505,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Save Window Configuration Argument
 
-(defvar-keymap conn-kapply-window-conf-argument-map
-  "w" 'save-window-conf)
+(defvar-keymap conn-kapply-window-conf-argument-map)
 
 (cl-defstruct (conn-kapply-window-conf-argument
                (:include conn-boolean-argument)
@@ -1531,8 +1523,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Query Argument
 
-(defvar-keymap conn-kapply-query-argument-map
-  "q" 'query)
+(defvar-keymap conn-kapply-query-argument-map)
 
 (cl-defstruct (conn-kapply-query-argument
                (:include conn-boolean-argument)
@@ -1753,8 +1744,7 @@ finishing showing the buffers that were visited."))
        conn-kapply-pulse-region
        ,@pipeline))))
 
-(defvar-keymap conn-restrict-argument-map
-  "v" 'restrict)
+(defvar-keymap conn-restrict-argument-map)
 
 (defun conn-kapply-on-isearch ()
   (interactive)
@@ -1846,8 +1836,7 @@ finishing showing the buffers that were visited."))
         (isearch-done)
         (switch-to-buffer curr)))))
 
-(defvar-keymap conn-read-pattern-map
-  "p" 'read-pattern)
+(defvar-keymap conn-read-pattern-map)
 
 (defun conn--kapply-highlights-read-patterns ()
   (when (and (boundp 'hi-lock-interactive-patterns)

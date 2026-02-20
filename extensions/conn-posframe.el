@@ -336,8 +336,8 @@
             (mapconcat
              (lambda (km)
                (conn--kmacro-display (kmacro--keys km)))
-             (take (min 4 (floor (length kmacro-ring) 2))
-                   (reverse kmacro-ring))
+             (reverse (take (min 4 (floor (length kmacro-ring) 2))
+                            (reverse kmacro-ring)))
              "\n")
             (when (length> kmacro-ring 1) "\n")
             (propertize (concat (conn--kmacro-display last-kbd-macro)
