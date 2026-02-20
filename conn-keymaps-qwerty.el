@@ -19,8 +19,7 @@
 
 ;;; Code
 
-(require 'compat)
-(require 'conn)
+(require 'conn-extras)
 
 (setq conn-keymaps-defined 'qwerty)
 

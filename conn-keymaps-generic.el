@@ -274,7 +274,7 @@
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "o" conn-forward-word-remap
-  "O" 'conn-backward-word-remap
+  "O" conn-backward-word-remap
   "u" conn-end-of-defun-remap
   "U" conn-beginning-of-defun-remap
   "j" 'forward-symbol
@@ -415,8 +415,8 @@
   "d" 'conn-dispatch-copy-from
   "x" 'conn-dispatch-grab
   "X" 'conn-dispatch-grab-replace
-  "i" 'conn-dispatch-send
-  "I" 'conn-dispatch-send-replace
+  "k" 'conn-dispatch-send
+  "K" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
@@ -781,6 +781,13 @@
   "l" 'next-buffer
   "j" 'previous-buffer)
 
+(defvar-keymap conn-buffer-one-command-repeat-map
+  :repeat t
+  "P" 'bury-buffer
+  "N" 'unbury-buffer
+  "n" 'next-buffer
+  "p" 'previous-buffer)
+
 (define-keymap
   :keymap conn-wincontrol-map
   "M-?" 'conn-wincontrol-quick-ref
@@ -883,6 +890,7 @@
   "e" 'delete-other-windows)
 
 (defvar-keymap conn-kill-buffer-repeat-map
+  :repeat t
   "u" 'conn-kill-this-buffer
   "P" 'conn-bury-buffer
   "N" 'conn-unbury-buffer

@@ -1141,4 +1141,4 @@
   "<escape>" 'undefined
   "M-j" 'undefined)
 
-(provide 'conn-extras)
+(provide 'conn-extras-qwerty)

@@ -176,7 +176,7 @@
                            conn-posframe--padding)
                  conn-posframe--padding)
                (buffer-name buf)))
-     found-buffers
+     (reverse found-buffers)
      "\n")))
 
 ;; Adapted from window.el
@@ -247,7 +247,7 @@
                            conn-posframe--padding)
                  conn-posframe--padding)
                (buffer-name buf)))
-     (nreverse found-buffers)
+     found-buffers
      "\n")))
 
 (defun conn-posframe--switch-buffer-display (&rest _)
@@ -278,7 +278,7 @@
                               'append current)
       (posframe-show
        " *conn-list-posframe*"
-       :string (concat header next "\n" current prev)
+       :string (concat header prev "\n" current next)
        :left-fringe 0
        :right-fringe 0
        :width conn-posframe-width
