@@ -15,160 +15,7 @@
 
 ;;; Commentary:
 
-(require 'conn)
-
-;;; State
-
-(defvar conn-special-state-modes
-  (list 'dired-mode
-        'diff-mode
-        'magit-section-mode
-        'ibuffer-mode
-        'bookmark-bmenu-mode
-        'help-mode
-        'helpful-mode
-        'Info-mode
-        'treemacs-mode
-        'messages-buffer-mode
-        'debugger-mode
-        'occur-mode
-        'compilation-mode
-        'pdf-view-mode))
-
-(conn-define-state conn-special-state ()
-  :lighter "S")
-
-(defun conn-setup-special-state ()
-  (when (derived-mode-p conn-special-state-modes)
-    (conn-push-state 'conn-special-state)
-    t))
-
-;;;###autoload
-(define-minor-mode conn-special-state-mode
-  "Minor mode for `conn-special-state' integration."
-  :global t
-  :group 'conn
-  (if conn-special-state-mode
-      (progn
-        (pcase conn-keymaps-defined
-          ('qwerty (require 'conn-extras-qwerty))
-          ('generic (require 'conn-extras-generic)))
-        (add-hook 'conn-setup-state-hook #'conn-setup-special-state -20))
-    (remove-hook 'conn-setup-state-hook #'conn-setup-special-state)))
-
-;;; Load Extensions
-
-;;;; Grep
-
-(defvar-local conn--grep-edit-stack-cookie nil)
-
-(with-eval-after-load 'wgrep
-  (defun conn--wgrep-cleanup ()
-    (when-let* ((cookie (cl-shiftf conn--grep-edit-stack-cookie nil)))
-      (conn-set-major-mode-maps
-       (conn--derived-mode-all-parents major-mode))
-      (conn-exit-recursive-stack cookie)))
-  (advice-add 'wgrep-to-original-mode :after 'conn--wgrep-cleanup)
-
-  (defun conn--wgrep-setup ()
-    (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setq conn--grep-edit-stack-cookie
-          (conn-enter-recursive-stack 'conn-command-state)))
-  (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
-
-(with-eval-after-load 'grep
-  (defun conn--exit-grep-edit-mode (&rest _)
-    (conn-setup-state-for-buffer))
-  (advice-add 'grep-edit-save-changes :after 'conn--exit-grep-edit-mode))
-
-;;;; Calc
-
-(with-eval-after-load 'calc
-  (declare-function calc-dispatch "calc")
-
-  (defun conn--calc-dispatch-ad (&rest app)
-    (conn-with-recursive-stack 'conn-null-state
-      (apply app)))
-  (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
-
-;;;; Eldoc
-
-(with-eval-after-load 'eldoc
-  (eldoc-add-command 'conn-end-of-inner-line
-                     'conn-beginning-of-inner-line
-                     'conn-backward-char
-                     'conn-goto-char-backward
-                     'conn-forward-char
-                     'conn-goto-char-forward
-                     'conn-dispatch))
-
-;;;; Edebug
-
-(defun conn--edebug-toggle-emacs-state ()
-  (if (bound-and-true-p edebug-mode)
-      (conn-push-state 'conn-emacs-state)
-    (conn-pop-state)))
-(add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state)
-
-;;;; Outline
-
-(declare-function outline-mark-subtree "outline")
-(declare-function outline-next-heading "outline")
-(declare-function outline-previous-heading "outline")
-(declare-function outline-on-heading-p "outline")
-(declare-function outline-up-heading "outline")
-
-(cl-defmethod conn-bounds-of ((cmd (eql outline-up-heading))
-                              arg)
-  (cl-callf prefix-numeric-value arg)
-  (cl-call-next-method cmd
-                       (if (looking-at-p outline-regexp)
-                           arg
-                         (1- arg))))
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
-                                      _arg)
-  (conn-dispatch-headings
-   :reference (conn-reference-quote
-                ((:heading "Heading Targets")
-                 "Hides buffer regions outside heading lines."))))
-
-(eval-and-compile
-  (conn-register-thing
-   'heading
-   :bounds-op (lambda ()
-                (save-mark-and-excursion
-                  (outline-mark-subtree)
-                  (cons (region-beginning) (region-end))))
-   :forward-op 'outline-next-visible-heading))
-
-(conn-register-thing-commands
- '(heading) 'conn-discrete-thing-handler
- 'conn-outline-state-up-heading
- 'outline-up-heading
- 'outline-next-heading
- 'outline-next-visible-heading
- 'outline-previous-visible-heading
- 'outline-previous-heading
- 'outline-forward-same-level
- 'outline-backward-same-level)
-
-(cl-defmethod conn-bounds-of ((_cmd (eql conn-outline-state-up-heading))
-                              arg)
-  (cl-callf prefix-numeric-value arg)
-  (cl-call-next-method 'outline-up-heading
-                       (if (looking-at-p outline-regexp)
-                           arg
-                         (1- arg))))
-
-(defun conn-outline-state ()
-  (interactive)
-  (conn-push-state 'conn-outline-state))
-
-(defun conn-outline-state-up-heading (arg)
-  (interactive "p")
-  (outline-up-heading (1- arg))
-  (conn-push-state 'conn-outline-state))
+(require 'conn-extras)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
@@ -215,55 +62,11 @@
 
 ;;;; Dired
 
-(conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
-  "State for dispatch in `dired-mode'."
-  :cursor 'box
-  :suppress-input-method t)
-
-(defun conn-dired-dispatch-state (&optional initial-arg)
-  (interactive "P")
-  (conn-read-args (conn-dired-dispatch-state
-                   :prefix initial-arg
-                   :prompt "Dired Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument))
-       (restrict-windows
-        (conn-boolean-argument "this-win"
-                               'restrict-windows
-                               conn-restrict-windows-argument-map))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-setup
-     action thing arg transform
-     :repeat repeat
-     :restrict-windows restrict-windows
-     :other-end :no-other-end)))
-
 (define-keymap
   :keymap (conn-get-state-map 'conn-dired-dispatch-state)
   "f" 'conn-dispatch-dired-mark
   "w" 'conn-dispatch-dired-kill-line
   "d" 'conn-dispatch-dired-kill-subdir)
-
-(defvar conn-dired-ref-1
-  (conn-reference-page
-    (:heading "Dired")
-    ((("next/prev" dired-next-line dired-previous-line)
-      ("next/prev dirline" dired-next-dirline dired-prev-dirline)
-      ("next/prev subdir" dired-next-subdir dired-prev-subdir)
-      ("next/prev marked" dired-next-marked-file dired-prev-marked-file))
-     (("dir up" dired-up-directory)
-      ("tree up/down" dired-tree-up dired-tree-down)
-      ("undo" dired-undo)
-      ("find alt" dired-find-alternate-file))
-     (("mark/unmark" dired-mark dired-unmark)
-      ("delete" dired-do-delete)
-      ("copy" dired-do-copy)
-      ("isearch/regexp" dired-do-isearch dired-do-isearch-regexp)
-      ("find/replace regexp" dired-do-find-regexp dired-do-find-regexp-and-replace)))))
-
-(defun conn-dired-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-dired-ref-1)))
 
 (conn-define-remap-keymap conn-dired-regexp-remap
     "Conn Dired Regexp Map"
@@ -504,31 +307,6 @@
 
 ;;;; Diff
 
-(defvar conn-diff-ref
-  (conn-reference-page
-    (:heading "Diff")
-    ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
-      ("file next/prev" diff-file-next diff-file-prev)
-      ("apply hunk/buffer" diff-apply-hunk diff-apply-buffer)
-      ("revert hunk" diff-revert-and-kill-hunk)
-      ("next" next-error-follow-minor-mode)
-      ("scroll up/down" conn-scroll-down conn-scroll-up))
-     (("kill ring save" diff-kill-ring-save)
-      ("kill hunk/file" diff-hunk-kill diff-file-kill)
-      ("delete other hunks" diff-delete-other-hunks)
-      ("split hunk" diff-split-hunk)
-      ("test hunk" diff-test-hunk)
-      ("reverse direction" diff-reverse-direction))
-     (("goto source" diff-goto-source)
-      ("narrow/widen" diff-restrict-view widen)
-      ("context->unified" diff-context->unified)
-      ("unified->context" diff-unified->context)
-      ("ignore whitespace" diff-ignore-whitespace-hunk)))))
-
-(defun conn-diff-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-diff-ref)))
-
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
   ";" 'conn-wincontrol
@@ -566,20 +344,6 @@
 
 ;;;; Magit
 
-(defvar conn-magit-ref
-  (conn-reference-page
-    (:heading "Magit")
-    ((("section forward/back" magit-section-forward magit-section-backward)
-      ("delete thing" magit-delete-thing)
-      ("dispatch" magit-dispatch))
-     (("reset quickly" magit-reset-quickly)
-      ("gitignore" magit-gitignore)
-      ("apply mail" magit-am)))))
-
-(defun conn-magit-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-magit-ref)))
-
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
   "M-?" 'conn-magit-quick-ref
@@ -597,145 +361,6 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Ibuffer
-
-(conn-define-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
-  "State for dispatch in `ibuffer-mode'."
-  :cursor '(bar . 4)
-  :suppress-input-method t)
-
-(defun conn-ibuffer-dispatch-state (&optional initial-arg)
-  (interactive "P")
-  (conn-read-args (conn-ibuffer-dispatch-state
-                   :prefix initial-arg
-                   :prompt "Ibuffer Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument))
-       (restrict-windows
-        (conn-boolean-argument "this-win"
-                               'restrict-windows
-                               conn-restrict-windows-argument-map))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-setup
-     action thing arg transform
-     :repeat repeat
-     :restrict-windows restrict-windows
-     :other-end :no-other-end)))
-
-(defvar ibuffer-movement-cycle)
-(defvar ibuffer-marked-char)
-
-(declare-function ibuffer-backward-line "ibuffer")
-(declare-function ibuffer-unmark-forward "ibuffer")
-(declare-function ibuffer-mark-forward "ibuffer")
-(declare-function ibuffer-current-mark "ibuffer")
-(declare-function ibuffer-backward-filter-group "ibuffer")
-
-(defun conn--dispatch-ibuffer-lines ()
-  (let ((ibuffer-movement-cycle nil))
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-max))
-        (while (/= (point)
-                   (progn
-                     (ibuffer-backward-line)
-                     (point)))
-          (unless (get-text-property (point) 'ibuffer-filter-group-name)
-            (conn-make-target-overlay (point) 0)))))))
-
-(defun conn--dispatch-ibuffer-filter-group ()
-  (let ((ibuffer-movement-cycle nil))
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-max))
-        (while (/= (point)
-                   (progn
-                     (ibuffer-backward-filter-group)
-                     (point)))
-          (conn-make-target-overlay (point) 0))))))
-
-(conn-register-thing 'ibuffer-line)
-
-(conn-register-thing-commands
- '(ibuffer-line) nil
- 'ibuffer-backward-line 'ibuffer-forward-line)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line))
-                                      _arg)
-  #'conn--dispatch-ibuffer-lines)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
-  (conn-dispatch-jump))
-
-(conn-register-thing 'ibuffer-filter-group)
-
-(conn-register-thing-commands
- '(ibuffer-filter-group) nil
- 'ibuffer-forward-filter-group
- 'ibuffer-backward-filter-group)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group))
-                                      _arg)
-  #'conn--dispatch-ibuffer-filter-group)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
-  (conn-dispatch-jump))
-
-(defun conn-dispatch-ibuffer-mark ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'ibuffer-mode))))
-      ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (if (or (null (ibuffer-current-mark))
-                  (= (ibuffer-current-mark) ? ))
-              (ibuffer-mark-forward nil nil 1)
-            (ibuffer-unmark-forward nil nil 1)))))))
-
-(defvar conn-ibuffer-ref
-  (conn-reference-page
-    (:heading "Ibuffer")
-    ((("next/prev line" ibuffer-forward-line ibuffer-backward-line)
-      ("next/prev group" ibuffer-forward-filter-group ibuffer-backward-filter-group)
-      ("jump to group" ibuffer-jump-to-filter-group)
-      ("jump to buffer" ibuffer-jump-to-buffer)
-      ("yank" ibuffer-yank)
-      ("copy filename" ibuffer-copy-filename-as-kill)
-      ("visit/other win" ibuffer-visit-buffer ibuffer-visit-buffer-other-window)
-      ("redisplay" ibuffer-redisplay))
-     ((:heading "Sort:")
-      ("invert" ibuffer-invert-sorting)
-      ("alphabetic" ibuffer-do-sort-by-alphabetic)
-      ("path" ibuffer-do-sort-by-filename/process)
-      ("mode" ibuffer-do-sort-by-major-mode)
-      ("size" ibuffer-do-sort-by-size)
-      ("recency" ibuffer-do-sort-by-recency)))))
-
-(defvar conn-ibuffer-mark-ref
-  (conn-reference-page
-    (:heading "Ibuffer Mark")
-    ((("mark" ibuffer-mark-forward)
-      ("unmark next/prev" ibuffer-unmark-forward ibuffer-unmark-backward)
-      ("unmark all" ibuffer-unmark-all)
-      ("toggle" ibuffer-toggle-marks)
-      ("next/prev" ibuffer-forward-next-marked ibuffer-backwards-next-marked))
-     (("revert" ibuffer-do-revert)
-      ("hide" ibuffer-do-kill-lines)
-      ("kill" ibuffer-do-kill-on-deletion-marks)
-      ("isearch/regexp" ibuffer-do-isearch ibuffer-do-isearch-regexp)
-      ("occur" ibuffer-do-occur)))))
-
-(defun conn-ibuffer-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-ibuffer-ref conn-ibuffer-mark-ref)))
 
 (keymap-set (conn-get-state-map 'conn-ibuffer-dispatch-state)
             "f" 'conn-dispatch-ibuffer-mark)
@@ -790,91 +415,12 @@
 
 ;;;; Bookmark Bmenu
 
-(declare-function bookmark-bmenu-unmark "bookmark")
-(declare-function bookmark-bmenu-mark "bookmark")
-
-(conn-define-state conn-bmenu-dispatch-state (conn-dispatch-targets-state)
-  "State for dispatch in `bookmark-bmenu-mode'."
-  :suppress-input-method t)
-
-(defun conn-bmenu-dispatch-state (&optional initial-arg)
-  (interactive "P")
-  (conn-read-args (conn-bmenu-dispatch-state
-                   :prefix initial-arg
-                   :prompt "Bookmark Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
-    (conn-dispatch-setup
-     action thing arg transform
-     :repeat repeat
-     :restrict-windows t
-     :other-end :no-other-end)))
-
-(defun conn-dispatch-bmenu-mark ()
-  (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'bookmark-bmenu-mode))))
-      ()
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (beginning-of-line)
-          (when (tabulated-list-get-entry)
-            (if (search-forward ">" (+ (point) tabulated-list-padding) t)
-                (bookmark-bmenu-unmark)
-              (bookmark-bmenu-mark))))))))
-
-(defun conn-bmenu-target-finder ()
-  (save-excursion
-    (with-restriction (window-start) (window-end)
-      (goto-char (point-min))
-      (while (progn
-               (when (tabulated-list-get-entry)
-                 (conn-make-target-overlay
-                  (+ (point) tabulated-list-padding) 0))
-               (forward-line)
-               (not (eobp)))))))
-
 (define-keymap
   :keymap (conn-get-state-map 'conn-bmenu-dispatch-state)
   "f" 'conn-dispatch-bmenu-mark
   "k" (conn-anonymous-thing
         '(line)
         :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
-
-(defvar conn-bookmark-bmenu-ref
-  (conn-reference-page
-    (:heading "Bookmark Menu")
-    ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
-      ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
-      ("annotations/all"
-       bookmark-bmenu-show-annotation
-       bookmark-bmenu-show-all-annotations)
-      ("edit annotation" bookmark-bmenu-edit-annotation)
-      ("this window" bookmark-bmenu-this-window))
-     (("select" bookmark-bmenu-select)
-      ("mark for deletion" bookmark-bmenu-delete)
-      ("execute delete" bookmark-bmenu-execute-deletions)
-      ("save" bookmark-bmenu-save)
-      ("jump" bookmark-jump))
-     (("scroll up/down"
-       scroll-up-command
-       scroll-down-command)
-      ("line next/prev" next-line previous-line)
-      ("revert buffer" revert-buffer)
-      ("locate" bookmark-locate)))))
-
-(defun conn-bookmark-bmenu-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-bookmark-bmenu-ref)))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
@@ -904,27 +450,6 @@
   "L" 'bookmark-locate
   "u" 'bookmark-bmenu-execute-deletions
   "y" 'tabulated-list-sort)
-
-;;;; Markdown
-
-(conn-register-thing
- 'md-paragraph
- :forward-op 'markdown-forward-paragraph)
-
-(conn-register-thing-commands
- '(md-paragraph) 'conn-continuous-thing-handler
- 'markdown-forward-paragraph
- 'markdown-backward-paragraph)
-
-;; TODO: other markdown things
-
-;;;; Treesit
-
-(static-if (<= 30 emacs-major-version)
-    (conn-register-thing-commands
-     '(defun) 'conn-continuous-thing-handler
-     'treesit-end-of-defun
-     'treesit-beginning-of-defun))
 
 ;;;; Help
 
@@ -963,55 +488,6 @@
   "x" (conn-remap-key "C-x" t))
 
 ;;;; Info
-
-(declare-function Info-prev-reference "info")
-(declare-function Info-follow-nearest-node "info")
-
-(defun conn-dispatch-on-info-refs ()
-  (interactive)
-  (conn-dispatch-setup
-   (oclosure-lambda (conn-action
-                     (action-description "Info Refs")
-                     (action-window-predicate
-                      (lambda (win)
-                        (eq 'Info-mode
-                            (buffer-local-value 'major-mode
-                                                (window-buffer win))))))
-       ()
-     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                   (conn-select-target)))
-       (select-window window)
-       (goto-char pt)
-       (Info-follow-nearest-node)))
-   (conn-anonymous-thing
-     '(point)
-     :target-finder ( :method (_self _arg)
-                      (save-excursion
-                        (let ((last-pt (goto-char (window-end))))
-                          (while (and (> last-pt (progn
-                                                   (Info-prev-reference)
-                                                   (setq last-pt (point))))
-                                      (<= (window-start) (point) (window-end)))
-                            (conn-make-target-overlay (point) 0))))))
-   nil nil
-   :other-end :no-other-end
-   :restrict-windows t))
-
-(defvar conn-info-ref
-  (conn-reference-page
-    (:heading "Info")
-    ((("history forward/back" Info-history-forward Info-history-back)
-      ("next/prev" Info-next Info-prev)
-      ("scroll up/down" Info-scroll-up Info-scroll-down))
-     (("node forward/back" Info-forward-node Info-backward-node)
-      ("node up" Info-up)
-      ("menu" Info-menu))
-     (("toc" Info-toc)
-      ("index" Info-index)))))
-
-(defun conn-info-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-info-ref)))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
@@ -1102,10 +578,6 @@
   ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
-
-(defun conn-occur-edit-map-setup ()
-  (setf (conn-get-major-mode-maps) '(occur-edit-mode)))
-(add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
 
 ;;;; Compile mode
 
