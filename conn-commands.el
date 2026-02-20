@@ -593,6 +593,8 @@ With arg N, insert N newlines."
 
 ;;;;; Register Setting and Loading
 
+(defvar-keymap conn-register-argument-map)
+
 (defun conn-set-register-separator (string)
   "Set `register-separator' register to string STRING."
   (interactive
@@ -1099,6 +1101,8 @@ Currently selected window remains selected afterwards."
 
 (conn-define-state conn-yank-replace-state (conn-read-thing-state)
   :lighter "YANK-REPLACE")
+
+(defvar-keymap conn-swap-argument-map)
 
 (defun conn-yank-replace-subr (beg end)
   (let ((cg (prepare-change-group))
@@ -2473,7 +2477,6 @@ append to that place."
   (concat (substitute-command-keys "\\[append-on-repeat], ")
           (cl-call-next-method)))
 
-(defvar-keymap conn-register-argument-map)
 (defvar-keymap conn-delete-argument-map)
 
 (cl-defstruct (conn-kill-how-argument
@@ -4010,8 +4013,6 @@ Interactively REPEAT is given by the prefix argument."
 
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
-
-(defvar-keymap conn-swap-argument-map)
 
 (defvar-keymap conn-change-thing-argument-map)
 
