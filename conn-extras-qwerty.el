@@ -456,7 +456,8 @@
   "j" 'pdf-view-previous-page-command
   "m" 'pdf-history-forward
   "n" 'pdf-history-backward
-  "." 'pdf-view-position-to-register
+  ">" 'pdf-view-position-to-register
+  "." 'conn-register-load
   "y" image-map
   "<escape>" 'undefined
   "M-j" 'undefined)

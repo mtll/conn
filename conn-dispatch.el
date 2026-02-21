@@ -148,9 +148,9 @@ strings have `conn-dispatch-label-face'."
     (setf (aref buckets i) (thread-last
                              (take count conn-simple-label-characters)
                              (copy-sequence)
-                             (mapcar #'copy-sequence)))
+                             (mapcar #'copy-sequence)
+                             (nreverse)))
     (cl-loop
-     (cl-callf nreverse (aref buckets i))
      (let ((prefixes nil))
        (while (and (aref buckets i)
                    (> count (+ (length (aref buckets i))
@@ -1283,7 +1283,8 @@ Target overlays may override this default by setting the
                                 (get-char-property pt 'before-string)
                                 (= pt (next-single-char-property-change
                                        (1- pt) 'before-string nil (1+ pt))))
-                           (and (get-char-property (1- pt) 'after-string)
+                           (and (/= pt beg)
+                                (get-char-property (1- pt) 'after-string)
                                 (= pt (next-single-char-property-change
                                        (- pt 1) 'after-string nil (1+ pt))))
                            (and (pcase (get-char-property pt 'display)
