@@ -409,7 +409,7 @@
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
   "r" 'conn-dispatch-copy-to-replace
-  "q" 'conn-dispatch-copy-from-replace
+  "D" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "d" 'conn-dispatch-copy-from
@@ -753,10 +753,10 @@
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
-  "n" 'conn-wincontrol-scroll-down
-  "m" 'conn-wincontrol-scroll-up
-  "N" 'conn-wincontrol-other-window-scroll-up
-  "M" 'conn-wincontrol-other-window-scroll-down)
+  "DEL" 'conn-wincontrol-scroll-down
+  "SPC" 'conn-wincontrol-scroll-up
+  "S-<backspace>" 'conn-wincontrol-other-window-scroll-down
+  "S-SPC" 'conn-wincontrol-other-window-scroll-up)
 
 (defvar-keymap conn-wincontrol-text-scale-repeat-map
   :repeat t
@@ -796,7 +796,6 @@
   "M-r" 'move-to-window-line-top-bottom
   "C-]" 'conn-wincontrol-abort
   "C-u" 'conn-wincontrol-universal-arg
-  "DEL" 'conn-wincontrol-backward-delete-arg
   "<backspace>" 'conn-wincontrol-backward-delete-arg
   "M-/" 'undelete-frame
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
@@ -826,8 +825,8 @@
   "L" 'windmove-swap-states-left
   "R" 'windmove-swap-states-right
   "U" 'windmove-swap-states-up
-  "P" 'conn-wincontrol-other-window-scroll-down
-  "N" 'conn-wincontrol-other-window-scroll-up
+  "S-<backspace>" 'conn-wincontrol-other-window-scroll-down
+  "S-SPC" 'conn-wincontrol-other-window-scroll-up
   "E" 'tab-new
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
@@ -848,9 +847,12 @@
   "g" (conn-remap-key "M-g" t t)
   "x" (conn-remap-key "C-x" t t)
   "C" 'kill-buffer-and-window
-  "p" 'conn-wincontrol-scroll-down
-  "n" 'conn-wincontrol-scroll-up
+  "p" 'previous-buffer
+  "n" 'next-buffer
   "f" 'tab-next
+  "DEL" 'conn-wincontrol-scroll-down
+  "<backspace>" 'conn-wincontrol-scroll-down
+  "SPC" 'conn-wincontrol-scroll-up
   "," 'conn-register-prefix
   "." 'conn-register-load
   "q" 'quit-window
@@ -872,10 +874,10 @@
 (defvar-keymap conn-buffer-repeat-map
   :repeat t
   "u" 'conn-kill-this-buffer
-  "{" 'conn-bury-buffer
-  "}" 'conn-unbury-buffer
-  "]" 'next-buffer
-  "[" 'previous-buffer)
+  "P" 'conn-bury-buffer
+  "N" 'conn-unbury-buffer
+  "n" 'next-buffer
+  "p" 'previous-buffer)
 
 (static-if (<= 31 emacs-major-version)
     (progn
