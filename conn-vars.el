@@ -79,6 +79,11 @@ disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
+(defcustom conn-yank-keys (key-parse "C-y")
+  "`undo-redo' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
 (defcustom conn-forward-sexp-keys (key-parse "C-M-f")
   "`forward-sexp' key binding."
   :group 'conn-key-remapping
@@ -257,6 +262,38 @@ See also `conn-repeat'.")
                                (key-binding ,from-keys ,accept-default))
                            (key-binding ,from-keys ,accept-default)))))))
 
+(defvar conn--key-remaps nil)
+
+(defmacro conn-define-key-remap (name
+                                 from-keys
+                                 &optional
+                                 without-conn-maps
+                                 no-accept-default)
+  (declare (indent 1))
+  `(progn
+     (defvar ,name
+       (conn-remap-key ,from-keys ,without-conn-maps ,no-accept-default))
+     (cl-pushnew ',name conn--key-remaps)))
+
+(conn-define-key-remap conn-forward-word-remap conn-forward-word-keys t)
+(conn-define-key-remap conn-forward-sexp-remap conn-forward-sexp-keys t)
+(conn-define-key-remap conn-previous-line-remap conn-previous-line-keys t)
+(conn-define-key-remap conn-backward-paragraph-remap conn-backward-paragraph-keys t)
+(conn-define-key-remap conn-forward-sentence-remap conn-forward-sentence-keys t)
+(conn-define-key-remap conn-backward-sentence-remap conn-backward-sentence-keys t)
+(conn-define-key-remap conn-down-list-remap conn-down-list-keys t)
+(conn-define-key-remap conn-backward-up-list-remap conn-backward-up-list-keys t)
+(conn-define-key-remap conn-forward-list-remap conn-forward-list-keys t)
+(conn-define-key-remap conn-backward-list-remap conn-backward-list-keys t)
+(conn-define-key-remap conn-backward-word-remap conn-backward-word-keys t)
+(conn-define-key-remap conn-backward-char-remap conn-backward-char-keys t)
+(conn-define-key-remap conn-forward-paragraph-remap conn-forward-paragraph-keys t)
+(conn-define-key-remap conn-next-line-remap conn-next-line-keys t)
+(conn-define-key-remap conn-forward-char-remap conn-forward-char-keys t)
+(conn-define-key-remap conn-end-of-defun-remap conn-end-of-defun-keys t)
+(conn-define-key-remap conn-beginning-of-defun-remap conn-beginning-of-defun-keys t)
+(conn-define-key-remap conn-backward-sexp-remap conn-backward-sexp-keys t)
+
 (defvar conn--remap-keymaps nil)
 
 (eval-and-compile
@@ -302,8 +339,13 @@ See also `conn-repeat'.")
          (cl-loop for remap in conn--remap-keymaps
                   for val = (symbol-value remap)
                   do (setf (nth 2 val) (keymap--menu-item-binding val)))
+         (cl-loop for remap in conn--key-remaps
+                  for val = (symbol-value remap)
+                  do (setf (nth 2 val) (keymap--menu-item-binding val)))
          ,@body)
      (cl-loop for remap in conn--remap-keymaps
+              do (setf (nth 2 (symbol-value remap)) nil))
+     (cl-loop for remap in conn--key-remaps
               do (setf (nth 2 (symbol-value remap)) nil))))
 
 (conn-define-remap-keymap conn-search-remap
@@ -332,24 +374,5 @@ See also `conn-repeat'.")
     "Conn Edit Map"
   [conn-edit-map]
   conn-default-edit-map)
-
-(defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
-(defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
-(defvar conn-previous-line-remap (conn-remap-key conn-previous-line-keys t))
-(defvar conn-backward-paragraph-remap (conn-remap-key conn-backward-paragraph-keys t))
-(defvar conn-forward-sentence-remap (conn-remap-key conn-forward-sentence-keys t))
-(defvar conn-backward-sentence-remap (conn-remap-key conn-backward-sentence-keys t))
-(defvar conn-down-list-remap (conn-remap-key conn-down-list-keys t))
-(defvar conn-backward-up-list-remap (conn-remap-key conn-backward-up-list-keys t))
-(defvar conn-forward-list-remap (conn-remap-key conn-forward-list-keys t))
-(defvar conn-backward-list-remap (conn-remap-key conn-backward-list-keys t))
-(defvar conn-backward-word-remap (conn-remap-key conn-backward-word-keys t))
-(defvar conn-backward-char-remap (conn-remap-key conn-backward-char-keys t))
-(defvar conn-forward-paragraph-remap (conn-remap-key conn-forward-paragraph-keys t))
-(defvar conn-next-line-remap (conn-remap-key conn-next-line-keys t))
-(defvar conn-forward-char-remap (conn-remap-key conn-forward-char-keys t))
-(defvar conn-end-of-defun-remap (conn-remap-key conn-end-of-defun-keys t))
-(defvar conn-beginning-of-defun-remap (conn-remap-key conn-beginning-of-defun-keys t))
-(defvar conn-backward-sexp-remap (conn-remap-key conn-backward-sexp-keys t))
 
 (provide 'conn-vars)

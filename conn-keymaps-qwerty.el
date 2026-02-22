@@ -337,7 +337,7 @@
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
-  "y" (conn-remap-key "C-y" t)
+  "y" (conn-remap-key conn-yank-keys t)
   "z" 'conn-yank-replace
   "Z" 'conn-exchange-mark-command)
 
@@ -723,7 +723,7 @@
 
 (define-keymap
   :keymap conn-reformat-argument-map
-  "TAB" 'reformat)
+  ":" 'reformat)
 
 (define-keymap
   :keymap conn-check-bounds-argument-map

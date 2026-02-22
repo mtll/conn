@@ -30,9 +30,6 @@
                (:constructor conn--self-insert (id)))
   (id -1 :type integer))
 
-(put 'conn-surround :conn-thing t)
-(put 'surround-self-insert :conn-thing t)
-
 (conn-define-state conn-surround-with-state (conn-mode-line-face-state)
   :lighter "WITH"
   :mode-line-face 'conn-read-surround-with-mode-line-face

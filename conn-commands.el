@@ -3103,16 +3103,18 @@ hook, which see."
                   (unless delete
                     (push (cons append (filter-buffer-substring beg end))
                           strings))
-                  (delete-region beg end)
+                  (save-excursion
+                    (goto-char beg)
+                    (delete-region beg end)
+                    (when reformat
+                      (funcall conn-kill-reformat-function bounds)))
                   (conn-dispatch-undo-case
                     :depth 90
                     (:undo
                      (pop strings)
                      (conn-dispatch-undo-pulse beg end))
                     (:cancel
-                     (pop strings)))
-                  (when reformat
-                    (funcall conn-kill-reformat-function bounds)))
+                     (pop strings))))
                  (_ (user-error "No %s found" thing))))))
          thing arg dtform
          :repeat repeat

@@ -384,8 +384,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                    (progn
                      (setq ,thing (car (conn-thing-all-parents ,thing)))
                      nil)))
-             (if-let* ((v (assq ,property (conn--thing-properties
-                                           (conn--find-thing ,thing)))))
+             (if-let* ((v (assq ,property (ignore-errors
+                                            (conn--thing-properties
+                                             (conn--find-thing ,thing))))))
                  (cdr v)
                ,default))))
      ((and (macroexp-const-p no-inherit)
@@ -401,8 +402,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                    end-op
                                    bounds-of-thing-at-point))
                  (get ,thing ,property)
-               (assq ,property (conn--thing-properties
-                                (conn--find-thing ,thing)))))))
+               (assq ,property (ignore-errors
+                                 (conn--thing-properties
+                                  (conn--find-thing ,thing))))))))
      (t exp))))
 
 (defun conn-thing-get (thing property &optional no-inherit default)
@@ -421,6 +423,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
               (setq thing (car (conn-thing-all-parents thing)))
               nil)))
       (cdr v))
+     ((null (conn--find-thing thing)) nil)
      ((get property :conn-static-property)
       (if-let* ((v (assq property (conn--thing-properties
                                    (conn--find-thing thing)))))
@@ -1419,13 +1422,11 @@ the point is within the region then the entire region is returned.")))
       ((and (pred conn-anonymous-thing-p)
             (app conn-anonymous-thing-parents thing))
        (format " (<anonymous %s>)" thing))
-      ((let (and thing (pred identity))
-         (if (conn-thing-get sym :command)
-             (seq-find #'conn-simple-thing-p
-                       (conn-thing-all-parents sym))
-           (and (conn-thing-p sym) sym)))
-       (format " (%s)" thing))
-      (_ " (<thing arg>)"))))
+      ((pred conn-thing-p)
+       (format " (%s)" (if (conn-thing-get sym :command)
+                           (seq-find #'conn-simple-thing-p
+                                     (conn-thing-all-parents sym))
+                         sym))))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
   (pcase (conn-thing-argument-value arg)

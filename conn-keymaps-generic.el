@@ -337,7 +337,7 @@
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
-  "y" (conn-remap-key "C-y" t)
+  "y" (conn-remap-key conn-yank-keys t)
   "z" 'conn-other-window-prefix
   "Z" 'conn-exchange-mark-command)
 
@@ -655,7 +655,7 @@
 
 (define-keymap
   :keymap conn-indirect-map
-  "i" 'indirect)
+  "k" 'indirect)
 
 (define-keymap
   :keymap conn-shell-command-replace-map

@@ -1783,18 +1783,11 @@ The duration of the message display is controlled by
                      (pcase (keymap--menu-item-binding def)
                        ((and (pred keymapp) keymap)
                         (bindings keymap))
-                       ((and (pred symbolp)
-                             (pred predicate)
-                             sym)
-                        (push (cons (symbol-name sym) sym) result))
                        (`(,(and desc (pred stringp))
                           . ,(and item (pred predicate)))
                         (push (cons desc item) result))
                        ((and item (pred predicate))
-                        (push (cons (propertize
-                                     (conn-thing-pretty-print item)
-                                     'command item)
-                                    item)
+                        (push (cons (conn-thing-pretty-print item) item)
                               result))))
                    (keymap-canonicalize keymap))))
       (if keymap
@@ -1802,44 +1795,44 @@ The duration of the message display is controlled by
         (mapc #'bindings (current-active-maps)))
       result)))
 
-(defun conn--read-args-affixation-function (args &optional keymap)
-  (lambda (command-names)
-    (with-selected-window (or (minibuffer-selected-window) (selected-window))
-      (cl-loop
-       for command-name in command-names
-       collect
-       (let* ((fun (or (get-char-property 0 'command command-name)
-                       (and (stringp command-name) (intern-soft command-name))))
-              (binding (where-is-internal fun keymap t))
-              (binding (if (and binding (not (stringp binding)))
-                           (format " {%s}" (key-description binding))
-                         ""))
-              (annotation
-               (or (cl-loop for arg in args
-                            thereis (conn-argument-completion-annotation arg fun))
-                   "")))
-         (put-text-property 0 (length binding)
-                            'face 'help-key-binding binding)
-         (when annotation
-           (put-text-property 0 (length annotation)
-                              'face 'completions-annotations annotation))
-         (list command-name "" (concat annotation binding)))))))
+(defun conn--read-args-command-affixation (command args &optional keymap)
+  (let* ((binding (where-is-internal command keymap t))
+         (binding (pcase binding
+                    ((pred stringp) binding)
+                    ((pred vectorp) (key-description binding))))
+         (annotation
+          (cl-loop for arg in args
+                   thereis (conn-argument-completion-annotation arg command))))
+    (list (if binding
+              (propertize (concat binding " ")
+                          'face 'help-key-binding)
+            "")
+          (if annotation
+              (propertize annotation
+                          'face 'completions-annotations)
+            ""))))
 
-(defun conn--read-args-completing-read (state args &optional keymap)
+(defun conn--read-args-completing-read (args &optional keymap)
   (let ((inhibit-message nil))
     (message nil))
-  (and-let* ((metadata
-              `((affixation-function . ,(conn--read-args-affixation-function
-                                         args keymap))
-                ,@(conn-state-get state :loop-completion-metadata)))
-             (table (conn--read-args-bindings args keymap)))
+  (let* ((table (conn--read-args-bindings args keymap))
+         (affixations (make-hash-table :test 'equal))
+         (metadata
+          `(metadata
+            (affixation-function
+             . ,(lambda (cands)
+                  (cl-loop for c in cands
+                           collect (cons c (gethash c affixations))))))))
     (conn--where-is-with-remaps
+      (pcase-dolist (`(,name . ,command) table)
+        (setf (gethash name affixations)
+              (conn--read-args-command-affixation command args keymap)))
       (condition-case _
           (alist-get (completing-read
                       "Command: "
                       (lambda (string pred action)
                         (if (eq action 'metadata)
-                            `(metadata ,@metadata)
+                            metadata
                           (complete-with-action action table string pred)))
                       nil t)
                      table nil nil #'equal)
@@ -1908,16 +1901,17 @@ This skips executing the body of the `conn-read-args' form entirely."
   (let ((arguments arglist)
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
-        (keymap (thread-last
-                  (mapcar #'conn-argument-compose-keymap arglist)
-                  (cons overriding-map)
-                  (delq nil)
-                  make-composed-keymap))
+        (keymap (make-sparse-keymap))
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil))
     (cl-labels
-        ((continue-p ()
+        ((setup-keymap ()
+           (setcdr keymap (thread-last
+                            (mapcar #'conn-argument-compose-keymap arguments)
+                            (cons overriding-map)
+                            (delq nil))))
+         (continue-p ()
            (cl-loop for arg in arguments
                     thereis (conn-argument-required-p arg)))
          (display-message ()
@@ -1957,7 +1951,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (setf conn--read-args-error-message
                          (format "Invalid Command <%s>" cmd)))))))
          (read-command ()
-           (let (keyseq cmd partial-keymap)
+           (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
                (setq keyseq (read-key-sequence-vector nil)
                      cmd (key-binding keyseq t))
@@ -1988,7 +1982,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (conn-read-args-error "No previous arguments")))
                  ((or 'execute-extended-command 'help)
                   (when-let* ((cmd (conn--read-args-completing-read
-                                    state
                                     (if command-handler
                                         `(,command-handler
                                           conn-read-args-command-handler
@@ -2017,6 +2010,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
                (while (continue-p)
+                 (setup-keymap)
                  (unless executing-kbd-macro
                    (display-message))
                  (read-command))
