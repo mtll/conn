@@ -52,7 +52,7 @@
   "U" 'outline-move-subtree-up
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "B" 'outline-show-branches
+  "R" 'outline-show-branches
   "c" (conn-remap-key "C-c" t)
   "k" 'conn-kill-thing
   "<conn-search-map> h h" 'outline-hide-by-heading-regexp

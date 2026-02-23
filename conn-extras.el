@@ -20,20 +20,8 @@
 ;;; State
 
 (defvar conn-special-state-modes
-  (list 'dired-mode
-        'diff-mode
-        'magit-section-mode
-        'ibuffer-mode
-        'bookmark-bmenu-mode
-        'help-mode
-        'helpful-mode
-        'Info-mode
-        'treemacs-mode
-        'messages-buffer-mode
-        'debugger-mode
-        'occur-mode
-        'compilation-mode
-        'pdf-view-mode))
+  (list 'special-mode
+        'dired-mode))
 
 (conn-define-state conn-special-state ()
   :lighter "S")

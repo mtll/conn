@@ -796,7 +796,6 @@
   "M-r" 'move-to-window-line-top-bottom
   "C-]" 'conn-wincontrol-abort
   "C-u" 'conn-wincontrol-universal-arg
-  "<backspace>" 'conn-wincontrol-backward-delete-arg
   "M-/" 'undelete-frame
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-DEL" 'conn-wincontrol-digit-argument-reset
@@ -828,8 +827,8 @@
   "S-<backspace>" 'conn-wincontrol-other-window-scroll-down
   "S-SPC" 'conn-wincontrol-other-window-scroll-up
   "E" 'tab-new
-  "R" 'conn-wincontrol-isearch-other-window-backward
-  "S" 'conn-wincontrol-isearch-other-window
+  "<conn-search-map> R" 'conn-wincontrol-isearch-other-window-backward
+  "<conn-search-map> S" 'conn-wincontrol-isearch-other-window
   "B" 'tab-close
   "Z" 'text-scale-increase
   "T" 'tear-off-window
