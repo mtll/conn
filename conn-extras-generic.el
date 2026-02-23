@@ -37,6 +37,7 @@
   :keymap (conn-get-state-map 'conn-outline-state)
   :suppress t
   "TAB" 'outline-cycle
+  "o" 'outline-cycle
   "<backstab>" 'outline-cycle-buffer
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
@@ -54,8 +55,8 @@
   "B" 'outline-show-branches
   "c" (conn-remap-key "C-c" t)
   "k" 'conn-kill-thing
-  "h h" 'outline-hide-by-heading-regexp
-  "h s" 'outline-show-by-heading-regexp
+  "<conn-search-map> h h" 'outline-hide-by-heading-regexp
+  "<conn-search-map> h s" 'outline-show-by-heading-regexp
   "e" 'conn-pop-state
   "d" 'conn-dispatch
   "g" (conn-remap-key "M-g" t)
@@ -65,7 +66,7 @@
   "f" 'outline-forward-same-level
   "m" 'outline-show-subtree
   "l" 'outline-hide-leaves
-  "o" 'outline-hide-other
+  "h" 'outline-hide-other
   "t" 'conn-transpose-things
   "s" conn-search-remap
   "z" 'outline-hide-body

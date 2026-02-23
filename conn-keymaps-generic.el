@@ -258,7 +258,7 @@
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   "c" 'comment
-  "i" conn-thing-inner-remap)
+  "m" conn-thing-inner-remap)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-read-thing-common-state 'outline-minor-mode)
@@ -279,9 +279,9 @@
   "U" conn-beginning-of-defun-remap
   "j" 'forward-symbol
   "J" 'conn-backward-symbol
-  "m" conn-forward-sexp-remap
-  "M" conn-backward-sexp-remap
-  "i" 'conn-duplicate-thing
+  "i" conn-forward-sexp-remap
+  "I" conn-backward-sexp-remap
+  "m" 'conn-duplicate-thing
   "," conn-thing-remap
   "@" 'kmacro-start-macro
   "#" 'kmacro-call-macro
@@ -636,7 +636,7 @@
   "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
-  "i" 'conn-duplicate-repeat
+  "m" 'conn-duplicate-repeat
   "RET" 'conn-duplicate-repeat-toggle-padding
   "<return>" 'conn-duplicate-repeat-toggle-padding
   "c" 'conn-duplicate-repeat-comment)
