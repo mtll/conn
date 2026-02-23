@@ -3990,9 +3990,9 @@ the string after the region selected by dispatch."))
                                t))
        (separator (conn-separator-argument 'default)))
     (let* ((cg (conn--action-buffer-change-group))
-           (str (progn
+           (str (save-excursion
                   (conn-kill-thing thing arg transform
-                                   nil nil nil
+                                   nil nil nil nil
                                    fixup check-bounds)
                   (current-kill 0))))
       (oclosure-lambda (conn-dispatch-send
@@ -4071,7 +4071,7 @@ the string after the region selected by dispatch."))
                                                     'check-bounds
                                                     conn-check-bounds-argument-map
                                                     t)))
-                         (progn
+                         (save-excursion
                            (conn-kill-thing thing arg transform
                                             nil nil nil
                                             fixup check-bounds)
@@ -5149,7 +5149,7 @@ for the dispatch."
                    :prompt "Bounds of Dispatch"
                    :reference (list conn-dispatch-command-reference
                                     conn-dispatch-thing-reference))
-      ((`(,thing ,arg) (conn-thing-argument t))
+      ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat
         (conn-boolean-argument "repeat"

@@ -2678,7 +2678,8 @@ hook, which see."
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform append delete
            register separator fixup check-bounds
-           (prefix-numeric-value current-prefix-arg))))
+           current-prefix-arg)))
+  (cl-callf prefix-numeric-value repeat-count)
   (cl-assert (not (and delete (or register append))))
   (cl-callf and reformat (null transform))
   (let ((last-command last-command)
