@@ -1051,7 +1051,7 @@ Currently selected window remains selected afterwards."
                    :prefix arg
                    :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument t))
+      ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
        (repeat
         (conn-boolean-argument "repeat"
@@ -1238,7 +1238,7 @@ Currently selected window remains selected afterwards."
                    :prefix arg
                    :prompt "Yank and Replace"
                    :reference (list conn-dispatch-thing-reference))
-      ((`(,thing ,arg) (conn-thing-argument t))
+      ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (read-from-kill-ring
         (unless register
@@ -1283,9 +1283,10 @@ selected by dispatch with it."))
            (with-selected-window window
              (conn-dispatch-change-group)
              (pcase (conn-bounds-of-dispatch thing arg pt)
-               ((conn-bounds (and bounds `(,beg . ,end)) transform)
-                (when check-bounds
-                  (conn-check-bounds bounds))
+               ((conn-bounds `(,beg . ,end)
+                             `(,@transform
+                               ,@(when check-bounds
+                                   (list 'conn-check-bounds))))
                 (unless (funcall conn-dispatch-other-end)
                   (goto-char beg))
                 (if swap
@@ -2321,7 +2322,7 @@ Exiting the recursive edit will resume the isearch."
                      :prompt "Transpose Dispatch"
                      :prefix arg
                      :reference (list conn-dispatch-thing-reference))
-        ((`(,thing ,arg) (conn-thing-argument t))
+        ((`(,thing ,arg) (conn-dispatch-thing-argument t))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
@@ -3033,7 +3034,7 @@ hook, which see."
                      :prompt "Kill"
                      :reference (list conn-dispatch-thing-reference)
                      :display-handler (conn-read-args-display-columns 3 3))
-        ((`(,thing ,arg) (conn-thing-argument t))
+        ((`(,thing ,arg) (conn-dispatch-thing-argument t))
          (repeat
           (conn-boolean-argument "repeat"
                                  'repeat-dispatch
@@ -3457,7 +3458,7 @@ that place."
                    :prefix arg
                    :prompt "Copy"
                    :reference (list conn-dispatch-thing-reference))
-      ((`(,thing ,arg) (conn-thing-argument t))
+      ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat
         (conn-boolean-argument "repeat"

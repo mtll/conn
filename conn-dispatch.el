@@ -528,6 +528,19 @@ themselves once the selection process has concluded."
       "<return>" 'ignore
       "M-TAB" 'repeat-dispatch)))
 
+(cl-defstruct (conn-dispatch-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-dispatch-thing-argument
+                 (&optional
+                  recursive-edit
+                  in-region
+                  &aux
+                  (required t)))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-thing-argument)
+                                       (_cmd (conn-thing dispatch)))
+  nil)
+
 (defvar-keymap conn-toggle-label-argument-map
   "SPC" 'toggle-labels)
 
