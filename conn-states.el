@@ -2283,7 +2283,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-update ((arg conn-composite-argument)
                                     form
                                     break)
-  (dolist (a arg)
+  (dolist (a (conn-argument-value arg))
     (conn-argument-update a form break)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-composite-argument))
