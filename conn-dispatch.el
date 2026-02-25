@@ -741,12 +741,13 @@ themselves once the selection process has concluded."
                  conn-dispatch-action-ref-list 3))))))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (cl-symbol-macrolet ((curr (conn-dispatch-action-argument-curr arg)))
     (pcase cmd
       ('repeat-dispatch
        (cl-callf not (conn-dispatch-action-argument-repeat arg))
-       (funcall updater arg))
+       (funcall break))
       ((guard (conn-argument-predicate arg cmd))
        (conn-cancel-action (conn-argument-value arg))
        (condition-case err
@@ -775,7 +776,7 @@ themselves once the selection process has concluded."
          (error
           (conn-read-args-error (error-message-string err))
           (setf (conn-argument-value arg) nil)))
-       (funcall updater arg)))))
+       (funcall break)))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
   (conn-cancel-action (conn-argument-value arg)))

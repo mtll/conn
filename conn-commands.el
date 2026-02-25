@@ -2460,14 +2460,14 @@ append to that place."
 
 (cl-defmethod conn-argument-update ((arg conn-kill-append-argument)
                                     cmd
-                                    updater)
+                                    break)
   (pcase cmd
     ('append-on-repeat
      (conn-threadf<- (conn-cycling-argument-value arg)
        (eq 'repeat)
        not
        (and 'repeat))
-     (funcall updater arg))
+     (funcall break))
     (_ (cl-call-next-method))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-append-argument)
@@ -2518,7 +2518,7 @@ append to that place."
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
                                     cmd
-                                    _updater)
+                                    _break)
   (cl-symbol-macrolet ((delete (conn-argument-value
                                 (conn-kill-how-argument-delete arg)))
                        (register (conn-argument-value
@@ -2610,7 +2610,7 @@ append to that place."
 
 (cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)
                                     cmd
-                                    updater)
+                                    break)
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
                        (fws (conn-transform-and-fixup-argument-reformat arg)))
     (let ((valid nil))
@@ -2621,13 +2621,13 @@ append to that place."
              (unless (conn-transform-and-fixup-argument-explicit arg)
                (setf (conn-reformat-argument-value fws)
                      (not (conn-transform-argument-value tform))))
-             (funcall updater arg))
+             (funcall break))
             ((and (conn-argument-update fws cmd (lambda (newval)
                                                   (setq fws newval
                                                         valid t)))
                   valid)
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
-             (funcall updater arg))))))
+             (funcall break))))))
 
 (defun conn-kill-thing (thing
                         arg

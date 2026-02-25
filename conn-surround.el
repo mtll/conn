@@ -65,10 +65,11 @@
                             "e" :inner))))))
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (when (memq cmd '(:whole :inner))
     (setf (conn-argument-value arg) cmd)
-    (funcall updater arg)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-surround-property-argument)
                                        sym)
@@ -187,13 +188,13 @@
 
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
                                     cmd
-                                    updater)
+                                    break)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list (conn-handle-surround-with-argument cmd)
                 (conn-read-args-consume-prefix-arg)))
-    (funcall updater arg)))
+    (funcall break)))
 
 (cl-defgeneric conn-handle-surround-with-argument (cmd)
   ( :method (cmd) cmd))
@@ -458,11 +459,6 @@
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")
 
-(cl-defmethod conn-handle-change-argument ((cmd (eql conn-surround))
-                                           arg)
-  (conn-set-argument
-   arg (list cmd (conn-read-args-consume-prefix-arg))))
-
 (cl-defstruct (conn-change-surround-argument
                (:include conn-argument)
                ( :constructor conn-change-surround-argument
@@ -471,13 +467,14 @@
                   (annotation "change surround")))))
 
 (cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-set-flag arg) t
           (conn-argument-value arg)
           (list (conn--self-insert last-input-event)
                 (conn-read-args-consume-prefix-arg)))
-    (funcall updater arg)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-surround-argument)
                                        (_sym (eql surround-self-insert)))

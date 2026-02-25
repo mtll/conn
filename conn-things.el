@@ -1340,22 +1340,22 @@ the point is within the region then the entire region is returned.")))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     cmd
-                                    updater)
+                                    break)
   (pcase cmd
     ('conn-things-in-region
      (cl-callf not (conn-thing-argument-in-region arg))
-     (funcall updater))
+     (funcall break))
     ((guard (conn-argument-predicate arg cmd))
      (setf (conn-argument-set-flag arg) t
            (conn-argument-value arg)
            (list cmd (conn-read-args-consume-prefix-arg)))
-     (funcall updater))))
+     (funcall break))))
 
 (defvar conn--last-thing-kbd-macro nil)
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     (cmd (conn-thing kbd-macro))
-                                    updater)
+                                    break)
   (unless (and conn--last-thing-kbd-macro
                (memq cmd '(kmacro-call-macro
                            call-last-kbd-macro
@@ -1391,7 +1391,7 @@ the point is within the region then the entire region is returned.")))
                       (error "Buffer change during keyboard macro")))))))))
   (setf (conn-argument-set-flag arg) t
         (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
-  (funcall updater))
+  (funcall break))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
                                        (_sym (conn-thing t)))
@@ -1514,14 +1514,14 @@ words."))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
                                     (_cmd (eql toggle-subregions))
-                                    updater)
+                                    break)
   (cl-callf not (conn-thing-with-subregions-argument-subregions arg))
   (setf (conn-thing-with-subregions-argument-subregions-explicit-flag arg) t)
-  (funcall updater))
+  (funcall break))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
                                     (_cmd (conn-thing region))
-                                    _updater)
+                                    _break)
   (unless (conn-thing-with-subregions-argument-subregions-explicit-flag arg)
     (setf (conn-thing-with-subregions-argument-subregions arg) t))
   (cl-call-next-method))
@@ -1533,22 +1533,26 @@ words."))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
                                     cmd
-                                    updater)
+                                    break)
   (cond ((conn-thing-with-subregions-argument-subregions-explicit-flag arg)
          (cl-call-next-method))
-        ((eq cmd 'conn-things-in-region)
+        ((conn-thing-argument-in-region arg)
          (cl-call-next-method)
-         (setf (conn-thing-with-subregions-argument-subregions arg)
-               (conn-thing-argument-in-region arg)))
+         (setf (conn-thing-with-subregions-argument-subregions arg) t))
+        ((conn-subthing-p cmd 'conn-things-in-region)
+         (unwind-protect
+             (cl-call-next-method)
+           (setf (conn-thing-with-subregions-argument-subregions arg)
+                 (conn-thing-argument-in-region arg))))
         (t
          (let* ((updated nil)
-                (ufn (lambda (&rest rest)
-                       (setf updated t)
-                       (apply updater rest))))
-           (cl-call-next-method arg cmd ufn)
-           (when (and updated (conn-argument-value arg))
-             (setf (conn-thing-with-subregions-argument-subregions arg)
-                   (conn-subregions-argument-default (car (conn-argument-value arg)))))))))
+                (bfn (lambda () (setf updated t))))
+           (cl-call-next-method arg cmd bfn)
+           (when updated
+             (when (conn-argument-value arg)
+               (setf (conn-thing-with-subregions-argument-subregions arg)
+                     (conn-subregions-argument-default (car (conn-argument-value arg)))))
+             (funcall break))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-with-subregions-argument)
                                        (_sym (eql toggle-subregions)))
@@ -1599,12 +1603,13 @@ current buffer."))
                  conn-reformat-default)))))))
 
 (cl-defmethod conn-argument-update ((arg conn-reformat-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (when (eq cmd 'reformat)
     (cl-callf null (conn-argument-value arg))
     (when (conn-read-args-consume-prefix-arg)
       (setq-local conn-reformat-default (conn-argument-value arg)))
-    (funcall updater arg)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
                                        (_sym (eql reformat)))
@@ -1663,7 +1668,7 @@ check bounds in the current buffer."))
 
 (cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
                                     _cmd
-                                    _updater)
+                                    _break)
   (cl-call-next-method)
   (when (conn-read-args-consume-prefix-arg)
     (setq-local conn-check-bounds-default (conn-argument-value arg))))
@@ -1719,12 +1724,13 @@ check bounds in the current buffer."))
               conn-transformations-quick-ref 3)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
     (pcase cmd
       ('conn-transform-reset
        (setf transforms nil)
-       (funcall updater arg))
+       (funcall break))
       ((and (let ts
               (if (and (symbolp cmd)
                        (get cmd :conn-bounds-transformation))
@@ -1734,7 +1740,7 @@ check bounds in the current buffer."))
                 transforms))
             (guard (not (eq ts transforms))))
        (setf transforms ts)
-       (funcall updater arg)))))
+       (funcall break)))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-transform-argument)
                                        sym)
@@ -1881,15 +1887,19 @@ Only the background color is used."
              ((bound
                (oclosure-lambda (conn-anonymous-argument
                                  (required t))
-                   (_self command updater)
-                 (let ((bounds (nth curr bounds)))
+                   (command break)
+                 (let ((bound (nth curr bounds)))
                    (pcase command
                      ('select
-                      (setf (conn-bounds-get bounds :direction) -1)
-                      (funcall updater (conn-argument bounds)))
+                      (setf (conn-bounds-get bound :direction) -1
+                            value bound
+                            set-flag t)
+                      (funcall break))
                      ('select-other-end
-                      (setf (conn-bounds-get bounds :direction) 1)
-                      (funcall updater (conn-argument bounds))))))))
+                      (setf (conn-bounds-get bound :direction) 1
+                            value bound
+                            set-flag t)
+                      (funcall break)))))))
            bound))))))
 
 ;;;; Read Thing Regions

@@ -160,17 +160,15 @@ function may setup any other necessary state as well.")
                   unless (memq parent no-inherit)
                   collect (conn-state-all-keymap-parents parent)))))
 
-(defun conn--state-all-children-subr (state)
-  (declare (side-effect-free t)
-           (important-return-value t))
-  (let ((children (conn-state--children (conn--find-state state))))
-    (append children (mapcan #'conn--state-all-children-subr children))))
-
 (defun conn-state-all-children (state)
   "Return all children for STATE."
   (declare (side-effect-free t)
            (important-return-value t))
-  (delete-dups (conn--state-all-children-subr state)))
+  (cl-labels ((all-children (state)
+                (let ((children (conn-state--children
+                                 (conn--find-state state))))
+                  (append children (mapcan #'all-children children)))))
+    (delete-dups (all-children state))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1901,17 +1899,16 @@ This skips executing the body of the `conn-read-args' form entirely."
   (let ((arguments arglist)
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
-        (keymap (make-sparse-keymap))
+        (keymap (thread-last
+                  (mapcar #'conn-argument-compose-keymap arglist)
+                  (cons overriding-map)
+                  (delq nil)
+                  (make-composed-keymap)))
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil))
     (cl-labels
-        ((setup-keymap ()
-           (setcdr keymap (thread-last
-                            (mapcar #'conn-argument-compose-keymap arguments)
-                            (cons overriding-map)
-                            (delq nil))))
-         (continue-p ()
+        ((continue-p ()
            (cl-loop for arg in arguments
                     thereis (conn-argument-required-p arg)))
          (display-message ()
@@ -1940,16 +1937,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (when post (funcall post cmd))
                    ;; (setq conn-read-args-last-command cmd)
                    (update-args newcmd))
-               (let (valid)
-                 (cl-loop for as on arguments
-                          do (conn-argument-update
-                              (car as) cmd
-                              (lambda (&optional newval)
-                                (when newval (setf (car as) newval))
-                                (setf valid t))))
-                 (unless valid
-                   (setf conn--read-args-error-message
-                         (format "Invalid Command <%s>" cmd)))))))
+               (let ((break nil))
+                 (dolist (a arguments)
+                   (conn-argument-update a cmd (lambda () (setq break t)))
+                   (when break (throw 'conn-read-args-handle nil))))
+               (setf conn--read-args-error-message
+                     (format "Invalid Command <%s>" cmd)))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
@@ -2010,7 +2003,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
                (while (continue-p)
-                 (setup-keymap)
                  (unless executing-kbd-macro
                    (display-message))
                  (read-command))
@@ -2127,8 +2119,8 @@ echo area help message.
     (and (conn-argument-required arg)
          (not (conn-argument-set-flag arg)))))
 
-(cl-defgeneric conn-argument-update (argument form updater)
-  ( :method (_arg _form _updater) nil))
+(cl-defgeneric conn-argument-update (argument form break)
+  ( :method (_arg _form _break) nil))
 
 (cl-defgeneric conn-argument-extract-value (argument)
   "Extract ARGUMENT's value."
@@ -2206,14 +2198,10 @@ be displayed in the echo area during `conn-read-args'."
 
 ;;;;;; Anonymous Argument
 
-(oclosure-define (conn-anonymous-argument
-                  ;; (:predicate conn-anonymous-argument-p)
-                  (:copier conn-set-argument (value &optional (set-flag t)))
-                  (:copier conn-unset-argument ( &optional value
-                                                 &aux (set-flag nil))))
+(oclosure-define (conn-anonymous-argument)
   (predicate :type (or nil function))
-  (value :type t)
-  (set-flag :type boolean)
+  (value :type t :mutable t)
+  (set-flag :type boolean :mutable t)
   (required :type boolean)
   (name :type (or nil string function))
   (annotation :type (or nil string function))
@@ -2244,8 +2232,8 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-update ((arg conn-anonymous-argument)
                                     form
-                                    updater)
-  (funcall arg arg form updater))
+                                    break)
+  (funcall arg form break))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-anonymous-argument))
   (conn-anonymous-argument-value arg))
@@ -2294,16 +2282,9 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-update ((arg conn-composite-argument)
                                     form
-                                    updater)
-  (cl-loop with done = nil
-           for as on (conn-argument-value arg)
-           until done
-           do (conn-argument-update (car as)
-                                    form
-                                    (lambda (a)
-                                      (setf (car as) a
-                                            done t)
-                                      (funcall updater arg)))))
+                                    break)
+  (dolist (a arg)
+    (conn-argument-update a form break)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
@@ -2347,10 +2328,11 @@ be displayed in the echo area during `conn-read-args'."
   (toggle-command nil :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (when (eq cmd (conn-boolean-argument-toggle-command arg))
     (cl-callf not (conn-boolean-argument-value arg))
-    (funcall updater arg)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -2392,17 +2374,17 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
-                                    updater)
+                                    break)
   (when (eq cmd (conn-cycling-argument-cycling-command arg))
     (pcase (memq (conn-cycling-argument-value arg)
                  (conn-cycling-argument-choices arg))
       (`(,_ ,next . ,_)
        (setf (conn-cycling-argument-value arg) next)
-       (funcall updater arg))
+       (funcall break))
       (`(,_ . nil)
        (setf (conn-cycling-argument-value arg)
              (car (conn-cycling-argument-choices arg)))
-       (funcall updater arg)))))
+       (funcall break)))))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-cycling-argument))
   (let ((val (conn-argument-value arg)))
@@ -2470,14 +2452,15 @@ be displayed in the echo area during `conn-read-args'."
   (toggle-command nil :type symbol :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
-                                    cmd updater)
+                                    cmd
+                                    break)
   (condition-case err
       (when (eq cmd (conn-read-argument-toggle-command arg))
         (setf (conn-argument-value arg)
               (unless (conn-argument-value arg)
                 (funcall (conn-read-argument-reader arg)
                          (conn-argument-value arg))))
-        (funcall updater arg))
+        (funcall break))
     (quit (conn-read-args-error "Quit"))
     (error (conn-read-args-error (error-message-string err)))))
 

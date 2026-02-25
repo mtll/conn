@@ -188,12 +188,13 @@ Expansions and contractions are provided by functions in
           ((bounds
             (oclosure-lambda (conn-anonymous-argument
                               (required t))
-                (_self command updater)
+                (command break)
               (pcase command
                 ((or 'end 'exit-recursive-edit)
-                 (funcall updater
-                          (conn-argument (cons (region-beginning)
-                                               (region-end)))))))))
+                 (setf value (cons (region-beginning)
+                                   (region-end))
+                       set-flag t)
+                 (funcall break))))))
         (deactivate-mark)
         (conn-make-bounds cmd arg bounds)))))
 
