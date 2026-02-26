@@ -454,8 +454,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                finally return default)))))
 
 (define-inline conn-thing-set (thing property val)
-  (if (memq (inline-const-val property)
-            '(forward-op beginning-op end-op bounds-of-thing-at-point))
+  (if (and (inline-const-p property)
+           (memq property '(forward-op
+                            beginning-op
+                            end-op
+                            bounds-of-thing-at-point)))
       (inline-quote
        (put ,thing ,property ,val))
     (inline-letevals (thing)
@@ -583,8 +586,8 @@ command moves over."
     `(progn
        ,(unless (conn-thing-p thing)
           (macroexp-warn-and-return
-	   (format "The thing %S is not known to be defined" thing)
-	   nil t nil thing))
+           (format "The thing %S is not known to be defined" thing)
+           nil t nil thing))
        (conn-register-thing-commands '(,thing) ,other-end-handler ',f)))
 ;;;###autoload
   (setf (alist-get 'conn-thing-command defun-declarations-alist)
