@@ -582,6 +582,22 @@
   "g" 'sort-fold-case)
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-kapply-state)
+  "M-p" 'kmacro-cycle-ring-next
+  "M-n" 'kmacro-cycle-ring-previous
+  "M-h" 'conn-display-kmacro-ring
+  "M-t" 'kmacro-swap-ring
+  "M-d" 'kmacro-delete-ring-head
+  "." 'register
+  "a" 'apply
+  "x" 'append
+  "r" 'step-edit
+  "e" 'record
+  "c" 'record
+  "+" 'kmacro-set-counter
+  "f" 'kmacro-set-format)
+
+(define-keymap
   :keymap conn-kapply-state-argument-map
   "s" 'kapply-state)
 
@@ -603,7 +619,7 @@
 
 (define-keymap
   :keymap conn-kapply-excursions-argument-map
-  "x" 'save-excursions)
+  "X" 'save-excursions)
 
 (define-keymap
   :keymap conn-kapply-restrictions-argument-map

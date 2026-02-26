@@ -1205,22 +1205,6 @@ The iterator must be the first argument in ARGLIST.
 (conn-define-state conn-kapply-state ()
   :lighter "KAPPLY")
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-kapply-state)
-  "M-p" 'kmacro-cycle-ring-next
-  "M-n" 'kmacro-cycle-ring-previous
-  "M-h" 'conn-display-kmacro-ring
-  "M-t" 'kmacro-swap-ring
-  "M-d" 'kmacro-delete-ring-head
-  "." 'register
-  "p" 'apply
-  "a" 'append
-  "r" 'step-edit
-  "e" 'record
-  "c" 'record
-  "+" 'kmacro-set-counter
-  "f" 'kmacro-set-format)
-
 ;;;;; Applier Argument
 
 (defvar conn-kapply-appliers-ref-list
