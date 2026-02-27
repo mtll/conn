@@ -25,7 +25,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
   "s" 'conn-surround
-  "h" 'end-of-buffer
+  "u" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
   ";" 'conn-things-in-region
@@ -275,13 +275,13 @@
   :suppress t
   "o" conn-forward-word-remap
   "O" conn-backward-word-remap
-  "u" conn-end-of-defun-remap
-  "U" conn-beginning-of-defun-remap
+  "m" conn-end-of-defun-remap
+  "M" conn-beginning-of-defun-remap
   "j" 'forward-symbol
   "J" 'conn-backward-symbol
   "i" conn-forward-sexp-remap
   "I" conn-backward-sexp-remap
-  "m" 'conn-duplicate-thing
+  "k" 'conn-duplicate-thing
   "," conn-thing-remap
   "@" 'kmacro-start-macro
   "#" 'kmacro-call-macro
@@ -332,8 +332,8 @@
   "<" 'point-to-register
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
-  "h" conn-edit-remap
-  "k" 'conn-kill-thing
+  "u" conn-edit-remap
+  "h" 'conn-kill-thing
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
@@ -346,8 +346,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   "TAB" 'repeat-dispatch
-  "n" 'forward-line
-  "p" 'next-line
+  "n" 'next-line
+  "p" 'forward-line
   "<conn-thing-map> b" (conn-anonymous-thing
                          '(visual-line)
                          :target-finder ( :method (_self _arg)
@@ -415,8 +415,8 @@
   "d" 'conn-dispatch-copy-from
   "x" 'conn-dispatch-grab
   "X" 'conn-dispatch-grab-replace
-  "k" 'conn-dispatch-send
-  "K" 'conn-dispatch-send-replace
+  "h" 'conn-dispatch-send
+  "H" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
@@ -538,7 +538,7 @@
 
 (define-keymap
   :keymap conn-delete-argument-map
-  "k" 'delete)
+  "h" 'delete)
 
 (define-keymap
   :keymap conn-kill-append-argument-map
@@ -831,7 +831,7 @@
   "I" 'tab-bar-switch-to-tab
   "F" 'tab-bar-duplicate-tab
   "J" 'tab-bar-detach-tab
-  "H" 'conn-kill-this-buffer
+  "k" 'conn-kill-this-buffer
   "d" 'windmove-down
   "l" 'windmove-left
   "r" 'windmove-right
@@ -847,16 +847,16 @@
   "<conn-search-map> S" 'conn-wincontrol-isearch-other-window
   "B" 'tab-close
   "Z" 'text-scale-increase
-  "T" 'tear-off-window
+  "O" 'tear-off-window
   "[" 'previous-buffer
   "]" 'next-buffer
   "{" 'bury-buffer
   "}" 'unbury-buffer
   "`" 'conn-wincontrol-mru-window
   "c" 'delete-window
-  "k" 'conn-delete-window
+  "h" 'conn-delete-window
   "e" 'conn-wincontrol-exit
-  "K" 'delete-other-windows
+  "H" 'delete-other-windows
   "<tab>" 'conn-goto-window
   "TAB" 'conn-goto-window
   "g" (conn-remap-key "M-g" t t)
@@ -876,19 +876,19 @@
   "t" 'conn-transpose-window
   "b" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
-  "h" 'conn-throw-buffer
+  "T" 'conn-throw-buffer
   "y" 'conn-yank-window
   "z" 'text-scale-decrease)
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map
-  "d" 'kill-buffer-and-window
-  "u" 'conn-kill-this-buffer
+  "k" 'kill-buffer-and-window
+  "h" 'conn-kill-this-buffer
   "e" 'delete-other-windows)
 
 (defvar-keymap conn-buffer-repeat-map
   :repeat t
-  "u" 'conn-kill-this-buffer
+  "k" 'conn-kill-this-buffer
   "P" 'conn-bury-buffer
   "N" 'conn-unbury-buffer
   "n" 'next-buffer
