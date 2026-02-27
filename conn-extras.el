@@ -590,17 +590,6 @@
                 (bookmark-bmenu-unmark)
               (bookmark-bmenu-mark))))))))
 
-(defun conn-bmenu-target-finder ()
-  (save-excursion
-    (with-restriction (window-start) (window-end)
-      (goto-char (point-min))
-      (while (progn
-               (when (tabulated-list-get-entry)
-                 (conn-make-target-overlay
-                  (+ (point) tabulated-list-padding) 0))
-               (forward-line)
-               (not (eobp)))))))
-
 (defvar conn-bookmark-bmenu-ref
   (conn-reference-page
     (:heading "Bookmark Menu")

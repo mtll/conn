@@ -123,10 +123,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-bmenu-dispatch-state)
-  "d" 'conn-dispatch-bmenu-mark
-  "k" (conn-anonymous-thing
-        '(line)
-        :target-finder (:method (_self _arg) #'conn-bmenu-target-finder)))
+  "d" 'conn-dispatch-bmenu-mark)
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
