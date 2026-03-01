@@ -593,7 +593,6 @@
   "x" 'append
   "r" 'step-edit
   "e" 'record
-  "c" 'record
   "+" 'kmacro-set-counter
   "f" 'kmacro-set-format)
 
@@ -780,10 +779,12 @@
   :repeat t
   "o" 'other-window)
 
+(defalias 'conn-other-window #'other-window)
+
 (defvar-keymap conn-other-window-tab-repeat-map
   :repeat t
-  "TAB" 'other-window
-  "<tab>" 'other-window)
+  "TAB" 'conn-other-window
+  "<tab>" 'conn-other-window)
 
 (defvar-keymap conn-wincontrol-next-window-repeat-map
   :repeat t
@@ -857,8 +858,8 @@
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "w" 'conn-other-place-prefix
-  "<tab>" 'other-window
-  "TAB" 'other-window
+  "<tab>" 'conn-other-window
+  "TAB" 'conn-other-window
   "G" 'tab-bar-move-window-to-tab
   "B" 'tab-bar-switch-to-tab
   "O" 'tab-bar-duplicate-tab

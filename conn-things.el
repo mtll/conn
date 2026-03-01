@@ -1753,7 +1753,8 @@ check bounds in the current buffer."))
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
   (when-let* ((ts (conn-argument-value arg)))
     (concat
-     "T: "
+     (propertize "T" 'face 'bold)
+     ": "
      (propertize
       (mapconcat (lambda (tf)
                    (or (get tf :conn-transform-description) ""))

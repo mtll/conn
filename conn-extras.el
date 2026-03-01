@@ -166,13 +166,13 @@
   (conn-read-args (conn-dired-dispatch-state
                    :prefix initial-arg
                    :prompt "Dired Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
+      ((`(,action ,repeat) (conn-dispatch-action-argument))
+       (`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-restrict-windows-argument-map))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
+                               conn-restrict-windows-argument-map)))
     (conn-dispatch-setup
      action thing arg transform
      :repeat repeat
@@ -417,13 +417,13 @@
   (conn-read-args (conn-ibuffer-dispatch-state
                    :prefix initial-arg
                    :prompt "Ibuffer Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
+      ((`(,action ,repeat) (conn-dispatch-action-argument))
+       (`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-restrict-windows-argument-map))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
+                               conn-restrict-windows-argument-map)))
     (conn-dispatch-setup
      action thing arg transform
      :repeat repeat
@@ -560,9 +560,9 @@
   (conn-read-args (conn-bmenu-dispatch-state
                    :prefix initial-arg
                    :prompt "Bookmark Dispatch")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument))
-       (`(,action ,repeat) (conn-dispatch-action-argument)))
+      ((`(,action ,repeat) (conn-dispatch-action-argument))
+       (`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument)))
     (conn-dispatch-setup
      action thing arg transform
      :repeat repeat

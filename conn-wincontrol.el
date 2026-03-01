@@ -422,7 +422,7 @@
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
-  (when-let* ((mru (get-mru-window 0 nil t t)))
+  (when-let* ((mru (get-mru-window nil t t t)))
     (select-window mru)))
 
 ;;;###autoload

@@ -796,14 +796,16 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (list
+   (when-let* ((action (conn-argument-value arg)))
+     (concat (propertize "Do" 'face 'bold)
+             ": "
+             (propertize (conn-action-pretty-print action)
+                         'face 'eldoc-highlight-function-argument)))
    (concat (substitute-command-keys "\\[repeat-dispatch] ")
            (propertize
             "repeat"
             'face (when (conn-dispatch-action-argument-repeat arg)
-                    'eldoc-highlight-function-argument)))
-   (when-let* ((action (conn-argument-value arg)))
-     (propertize (conn-action-pretty-print action)
-                 'face 'eldoc-highlight-function-argument))))
+                    'eldoc-highlight-function-argument)))))
 
 ;;;;;; Command Handler
 
@@ -1929,8 +1931,8 @@ depths will be sorted before greater depths.
 
 (defvar conn--current-dispatch-buffers)
 
-(defun conn-dispatch-select-window (window &optional norecord)
-  (prog1 (select-window window norecord)
+(defun conn-dispatch-select-window (window)
+  (prog1 (select-window window)
     (or (gethash (current-buffer) conn--current-dispatch-buffers)
         (setf (gethash (current-buffer) conn--current-dispatch-buffers)
               (point-marker)))))
@@ -3750,7 +3752,7 @@ contain targets."
       ()
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
-      (select-window window)
+      (conn-dispatch-select-window window)
       (run-hook-with-args-until-success 'conn-dispatch-button-functions pt))))
 
 (oclosure-define (conn-dispatch-copy-to
@@ -4851,9 +4853,9 @@ INITIAL-ARG is the initial value of the prefix argument during
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
                             (posframe-hide " *conn-list-posframe*"))))
-      ((`(,thing ,arg) (conn-dispatch-target-argument))
+      ((`(,action ,repeat) (conn-dispatch-action-argument))
+       (`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
-       (`(,action ,repeat) (conn-dispatch-action-argument))
        (other-end (conn-boolean-argument "other-end"
                                          'other-end
                                          conn-other-end-argument-map))
@@ -4888,7 +4890,8 @@ INITIAL-ARG is the initial value of the prefix argument during
                             (when (and (bound-and-true-p conn-posframe-mode)
                                        (fboundp 'posframe-hide))
                               (posframe-hide " *conn-list-posframe*"))))
-        ((`(,thing ,arg) (conn-dispatch-target-argument))
+        ((`(,action ,repeat) (conn-dispatch-action-argument))
+         (`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument))
          (other-end
           (conn-boolean-argument "other-end"
@@ -4897,8 +4900,7 @@ INITIAL-ARG is the initial value of the prefix argument during
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-restrict-windows-argument-map))
-         (`(,action ,repeat) (conn-dispatch-action-argument)))
+                                 conn-restrict-windows-argument-map)))
       (conn-dispatch-setup
        action
        (conn-anonymous-thing
