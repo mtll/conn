@@ -413,8 +413,8 @@
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "d" 'conn-dispatch-copy-from
-  "x" 'conn-dispatch-grab
-  "X" 'conn-dispatch-grab-replace
+  "x" 'conn-dispatch-take
+  "X" 'conn-dispatch-take-replace
   "h" 'conn-dispatch-send
   "H" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose

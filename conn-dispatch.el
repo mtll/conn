@@ -652,9 +652,9 @@ themselves once the selection process has concluded."
       conn-dispatch-register-load
       conn-dispatch-register-load-replace)
      ("repeat command at" conn-dispatch-repeat-command)
-     ("grab/replace"
-      conn-dispatch-grab
-      conn-dispatch-grab-replace))))
+     ("take/replace"
+      conn-dispatch-take
+      conn-dispatch-take-replace))))
 
 (defvar conn-dispatch-command-reference
   (conn-reference-page
@@ -749,7 +749,7 @@ themselves once the selection process has concluded."
        (cl-callf not (conn-dispatch-action-argument-repeat arg))
        (funcall break))
       ((guard (conn-argument-predicate arg cmd))
-       (conn-cancel-action (conn-argument-value arg))
+       (conn-action-cancel (conn-argument-value arg))
        (condition-case err
            (if-let* ((_(not (eq curr cmd)))
                      (action (or (atomic-change-group
@@ -779,7 +779,7 @@ themselves once the selection process has concluded."
        (funcall break)))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
-  (conn-cancel-action (conn-argument-value arg)))
+  (conn-action-cancel (conn-argument-value arg)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
   (list (conn-argument-value arg)
@@ -2027,8 +2027,8 @@ depths will be sorted before greater depths.
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel))))
       (if success
-          (conn-accept-action action)
-        (conn-cancel-action action))
+          (conn-action-accept action)
+        (conn-action-cancel action))
       (maphash
        (lambda (_buf mk)
          (when (markerp mk) (set-marker mk nil)))
@@ -3662,10 +3662,10 @@ contain targets."
   ( :method ((action conn-action) &optional _)
     (conn-action-description action)))
 
-(cl-defgeneric conn-accept-action (action)
+(cl-defgeneric conn-action-accept (action)
   (:method ((action conn-action)) action))
 
-(cl-defgeneric conn-cancel-action (action)
+(cl-defgeneric conn-action-cancel (action)
   (:method (_) "Noop" nil))
 
 (defun conn--action-buffer-change-group ()
@@ -3692,9 +3692,7 @@ contain targets."
                      (not (= omark saved-mark)))
              (run-hooks 'activate-mark-hook))
          (when cur-mark-active
-           (run-hooks 'deactivate-mark-hook))))
-     (setf (cdr change-group) nil
-           (car change-group) nil))))
+           (run-hooks 'deactivate-mark-hook)))))))
 
 (defun conn-dispatch-insert-separator (separator)
   (pcase separator
@@ -3717,16 +3715,17 @@ contain targets."
 
 (oclosure-define (conn-change-group-action
                   (:parent conn-action))
-  (action-change-group))
+  (action-change-group :mutable t))
 
-(cl-defmethod conn-accept-action ((action conn-change-group-action))
+(cl-defmethod conn-action-accept ((action conn-change-group-action))
   (conn--action-accept-change-group
    (conn-change-group-action--action-change-group action))
   action)
 
-(cl-defmethod conn-cancel-action ((action conn-change-group-action))
+(cl-defmethod conn-action-cancel ((action conn-change-group-action))
   (conn--action-cancel-change-group
-   (conn-change-group-action--action-change-group action)))
+   (conn-change-group-action--action-change-group action))
+  (setf (conn-change-group-action--action-change-group action) nil))
 
 ;;;###autoload
 (defvar conn-dispatch-button-functions nil)
@@ -3972,10 +3971,9 @@ the string after the region selected by dispatch."))
     "Yank To"))
 
 (oclosure-define (conn-dispatch-send
-                  (:parent conn-action))
+                  (:parent conn-change-group-action))
   (str :type string)
-  (separator :type string)
-  (action-change-group))
+  (separator :type string))
 
 (defun conn-dispatch-send ()
   (declare (conn-dispatch-action)
@@ -4040,19 +4038,18 @@ the string after the region selected by dispatch."))
                (- (point) (length str))
                (point)))))))))
 
-(cl-defmethod conn-accept-action ((action conn-dispatch-send))
+(cl-defmethod conn-action-accept ((action conn-dispatch-send))
   (conn--action-accept-change-group
    (conn-dispatch-send--action-change-group action))
   action)
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-send))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-send))
   (conn--action-cancel-change-group
    (conn-dispatch-send--action-change-group action)))
 
 (oclosure-define (conn-dispatch-send-replace
-                  (:parent conn-action))
-  (str :type string)
-  (action-change-group))
+                  (:parent conn-change-group-action))
+  (str :type string))
 
 (defun conn-dispatch-send-replace ()
   (declare (conn-dispatch-action)
@@ -4102,12 +4099,12 @@ it."))
                 (- (point) (length str)) (point)))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
+(cl-defmethod conn-action-accept ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group
    (conn-dispatch-send-replace--action-change-group action))
   action)
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-send-replace))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-send-replace))
   (conn--action-cancel-change-group
    (conn-dispatch-send-replace--action-change-group action)))
 
@@ -4190,7 +4187,7 @@ it."))
    action
    (copy-marker (conn-dispatch-copy-from--action-opoint action) t)))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (defun conn-dispatch-copy-from ()
@@ -4224,12 +4221,11 @@ it."))
                  (insert-for-yank str))))))))
 
 (oclosure-define (conn-dispatch-copy-from-replace
-                  (:parent conn-action)
+                  (:parent conn-change-group-action)
                   ( :copier
                     conn-dispatch-copy-from-replace-copy
                     (action-opoint)))
-  (action-opoint :type marker)
-  (action-change-group))
+  (action-opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from-replace))
   (when-let* ((mk (conn-dispatch-copy-from-replace--action-opoint action)))
@@ -4277,40 +4273,40 @@ it."))
                  (yank)))))))
       (_ (error "No region to replace")))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-copy-from-replace))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from-replace))
   (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil)
   (conn--action-cancel-change-group
    (conn-dispatch-copy-from-replace--action-change-group action)))
 
-(cl-defmethod conn-accept-action ((action conn-dispatch-copy-from-replace))
+(cl-defmethod conn-action-accept ((action conn-dispatch-copy-from-replace))
   (conn--action-accept-change-group
    (conn-dispatch-copy-from-replace--action-change-group action)))
 
-(oclosure-define (conn-dispatch-grab
+(oclosure-define (conn-dispatch-take
                   (:parent conn-action)
-                  (:copier conn-dispatch-grab-copy (action-opoint)))
+                  (:copier conn-dispatch-take-copy (action-opoint)))
   (action-opoint :type marker))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-grab))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
   (not (thread-first
-         (conn-dispatch-grab--action-opoint action)
+         (conn-dispatch-take--action-opoint action)
          marker-buffer
          buffer-live-p)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-grab))
-  (set-marker (conn-dispatch-grab--action-opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
+  (set-marker (conn-dispatch-take--action-opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-grab))
+(cl-defmethod conn-action-copy ((action conn-dispatch-take))
   (conn-thread<-
-    (conn-dispatch-grab--action-opoint action)
+    (conn-dispatch-take--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-grab-copy action))))
+    (:-> (conn-dispatch-take-copy action))))
 
-(defun conn-dispatch-grab ()
+(defun conn-dispatch-take ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-grab
-                    (action-description "Grab From")
+  (oclosure-lambda (conn-dispatch-take
+                    (action-description "Take From")
                     (action-opoint (copy-marker (point) t))
                     (action-window-predicate
                      (lambda (win)
@@ -4335,31 +4331,30 @@ it."))
       (with-current-buffer (marker-buffer action-opoint)
         (yank)))))
 
-(cl-defmethod conn-cancel-action ((action conn-dispatch-grab))
-  (set-marker (conn-dispatch-grab--action-opoint action) nil))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-take))
+  (set-marker (conn-dispatch-take--action-opoint action) nil))
 
-(oclosure-define (conn-dispatch-grab-replace
-                  (:parent conn-action)
+(oclosure-define (conn-dispatch-take-replace
+                  (:parent conn-change-group-action)
                   ( :copier
-                    conn-dispatch-grab-replace-copy
+                    conn-dispatch-take-replace-copy
                     (action-opoint)))
-  (action-opoint :type marker)
-  (action-change-group))
+  (action-opoint :type marker))
 
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-grab-replace))
-  (when-let* ((mk (conn-dispatch-grab-replace--action-opoint action)))
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
+  (when-let* ((mk (conn-dispatch-take-replace--action-opoint action)))
     (thread-first mk marker-buffer buffer-live-p not)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-grab-replace))
-  (set-marker (conn-dispatch-grab-replace--action-opoint action) nil))
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
+  (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
 
-(cl-defmethod conn-action-copy ((action conn-dispatch-grab-replace))
+(cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
   (conn-thread<-
-    (conn-dispatch-grab-replace--action-opoint action)
+    (conn-dispatch-take-replace--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-grab-replace-copy action))))
+    (:-> (conn-dispatch-take-replace-copy action))))
 
-(defun conn-dispatch-grab-replace ()
+(defun conn-dispatch-take-replace ()
   (declare (conn-dispatch-action)
            (important-return-value t))
   (conn-read-args (conn-read-thing-state
@@ -4372,10 +4367,10 @@ it."))
          (setq cg (conn--action-buffer-change-group))
          (delete-region rbeg rend))
         (_ (user-error "No thing found at point")))
-      (oclosure-lambda (conn-dispatch-grab-replace
+      (oclosure-lambda (conn-dispatch-take-replace
                         (action-opoint (copy-marker (point) t))
                         (action-change-group cg)
-                        (action-description "Grab From and replace")
+                        (action-description "Take From and Replace")
                         (action-window-predicate
                          (lambda (win)
                            (not
@@ -4695,7 +4690,7 @@ it."))
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (conn-protected-let*
-      ((action action (conn-cancel-action action))
+      ((action action (conn-action-cancel action))
        (dispatch-quit-flag nil)
        (conn-dispatch-action-reference
         (conn-action-get-reference action))

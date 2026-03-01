@@ -47,9 +47,7 @@
 
 (defcustom conn-command-state-modes
   (list 'prog-mode
-        'text-mode
-        'conf-mode
-        'fundamental-mode)
+        'text-mode)
   "Major modes in which `conn-command-state' should be the base state."
   :group 'conn
   :type '(list symbol))
@@ -1560,14 +1558,14 @@ entering mark state.")
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state)
 
 (defun conn-setup-edmacro-state ()
   "Set the base state to `conn-command-state' in edit macro buffers."
   (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state -80)
+(add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state)
 
 (defun conn-setup-null-state ()
   "Set the base state to `conn-null-state' in `conn-null-state-modes' buffers."
@@ -1581,14 +1579,14 @@ entering mark state.")
   (when (derived-mode-p conn-command-state-modes)
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-command-state)
+(add-hook 'conn-setup-state-hook 'conn-setup-command-state 50)
 
 (defun conn-setup-minibuffer-state ()
   "Setup `minibuffer-mode' buffer state."
   (when (eq major-mode 'minibuffer-mode)
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
+(add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -80)
 
 ;;;; Read Args
 

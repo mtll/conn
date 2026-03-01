@@ -69,11 +69,11 @@
   "w" 'org-refile
   "y" 'org-show-all)
 
-(defun conn-setup-capture-state ()
+(defun conn-org-setup-capture-state ()
   (when (buffer-match-p "CAPTURE-.*" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-capture-state -20)
+(add-hook 'conn-setup-state-hook 'conn-org-setup-capture-state)
 
 ;;;###autoload
 (defun conn-org-heading-state ()
@@ -316,12 +316,6 @@
   "M" 'org-forward-element
   "I" 'org-backward-paragraph
   "K" 'org-forward-paragraph)
-
-(defun conn-setup-org-capture-state ()
-  (when (bound-and-true-p org-capture-mode)
-    (conn-push-state 'conn-command-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -50)
 
 ;;;; Surround
 
