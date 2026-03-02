@@ -97,7 +97,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (cl-with-gensyms (as)
     (cl-flet ((expand-last (&rest forms)
                 `(thread-last ,@forms))
-              (expand-let (binding &rest forms)
+              (expand-as (binding &rest forms)
                 `(,as ,binding ,forms)))
       `(cl-macrolet ((,as (val binding forms)
                        `(pcase-let ((,binding ,val))
