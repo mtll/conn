@@ -928,20 +928,20 @@ Returns a `conn-bounds' struct."
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 
-;;;;;; Upto Bounds
+;;;;;; Butlast Bounds
 
-(cl-defgeneric conn-bounds-upto (bounds)
+(cl-defgeneric conn-bounds-butlast (bounds)
   (declare (conn-bounds-transformation
             "upto"
             "Bounds from point up to the nearest bound of the final subregion.  If
 the point is within the region then the entire region is returned.")))
 
-(cl-defmethod conn-bounds-upto (bounds)
+(cl-defmethod conn-bounds-butlast (bounds)
   (pcase (or (car (last (conn-bounds-get bounds :subregions)))
              bounds)
     ((conn-bounds (and `(,beg . ,end) last))
      (conn-make-transformed-bounds
-      'conn-bounds-upto
+      'conn-bounds-butlast
       bounds
       (cond ((< (point) beg)
              (cons (point) beg))
@@ -1680,12 +1680,13 @@ check bounds in the current buffer."))
 
 (defvar conn-transformations-quick-ref
   (conn-reference-quote
-    (("upto" conn-bounds-upto)
-     ("after point/exclusive"
+    (("after point/exclusive"
       conn-bounds-after-point
       conn-bounds-after-point-exclusive)
      ("trim" conn-bounds-trim)
-     ("last" conn-bounds-last)
+     ("last/butlast"
+      conn-bounds-last
+      conn-bounds-butlast)
      ("before point/exclusive"
       conn-bounds-before-point
       conn-bounds-before-point-exclusive)

@@ -78,44 +78,70 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-thread<- (&rest forms)
   (declare (indent 0))
-  (cl-flet ((expand-last (&rest forms)
-              `(thread-last ,@forms)))
-    `(thread-first
-       ,@(mapcar (lambda (form)
-                   (macroexpand form `((:-> . ,#'expand-last))))
-                 forms))))
+  (cl-with-gensyms (letform)
+    (cl-flet ((expand-last (&rest forms)
+                `(thread-last ,@forms))
+              (expand-let (binding &rest forms)
+                `(,letform ,binding ,forms)))
+      `(cl-macrolet ((,letform (val binding forms)
+                       `(pcase-let ((,binding ,val))
+                          ,@forms)))
+         (thread-first
+           ,@(mapcar (lambda (form)
+                       (macroexpand form `((:-> . ,#'expand-last)
+                                           (:let . ,#'expand-let))))
+                     forms))))))
 
 (defmacro conn-threadf<- (&rest forms)
   (declare (indent 1))
-  (cl-flet ((expand-last (&rest forms)
-              `(thread-last ,@forms)))
-    `(cl-callf thread-first
-         ,@(mapcar (lambda (form)
-                     (macroexpand form `((:-> . ,#'expand-last))))
-                   forms))))
+  (cl-with-gensyms (letform)
+    (cl-flet ((expand-last (&rest forms)
+                `(thread-last ,@forms))
+              (expand-let (binding &rest forms)
+                `(,letform ,binding ,forms)))
+      `(cl-macrolet ((,letform (val binding forms)
+                       `(pcase-let ((,binding ,val))
+                          ,@forms)))
+         (cl-callf thread-first
+             ,@(mapcar (lambda (form)
+                         (macroexpand form `((:-> . ,#'expand-last)
+                                             (:let . ,#'expand-let))))
+                       forms))))))
 
 (defmacro conn-thread-> (&rest forms)
   (declare (indent 0))
-  (cl-with-gensyms (first)
+  (cl-with-gensyms (first letform)
     (cl-flet ((expand-first (&rest forms)
-                `(,first ,forms)))
+                `(,first ,forms))
+              (expand-let (binding &rest forms)
+                `(,letform ,binding ,forms)))
       `(cl-macrolet ((,first (forms a1)
-                       `(thread-first ,a1 ,@forms)))
+                       `(thread-first ,a1 ,@forms))
+                     (,letform (val binding forms)
+                       `(pcase-let ((,binding ,val))
+                          ,@forms)))
          (thread-last
            ,@(mapcar (lambda (form)
-                       (macroexpand form `((:<- . ,#'expand-first))))
+                       (macroexpand form `((:<- . ,#'expand-first)
+                                           (:let . ,#'expand-let))))
                      forms))))))
 
 (defmacro conn-threadf-> (&rest forms)
   (declare (indent 1))
-  (cl-with-gensyms (first)
+  (cl-with-gensyms (first letform)
     (cl-flet ((expand-first (&rest args)
-                `(,first ,args)))
+                `(,first ,args))
+              (expand-let (binding &rest forms)
+                `(,letform ,binding ,forms)))
       `(cl-macrolet ((,first (forms a1)
-                       `(thread-first ,a1 ,@forms)))
+                       `(thread-first ,a1 ,@forms))
+                     (,letform (binding forms val)
+                       `(pcase-let ((,binding ,val))
+                          ,@forms)))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
-                         (macroexpand form `((:<- . ,#'expand-first))))
+                         (macroexpand form `((:<- . ,#'expand-first)
+                                             (:let . ,#'expand-let))))
                        forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
@@ -366,24 +392,21 @@ See `quail-add-unread-command-events'."
   "Rotate ring forward.
 
 Takes (1 2 3 4) to (2 3 4 1)."
-  (let ((head (car (conn-threadf->
-                     (conn-ring-list ring)
-                     car
-                     list
-                     (nconc (cdr (conn-ring-list ring)))))))
-    (conn-ring--visit ring head)
-    head))
+  (when-let* ((list (conn-ring-list ring)))
+    (let ((head (car (setf (conn-ring-list ring)
+                           (nconc (cdr list) (list (car list)))))))
+      (conn-ring--visit ring head)
+      head)))
 
 (defun conn-ring-rotate-backward (ring)
   "Rotate ring backward.
 
 Takes (1 2 3 4) to (4 1 2 3)."
-  (let ((head (car (conn-threadf->
-                     (conn-ring-list ring)
-                     butlast
-                     (nconc (last (conn-ring-list ring)))))))
-    (conn-ring--visit ring head)
-    head))
+  (when-let* ((list (conn-ring-list ring)))
+    (let ((head (car (setf (conn-ring-list ring)
+                           (nconc (last list) (butlast list))))))
+      (conn-ring--visit ring head)
+      head)))
 
 (defun conn-ring-head (ring)
   "Return the front element of RING.

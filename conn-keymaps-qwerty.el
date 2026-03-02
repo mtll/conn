@@ -752,7 +752,7 @@
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
   "t" 'conn-bounds-last
-  "T" 'conn-bounds-upto)
+  "T" 'conn-bounds-butlast)
 
 ;;;; Wincontrol
 
