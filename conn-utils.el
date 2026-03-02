@@ -88,8 +88,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (thread-first
            ,@(mapcar (lambda (form)
-                       (macroexpand form `((:-> . ,#'expand-last)
-                                           (:let . ,#'expand-let))))
+                       (macroexpand-1 form `((:-> . ,#'expand-last)
+                                             (:let . ,#'expand-let))))
                      forms))))))
 
 (defmacro conn-threadf<- (&rest forms)
@@ -104,8 +104,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (cl-callf thread-first
              ,@(mapcar (lambda (form)
-                         (macroexpand form `((:-> . ,#'expand-last)
-                                             (:let . ,#'expand-let))))
+                         (macroexpand-1 form `((:-> . ,#'expand-last)
+                                               (:let . ,#'expand-let))))
                        forms))))))
 
 (defmacro conn-thread-> (&rest forms)
@@ -115,15 +115,15 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                 `(,first ,forms))
               (expand-let (binding &rest forms)
                 `(,letform ,binding ,forms)))
-      `(cl-macrolet ((,first (forms a1)
-                       `(thread-first ,a1 ,@forms))
+      `(cl-macrolet ((,first (forms val)
+                       `(thread-first ,val ,@forms))
                      (,letform (val binding forms)
                        `(pcase-let ((,binding ,val))
                           ,@forms)))
          (thread-last
            ,@(mapcar (lambda (form)
-                       (macroexpand form `((:<- . ,#'expand-first)
-                                           (:let . ,#'expand-let))))
+                       (macroexpand-1 form `((:<- . ,#'expand-first)
+                                             (:let . ,#'expand-let))))
                      forms))))))
 
 (defmacro conn-threadf-> (&rest forms)
@@ -133,15 +133,15 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                 `(,first ,args))
               (expand-let (binding &rest forms)
                 `(,letform ,binding ,forms)))
-      `(cl-macrolet ((,first (forms a1)
-                       `(thread-first ,a1 ,@forms))
+      `(cl-macrolet ((,first (forms val)
+                       `(thread-first ,val ,@forms))
                      (,letform (binding forms val)
                        `(pcase-let ((,binding ,val))
                           ,@forms)))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
-                         (macroexpand form `((:<- . ,#'expand-first)
-                                             (:let . ,#'expand-let))))
+                         (macroexpand-1 form `((:<- . ,#'expand-first)
+                                               (:let . ,#'expand-let))))
                        forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)
