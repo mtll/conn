@@ -47,7 +47,7 @@
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
 
-(put 'keyboard-quit :conn-wincontrol-preserve-arg t)
+(function-put 'keyboard-quit :conn-wincontrol-preserve-arg t)
 
 (defalias 'conn-bury-buffer #'bury-buffer)
 (defalias 'conn-unbury-buffer #'unbury-buffer)
@@ -84,9 +84,19 @@
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
     (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (if this-command
-      (when (get this-command :conn-wincontrol-preserve-arg)
+      (when (function-get this-command :conn-wincontrol-preserve-arg)
         (setq conn--wincontrol-preserve-arg t))
     (setq conn--wincontrol-preserve-arg t)))
+
+(eval-and-compile
+;;;###autoload
+  (defun conn--set-wincontrol-arg-property (f _args)
+    `(progn
+       :autoload-end
+       (function-put ',f :conn-wincontrol-preserve-arg t)))
+;;;###autoload
+  (setf (alist-get 'conn-wincontrol-preserve-arg defun-declarations-alist)
+        (list #'conn--set-wincontrol-arg-property)))
 
 (defun conn--wincontrol-post-command ()
   (unless conn--wincontrol-preserve-arg
@@ -308,14 +318,14 @@
 
 ;;;;; Wincontrol Prefix Arg
 
-(put 'conn-wincontrol-universal-arg :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-universal-arg ()
   "Multiply wincontrol prefix arg by 4."
+  (declare (conn-wincontrol-preserve-arg))
   (interactive)
   (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
-(put 'conn-wincontrol-digit-argument :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-digit-argument ()
+  (declare (conn-wincontrol-preserve-arg))
   (interactive)
   (let* ((char (if (integerp last-command-event)
                    last-command-event
@@ -328,9 +338,9 @@
       (setq conn--wincontrol-arg digit)))
   (setq this-command 'conn-wincontrol-digit-argument))
 
-(put 'conn-wincontrol-invert-argument :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-invert-argument ()
   "Invert sign of wincontrol prefix arg."
+  (declare (conn-wincontrol-preserve-arg))
   (interactive)
   (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
@@ -338,9 +348,9 @@
   "Reset wincontrol prefix arg to nil and sign to +."
   (interactive))
 
-(put 'conn-wincontrol-backward-delete-arg :conn-wincontrol-preserve-arg t)
 (defun conn-wincontrol-backward-delete-arg ()
   "Delete least significant digit of prefix arg."
+  (declare (conn-wincontrol-preserve-arg))
   (interactive)
   (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
 
@@ -404,8 +414,6 @@
   (other-window -1))
 
 (defalias 'conn-other-window 'other-window)
-
-(defvar conn-goto-window-cycle-limit 2)
 
 ;;;###autoload
 (defun conn-goto-window ()
