@@ -2994,21 +2994,19 @@ hook, which see."
 
 (defun conn-kill-separator-for-region (beg end separator)
   (pcase separator
-    ('nil)
-    ((pred stringp) separator)
-    (_ (save-excursion
+    ('t (save-excursion
          (goto-char beg)
-         (if (search-forward "\n" end t) "\n" " ")))))
+         (if (search-forward "\n" end t) "\n" " ")))
+    ((pred stringp) separator)))
 
 (defun conn-kill-separator-for-strings (strings separator)
   (pcase separator
-    ('nil)
-    ((pred stringp) separator)
-    (_ (catch 'sep
+    (t (catch 'sep
          (dolist (str (ensure-list strings))
            (when (string-match "\n" str nil t)
              (throw 'sep "\n")))
-         " "))))
+         " "))
+    ((pred stringp) separator)))
 
 (defvar-keymap conn-kill-dispatch-append-map)
 
@@ -3146,7 +3144,8 @@ hook, which see."
           bounds)
      (if delete
          (delete-region beg end)
-       (conn--kill-region beg end t append register separator))
+       (conn--kill-region beg end t append register
+                          (or separator (when transform 'no))))
      (when reformat
        (goto-char beg)
        (funcall conn-kill-reformat-function bounds)))))
