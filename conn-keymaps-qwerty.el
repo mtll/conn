@@ -909,8 +909,7 @@
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map
-  "i" 'kill-buffer-and-window
-  "k" 'conn-kill-this-buffer
+  "k" 'kill-buffer-and-window
   "I" 'undefined
   "K" 'undefined
   "j" 'previous-buffer
