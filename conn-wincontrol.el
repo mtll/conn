@@ -22,6 +22,7 @@
 (require 'conn-utils)
 (require 'conn-dispatch)
 (require 'conn-commands)
+(require 'repeat)
 
 ;;;; WinControl
 
@@ -422,8 +423,27 @@
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
-  (when-let* ((mru (get-mru-window nil t t t)))
-    (select-window mru)))
+  (let* ((windows (sort (conn--get-windows)
+                        :key #'window-use-time
+                        :reverse t))
+         (len (length windows))
+         (idx 1))
+    (when (> len 1)
+      (let ((map (make-sparse-keymap))
+            (msg-sym (make-symbol "msg-fn"))
+            (key (vector last-command-event)))
+        (define-key map key (lambda ()
+                              (interactive)
+                              (conn-threadf<- idx 1+ (mod len))
+                              (select-window (nth idx windows))))
+        (select-window (nth idx windows))
+        (set-transient-map
+         map t
+         (lambda ()
+           (remove-hook 'post-command-hook msg-sym)
+           (mapc #'window-bump-use-time (nreverse windows))))
+        (fset msg-sym (lambda () (funcall repeat-echo-function map)))
+        (add-hook 'post-command-hook msg-sym)))))
 
 ;;;###autoload
 (defun conn-wincontrol-quit-other-window-for-scrolling ()

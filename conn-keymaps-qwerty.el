@@ -39,10 +39,6 @@
 
 ;;;; Repeat Map
 
-(defvar-keymap conn-mru-window-repeat-map
-  :repeat t
-  "`" 'conn-wincontrol-mru-window)
-
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
   "/" 'tab-bar-history-back
