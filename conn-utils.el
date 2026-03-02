@@ -84,8 +84,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
               (expand-as (binding &rest forms)
                 `(,as ,binding ,forms)))
       `(cl-macrolet ((,as (val binding forms)
-                       `(pcase-let ((,binding ,val))
-                          ,@forms)))
+                       `(pcase-exhaustive ,val
+                          (,binding ,@forms))))
          (thread-first
            ,@(mapcar (lambda (form)
                        (macroexpand-1 form `((:> . ,#'expand-last)
@@ -100,8 +100,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
               (expand-as (binding &rest forms)
                 `(,as ,binding ,forms)))
       `(cl-macrolet ((,as (val binding forms)
-                       `(pcase-let ((,binding ,val))
-                          ,@forms)))
+                       `(pcase-exhaustive ,val
+                          (,binding ,@forms))))
          (cl-callf thread-first
              ,@(mapcar (lambda (form)
                          (macroexpand-1 form `((:> . ,#'expand-last)
@@ -118,8 +118,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(cl-macrolet ((,first (forms val)
                        `(thread-first ,val ,@forms))
                      (,as (binding forms val)
-                       `(pcase-let ((,binding ,val))
-                          ,@forms)))
+                       `(pcase-exhaustive ,val
+                          (,binding ,@forms))))
          (thread-last
            ,@(mapcar (lambda (form)
                        (macroexpand-1 form `((:< . ,#'expand-first)
@@ -136,8 +136,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(cl-macrolet ((,first (forms val)
                        `(thread-first ,val ,@forms))
                      (,as (binding forms val)
-                       `(pcase-let ((,binding ,val))
-                          ,@forms)))
+                       `(pcase-exhaustive ,val
+                          (,binding ,@forms))))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
                          (macroexpand-1 form `((:< . ,#'expand-first)
