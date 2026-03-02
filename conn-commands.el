@@ -3001,11 +3001,11 @@ hook, which see."
 
 (defun conn-kill-separator-for-strings (strings separator)
   (pcase separator
-    (t (catch 'sep
-         (dolist (str (ensure-list strings))
-           (when (string-match "\n" str nil t)
-             (throw 'sep "\n")))
-         " "))
+    ('t (catch 'sep
+          (dolist (str (ensure-list strings))
+            (when (string-match "\n" str nil t)
+              (throw 'sep "\n")))
+          " "))
     ((pred stringp) separator)))
 
 (defvar-keymap conn-kill-dispatch-append-map)
