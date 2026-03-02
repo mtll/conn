@@ -755,10 +755,14 @@
 
 (define-keymap
   :keymap conn-window-resize-map
+  "+" 'conn-wincontrol-zoom-in
+  "-" 'conn-wincontrol-zoom-out
+  "0" 'conn-wincontrol-reset-zoom
+  "f" 'toggle-frame-fullscreen
   "v" 'conn-wincontrol-maximize-vertically
   "r" 'conn-wincontrol-maximize-horizontally
   "m" 'maximize-window
-  "b" 'balance-windows
+  "=" 'balance-windows
   "n" 'conn-wincontrol-narrow-window
   "s" 'conn-wincontrol-shorten-window
   "h" 'conn-wincontrol-heighten-window
@@ -767,10 +771,18 @@
 (defvar-keymap conn-window-resize-repeat-map
   :repeat (:exit (ignore))
   "e" 'ignore
+  "=" 'balance-windows
   "n" 'conn-wincontrol-narrow-window
   "s" 'conn-wincontrol-shorten-window
   "h" 'conn-wincontrol-heighten-window
   "w" 'conn-wincontrol-widen-window)
+
+(defvar-keymap conn-text-scale-repeat-map
+  :repeat t
+  "+" 'conn-wincontrol-zoom-in
+  "=" 'conn-wincontrol-zoom-in
+  "-" 'conn-wincontrol-zoom-out
+  "0" 'conn-wincontrol-reset-zoom)
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
@@ -819,6 +831,7 @@
 
 (define-keymap
   :keymap conn-wincontrol-map
+  "=" 'balance-windows
   "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
@@ -877,7 +890,6 @@
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "U" 'tab-close
-  "Z" 'text-scale-increase
   "T" 'tear-off-window
   "[" 'conn-previous-buffer
   "]" 'conn-next-buffer
@@ -889,7 +901,7 @@
   "e" 'conn-wincontrol-exit
   "b" 'delete-other-windows
   "f" 'conn-goto-window
-  "g" (conn-remap-key "M-g" t t)
+  "g" conn-goto-remap
   "x" (conn-remap-key "C-x" t t)
   "C" 'kill-buffer-and-window
   "n" 'conn-wincontrol-scroll-down
@@ -898,14 +910,14 @@
   "," 'conn-register-prefix
   "." 'conn-register-load
   "q" 'quit-window
-  "s" 'conn-wincontrol-split-right
-  "r" conn-window-resize-map
+  "s" conn-search-remap
+  "r" 'conn-wincontrol-split-right
   "t" 'conn-transpose-window
   "u" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
   "h" 'conn-throw-buffer
   "y" 'conn-yank-window
-  "z" 'text-scale-decrease)
+  "z" conn-window-resize-map)
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map

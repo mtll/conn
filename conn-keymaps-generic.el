@@ -733,11 +733,14 @@
 ;;;; Wincontrol
 
 (defvar-keymap conn-window-resize-map
+  "+" 'conn-wincontrol-zoom-in
+  "-" 'conn-wincontrol-zoom-out
+  "0" 'conn-wincontrol-reset-zoom
   "f" 'toggle-frame-fullscreen
   "v" 'conn-wincontrol-maximize-vertically
   "r" 'conn-wincontrol-maximize-horizontally
   "m" 'maximize-window
-  "b" 'balance-windows
+  "=" 'balance-windows
   "n" 'conn-wincontrol-narrow-window
   "s" 'conn-wincontrol-shorten-window
   "h" 'conn-wincontrol-heighten-window
@@ -750,6 +753,13 @@
   "s" 'conn-wincontrol-shorten-window
   "h" 'conn-wincontrol-heighten-window
   "w" 'conn-wincontrol-widen-window)
+
+(defvar-keymap conn-text-scale-repeat-map
+  :repeat t
+  "+" 'conn-wincontrol-zoom-in
+  "=" 'conn-wincontrol-zoom-in
+  "-" 'conn-wincontrol-zoom-out
+  "0" 'conn-wincontrol-reset-zoom)
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
@@ -789,6 +799,7 @@
 
 (define-keymap
   :keymap conn-wincontrol-map
+  "=" 'balance-windows
   "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
@@ -856,7 +867,7 @@
   "H" 'delete-other-windows
   "<tab>" 'conn-goto-window
   "TAB" 'conn-goto-window
-  "g" (conn-remap-key "M-g" t t)
+  "g" conn-goto-remap
   "x" (conn-remap-key "C-x" t t)
   "C" 'kill-buffer-and-window
   "p" 'previous-buffer

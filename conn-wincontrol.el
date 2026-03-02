@@ -504,6 +504,24 @@
 
 ;;;;; Window Configuration Commands
 
+(defun conn-wincontrol-zoom-in ()
+  (interactive)
+  (conn->
+    (conn-wincontrol-consume-prefix-arg)
+    (prefix-numeric-value)
+    (text-scale-increase)))
+
+(defun conn-wincontrol-zoom-out ()
+  (interactive)
+  (conn->
+    (conn-wincontrol-consume-prefix-arg)
+    (prefix-numeric-value)
+    (text-scale-decrease)))
+
+(defun conn-wincontrol-reset-zoom ()
+  (interactive)
+  (text-scale-set 0))
+
 (defun conn-wincontrol-widen-window ()
   (interactive)
   (enlarge-window-horizontally
