@@ -796,16 +796,18 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (list
-   (when-let* ((action (conn-argument-value arg)))
-     (concat (propertize "Do" 'face 'bold)
-             ": "
-             (propertize (conn-action-pretty-print action)
-                         'face 'eldoc-highlight-function-argument)))
    (concat (substitute-command-keys "\\[repeat-dispatch] ")
            (propertize
             "repeat"
             'face (when (conn-dispatch-action-argument-repeat arg)
-                    'eldoc-highlight-function-argument)))))
+                    'eldoc-highlight-function-argument)))
+   (when-let* ((action (conn-argument-value arg)))
+     (concat (propertize "Do"
+                         'face 'bold
+                         'conn-read-args-display-depth -50)
+             ": "
+             (propertize (conn-action-pretty-print action)
+                         'face 'eldoc-highlight-function-argument)))))
 
 ;;;;;; Command Handler
 
@@ -4624,12 +4626,10 @@ it."))
     (conn-ring-insert-front conn-dispatch-ring dispatch)))
 
 (defun conn-dispatch-ring-remove-stale ()
-  (cl-loop for stale in (seq-filter
-                         (lambda (dispatch)
-                           (conn-action-stale-p
-                            (conn-previous-dispatch-action dispatch)))
-                         (conn-ring-list conn-dispatch-ring))
-           do (conn-ring-delq stale conn-dispatch-ring)))
+  (cl-loop for dispatch in (conn-ring-list conn-dispatch-ring)
+           when (conn-action-stale-p
+                 (conn-previous-dispatch-action dispatch))
+           do (conn-ring-delq dispatch conn-dispatch-ring)))
 
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."

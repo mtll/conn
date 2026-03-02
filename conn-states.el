@@ -1732,7 +1732,14 @@ The duration of the message display is controlled by
    (conn-read-args-prompt-line prompt)
    (when-let* ((args (flatten-tree
                       (mapcar #'conn-argument-display arguments))))
-     (concat "\n" (string-join args "   ")))))
+     (conn-thread<-
+       (compat-call
+        sort args
+        :key (lambda (str)
+               (or (get-text-property 0 'conn-read-args-display-depth str)
+                   0)))
+       (string-join "   ")
+       (:-> (concat "\n"))))))
 
 (defun conn--read-args-display-prompt (prompt
                                        arguments
