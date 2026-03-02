@@ -3769,6 +3769,11 @@ Only available during repeating duplicate."
              (goto-char end-marker)
              (unless (looking-back regexp 1)
                (insert padding))
+             (when extra-newline
+               (if block
+                   (insert "\n")
+                 (unless (looking-back "\n" 1)
+                   (insert "\n"))))
              (let ((rbeg (point))
                    ov)
                (insert str)
