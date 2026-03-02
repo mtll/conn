@@ -719,7 +719,7 @@
   "B" 'conn-dispatch-bounds-between
   "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
-  "T" 'conn-transform-reset)
+  "C-t" 'conn-transform-reset)
 
 ;;;; Things
 
@@ -748,7 +748,8 @@
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
   "t" 'conn-bounds-last
-  "T" 'conn-bounds-butlast)
+  "T" 'conn-bounds-butlast
+  "C-t" 'conn-transform-reset)
 
 ;;;; Wincontrol
 
