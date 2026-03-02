@@ -76,7 +76,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
            ,(macroexp-progn body)
          (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))))
 
-(defmacro conn-thread<- (&rest forms)
+(defmacro conn-< (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (letform)
     (cl-flet ((expand-last (&rest forms)
@@ -88,11 +88,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (thread-first
            ,@(mapcar (lambda (form)
-                       (macroexpand-1 form `((:-> . ,#'expand-last)
+                       (macroexpand-1 form `((:> . ,#'expand-last)
                                              (:let . ,#'expand-let))))
                      forms))))))
 
-(defmacro conn-threadf<- (&rest forms)
+(defmacro conn-<f (&rest forms)
   (declare (indent 1))
   (cl-with-gensyms (letform)
     (cl-flet ((expand-last (&rest forms)
@@ -104,11 +104,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (cl-callf thread-first
              ,@(mapcar (lambda (form)
-                         (macroexpand-1 form `((:-> . ,#'expand-last)
+                         (macroexpand-1 form `((:> . ,#'expand-last)
                                                (:let . ,#'expand-let))))
                        forms))))))
 
-(defmacro conn-thread-> (&rest forms)
+(defmacro conn-> (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (first letform)
     (cl-flet ((expand-first (&rest forms)
@@ -122,11 +122,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (thread-last
            ,@(mapcar (lambda (form)
-                       (macroexpand-1 form `((:<- . ,#'expand-first)
+                       (macroexpand-1 form `((:< . ,#'expand-first)
                                              (:let . ,#'expand-let))))
                      forms))))))
 
-(defmacro conn-threadf-> (&rest forms)
+(defmacro conn->f (&rest forms)
   (declare (indent 1))
   (cl-with-gensyms (first letform)
     (cl-flet ((expand-first (&rest args)
@@ -140,7 +140,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                           ,@forms)))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
-                         (macroexpand-1 form `((:<- . ,#'expand-first)
+                         (macroexpand-1 form `((:< . ,#'expand-first)
                                                (:let . ,#'expand-let))))
                        forms))))))
 
@@ -350,7 +350,7 @@ See `quail-add-unread-command-events'."
 (define-inline conn-ring--visit (ring item)
   (inline-letevals (item)
     (inline-quote
-     (conn-threadf->
+     (conn->f
          (conn-ring-history ,ring)
        (delq ,item)
        (cons ,item)))))
@@ -371,7 +371,7 @@ See `quail-add-unread-command-events'."
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (conn-threadf->
+  (conn->f
       (conn-ring-list ring)
     (delq item)
     (cons item))

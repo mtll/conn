@@ -3004,7 +3004,7 @@ contain targets."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
                                                    &context (conn-dispatch-target-finder
                                                              conn-dispatch-focus-mixin))
-  (conn-threadf<-
+  (conn-<f
       (alist-get (selected-window)
                  (oref conn-dispatch-target-finder cursor-location))
     (memq recenter-positions)
@@ -4237,10 +4237,10 @@ it."))
   (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from-replace))
-  (conn-thread<-
+  (conn-<
     (conn-dispatch-copy-from-replace--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-copy-from-replace-copy action))))
+    (:> (conn-dispatch-copy-from-replace-copy action))))
 
 (defun conn-dispatch-copy-from-replace ()
   (declare (conn-dispatch-action)
@@ -4299,10 +4299,10 @@ it."))
   (set-marker (conn-dispatch-take--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
-  (conn-thread<-
+  (conn-<
     (conn-dispatch-take--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-take-copy action))))
+    (:> (conn-dispatch-take-copy action))))
 
 (defun conn-dispatch-take ()
   (declare (conn-dispatch-action)
@@ -4351,10 +4351,10 @@ it."))
   (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
-  (conn-thread<-
+  (conn-<
     (conn-dispatch-take-replace--action-opoint action)
     (copy-marker t)
-    (:-> (conn-dispatch-take-replace-copy action))))
+    (:> (conn-dispatch-take-replace-copy action))))
 
 (defun conn-dispatch-take-replace ()
   (declare (conn-dispatch-action)

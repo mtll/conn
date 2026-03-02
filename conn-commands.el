@@ -2463,7 +2463,7 @@ append to that place."
                                     break)
   (pcase cmd
     ('append-on-repeat
-     (conn-threadf<- (conn-cycling-argument-value arg)
+     (conn-<f (conn-cycling-argument-value arg)
        (eq 'repeat)
        not
        (and 'repeat))

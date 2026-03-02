@@ -233,7 +233,7 @@
       ("switch" switch-to-buffer)
       ("beg/end" beginning-of-buffer end-of-buffer)
       ("prev/next" conn-previous-buffer conn-next-buffer)
-      ("bury/unbury" bury-buffer unbury-buffer)
+      ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
       ("kill buffer" conn-kill-this-buffer)))
     (((:keymap conn-window-resize-map)
       (:eval (concat
@@ -434,7 +434,7 @@
             (key (vector last-command-event)))
         (define-key map key (lambda ()
                               (interactive)
-                              (conn-threadf<- idx 1+ (mod len))
+                              (conn-<f idx 1+ (mod len))
                               (select-window (nth idx windows))))
         (select-window (nth idx windows))
         (set-transient-map

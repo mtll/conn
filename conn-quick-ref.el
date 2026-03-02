@@ -333,7 +333,7 @@
         (with-silent-modifications
           (delete-region (point-min) (point-max))))
       (conn-quick-ref-insert-pages pages buf header)
-      (conn-threadf-> state (funcall display-function buf))
+      (conn->f state (funcall display-function buf))
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
@@ -342,10 +342,10 @@
                  ('close (cl-return))
                  ('next
                   (conn-quick-ref-next-page buf)
-                  (conn-threadf-> state (funcall display-function buf)))
+                  (conn->f state (funcall display-function buf)))
                  ('previous
                   (conn-quick-ref-previous-page buf)
-                  (conn-threadf-> state (funcall display-function buf)))
+                  (conn->f state (funcall display-function buf)))
                  ((or 'quit 'keyboard-quit)
                   (keyboard-quit))
                  (_ (conn-add-unread-events (this-single-command-raw-keys))

@@ -516,7 +516,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
          (:backward
           (cl-callf nreverse matches))
          (:any-order
-          (conn-threadf<- matches nreverse conn--nnearest-first))
+          (conn-<f matches nreverse conn--nnearest-first))
          (:cleanup
           (mapc #'delete-overlay matches))
          ((or :next :record)
@@ -1881,7 +1881,7 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-occur ()
   (interactive)
-  (conn-thread<-
+  (conn-<
     (save-excursion
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'occur-target)
@@ -1900,7 +1900,7 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-compilation ()
   (interactive)
-  (conn-thread<-
+  (conn-<
     (save-excursion
       (goto-char (point-min))
       (cl-loop for match = (text-property-search-forward 'compilation-message)

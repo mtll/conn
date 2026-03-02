@@ -1084,7 +1084,7 @@ current state does not have a :pop-alternate property then push
   "Returns the next state in the state stack."
   (declare (side-effect-free t)
            (important-return-value t))
-  (conn-thread<-
+  (conn-<
     'conn--state-stack
     (buffer-local-value (or buffer (current-buffer)))
     last
@@ -1732,14 +1732,14 @@ The duration of the message display is controlled by
    (conn-read-args-prompt-line prompt)
    (when-let* ((args (flatten-tree
                       (mapcar #'conn-argument-display arguments))))
-     (conn-thread<-
+     (conn-<
        (compat-call
         sort args
         :key (lambda (str)
                (or (get-text-property 0 'conn-read-args-display-depth str)
                    0)))
        (string-join "   ")
-       (:-> (concat "\n"))))))
+       (:> (concat "\n"))))))
 
 (defun conn--read-args-display-prompt (prompt
                                        arguments
@@ -1924,7 +1924,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((inhibit-message conn-read-args-inhibit-message)
                  (message-log-max nil)
                  (scroll-conservatively 100))
-             (conn-threadf-> display-state
+             (conn->f display-state
                (funcall display-handler
                         prompt
                         (cons command-handler arguments))))
@@ -2020,7 +2020,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              (setq argument-values (mapcar #'conn-argument-extract-value
                                            arguments))
              (when (and history-var (symbolp history-var))
-               (conn-threadf->
+               (conn->f
                    (get history-var :conn-read-args-history)
                  (cons argument-values)
                  (take history-len))))
