@@ -21,7 +21,8 @@
 
 (defvar conn-special-state-modes
   (list 'special-mode
-        'dired-mode))
+        'dired-mode
+        'messages-buffer-mode))
 
 (conn-define-state conn-special-state ()
   :lighter "S")
@@ -78,12 +79,8 @@
 ;;;; Eldoc
 
 (with-eval-after-load 'eldoc
-  (eldoc-add-command 'conn-end-of-inner-line
-                     'conn-beginning-of-inner-line
-                     'conn-backward-char
-                     'conn-goto-char-backward
-                     'conn-forward-char
-                     'conn-goto-char-forward
+  (eldoc-add-command 'conn-forward-inner-line-dwim
+                     'conn-backward-inner-line-dwim
                      'conn-dispatch))
 
 ;;;; Edebug
