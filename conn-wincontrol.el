@@ -26,7 +26,7 @@
 
 ;;;; WinControl
 
-(defgroup conn-wincontrol nil
+(defgroup conn-wincontrol-mode nil
   "Conn-mode WinControl."
   :prefix "conn-wincontrol-"
   :group 'conn)
@@ -62,23 +62,15 @@
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
+;;;###autoload
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for wincontrol."
   :global t
   :lighter " WinC"
-  :interactive nil
-  :group 'conn-wincontrol
+  :group 'conn-wincontrol-mode
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
-
-;;;###autoload
-(defun conn-wincontrol ()
-  "Enable `conn-wincontrol-mode'."
-  (interactive)
-  (if (= (minibuffer-depth) 0)
-      (conn-wincontrol-mode 1)
-    (user-error "Cannot activate wincontrol while minibuffer is active.")))
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
@@ -106,17 +98,15 @@
   (setq emulation-mode-map-alists
         `(conn--wincontrol-map-alist
           ,@(delq 'conn--wincontrol-map-alist emulation-mode-map-alists)))
-  (if (not (zerop (minibuffer-depth)))
-      (progn
-        (conn-wincontrol-mode -1)
-        (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
-    (let ((curr (current-message)))
-      (cond ((null curr)
-             (message "%s" (conn--wincontrol-message)))
-            ((not (text-property-any 0 (length curr)
-                                     'conn-wincontrol-string
-                                     t curr))
-             (message "%s%s" (conn--wincontrol-message) curr))))))
+  (let ((curr (current-message))
+        (message-log-max nil))
+    (cond ((minibuffer-window-active-p (selected-window)))
+          ((null curr)
+           (message "%s" (conn--wincontrol-message)))
+          ((not (text-property-any 0 (length curr)
+                                   'conn-wincontrol-string
+                                   t curr))
+           (message "%s%s" (conn--wincontrol-message) curr)))))
 
 (defun conn--wincontrol-new-frame (frame)
   (set-face-inverse-video 'mode-line t frame)
@@ -145,8 +135,21 @@
       string
     (concat (conn--wincontrol-message) string)))
 
+(defun conn--wincontrol-minibuffer-exit ()
+  (unless (> (minibuffer-depth) 1)
+    (let ((message-log-max nil))
+      (message "%s" (conn--wincontrol-message)))
+    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)))
+
+(defun conn--wincontrol-minibuffer-setup ()
+  (setq-local conn-wincontrol-mode nil
+              conn-wincontrol-one-command-mode nil)
+  (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
+
 (defun conn--wincontrol-setup (&optional preserve-state)
-  (message "%s" (conn--wincontrol-message))
+  (when (zerop (minibuffer-depth))
+    (let ((message-log-max nil))
+      (message "%s" (conn--wincontrol-message))))
   (setq emulation-mode-map-alists
         `(conn--wincontrol-map-alist
           ,@(delq 'conn--wincontrol-map-alist emulation-mode-map-alists)))
@@ -155,6 +158,7 @@
   (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
   (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
+  (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
   (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
   (unless preserve-state
     (setq conn--wincontrol-arg (when current-prefix-arg
@@ -172,16 +176,11 @@
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
-  (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
+  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
   (remove-function eldoc-message-function 'conn--wincontrol-ignore)
   (set-face-inverse-video 'mode-line nil)
   ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
   (set-face-inverse-video 'mode-line-active nil))
-
-(defun conn--wincontrol-minibuffer-exit ()
-  (when (= (minibuffer-depth) 1)
-    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (conn-wincontrol-mode 1)))
 
 (defvar conn-wincontrol-one-command-stay-command
   (list 'conn-wincontrol-backward-delete-arg
@@ -200,23 +199,18 @@
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (conn-wincontrol-one-command-mode -1)))
 
+;;;###autoload
 (define-minor-mode conn-wincontrol-one-command-mode
   "Global minor mode for wincontrol one command."
   :global t
-  :interactive nil
-  :group 'conn-wincontrol
+  :group 'conn-wincontrol-mode
   (if conn-wincontrol-one-command-mode
-      (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+      (progn
+        (conn-wincontrol-mode 1)
+        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+        (setq conn--wincontrol-message-newline nil))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (conn-wincontrol-mode -1)))
-
-;;;###autoload
-(defun conn-wincontrol-one-command ()
-  "Execute one command in `conn-wincontrol-mode'."
-  (interactive)
-  (conn-wincontrol)
-  (conn-wincontrol-one-command-mode 1)
-  (setq conn--wincontrol-message-newline nil))
 
 ;;;;; Wincontrol Quick Ref
 
@@ -552,7 +546,7 @@ Operates with the selected windows parent window."
 
 Operates with the selected windows parent window."
   (interactive)
-  (when (and (not (window-minibuffer-p (selected-window)))
+  (when (and (not (window-minibuffer-p))
              (not (window-parameter (selected-window) 'window-side))
              (window-combined-p (selected-window) horizontal))
     (cl-loop for sub = (thread-first
@@ -575,4 +569,4 @@ Operates with the selected windows parent window."
   (kill-buffer)
   (set-transient-map conn-kill-buffer-repeat-map t nil t))
 
-(provide 'conn-wincontrol)
+(provide 'conn-wincontrol-mode)

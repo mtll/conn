@@ -23,8 +23,8 @@
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
+  "w" 'conn-wincontrol-one-command-mode
+  ";" 'conn-wincontrol-mode
   "`" 'conn-wincontrol-mru-window)
 
 (define-keymap
@@ -34,7 +34,7 @@
   "<backstab>" 'outline-cycle-buffer
   "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "/" (conn-remap-key conn-undo-keys t)
   "?" (conn-remap-key conn-undo-redo-keys t)
   "W" 'widen
@@ -54,7 +54,7 @@
   "e" 'conn-pop-state
   "f" 'conn-dispatch
   "g" (conn-remap-key "M-g" t)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "i" 'outline-previous-visible-heading
   "j" 'outline-backward-same-level
   "k" 'outline-next-visible-heading
@@ -99,7 +99,7 @@
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
   "<conn-dired-search-map> q" 'dired-do-find-regexp
   "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   ;; "A" 'dired-find-alternate-file
@@ -131,7 +131,7 @@
   "M-SPC" 'dired-toggle-marks
   "C-M-l" 'dired-do-redisplay
   "z" 'dired-goto-file
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "`" 'conn-wincontrol-mru-window
   "v" 'dired-mark
   "V" 'dired-toggle-marks
@@ -157,8 +157,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
-  ";" 'conn-wincontrol
-  "w" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol-mode
+  "w" 'conn-wincontrol-one-command-mode
   "M-?" 'conn-diff-quick-ref
   "q" 'quit-window
   "/" 'diff-undo
@@ -195,7 +195,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
   "M-?" 'conn-magit-quick-ref
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "," 'magit-dispatch
   "i" 'magit-section-backward
   "k" 'magit-section-forward
@@ -219,10 +219,10 @@
   "M-DEL" 'ibuffer-unmark-all-marks
   "f" 'conn-ibuffer-dispatch-state
   "M-?" 'conn-ibuffer-quick-ref
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "/" 'ibuffer-do-revert
   "`" 'conn-wincontrol-mru-window
   "y" 'ibuffer-yank
@@ -284,8 +284,8 @@
   "I" 'scroll-down-command
   "i" 'previous-line
   "k" 'next-line
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
+  "w" 'conn-wincontrol-one-command-mode
+  ";" 'conn-wincontrol-mode
   "j" 'bookmark-bmenu-select
   "f" 'conn-bmenu-dispatch-state
   "h" 'bookmark-bmenu-this-window
@@ -300,7 +300,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'help-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -311,13 +311,13 @@
   "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'helpful-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -328,7 +328,7 @@
   "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -337,7 +337,7 @@
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
   "M-?" 'conn-info-quick-ref
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "o" 'Info-history-back
   "u" 'Info-history-forward
   "L" 'Info-next
@@ -356,7 +356,7 @@
   "f" 'dispatch-on-info-refs
   "v" 'Info-index
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -364,14 +364,14 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'treemacs-select-window
   "i" 'treemacs-previous-line
   "k" 'treemacs-next-line
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -379,7 +379,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
@@ -388,7 +388,7 @@
   "i" 'scroll-down-command
   "k" 'scroll-up-command
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -396,7 +396,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
@@ -405,7 +405,7 @@
   "I" 'scroll-down-command
   "K" 'scroll-up-command
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -413,14 +413,14 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -428,14 +428,14 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
-  "w" 'conn-wincontrol-one-command
+  "w" 'conn-wincontrol-one-command-mode
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -445,8 +445,8 @@
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
-  "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
+  "w" 'conn-wincontrol-one-command-mode
+  ";" 'conn-wincontrol-mode
   "i" 'pdf-view-scroll-down-or-previous-page
   "k" 'pdf-view-scroll-up-or-next-page
   "l" 'pdf-view-next-page-command
