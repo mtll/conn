@@ -56,7 +56,7 @@
 
 ;;;;; Wincontrol Internals
 
-(defconst conn--wincontrol-map-alist
+(defconst conn--wincontrol-maps
   `((conn-wincontrol-one-command-mode . ,conn-wincontrol-one-command-map)
     (conn-wincontrol-mode . ,conn-wincontrol-map)))
 
@@ -96,8 +96,8 @@
           conn--wincontrol-arg-sign 1))
   (setq conn--wincontrol-preserve-arg nil)
   (setq emulation-mode-map-alists
-        `(conn--wincontrol-map-alist
-          ,@(delq 'conn--wincontrol-map-alist emulation-mode-map-alists)))
+        `(conn--wincontrol-maps
+          ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
   (let ((curr (current-message))
         (message-log-max nil))
     (cond ((minibuffer-window-active-p (selected-window)))
@@ -151,8 +151,8 @@
     (let ((message-log-max nil))
       (message "%s" (conn--wincontrol-message))))
   (setq emulation-mode-map-alists
-        `(conn--wincontrol-map-alist
-          ,@(delq 'conn--wincontrol-map-alist emulation-mode-map-alists)))
+        `(conn--wincontrol-maps
+          ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
   (add-hook 'set-message-functions #'conn-wincontrol-message-function)
   ;; Must be before 'repeat-post-hook
   (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)

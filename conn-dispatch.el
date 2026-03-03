@@ -4472,8 +4472,9 @@ it."))
           (goto-char pt)
           (conn-toggle-highlight-at-point))
         (conn-dispatch-undo-case
-          (_ (goto-char pt)
-             (conn--unhighlight-at-point)))))))
+          ((or :cancel :undo)
+           (goto-char pt)
+           (conn--unhighlight-at-point)))))))
 
 (cl-defmethod conn-action-pretty-print ((_action conn-dispatch-highlight-symbol)
                                         &optional
