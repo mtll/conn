@@ -126,8 +126,9 @@
 
 (define-keymap
   :keymap conn-search-map
-  "f" 'conn-dispatch-thing-at-point
+  "F" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-on-highlights
+  "h k" 'highlight-lines-matching-regexp
   "s" 'conn-isearch-forward
   "r" 'conn-isearch-backward
   "o" 'occur
@@ -305,6 +306,7 @@
   "C-4" (conn-remap-key "C-x 4" t)
   "C-5" (conn-remap-key "C-x 5" t)
   "S" 'conn-surround
+  "H" 'conn-toggle-highlight-at-point
   "<escape>" 'conn-pop-state
   "q" 'conn-duplicate-thing
   "+" 'conn-set-register-separator

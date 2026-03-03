@@ -46,6 +46,19 @@
 
 ;;;; Commands
 
+(defun conn-toggle-highlight-at-point ()
+  (interactive)
+  (require 'hi-lock)
+  (let ((regexp (hi-lock-regexp-okay
+		 (find-tag-default-as-symbol-regexp))))
+    (if (or (when (assoc regexp hi-lock-interactive-lighters)
+              (setq regexp (cadr (assoc regexp hi-lock-interactive-lighters))))
+            (assoc regexp hi-lock-interactive-patterns))
+        (hi-lock-unface-buffer regexp)
+      (let* ((hi-lock-auto-select-face t)
+             (face (hi-lock-read-face-name)))
+        (hi-lock-face-buffer regexp face)))))
+
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
 

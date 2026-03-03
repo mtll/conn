@@ -125,6 +125,7 @@
 
 (define-keymap
   :keymap conn-search-map
+  "h n" 'highlight-lines-matching-regexp
   "d" 'conn-dispatch-thing-at-point
   "h '" 'conn-kapply-on-highlights
   "s" 'conn-isearch-forward
@@ -330,6 +331,7 @@
   "v" 'conn-mark-thing
   "u" conn-edit-remap
   "h" 'conn-kill-thing
+  "H" 'conn-toggle-highlight-at-point
   "W" 'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
