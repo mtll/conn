@@ -52,6 +52,11 @@
 
 ;;;; Commands
 
+(defun conn--unhighlight-at-point ()
+  (let ((regexp (hi-lock-regexp-okay
+		 (find-tag-default-as-symbol-regexp))))
+    (hi-lock-unface-buffer regexp)))
+
 (defun conn-toggle-highlight-at-point ()
   (interactive)
   (let ((regexp (hi-lock-regexp-okay

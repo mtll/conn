@@ -34,6 +34,7 @@
 (declare-function conn-beginning-of-inner-line "conn-commands")
 (declare-function conn-kill-thing "conn-commands")
 (declare-function conn-toggle-highlight-at-point "conn-commands")
+(declare-function conn--unhighlight-at-point "conn-commands")
 
 ;;;; Labels
 
@@ -4469,12 +4470,15 @@ it."))
         (conn-dispatch-change-group)
         (save-mark-and-excursion
           (goto-char pt)
-          (conn-toggle-highlight-at-point))))))
+          (conn-toggle-highlight-at-point))
+        (conn-dispatch-undo-case
+          (_ (goto-char pt)
+             (conn--unhighlight-at-point)))))))
 
 (cl-defmethod conn-action-pretty-print ((_action conn-dispatch-highlight-symbol)
                                         &optional
                                         _short)
-  "Highlight")
+  "Highlight Symbol")
 
 (defun conn-dispatch-transpose ()
   (declare (conn-dispatch-action)
