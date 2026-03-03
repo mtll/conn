@@ -911,6 +911,7 @@
   "o" 'tab-next
   "h" conn-edit-remap
   "," 'delete-window
+  "<" 'kill-buffer-and-window
   "." 'conn-register-load
   "q" 'quit-window
   "r" 'conn-wincontrol-split-right

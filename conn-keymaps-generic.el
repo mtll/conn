@@ -874,6 +874,7 @@
   "N" 'unbury-buffer
   "f" 'tab-next
   "," 'delete-window
+  "<" 'kill-buffer-and-window
   "." 'conn-register-load
   "q" 'quit-window
   "j" 'conn-wincontrol-split-right
