@@ -445,7 +445,8 @@
            (remove-hook 'post-command-hook msg-sym)
            (mapc #'window-bump-use-time (nreverse windows))))
         (fset msg-sym (lambda () (funcall repeat-echo-function map)))
-        (add-hook 'post-command-hook msg-sym)))))
+        ;; Should be after `repeat-post-hook'
+        (add-hook 'post-command-hook msg-sym 10)))))
 
 ;;;###autoload
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
