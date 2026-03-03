@@ -870,9 +870,8 @@
   "<up>" 'windmove-up
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "w" 'conn-other-place-prefix
-  "<tab>" 'conn-other-window
-  "TAB" 'conn-other-window
+  "<tab>" 'conn-other-place-prefix
+  "TAB" 'conn-other-place-prefix
   "G" 'tab-bar-move-window-to-tab
   "B" 'tab-bar-switch-to-tab
   "O" 'tab-bar-duplicate-tab
@@ -903,7 +902,8 @@
   "c" (conn-remap-key "C-c" t)
   "d" 'conn-delete-window
   "e" 'conn-wincontrol-exit
-  "f" 'conn-goto-window
+  "w" 'conn-goto-window
+  "f" 'conn-dispatch
   "g" conn-goto-remap
   "x" (conn-remap-key "C-x" t)
   "n" 'conn-wincontrol-scroll-down
@@ -925,6 +925,7 @@
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map
+  "f" 'conn-other-place-prefix
   "k" 'kill-buffer-and-window
   "I" 'undefined
   "K" 'undefined

@@ -2000,14 +2000,16 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn-reading-args t)
-                   (emulation-mode-map-alists
-                    (cons `((,state . ,keymap)
-                            ,@(when history-var
-                                `((,state . ,conn-read-args-previous-map))))
-                          emulation-mode-map-alists))
+                   (maps `((,state . ,keymap)
+                           ,@(when history-var
+                               `((,state . ,conn-read-args-previous-map)))))
+                   (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
                (while (continue-p)
+                 (conn->f emulation-mode-map-alists
+                   (delq maps)
+                   (cons maps))
                  (unless executing-kbd-macro
                    (display-message))
                  (read-command))
