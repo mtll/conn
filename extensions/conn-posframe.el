@@ -293,69 +293,72 @@
   (when (and (not executing-kbd-macro)
              (cl-loop for fn in (cons this-command (function-alias-p this-command))
                       thereis (advice-member-p 'conn-list-posframe fn)))
+    (let ((header (conn--with-work-buffer
+                    (insert (when (fboundp 'nerd-icons-mdicon)
+                              (concat conn-posframe--padding
+                                      (nerd-icons-mdicon "nf-md-tab")
+                                      conn-posframe--padding))
+                            "Tabs\n")
+                    (add-face-text-property (point-min) (point-max)
+                                            'conn-posframe-header 'append)
+                    (buffer-string)))
+          (tabs (mapconcat
+                 (lambda (tab)
+                   (concat
+                    (if (eq (car tab) 'current-tab)
+                        (propertize
+                         (concat (alist-get 'name (cdr tab)) "\n")
+                         'face 'conn-posframe-highlight)
+                      (concat (alist-get 'name (cdr tab)) "\n"))))
+                 (funcall tab-bar-tabs-function))))
+      (posframe-show
+       " *conn-list-posframe*"
+       :string (concat header tabs)
+       :left-fringe 0
+       :right-fringe 0
+       :poshandler conn-posframe-tab-poshandler
+       :timeout conn-posframe-timeout
+       :border-width conn-posframe-border-width
+       :border-color (face-background 'conn-posframe-border)))
+    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+
+(defun conn-posframe--kmacro-ring-display-subr ()
+  (require 'kmacro)
+  (let ((header (propertize (format " %s Kmacro Ring\n"
+                                    (or (if defining-kbd-macro
+                                            kmacro-counter
+                                          kmacro-initial-counter-value)
+                                        (format "[%s]" kmacro-counter)))
+                            'face 'conn-posframe-header))
+        (prev (mapconcat
+               (lambda (km)
+                 (conn--kmacro-display (kmacro--keys km)))
+               (reverse (take (min 4 (floor (length kmacro-ring) 2))
+                              (reverse kmacro-ring)))
+               "\n"))
+        (current (propertize (concat (conn--kmacro-display last-kbd-macro)
+                                     "\n")
+                             'face 'conn-posframe-highlight))
+        (next (mapconcat
+               (lambda (km)
+                 (conn--kmacro-display (kmacro--keys km)))
+               (take (min 4 (ceiling (length kmacro-ring) 2))
+                     kmacro-ring)
+               "\n")))
     (posframe-show
      " *conn-list-posframe*"
-     :string (concat
-              (conn--with-work-buffer
-                (insert (when (fboundp 'nerd-icons-mdicon)
-                          (concat conn-posframe--padding
-                                  (nerd-icons-mdicon "nf-md-tab")
-                                  conn-posframe--padding))
-                        "Tabs\n")
-                (add-face-text-property (point-min) (point-max)
-                                        'conn-posframe-header 'append)
-                (buffer-string))
-              (mapconcat
-               (lambda (tab)
-                 (concat
-                  (if (eq (car tab) 'current-tab)
-                      (propertize
-                       (concat (alist-get 'name (cdr tab)) "\n")
-                       'face 'conn-posframe-highlight)
-                    (concat (alist-get 'name (cdr tab)) "\n"))))
-               (reverse (funcall tab-bar-tabs-function))))
+     :string (concat header
+                     prev
+                     (when (length> kmacro-ring 1) "\n")
+                     current
+                     next
+                     (when (length> kmacro-ring 1) "\n"))
      :left-fringe 0
      :right-fringe 0
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
-     :border-color (face-background 'conn-posframe-border))
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
-
-(defun conn-posframe--kmacro-ring-display-subr ()
-  (require 'kmacro)
-  (posframe-show
-   " *conn-list-posframe*"
-   :string (concat
-            (propertize (format " %s Kmacro Ring\n"
-                                (or (if defining-kbd-macro
-                                        kmacro-counter
-                                      kmacro-initial-counter-value)
-                                    (format "[%s]" kmacro-counter)))
-                        'face 'conn-posframe-header)
-            (mapconcat
-             (lambda (km)
-               (conn--kmacro-display (kmacro--keys km)))
-             (reverse (take (min 4 (floor (length kmacro-ring) 2))
-                            (reverse kmacro-ring)))
-             "\n")
-            (when (length> kmacro-ring 1) "\n")
-            (propertize (concat (conn--kmacro-display last-kbd-macro)
-                                "\n")
-                        'face 'conn-posframe-highlight)
-            (mapconcat
-             (lambda (km)
-               (conn--kmacro-display (kmacro--keys km)))
-             (take (min 4 (ceiling (length kmacro-ring) 2))
-                   kmacro-ring)
-             "\n")
-            (when (length> kmacro-ring 1) "\n"))
-   :left-fringe 0
-   :right-fringe 0
-   :poshandler conn-posframe-tab-poshandler
-   :timeout conn-posframe-timeout
-   :border-width conn-posframe-border-width
-   :border-color (face-background 'conn-posframe-border)))
+     :border-color (face-background 'conn-posframe-border))))
 
 (defun conn-posframe--kmacro-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
@@ -371,35 +374,38 @@
                 (concat conn-posframe--padding
                         (conn-describe-dispatch d)
                         conn-posframe--padding)))
-      (posframe-show
-       " *conn-list-posframe*"
-       :string (concat
-                (conn--with-work-buffer
-                  (insert conn-posframe--padding
-                          (when (fboundp 'nerd-icons-faicon)
-                            (concat (nerd-icons-faicon "nf-fa-buffer")
-                                    conn-posframe--padding))
-                          "Dispatch Ring\n")
-                  (add-face-text-property (point-min) (point-max)
-                                          'conn-posframe-header 'append)
-                  (buffer-string))
-                (mapconcat #'describe
-                           (reverse (take (min 4 (floor (length (cdr ring)) 2))
-                                          (cdr ring)))
-                           "\n")
-                (when (length> ring 2) "\n")
-                (propertize (concat (describe (car ring)) "\n")
-                            'face 'conn-posframe-highlight)
-                (mapconcat #'describe
-                           (take (min 4 (ceiling (length (cdr ring)) 2))
-                                 (reverse (cdr ring)))
-                           "\n"))
-       :left-fringe 0
-       :right-fringe 0
-       :poshandler conn-posframe-tab-poshandler
-       :timeout conn-posframe-timeout
-       :border-width conn-posframe-border-width
-       :border-color (face-background 'conn-posframe-border)))))
+      (let ((header (conn--with-work-buffer
+                      (insert conn-posframe--padding
+                              (when (fboundp 'nerd-icons-faicon)
+                                (concat (nerd-icons-faicon "nf-fa-buffer")
+                                        conn-posframe--padding))
+                              "Dispatch Ring\n")
+                      (add-face-text-property (point-min) (point-max)
+                                              'conn-posframe-header 'append)
+                      (buffer-string)))
+            (prev (mapconcat #'describe
+                             (reverse (take (min 4 (floor (length (cdr ring)) 2))
+                                            (cdr ring)))
+                             "\n"))
+            (current (propertize (concat (describe (car ring)) "\n")
+                                 'face 'conn-posframe-highlight))
+            (next (mapconcat #'describe
+                             (take (min 4 (ceiling (length (cdr ring)) 2))
+                                   (reverse (cdr ring)))
+                             "\n")))
+        (posframe-show
+         " *conn-list-posframe*"
+         :string (concat header
+                         prev
+                         (when (length> ring 2) "\n")
+                         current
+                         next)
+         :left-fringe 0
+         :right-fringe 0
+         :poshandler conn-posframe-tab-poshandler
+         :timeout conn-posframe-timeout
+         :border-width conn-posframe-border-width
+         :border-color (face-background 'conn-posframe-border))))))
 
 (defun conn-posframe--dispatch-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
