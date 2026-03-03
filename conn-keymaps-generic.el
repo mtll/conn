@@ -801,6 +801,9 @@
 
 (define-keymap
   :keymap conn-wincontrol-map
+  "DEL" 'conn-wincontrol-scroll-down
+  "<backspace>" 'conn-wincontrol-scroll-down
+  "SPC" 'conn-wincontrol-scroll-up
   "=" 'balance-windows
   "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
@@ -836,7 +839,6 @@
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "w" 'conn-other-place-prefix
-  "j" 'other-window
   "G" 'tab-bar-move-window-to-tab
   "I" 'tab-bar-switch-to-tab
   "F" 'tab-bar-duplicate-tab
@@ -856,39 +858,34 @@
   "<conn-search-map> R" 'conn-wincontrol-isearch-other-window-backward
   "<conn-search-map> S" 'conn-wincontrol-isearch-other-window
   "B" 'tab-close
-  "Z" 'text-scale-increase
   "O" 'tear-off-window
-  "[" 'previous-buffer
-  "]" 'next-buffer
-  "{" 'bury-buffer
-  "}" 'unbury-buffer
   "`" 'conn-wincontrol-mru-window
-  "c" 'delete-window
-  "h" 'conn-delete-window
+  "h" conn-edit-remap
   "e" 'conn-wincontrol-exit
-  "H" 'delete-other-windows
   "<tab>" 'conn-goto-window
   "TAB" 'conn-goto-window
   "g" conn-goto-remap
-  "x" (conn-remap-key "C-x" t t)
-  "C" 'kill-buffer-and-window
+  "x" (conn-remap-key "C-x" t)
+  "c" (conn-remap-key "C-c" t)
+  "s" conn-search-remap
   "p" 'previous-buffer
   "n" 'next-buffer
+  "P" 'bury-buffer
+  "N" 'unbury-buffer
   "f" 'tab-next
-  "DEL" 'conn-wincontrol-scroll-down
-  "<backspace>" 'conn-wincontrol-scroll-down
-  "SPC" 'conn-wincontrol-scroll-up
-  "," 'conn-register-prefix
+  "," 'delete-window
   "." 'conn-register-load
   "q" 'quit-window
-  "s" 'conn-wincontrol-split-right
+  "j" 'conn-wincontrol-split-right
   "i" conn-window-resize-map
   "t" 'conn-transpose-window
   "b" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
-  "T" 'conn-throw-buffer
+  "Y" 'conn-throw-buffer
   "y" 'conn-yank-window
-  "z" 'text-scale-decrease)
+  "z" 'delete-other-windows
+  ;; "o" "m"
+  )
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map

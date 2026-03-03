@@ -899,28 +899,28 @@
   "{" 'conn-bury-buffer
   "}" 'conn-unbury-buffer
   "`" 'conn-wincontrol-mru-window
-  "c" 'delete-window
+  "b" conn-window-resize-map
+  "c" (conn-remap-key "C-c" t)
   "d" 'conn-delete-window
   "e" 'conn-wincontrol-exit
-  "b" 'delete-other-windows
   "f" 'conn-goto-window
   "g" conn-goto-remap
-  "x" (conn-remap-key "C-x" t t)
-  "C" 'kill-buffer-and-window
+  "x" (conn-remap-key "C-x" t)
   "n" 'conn-wincontrol-scroll-down
   "m" 'conn-wincontrol-scroll-up
   "o" 'tab-next
-  "," 'conn-register-prefix
+  "h" conn-edit-remap
+  "," 'delete-window
   "." 'conn-register-load
   "q" 'quit-window
-  "s" conn-search-remap
   "r" 'conn-wincontrol-split-right
+  "s" conn-search-remap
   "t" 'conn-transpose-window
   "u" 'tab-previous
   "v" 'conn-wincontrol-split-vertically
-  "h" 'conn-throw-buffer
+  "Y" 'conn-throw-buffer
   "y" 'conn-yank-window
-  "z" conn-window-resize-map)
+  "z" 'delete-other-windows)
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map
