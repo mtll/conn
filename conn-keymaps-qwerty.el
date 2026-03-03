@@ -420,6 +420,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "h" 'highlight
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-to-replace

@@ -33,6 +33,7 @@
 (declare-function conn-end-of-inner-line "conn-commands")
 (declare-function conn-beginning-of-inner-line "conn-commands")
 (declare-function conn-kill-thing "conn-commands")
+(declare-function conn-toggle-highlight-at-point "conn-commands")
 
 ;;;; Labels
 
@@ -578,10 +579,14 @@ themselves once the selection process has concluded."
                               (required t)
                               (recursive-edit t)))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-target-argument)
-                                       sym)
+(cl-defmethod conn-argument-predicate :around ((_arg conn-dispatch-target-argument)
+                                               sym)
   (and (cl-call-next-method)
        (funcall conn--dispatch-thing-predicate sym)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-target-argument)
+                                       (_sym (eql highlight)))
+  t)
 
 (defvar-keymap conn-separator-argument-map
   "+" 'separator)
@@ -3646,6 +3651,9 @@ contain targets."
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
   (conn-dispatch-jump))
 
+(cl-defmethod conn-make-default-action ((_cmd (eql highlight)))
+  (conn-dispatch-highlight-symbol))
+
 (cl-defgeneric conn-action-stale-p (action)
   (declare (important-return-value t)
            (side-effect-free t))
@@ -4446,6 +4454,27 @@ it."))
                                         short)
   (if short "Repeat Cmd"
     (format "Repeat <%s>" (car (oref action command)))))
+
+(oclosure-define (conn-dispatch-highlight-symbol
+                  (:parent conn-action)))
+
+(defun conn-dispatch-highlight-symbol ()
+  (declare (conn-dispatch-action)
+           (important-return-value t))
+  (oclosure-lambda (conn-dispatch-highlight-symbol)
+      ()
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        (save-mark-and-excursion
+          (goto-char pt)
+          (conn-toggle-highlight-at-point))))))
+
+(cl-defmethod conn-action-pretty-print ((_action conn-dispatch-highlight-symbol)
+                                        &optional
+                                        _short)
+  "Highlight")
 
 (defun conn-dispatch-transpose ()
   (declare (conn-dispatch-action)
@@ -5270,6 +5299,10 @@ for the dispatch."
     (user-error "Dispatch ring empty")))
 
 ;;;; Thing Target Finders
+
+(cl-defmethod conn-get-target-finder ((_cmd (eql highlight))
+                                      _arg)
+  (conn-dispatch-things-read-prefix 'symbol 1))
 
 (conn-register-thing 'dispatch)
 
