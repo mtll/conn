@@ -36,6 +36,7 @@
 (autoload 'multi-isearch-read-matching-buffers "misearch")
 (autoload 'kmacro-ring-head "kmacro")
 (autoload 'pulse-momentary-highlight-overlay "pulse")
+(autoload 'hi-lock-regexp-okay "hi-lock")
 
 (declare-function outline-insert-heading "outline")
 (declare-function project-files "project")
@@ -43,12 +44,16 @@
 (declare-function rectangle--reset-crutches "rect")
 (declare-function rectangle--col-pos "rect")
 (declare-function fileloop-continue "fileloop")
+(declare-function hi-lock-read-face-name "hi-lock")
+
+(defvar hi-lock-auto-select-face)
+(defvar hi-lock-interactive-patterns)
+(defvar hi-lock-interactive-lighters)
 
 ;;;; Commands
 
 (defun conn-toggle-highlight-at-point ()
   (interactive)
-  (require 'hi-lock)
   (let ((regexp (hi-lock-regexp-okay
 		 (find-tag-default-as-symbol-regexp))))
     (if (or (when (assoc regexp hi-lock-interactive-lighters)
