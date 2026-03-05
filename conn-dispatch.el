@@ -1018,7 +1018,7 @@ with `conn-dispatch-thing-ignored-modes'."
 (defvar conn-target-count nil
   "Alist of (WINODW . TARGET-COUNT).")
 
-(defvar conn-target-sort-function 'conn-target-nearest-op
+(defvar conn-target-sort-function 'conn-target-sort-adjacent-then-nearest
   "Sort function for targets in each window.
 
 Labels are sorted first by length and then lexicographically by the
@@ -1689,9 +1689,9 @@ Target overlays may override this default by setting the
       (dolist (str pool)
         (remhash str in-use)))
     (pcase-dolist (`(,win . ,targets) conn-targets)
-      (dolist (tar (if (eq win (selected-window))
-                       (compat-call sort targets
-                                    :lessp conn-target-sort-function)
+      (dolist (tar (if (and (eq win (selected-window))
+                            conn-target-sort-function)
+                       (funcall conn-target-sort-function targets)
                      targets))
         (if-let* ((str (overlay-get tar 'label-string))
                   (_ (not (eq t (gethash str in-use)))))
@@ -1824,9 +1824,11 @@ Target overlays may override this default by setting the
       (mapc #'delete-overlay old)))
   (conn-target-finder-label-faces target-finder))
 
-(cl-defmethod conn-target-finder-select :around (_target-finder)
+(cl-defmethod conn-target-finder-select :around (target-finder)
   (let ((conn--dispatch-remap-cookies nil)
-        (conn-dispatch-label-input-method nil))
+        (conn-dispatch-label-input-method nil)
+        (conn-target-sort-function (or (oref target-finder label-sort-function)
+                                       conn-target-sort-function)))
     (conn-with-dispatch-event-handlers
       ( :handler (cmd)
         (when (or (and (eq cmd 'act)
@@ -2518,7 +2520,9 @@ the meaning of depth."
    (reference :initform nil
               :initarg :reference)
    (label-function :initform nil
-                   :initarg :label-function))
+                   :initarg :label-function)
+   (label-sort-function :initform nil
+                        :initarg :label-sort-function))
   :abstract t)
 
 (defvar conn-dispatch-post-update-functions nil
@@ -2621,11 +2625,27 @@ updated.")
          args)))
     (setf (oref target-finder current-update-handlers) ufns)))
 
-(defun conn-target-nearest-op (a b)
+(defun conn-target-nearest-op (targets)
   (declare (side-effect-free t)
            (important-return-value t))
-  (< (abs (- (overlay-end a) (point)))
-     (abs (- (overlay-end b) (point)))))
+  (compat-call
+   sort targets
+   :lessp (lambda (a b)
+            (< (abs (- (overlay-end a) (point)))
+               (abs (- (overlay-end b) (point)))))))
+
+(defun conn-target-sort-adjacent-then-nearest (targets)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (compat-call
+   sort (conn-target-nearest-op targets)
+   :lessp (lambda (a b)
+            (and (delq a (conn--overlays-in-of-type (overlay-end a)
+                                                    (+ 2 (overlay-end a))
+                                                    'conn-target-overlay))
+                 (not (delq b (conn--overlays-in-of-type (overlay-end b)
+                                                         (+ 2 (overlay-end b))
+                                                         'conn-target-overlay)))))))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
