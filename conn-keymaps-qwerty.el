@@ -380,9 +380,13 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
+  "h" (conn-anonymous-thing
+        '(expansion)
+        :pretty-print ( :method (_) "expansion")
+        :target-finder (:method (_self _arg) (conn-expansion-targets)))
   "<remap> <conn-expand>" (conn-anonymous-thing
                             '(expansion)
-                            :pretty-print ( :method (_) "conn-expand")
+                            :pretty-print ( :method (_) "expansion-at")
                             :bounds-op ( :method (_self arg)
                                          (conn-bounds-of 'conn-expand arg)))
   "O" (conn-anonymous-thing
@@ -420,7 +424,11 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
-  "h" 'highlight
+  "H" (conn-anonymous-thing
+        '(symbol)
+        :target-finder ( :method (_self _arg)
+                         (conn-dispatch-things-read-prefix 'symbol 1))
+        :default-action (:method (_self) (conn-dispatch-highlight-symbol)))
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-to-replace

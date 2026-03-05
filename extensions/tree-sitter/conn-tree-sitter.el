@@ -516,35 +516,47 @@
       :initform (lambda (win)
                   (treesit-parser-list (window-buffer win)))))
   ( :default-update-handler (state)
-    (let ((region-pred (ignore-error unbound-slot
-                         (oref state region-predicate)))
-          (things (oref state things))
-          (bounds-thing
-           (conn-anonymous-thing
-             '(conn-ts-thing)
-             :target-finder ( :method (self _arg)
-                              (conn-ts-query-targets
-                               :things (conn-thing-get self :types)))
-             :pretty-print ( :method (self)
-                             (mapconcat
-                              #'conn-thing-pretty-print
-                              (conn-thing-get self :types)
-                              " & "))
-             :bounds-op ( :method (self _)
-                          (conn-ts-select-expansion
-                           (lambda ()
-                             (conn-ts-filter-captures
-                              (conn-thing-get self :types)
-                              (conn-ts-capture (point) (1+ (point)))
-                              (lambda (bd)
-                                (<= (car bd) (point) (cdr bd)))))
-                           'conn-ts-thing)))))
-      (cl-flet ((make-bounds (bounds types)
-                  (conn-make-bounds
-                   (let ((th (conn--copy-anonymous-thing bounds-thing)))
-                     (setf (conn-thing-get th :types) types)
-                     th)
-                   nil bounds)))
+    (let* ((region-pred (ignore-error unbound-slot
+                          (oref state region-predicate)))
+           (things (oref state things))
+           (bounds-alist nil)
+           (target-thing
+            (conn-anonymous-thing
+              '(conn-ts-thing)
+              :multi-thing-p (lambda (_self target)
+                               (length> (alist-get (overlay-start target) bounds-alist)
+                                        1))
+              :bounds-op ( :method (self _arg)
+                           (conn-with-dispatch-suspended
+                             (conn-multi-thing-select
+                              (alist-get (point) bounds-alist)
+                              (funcall conn-ts-multi-always-prompt-p))))))
+           (bounds-thing
+            (conn-anonymous-thing
+              '(conn-ts-thing)
+              :target-finder ( :method (self _arg)
+                               (conn-ts-query-targets
+                                :things (conn-thing-get self :types)))
+              :pretty-print ( :method (self)
+                              (mapconcat
+                               #'conn-thing-pretty-print
+                               (conn-thing-get self :types)
+                               " & "))
+              :bounds-op ( :method (self _)
+                           (conn-ts-select-expansion
+                            (lambda ()
+                              (conn-ts-filter-captures
+                               (conn-thing-get self :types)
+                               (conn-ts-capture (point) (1+ (point)))
+                               (lambda (bd)
+                                 (<= (car bd) (point) (cdr bd)))))
+                            'conn-ts-thing)))))
+      (cl-macrolet ((make-bounds (bounds types)
+                      `(conn-make-bounds
+                        (let ((th (conn--copy-anonymous-thing bounds-thing)))
+                          (setf (conn-thing-get th :types) ,types)
+                          th)
+                        nil ,bounds)))
         (pcase-dolist (`(,vbeg . ,vend)
                        (conn--visible-regions (window-start)
                                               (window-end)))
@@ -559,32 +571,18 @@
                       (setq type-things (seq-intersection
                                          (get type :conn-ts--member-of)
                                          things)))))
-               ((not (setq ov (car (conn--overlays-in-of-type
-                                    beg (1+ beg) 'conn-target-overlay
-                                    (selected-window)))))
-                (conn-make-target-overlay
-                 beg 0
-                 :thing
-                 (conn-anonymous-thing
-                   '(conn-ts-thing)
-                   :bounds (list (make-bounds (cons beg end) type-things))
-                   :bounds-op ( :method (self _arg)
-                                (conn-with-dispatch-suspended
-                                  (conn-multi-thing-select
-                                   (conn-thing-get self :bounds)
-                                   (funcall conn-ts-multi-always-prompt-p)))))))
+               ((not (alist-get beg bounds-alist))
+                (push (make-bounds (cons beg end) type-things)
+                      (alist-get beg bounds-alist))
+                (conn-make-target-overlay beg 0 :thing target-thing))
                ((not (setq bounds (seq-find
                                    (lambda (bounds)
                                      (pcase bounds
                                        ((conn-bounds `(,b . ,e))
                                         (and (eql beg b) (eql end e)))))
-                                   (conn-thing-get
-                                    (overlay-get ov 'thing)
-                                    :bounds))))
+                                   (alist-get beg bounds-alist))))
                 (push (make-bounds (cons beg end) type-things)
-                      (conn-thing-get
-                       (overlay-get ov 'thing)
-                       :bounds)))
+                      (alist-get beg bounds-alist)))
                (t
                 (cl-callf2 seq-union
                     type-things
@@ -600,7 +598,19 @@
                   (treesit-parser-list (window-buffer win)))))
   ( :default-update-handler (state)
     (let* ((thing (oref state thing))
-           (query (conn-ts--thing-node-query thing)))
+           (query (conn-ts--thing-node-query thing))
+           (bounds-alist nil)
+           (target-thing
+            (conn-anonymous-thing
+              (list thing)
+              :multi-thing-p (lambda (_self target)
+                               (length> (alist-get (overlay-start target) bounds-alist)
+                                        1))
+              :bounds-op ( :method (self _arg)
+                           (conn-with-dispatch-suspended
+                             (conn-multi-thing-select
+                              (alist-get (point) bounds-alist)
+                              (funcall conn-ts-multi-always-prompt-p)))))))
       (cl-flet ((make-bounds (bounds parent-thing type)
                   (conn-make-bounds
                    (conn-anonymous-thing
@@ -636,34 +646,21 @@
                          (treesit-query-capture
                           (treesit-language-at (point))
                           query vbeg vend))
-            (if-let* ((ov (car (conn--overlays-in-of-type
-                                beg (1+ beg) 'conn-target-overlay
-                                (selected-window)))))
+            (if-let* ((bounds-at (alist-get beg bounds-alist)))
                 (if-let* ((b (seq-find
                               (lambda (bound)
                                 (pcase bound
                                   ((conn-bounds `(,b . ,e))
                                    (and (eql beg b) (eql end e)))))
-                              (conn-thing-get
-                               (overlay-get ov 'thing)
-                               :bounds))))
-                    (push type (conn-thing-get
-                                (conn-bounds-thing b)
-                                :types))
+                              bounds-at)))
+                    (cl-pushnew type (conn-thing-get
+                                      (conn-bounds-thing b)
+                                      :types))
                   (push (make-bounds (cons beg end) thing type)
-                        (conn-thing-get
-                         (overlay-get ov 'thing)
-                         :bounds)))
-              (conn-make-target-overlay
-               beg 0
-               :thing (conn-anonymous-thing
-                        (list thing)
-                        :bounds (list (make-bounds (cons beg end) thing type))
-                        :bounds-op ( :method (self _arg)
-                                     (conn-with-dispatch-suspended
-                                       (conn-multi-thing-select
-                                        (conn-thing-get self :bounds)
-                                        (funcall conn-ts-multi-always-prompt-p)))))))))))))
+                        (alist-get beg bounds-alist)))
+              (push (make-bounds (cons beg end) thing type)
+                    (alist-get beg bounds-alist))
+              (conn-make-target-overlay beg 0 :thing target-thing))))))))
 
 (defun conn-ts--thing-predicate (thing)
   (with-memoization (gethash (cons 'conn-all-things thing)
