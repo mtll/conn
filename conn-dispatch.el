@@ -858,6 +858,17 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-bounds-of-dispatch (thing arg location))
 
+(cl-defmethod conn-bounds-of-dispatch :around (&rest _)
+  (unwind-protect
+      (progn
+        (dolist (win (conn--get-target-windows))
+          (with-current-buffer (window-buffer win)
+            (remove-from-invisibility-spec 'conn-dispatch-invisible)))
+        (cl-call-next-method))
+    (dolist (win (conn--get-target-windows))
+      (with-current-buffer (window-buffer win)
+        (add-to-invisibility-spec '(conn-dispatch-invisible . t))))))
+
 (cl-defmethod conn-bounds-of-dispatch (thing arg location)
   (when-let* ((bounds (save-excursion
                         (goto-char location)
@@ -1925,17 +1936,10 @@ depths will be sorted before greater depths.
   :lighter " SELECT"
   :group 'conn
   (if conn-dispatch-select-mode
-      (progn
-        (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
-          (face-remap-add-relative
-           'mode-line
-           (conn-state-get 'conn-dispatch-state :mode-line-face)))
-        (dolist (win (conn--get-target-windows))
-          (with-current-buffer (window-buffer win)
-            (add-to-invisibility-spec 'conn-dispatch-select-mode))))
-    (dolist (win (conn--get-target-windows))
-      (with-current-buffer (window-buffer win)
-        (remove-from-invisibility-spec 'conn-dispatch-select-mode)))
+      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+        (face-remap-add-relative
+         'mode-line
+         (conn-state-get 'conn-dispatch-state :mode-line-face)))
     (unwind-protect
         (conn-cleanup-labels)
       (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
@@ -3024,7 +3028,9 @@ contain targets."
 
 (defun conn-focus-targets-remove-overlays (state)
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
-    (mapc #'delete-overlay ovs))
+    (let ((recenter-line (count-screen-lines (window-start) (point))))
+      (mapc #'delete-overlay ovs)
+      (recenter (1- recenter-line))))
   (setf (oref state hidden) nil))
 
 (cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
@@ -3068,10 +3074,8 @@ contain targets."
                     (oref state cursor-default-location)
                     (count-screen-lines (window-start) (point))))
                (context-lines (oref state context-lines))
-               (separator-p (if (slot-boundp state 'separator-p)
-                                (oref state separator-p)
-                              (> context-lines 0)))
-               (regions (list (cons (pos-bol) (pos-bol 2)))))
+               (regions (list (cons (max (1- (pos-bol)) (point-min))
+                                    (pos-bol 2)))))
           (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
             (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
               (mapc #'delete old-hidden)
@@ -3080,50 +3084,44 @@ contain targets."
                   (push (or (overlay-get tar 'context)
                             (progn
                               (goto-char (overlay-start tar))
-                              (let ((beg (pos-bol (- 1 context-lines)))
+                              (let ((beg (1- (pos-bol (- 1 context-lines))))
                                     (end (pos-bol (+ 2 context-lines))))
-                                (cons (if (invisible-p end) (max 1 (1- beg)) beg)
+                                (cons (max (if (invisible-p end) (1- beg) beg)
+                                           (point-min))
                                       end))))
                         regions)))
               (cl-callf conn--merge-overlapping-regions regions t)
               (conn--compat-callf sort regions :key #'car :in-place t)
-              (unless (<= (window-start)
-                          (caar regions)
-                          (caar (last regions))
-                          (window-end))
-                (cl-loop
-                 for beg = (point-min) then next-beg
-                 for (end . next-beg) in regions
-                 while end
-                 do (let ((ov (make-overlay beg end)))
-                      (push ov hidden)
-                      (overlay-put ov 'invisible 'conn-dispatch-select-mode)
-                      (overlay-put ov 'window win)
-                      (when (and separator-p (/= end (point-max)))
-                        (overlay-put
-                         (car hidden)
-                         'before-string
-                         (propertize
-                          (format " %s\n"
-                                  (when (memq display-line-numbers
-                                              '(nil relative visual))
-                                    (line-number-at-pos end)))
-                          'face 'conn-dispatch-context-separator-face))))
-                 finally (let ((ov (make-overlay beg (point-max))))
-                           (push ov hidden)
-                           (overlay-put ov 'window win)
-                           (overlay-put ov 'invisible 'conn-dispatch-select-mode))))
+              (cl-loop for (beg . end) in regions
+                       sum (count-lines beg end) into lines
+                       finally (let ((diff (- (ceiling (window-screen-lines))
+                                              lines)))
+                                 (when (> diff 0)
+                                   (save-excursion
+                                     (goto-char (caar regions))
+                                     (setf (caar regions) (pos-bol (- diff)))))))
+              (cl-loop
+               for beg = (point-min) then next-beg
+               for (end . next-beg) in regions
+               while end
+               do (let ((ov (make-overlay beg end)))
+                    (push ov hidden)
+                    (overlay-put ov 'invisible 'conn-dispatch-invisible)
+                    (overlay-put ov 'window win))
+               finally (let ((ov (make-overlay beg (point-max))))
+                         (push ov hidden)
+                         (overlay-put ov 'window win)
+                         (overlay-put ov 'invisible 'conn-dispatch-invisible)))
               (setf (alist-get win (oref state hidden))
                     (cons (buffer-chars-modified-tick) hidden)))
-            (when hidden
-              (let ((this-scroll-margin
-                     (min (max 0 scroll-margin)
-                          (truncate (/ (window-body-height) 4.0)))))
-                (pcase recenter-pos
-                  ('middle (recenter nil))
-                  ('top (recenter this-scroll-margin))
-                  ('bottom (recenter (- -1 this-scroll-margin)))
-                  (loc (recenter loc))))))))))
+            (let ((this-scroll-margin
+                   (min (max 0 scroll-margin)
+                        (truncate (/ (window-body-height) 4.0)))))
+              (pcase recenter-pos
+                ('middle (recenter nil))
+                ('top (recenter this-scroll-margin))
+                ('bottom (recenter (- -1 this-scroll-margin)))
+                (loc (recenter (1- loc))))))))))
   (redisplay))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
@@ -4879,8 +4877,14 @@ it."))
             (progn
               (activate-input-method conn--input-method)
               (when setup-function (funcall setup-function))
+              (dolist (win (conn--get-target-windows))
+                (with-current-buffer (window-buffer win)
+                  (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
               (conn-dispatch-perform-action action repeat)
               (conn-dispatch-push-history (conn-make-dispatch action)))
+            (dolist (win (conn--get-target-windows))
+              (with-current-buffer (window-buffer win)
+                (remove-from-invisibility-spec 'conn-dispatch-invisible)))
             (with-current-buffer conn-dispatch-input-buffer
               (activate-input-method prev-input-method))
             (conn-cleanup-targets)

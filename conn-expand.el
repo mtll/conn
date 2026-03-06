@@ -169,9 +169,8 @@ Expansions and contractions are provided by functions in
 (conn-define-target-finder conn-expansion-targets
     (conn-dispatch-focus-mixin)
     ((expansions :initform nil)
-     (cursor-default-location :initform 'bottom)
      (context-lines
-      :initform 2
+      :initform 1
       :initarg :context-lines)
      (window-predicate
       :initform (lambda (win)
