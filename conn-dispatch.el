@@ -231,6 +231,30 @@ strings have `conn-dispatch-label-face'."
   (declare (indent 0))
   (conn--with-dispatch-event-handlers body))
 
+(defmacro conn-with-dispatch-invisible-property (&rest body)
+  (declare (indent 0))
+  `(unwind-protect
+       (progn
+         (dolist (win (conn--get-target-windows))
+           (with-current-buffer (window-buffer win)
+             (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
+         ,@body)
+     (dolist (win (conn--get-target-windows))
+       (with-current-buffer (window-buffer win)
+         (remove-from-invisibility-spec 'conn-dispatch-invisible)))))
+
+(defmacro conn-without-dispatch-invisible-property (&rest body)
+  (declare (indent 0))
+  `(unwind-protect
+       (progn
+         (dolist (win (conn--get-target-windows))
+           (with-current-buffer (window-buffer win)
+             (remove-from-invisibility-spec 'conn-dispatch-invisible)))
+         ,@body)
+     (dolist (win (conn--get-target-windows))
+       (with-current-buffer (window-buffer win)
+         (add-to-invisibility-spec '(conn-dispatch-invisible . t))))))
+
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
 
@@ -859,15 +883,8 @@ themselves once the selection process has concluded."
 (cl-defgeneric conn-bounds-of-dispatch (thing arg location))
 
 (cl-defmethod conn-bounds-of-dispatch :around (&rest _)
-  (unwind-protect
-      (progn
-        (dolist (win (conn--get-target-windows))
-          (with-current-buffer (window-buffer win)
-            (remove-from-invisibility-spec 'conn-dispatch-invisible)))
-        (cl-call-next-method))
-    (dolist (win (conn--get-target-windows))
-      (with-current-buffer (window-buffer win)
-        (add-to-invisibility-spec '(conn-dispatch-invisible . t))))))
+  (conn-without-dispatch-invisible-property
+    (cl-call-next-method)))
 
 (cl-defmethod conn-bounds-of-dispatch (thing arg location)
   (when-let* ((bounds (save-excursion
@@ -4877,14 +4894,9 @@ it."))
             (progn
               (activate-input-method conn--input-method)
               (when setup-function (funcall setup-function))
-              (dolist (win (conn--get-target-windows))
-                (with-current-buffer (window-buffer win)
-                  (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
-              (conn-dispatch-perform-action action repeat)
+              (conn-with-dispatch-invisible-property
+                (conn-dispatch-perform-action action repeat))
               (conn-dispatch-push-history (conn-make-dispatch action)))
-            (dolist (win (conn--get-target-windows))
-              (with-current-buffer (window-buffer win)
-                (remove-from-invisibility-spec 'conn-dispatch-invisible)))
             (with-current-buffer conn-dispatch-input-buffer
               (activate-input-method prev-input-method))
             (conn-cleanup-targets)
