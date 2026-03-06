@@ -516,7 +516,7 @@ themselves once the selection process has concluded."
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
 
-(defvar dispatch-quit-flag nil)
+(defvar conn-dispatch-quit-flag nil)
 
 (defvar conn-dispatch-read-char-map
   (let ((map (make-keymap)))
@@ -2007,7 +2007,7 @@ depths will be sorted before greater depths.
     (setf (gethash (current-buffer) conn--current-dispatch-buffers)
           (point-marker))
     (conn--unwind-protect-all
-      (progn
+      (conn-with-dispatch-invisible-property
         (redisplay)
         (catch 'dispatch-exit
           (while (or repeat (< conn-dispatch-iteration-count 1))
@@ -2056,7 +2056,8 @@ depths will be sorted before greater depths.
                  (funcall undo-fn :undo))
                (setf conn--read-args-error-message
                      (error-message-string err))))))
-        (setq success (not dispatch-quit-flag)))
+        (setq success t))
+      (setq conn-dispatch-quit-flag (not success))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel))))
@@ -2070,8 +2071,7 @@ depths will be sorted before greater depths.
       (unless success
         (select-frame oframe)
         (set-window-configuration owconf)
-        (goto-char opoint)))
-    (when dispatch-quit-flag (keyboard-quit))))
+        (goto-char opoint)))))
 
 (defun conn-select-target ()
   "Prompt the user to select a target during dispatch.
@@ -2129,29 +2129,30 @@ before performing any modifications.
 
 Buffer change groups have depth 0.  See `conn-dispatch-undo-case' for
 the meaning of depth."
+  (unless conn-dispatch-in-progress
+    (error "No dispatch in progress"))
   (if buffers
       (setq buffers (delete-dups buffers))
     (setq buffers (list (current-buffer))))
-  (when conn-dispatch-in-progress
-    (let ((cg (mapcan #'prepare-change-group
-                      (or buffers (list (current-buffer)))))
-          (saved-pos (cl-loop for buf in buffers
-                              collect (with-current-buffer buf
-                                        (point)))))
-      (when (and conn--dispatch-change-groups
-                 (not conn-dispatch-amalgamate-undo)
-                 (length> conn--dispatch-change-groups 1))
-        (dolist (b (or buffers (list (current-buffer))))
-          (with-current-buffer b
-            (undo-boundary))))
-      (conn-dispatch-undo-case
-        ((or :cancel :undo)
-         (cancel-change-group cg)
-         (cl-loop for buf in buffers
-                  for pt in saved-pos
-                  do (with-current-buffer buf
-                       (goto-char pt))))
-        (:accept (accept-change-group cg))))))
+  (let ((cg (mapcan #'prepare-change-group
+                    (or buffers (list (current-buffer)))))
+        (saved-pos (cl-loop for buf in buffers
+                            collect (with-current-buffer buf
+                                      (point)))))
+    (when (and conn--dispatch-change-groups
+               (not conn-dispatch-amalgamate-undo)
+               (length> conn--dispatch-change-groups 1))
+      (dolist (b (or buffers (list (current-buffer))))
+        (with-current-buffer b
+          (undo-boundary))))
+    (conn-dispatch-undo-case
+      ((or :cancel :undo)
+       (cancel-change-group cg)
+       (cl-loop for buf in buffers
+                for pt in saved-pos
+                do (with-current-buffer buf
+                     (goto-char pt))))
+      (:accept (accept-change-group cg)))))
 
 (defun conn-dispatch-undo-pulse (beg end)
   "Highlight an undo between BEG and END."
@@ -2419,10 +2420,6 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
   (throw 'dispatch-exit nil))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql keyboard-quit)))
-  (setq dispatch-quit-flag t)
-  (throw 'dispatch-exit nil))
-
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql other-end)))
   (if (advice-function-member-p 'toggle conn-dispatch-other-end)
       (remove-function conn-dispatch-other-end 'toggle)
@@ -2662,7 +2659,10 @@ updated.")
   (compat-call
    sort (conn-target-nearest-op targets)
    :lessp (lambda (a b)
-            (and (delq a (conn--overlays-in-of-type (overlay-end a)
+            (and (save-excursion
+                   (goto-char (overlay-end a))
+                   (not (eolp)))
+                 (delq a (conn--overlays-in-of-type (overlay-end a)
                                                     (+ 2 (overlay-end a))
                                                     'conn-target-overlay))
                  (not (delq b (conn--overlays-in-of-type (overlay-end b)
@@ -3032,6 +3032,7 @@ to the key binding for that target."
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
+   (current-window-lines :initform nil)
    (context-lines :initform 0 :initarg :context-lines)
    (cursor-location :initform nil)
    (cursor-default-location :initform nil)
@@ -3044,10 +3045,17 @@ contain targets."
   t)
 
 (defun conn-focus-targets-remove-overlays (state)
-  (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
-    (let ((recenter-line (count-screen-lines (window-start) (point))))
-      (mapc #'delete-overlay ovs)
-      (recenter (1- recenter-line))))
+  (pcase-dolist (`(,win ,_tick . ,ovs) (oref state hidden))
+    (with-selected-window win
+      (cond (conn-dispatch-in-progress
+             (mapc #'delete-overlay ovs))
+            (conn-dispatch-quit-flag
+             (mapc #'delete-overlay ovs)
+             (recenter (1- (alist-get win (oref state current-window-lines)))))
+            (t
+             (let ((recenter-line (count-screen-lines (window-start) (point))))
+               (mapc #'delete-overlay ovs)
+               (recenter (1- recenter-line)))))))
   (setf (oref state hidden) nil))
 
 (cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
@@ -3093,42 +3101,48 @@ contain targets."
                (context-lines (oref state context-lines))
                (regions (list (cons (max (1- (pos-bol)) (point-min))
                                     (pos-bol 2)))))
+          (setf (alist-get win (oref state current-window-lines))
+                recenter-pos)
           (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
             (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
               (mapc #'delete old-hidden)
-              (save-excursion
-                (dolist (tar targets)
-                  (push (or (overlay-get tar 'context)
-                            (progn
-                              (goto-char (overlay-start tar))
-                              (let ((beg (1- (pos-bol (- 1 context-lines))))
-                                    (end (pos-bol (+ 2 context-lines))))
-                                (cons (max (if (invisible-p end) (1- beg) beg)
-                                           (point-min))
-                                      end))))
-                        regions)))
-              (cl-callf conn--merge-overlapping-regions regions t)
-              (conn--compat-callf sort regions :key #'car :in-place t)
-              (cl-loop for (beg . end) in regions
-                       sum (count-lines beg end) into lines
-                       finally (let ((diff (- (ceiling (window-screen-lines))
-                                              lines)))
-                                 (when (> diff 0)
-                                   (save-excursion
-                                     (goto-char (caar regions))
-                                     (setf (caar regions) (pos-bol (- diff)))))))
-              (cl-loop
-               for beg = (point-min) then next-beg
-               for (end . next-beg) in regions
-               while end
-               do (let ((ov (make-overlay beg end)))
-                    (push ov hidden)
-                    (overlay-put ov 'invisible 'conn-dispatch-invisible)
-                    (overlay-put ov 'window win))
-               finally (let ((ov (make-overlay beg (point-max))))
-                         (push ov hidden)
-                         (overlay-put ov 'window win)
-                         (overlay-put ov 'invisible 'conn-dispatch-invisible)))
+              (unless (<= (window-start)
+                          (apply #'min (mapcar #'overlay-start targets))
+                          (apply #'max (mapcar #'overlay-end targets))
+                          (window-end))
+                (save-excursion
+                  (dolist (tar targets)
+                    (push (or (overlay-get tar 'context)
+                              (progn
+                                (goto-char (overlay-start tar))
+                                (let ((beg (1- (pos-bol (- 1 context-lines))))
+                                      (end (pos-bol (+ 2 context-lines))))
+                                  (cons (max (if (invisible-p end) (1- beg) beg)
+                                             (point-min))
+                                        end))))
+                          regions)))
+                (cl-callf conn--merge-overlapping-regions regions t)
+                (conn--compat-callf sort regions :key #'car :in-place t)
+                (cl-loop for (beg . end) in regions
+                         sum (count-lines beg end) into lines
+                         finally (let ((diff (- (ceiling (window-screen-lines))
+                                                lines)))
+                                   (when (> diff 0)
+                                     (save-excursion
+                                       (goto-char (caar regions))
+                                       (setf (caar regions) (pos-bol (- diff)))))))
+                (cl-loop
+                 for beg = (point-min) then next-beg
+                 for (end . next-beg) in regions
+                 while end
+                 do (let ((ov (make-overlay beg end)))
+                      (push ov hidden)
+                      (overlay-put ov 'invisible 'conn-dispatch-invisible)
+                      (overlay-put ov 'window win))
+                 finally (let ((ov (make-overlay beg (point-max))))
+                           (push ov hidden)
+                           (overlay-put ov 'window win)
+                           (overlay-put ov 'invisible 'conn-dispatch-invisible))))
               (setf (alist-get win (oref state hidden))
                     (cons (buffer-chars-modified-tick) hidden)))
             (let ((this-scroll-margin
@@ -4767,7 +4781,7 @@ it."))
     (error "Dispatch not available in keyboard macros"))
   (conn-protected-let*
       ((action action (conn-action-cancel action))
-       (dispatch-quit-flag nil)
+       (conn-dispatch-quit-flag nil)
        (conn-dispatch-action-reference
         (conn-action-get-reference action))
        (conn--dispatch-current-thing (list thing arg transform))
@@ -4799,13 +4813,7 @@ it."))
        (prev-input-method current-input-method)
        (default-input-method default-input-method)
        (input-method-history input-method-history)
-       (conn-dispatch-in-progress t)
        (conn-dispatch-target-finder nil))
-    (conn-get-target-finder thing arg)
-    (add-function :before-while conn-dispatch-other-end
-                  (lambda () (not conn-dispatch-no-other-end))
-                  '((depth . -100)
-                    (name . no-other-end)))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
       ( :message -99 (_)
@@ -4881,21 +4889,25 @@ it."))
           ('negative-argument
            (cl-callf not conn--read-args-prefix-sign)
            (conn-dispatch-handle))))
-      (when-let* ((predicate (conn-action-window-predicate action)))
-        (add-function :after-while conn-target-window-predicate predicate))
-      (when-let* ((predicate (conn-action-target-predicate action)))
-        (add-function :after-while conn-target-predicate predicate))
-      (when restrict-windows
-        (add-function :after-while conn-target-window-predicate
-                      'conn--dispatch-restrict-windows))
       (conn-with-recursive-stack 'conn-dispatch-state
         (let ((conn-disable-input-method-hooks t))
           (conn--unwind-protect-all
-            (progn
+            (let ((conn-dispatch-in-progress t))
+              (conn-get-target-finder thing arg)
+              (add-function :before-while conn-dispatch-other-end
+                            (lambda () (not conn-dispatch-no-other-end))
+                            '((depth . -100)
+                              (name . no-other-end)))
+              (when-let* ((predicate (conn-action-window-predicate action)))
+                (add-function :after-while conn-target-window-predicate predicate))
+              (when-let* ((predicate (conn-action-target-predicate action)))
+                (add-function :after-while conn-target-predicate predicate))
+              (when restrict-windows
+                (add-function :after-while conn-target-window-predicate
+                              'conn--dispatch-restrict-windows))
               (activate-input-method conn--input-method)
               (when setup-function (funcall setup-function))
-              (conn-with-dispatch-invisible-property
-                (conn-dispatch-perform-action action repeat))
+              (conn-dispatch-perform-action action repeat)
               (conn-dispatch-push-history (conn-make-dispatch action)))
             (with-current-buffer conn-dispatch-input-buffer
               (activate-input-method prev-input-method))
