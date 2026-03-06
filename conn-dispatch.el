@@ -1636,8 +1636,9 @@ Target overlays may override this default by setting the
                       (not (eobp)))
             (vertical-motion (cons (window-width) 0))
             (push (cons prev (point)) lines)
-            (forward-char)
-            (setq prev (point)))))
+            (unless (eobp)
+              (forward-char)
+              (setq prev (point))))))
       lines)))
 
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
