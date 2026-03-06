@@ -241,7 +241,7 @@ strings have `conn-dispatch-label-face'."
          ,@body)
      (dolist (win (conn--get-target-windows))
        (with-current-buffer (window-buffer win)
-         (remove-from-invisibility-spec 'conn-dispatch-invisible)))))
+         (remove-from-invisibility-spec '(conn-dispatch-invisible . t))))))
 
 (defmacro conn-without-dispatch-invisible-property (&rest body)
   (declare (indent 0))
@@ -249,7 +249,7 @@ strings have `conn-dispatch-label-face'."
        (progn
          (dolist (win (conn--get-target-windows))
            (with-current-buffer (window-buffer win)
-             (remove-from-invisibility-spec 'conn-dispatch-invisible)))
+             (remove-from-invisibility-spec '(conn-dispatch-invisible . t))))
          ,@body)
      (dolist (win (conn--get-target-windows))
        (with-current-buffer (window-buffer win)
@@ -1182,9 +1182,6 @@ will be nil.")
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
-(defvar conn-pixelwise-label-target-limit 500
-  "Maximum number of targets in a window for pixelwise labeling.")
-
 (defvar conn-pixelwise-labels-window-predicate
   'conn--pixelwise-labels-window-p)
 
@@ -1196,19 +1193,14 @@ Target overlays may override this default by setting the
 
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
-  (and (eq (selected-frame) (window-frame win))
-       (< (alist-get win conn-target-count)
-          conn-pixelwise-label-target-limit)))
+  (eq (selected-frame) (window-frame win)))
 
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
-  (cl-loop with ov-beg = (overlay-start target)
-           for (beg . end) in (conn--dispatch-window-lines
-                               (overlay-get target 'window))
-           when (and (<= beg ov-beg)
-                     (< ov-beg end))
-           return (< (- ov-beg beg)
-                     conn-dispatch-pixelwise-labels-line-limit)))
+  (< (save-excursion
+       (goto-char (overlay-start target))
+       (- (point) (pos-bol)))
+     conn-dispatch-pixelwise-labels-line-limit))
 
 (put 'conn-label-overlay 'priority 3000)
 
@@ -1244,11 +1236,13 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-eovl (pt window)
   (declare (important-return-value t))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (vertical-motion (cons (window-width) 0))
-      (point))))
+  (or (cl-loop for (beg . end) in (conn--dispatch-window-lines window)
+               when (<= beg pt end) return end)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (vertical-motion (cons (window-width) 0))
+          (point)))))
 
 (defun conn--dispatch-setup-label-pixelwise (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -1329,19 +1323,19 @@ Target overlays may override this default by setting the
                  ((and (/= pt (point-min))
                        (or (and (/= pt beg)
                                 (get-char-property pt 'before-string)
-                                (= pt (next-single-char-property-change
+                                (= pt (next-single-property-change
                                        (1- pt) 'before-string nil (1+ pt))))
                            (and (/= pt beg)
                                 (get-char-property (1- pt) 'after-string)
-                                (= pt (next-single-char-property-change
+                                (= pt (next-single-property-change
                                        (- pt 1) 'after-string nil (1+ pt))))
-                           (and (pcase (get-char-property pt 'display)
+                           (and (pcase (get-text-property pt 'display)
                                   ('nil)
                                   ((pred stringp) t)
                                   (`(,(or 'image 'slice `(margin nil))
                                      . ,_)
                                    t))
-                                (= pt (next-single-char-property-change
+                                (= pt (next-single-property-change
                                        (1- pt) 'display nil (1+ pt))))))
                   (setq end pt))
                  ;; If the label overlay is wider than the label
@@ -1461,16 +1455,16 @@ Target overlays may override this default by setting the
                  ((= line-beg pt)
                   (setq end pt))
                  ((and (/= pt (point-min))
-                       (or (and (get-char-property pt 'before-string)
-                                (= pt (next-single-char-property-change
+                       (or (and (get-text-property pt 'before-string)
+                                (= pt (next-single-property-change
                                        (1- pt) 'before-string nil (1+ pt))))
-                           (and (pcase (get-char-property (1- pt) 'display)
+                           (and (pcase (get-text-property (1- pt) 'display)
                                   ('nil)
                                   ((pred stringp) t)
                                   (`(,(or 'image 'slice `(margin nil))
                                      . ,_)
                                    t))
-                                (= pt (next-single-char-property-change
+                                (= pt (next-single-property-change
                                        (1- pt) 'display nil (1+ pt))))))
                   (setq end (min beg (1+ pt))))
                  ((and (/= pt (point-min))
@@ -1634,14 +1628,15 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (with-memoization (gethash window conn--dispatch-window-lines-cache)
     (let (lines prev)
-      (with-current-buffer (window-buffer window)
+      (with-selected-window window
         (save-excursion
           (goto-char (window-start window))
-          (setq prev (pos-bol))
+          (setq prev (point))
           (while (and (<= prev (window-end window))
                       (not (eobp)))
-            (vertical-motion 1)
+            (vertical-motion (cons (window-width) 0))
             (push (cons prev (point)) lines)
+            (forward-char)
             (setq prev (point)))))
       lines)))
 
@@ -1671,7 +1666,7 @@ Target overlays may override this default by setting the
        (or (overlay-get target 'label-ctor)
            #'make-conn-dispatch-label)
        :setup-function (cond ((overlay-get target 'no-hide)
-                              'conn-before-string-label)
+                              #'conn-before-string-label)
                              ((conn-dispatch-pixelwise-label-p ov)
                               (if (overlay-get target 'label-before)
                                   #'conn--dispatch-setup-label-pixelwise-before
@@ -2007,7 +2002,7 @@ depths will be sorted before greater depths.
     (setf (gethash (current-buffer) conn--current-dispatch-buffers)
           (point-marker))
     (conn--unwind-protect-all
-      (conn-with-dispatch-invisible-property
+      (progn
         (redisplay)
         (catch 'dispatch-exit
           (while (or repeat (< conn-dispatch-iteration-count 1))
@@ -2039,7 +2034,8 @@ depths will be sorted before greater depths.
                         :depth 100
                         (:undo (redisplay)))
                       (unwind-protect
-                          (funcall action)
+                          (conn-without-dispatch-invisible-property
+                            (funcall action))
                         (unless (or (equal wconf (current-window-configuration))
                                     (null (car conn--dispatch-change-groups)))
                           (conn-dispatch-undo-case
@@ -2077,25 +2073,26 @@ depths will be sorted before greater depths.
   "Prompt the user to select a target during dispatch.
 
 Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
-  (cl-loop
-   (catch 'dispatch-redisplay
-     (pcase-let* ((emulation-mode-map-alists
-                   `(((conn-dispatch-select-mode
-                       . ,(make-composed-keymap
-                           (conn-target-finder-keymaps
-                            conn-dispatch-target-finder))))
-                     ,@emulation-mode-map-alists))
-                  (`(,pt ,win ,thing-override)
-                   (conn-target-finder-select
-                    conn-dispatch-target-finder))
-                  (`(,thing ,arg ,transform)
-                   conn--dispatch-current-thing))
-       (cl-return
-        (list pt
-              win
-              (or thing-override thing)
-              arg
-              transform))))))
+  (conn-with-dispatch-invisible-property
+    (cl-loop
+     (catch 'dispatch-redisplay
+       (pcase-let* ((emulation-mode-map-alists
+                     `(((conn-dispatch-select-mode
+                         . ,(make-composed-keymap
+                             (conn-target-finder-keymaps
+                              conn-dispatch-target-finder))))
+                       ,@emulation-mode-map-alists))
+                    (`(,pt ,win ,thing-override)
+                     (conn-target-finder-select
+                      conn-dispatch-target-finder))
+                    (`(,thing ,arg ,transform)
+                     conn--dispatch-current-thing))
+         (cl-return
+          (list pt
+                win
+                (or thing-override thing)
+                arg
+                transform)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -2502,7 +2499,7 @@ the meaning of depth."
                           narrowed-string
                           setup-function)
                label))
-    (with-current-buffer (overlay-buffer overlay)
+    (with-selected-window (overlay-get overlay 'window)
       (cond (conn-dispatch-hide-labels
              (overlay-put overlay 'display nil)
              (overlay-put overlay 'after-string nil)
@@ -2664,10 +2661,12 @@ updated.")
                    (not (eolp)))
                  (delq a (conn--overlays-in-of-type (overlay-end a)
                                                     (+ 2 (overlay-end a))
-                                                    'conn-target-overlay))
+                                                    'conn-target-overlay
+                                                    (selected-window)))
                  (not (delq b (conn--overlays-in-of-type (overlay-end b)
                                                          (+ 2 (overlay-end b))
-                                                         'conn-target-overlay)))))))
+                                                         'conn-target-overlay
+                                                         (selected-window))))))))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
@@ -4895,30 +4894,31 @@ it."))
            (conn-dispatch-handle))))
       (conn-with-recursive-stack 'conn-dispatch-state
         (let ((conn-disable-input-method-hooks t))
-          (conn--unwind-protect-all
-            (let ((conn-dispatch-in-progress t))
-              (conn-get-target-finder thing arg)
-              (add-function :before-while conn-dispatch-other-end
-                            (lambda () (not conn-dispatch-no-other-end))
-                            '((depth . -100)
-                              (name . no-other-end)))
-              (when-let* ((predicate (conn-action-window-predicate action)))
-                (add-function :after-while conn-target-window-predicate predicate))
-              (when-let* ((predicate (conn-action-target-predicate action)))
-                (add-function :after-while conn-target-predicate predicate))
-              (when restrict-windows
-                (add-function :after-while conn-target-window-predicate
-                              'conn--dispatch-restrict-windows))
-              (activate-input-method conn--input-method)
-              (when setup-function (funcall setup-function))
-              (conn-dispatch-perform-action action repeat)
-              (conn-dispatch-push-history (conn-make-dispatch action)))
-            (with-current-buffer conn-dispatch-input-buffer
-              (activate-input-method prev-input-method))
-            (conn-cleanup-targets)
-            (conn-cleanup-labels)
-            (let ((inhibit-message conn-read-args-inhibit-message))
-              (message nil))))))))
+          (conn-with-dispatch-invisible-property
+            (conn--unwind-protect-all
+              (let ((conn-dispatch-in-progress t))
+                (conn-get-target-finder thing arg)
+                (add-function :before-while conn-dispatch-other-end
+                              (lambda () (not conn-dispatch-no-other-end))
+                              '((depth . -100)
+                                (name . no-other-end)))
+                (when-let* ((predicate (conn-action-window-predicate action)))
+                  (add-function :after-while conn-target-window-predicate predicate))
+                (when-let* ((predicate (conn-action-target-predicate action)))
+                  (add-function :after-while conn-target-predicate predicate))
+                (when restrict-windows
+                  (add-function :after-while conn-target-window-predicate
+                                'conn--dispatch-restrict-windows))
+                (activate-input-method conn--input-method)
+                (when setup-function (funcall setup-function))
+                (conn-dispatch-perform-action action repeat)
+                (conn-dispatch-push-history (conn-make-dispatch action)))
+              (with-current-buffer conn-dispatch-input-buffer
+                (activate-input-method prev-input-method))
+              (conn-cleanup-targets)
+              (conn-cleanup-labels)
+              (let ((inhibit-message conn-read-args-inhibit-message))
+                (message nil)))))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)

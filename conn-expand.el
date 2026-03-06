@@ -173,9 +173,7 @@ Expansions and contractions are provided by functions in
       :initform 1
       :initarg :context-lines)
      (window-predicate
-      :initform (lambda (win)
-                  (eq (window-buffer win)
-                      (current-buffer)))))
+      :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (state &optional len)
     (let* ((expansions (oref state expansions))
            (bounds nil)
