@@ -374,11 +374,30 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
-  "<remap> <conn-expand>" (conn-anonymous-thing
-                            '(expansion)
-                            :pretty-print ( :method (_) "conn-expand")
-                            :bounds-op ( :method (_self arg)
-                                         (conn-bounds-of 'conn-expand arg)))
+  "e" (conn-anonymous-thing
+        '(expansion)
+        :pretty-print ( :method (_) "expansion")
+        :target-finder (:method (_self _arg) (conn-expansion-targets)))
+  "E" (conn-anonymous-thing
+        '(expansion)
+        :pretty-print
+        ( :method (_) "expansion-at")
+        :bounds-op
+        ( :method (_self arg)
+          (conn-bounds-of 'conn-expand arg))
+        :default-action
+        ( :method (_self)
+          (oclosure-lambda (conn-action
+                            (action-description "Jump"))
+              ()
+            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                          (conn-select-target)))
+              (conn-dispatch-select-window window)
+              (conn-dispatch-change-group)
+              (pcase (conn-bounds-of-dispatch thing arg pt)
+                ((conn-dispatch-bounds `(,beg . ,_end) transform)
+                 (unless (= beg (point))
+                   (conn-dispatch-goto-char beg))))))))
   ")" (conn-anonymous-thing
         '(sexp)
         :pretty-print (:method (_) "outer-list-or-string")
@@ -687,7 +706,7 @@
 
 (define-keymap
   :keymap conn-expand-repeat-map
-  "e" 'ignore
+  "E" 'conn-expand
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand)

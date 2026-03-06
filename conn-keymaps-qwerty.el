@@ -380,15 +380,30 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
-  "h" (conn-anonymous-thing
+  "e" (conn-anonymous-thing
         '(expansion)
         :pretty-print ( :method (_) "expansion")
         :target-finder (:method (_self _arg) (conn-expansion-targets)))
-  "<remap> <conn-expand>" (conn-anonymous-thing
-                            '(expansion)
-                            :pretty-print ( :method (_) "expansion-at")
-                            :bounds-op ( :method (_self arg)
-                                         (conn-bounds-of 'conn-expand arg)))
+  "E" (conn-anonymous-thing
+        '(expansion)
+        :pretty-print
+        ( :method (_) "expansion-at")
+        :bounds-op
+        ( :method (_self arg)
+          (conn-bounds-of 'conn-expand arg))
+        :default-action
+        ( :method (_self)
+          (oclosure-lambda (conn-action
+                            (action-description "Jump"))
+              ()
+            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                          (conn-select-target)))
+              (conn-dispatch-select-window window)
+              (conn-dispatch-change-group)
+              (pcase (conn-bounds-of-dispatch thing arg pt)
+                ((conn-dispatch-bounds `(,beg . ,_end) transform)
+                 (unless (= beg (point))
+                   (conn-dispatch-goto-char beg))))))))
   "O" (conn-anonymous-thing
         '(word)
         :pretty-print (:method (_self) "all-words")
@@ -478,8 +493,8 @@
   :keymap (conn-get-state-map 'conn-change-state)
   "y" 'yank
   "Y" 'yank-from-kill-ring
-  "e" 'conn-emacs-state-overwrite
-  "E" 'conn-emacs-state-overwrite-binary
+  "r" 'conn-emacs-state-overwrite
+  "R" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
   "l" conn-forward-char-remap
   "q" 'conn-replace)
@@ -715,9 +730,9 @@
 
 ;;;; Expand
 
-(define-keymap
-  :keymap conn-expand-repeat-map
-  "e" 'ignore
+(defvar-keymap conn-expand-repeat-map
+  :repeat (:exit (ignore))
+  "E" 'conn-expand
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand)

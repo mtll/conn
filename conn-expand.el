@@ -19,6 +19,7 @@
 
 (require 'compat)
 (require 'conn-things)
+(require 'conn-dispatch)
 
 (declare-function conn-exchange-mark-command "conn-commands")
 
@@ -34,8 +35,7 @@ potential expansions.  Functions may return invalid expansions
 (defvar-local conn--current-expansions nil)
 (defvar-local conn--current-expansions-tick nil)
 
-(defvar-keymap conn-expand-repeat-map
-  :repeat (:exit (ignore)))
+(defvar-keymap conn-expand-repeat-map)
 
 (conn-register-thing 'expansion)
 
@@ -145,57 +145,57 @@ Expansions and contractions are provided by functions in
   "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
-                              arg)
-  (cl-flet ((command-handler (command)
-              (condition-case err
-                  (pcase command
-                    ('exchange-point-and-mark
-                     (exchange-point-and-mark)
-                     (conn-read-args-handle))
-                    ('conn-contract
-                     (conn-contract-subr
-                      (prefix-numeric-value
-                       (conn-read-args-consume-prefix-arg)))
-                     (conn-read-args-handle))
-                    ('conn-expand
-                     (conn-expand-subr
-                      (prefix-numeric-value
-                       (conn-read-args-consume-prefix-arg)))
-                     (conn-read-args-handle)))
-                (user-error
-                 (conn-read-args-error (error-message-string err)))))
-            (display (prompt args &optional _state teardown)
-              (if teardown
-                  (unless executing-kbd-macro
-                    (message nil))
-                (message
-                 (substitute-command-keys
-                  (concat
-                   (conn--read-args-prompt prompt args)
-                   "\n"
-                   "\\[conn-expand] expand; "
-                   "\\[conn-contract] contract; "
-                   "\\[end] finish"))))))
-    (save-excursion
-      (push-mark nil t)
-      (conn-expand-subr (prefix-numeric-value arg))
-      (conn-read-args (conn-expand-state
-                       :prompt "Expansion"
-                       :prefix arg
-                       :display-handler #'display
-                       :command-handler #'command-handler)
-          ((bounds
-            (oclosure-lambda (conn-anonymous-argument
-                              (required t))
-                (command break)
-              (pcase command
-                ((or 'end 'exit-recursive-edit)
-                 (setf value (cons (region-beginning)
-                                   (region-end))
-                       set-flag t)
-                 (funcall break))))))
-        (deactivate-mark)
-        (conn-make-bounds cmd arg bounds)))))
+(cl-defmethod conn-bounds-of ((_cmd (conn-thing expansion))
+                              _arg)
+  (conn--expand-create-expansions)
+  (let ((bounds))
+    (conn-dispatch-setup
+     (oclosure-lambda (conn-action
+                       (action-description "Bounds"))
+         ()
+       (pcase-let ((`(,pt ,window ,thing ,_arg ,_transform)
+                    (conn-select-target)))
+         (with-selected-window window
+           (goto-char pt)
+           (setf bounds (conn-bounds-of thing nil)))))
+     (conn-anonymous-thing
+       '(expansion)
+       :pretty-print ( :method (_) "expansion")
+       :target-finder (:method (_self _arg) (conn-expansion-targets)))
+     nil nil
+     :other-end :no-other-end)
+    bounds))
+
+(conn-define-target-finder conn-expansion-targets
+    (conn-dispatch-focus-mixin)
+    ((expansions :initform nil)
+     (cursor-default-location :initform 'bottom)
+     (context-lines
+      :initform 2
+      :initarg :context-lines)
+     (window-predicate
+      :initform (lambda (win)
+                  (eq (window-buffer win)
+                      (current-buffer)))))
+  ( :default-update-handler (state &optional len)
+    (let* ((expansions (oref state expansions))
+           (bounds nil)
+           (thing
+            (conn-anonymous-thing
+              '(region)
+              :multi-thing-p (lambda (_self target)
+                               (length> (alist-get (overlay-start target) bounds)
+                                        1))
+              :pretty-print ( :method (self) "Expansion")
+              :bounds-op ( :method (_ _)
+                           (conn-multi-thing-select
+                            (alist-get (point) bounds))))))
+      (unless expansions
+        (setf expansions (conn--expand-create-expansions)
+              (oref state expansions) expansions))
+      (pcase-dolist ((and cons `(,beg . ,end)) expansions)
+        (push (conn-make-bounds 'region nil cons)
+              (alist-get beg bounds))
+        (conn-make-target-overlay beg 0 :thing thing)))))
 
 (provide 'conn-expand)

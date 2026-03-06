@@ -21,7 +21,6 @@
 (require 'conn-states)
 (require 'conn-things)
 (require 'conn-jump-ring)
-(require 'conn-expand)
 
 (defvar outline-heading-end-regexp)
 (defvar treesit-defun-type-regexp)
@@ -2326,7 +2325,9 @@ the meaning of depth."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom)))
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-read-args-last-command))
-    (recenter-top-bottom (conn-read-args-prefix-arg)))
+    (recenter-top-bottom (conn-read-args-prefix-arg))
+    (unless executing-kbd-macro
+      (pulse-momentary-highlight-one-line)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
@@ -3037,9 +3038,8 @@ contain targets."
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
                                                    &context (conn-dispatch-target-finder
                                                              conn-dispatch-focus-mixin))
-  (conn-<f
-      (alist-get (selected-window)
-                 (oref conn-dispatch-target-finder cursor-location))
+  (conn-<f (alist-get (selected-window)
+                      (oref conn-dispatch-target-finder cursor-location))
     (memq recenter-positions)
     (cadr)
     (or (car recenter-positions)))
@@ -3063,70 +3063,67 @@ contain targets."
     (pcase-let ((`(,tick . ,old-hidden)
                  (alist-get win (oref state hidden))))
       (with-selected-window win
-        (let ((lines (unless (alist-get win (oref state cursor-location))
-                       (count-screen-lines (window-start) (point)))))
-          (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
-            (mapc #'delete old-hidden)
-            (conn-protected-let*
-                ((hidden nil (mapc #'delete-overlay hidden))
-                 (context-lines (oref state context-lines))
-                 (separator-p (if (slot-boundp state 'separator-p)
-                                  (oref state separator-p)
-                                (> context-lines 0))))
-              (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
-                (save-excursion
-                  (dolist (tar targets)
-                    (push (or (overlay-get tar 'context)
-                              (progn
-                                (goto-char (overlay-start tar))
-                                (let ((beg (pos-bol (- 1 context-lines)))
-                                      (end (pos-bol (+ 2 context-lines))))
-                                  (cons (if (invisible-p end) (max 1 (1- beg)) beg)
-                                        end))))
-                          regions)))
-                (cl-callf conn--merge-overlapping-regions regions t)
-                (conn--compat-callf sort regions :key #'car :in-place t)
-                (unless (<= (window-start)
-                            (caar regions)
-                            (caar (last regions))
-                            (window-end))
-                  (cl-loop for beg = (point-min) then next-beg
-                           for (end . next-beg) in regions
-                           while end
-                           do (let ((ov (make-overlay beg end)))
-                                (push ov hidden)
-                                (overlay-put ov 'invisible 'conn-dispatch-select-mode)
-                                (overlay-put ov 'window win)
-                                (when (and separator-p (/= end (point-max)))
-                                  (overlay-put
-                                   (car hidden)
-                                   'before-string
-                                   (propertize
-                                    (format " %s\n"
-                                            (when (memq display-line-numbers
-                                                        '(nil relative visual))
-                                              (line-number-at-pos end)))
-                                    'face 'conn-dispatch-context-separator-face))))
-                           finally (let ((ov (make-overlay beg (point-max))))
-                                     (push ov hidden)
-                                     (overlay-put ov 'window win)
-                                     (overlay-put ov 'invisible 'conn-dispatch-select-mode)))))
+        (let* ((recenter-pos
+                (or (alist-get win (oref state cursor-location))
+                    (oref state cursor-default-location)
+                    (count-screen-lines (window-start) (point))))
+               (context-lines (oref state context-lines))
+               (separator-p (if (slot-boundp state 'separator-p)
+                                (oref state separator-p)
+                              (> context-lines 0)))
+               (regions (list (cons (pos-bol) (pos-bol 2)))))
+          (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
+            (unless (eql tick (buffer-chars-modified-tick (window-buffer win)))
+              (mapc #'delete old-hidden)
+              (save-excursion
+                (dolist (tar targets)
+                  (push (or (overlay-get tar 'context)
+                            (progn
+                              (goto-char (overlay-start tar))
+                              (let ((beg (pos-bol (- 1 context-lines)))
+                                    (end (pos-bol (+ 2 context-lines))))
+                                (cons (if (invisible-p end) (max 1 (1- beg)) beg)
+                                      end))))
+                        regions)))
+              (cl-callf conn--merge-overlapping-regions regions t)
+              (conn--compat-callf sort regions :key #'car :in-place t)
+              (unless (<= (window-start)
+                          (caar regions)
+                          (caar (last regions))
+                          (window-end))
+                (cl-loop
+                 for beg = (point-min) then next-beg
+                 for (end . next-beg) in regions
+                 while end
+                 do (let ((ov (make-overlay beg end)))
+                      (push ov hidden)
+                      (overlay-put ov 'invisible 'conn-dispatch-select-mode)
+                      (overlay-put ov 'window win)
+                      (when (and separator-p (/= end (point-max)))
+                        (overlay-put
+                         (car hidden)
+                         'before-string
+                         (propertize
+                          (format " %s\n"
+                                  (when (memq display-line-numbers
+                                              '(nil relative visual))
+                                    (line-number-at-pos end)))
+                          'face 'conn-dispatch-context-separator-face))))
+                 finally (let ((ov (make-overlay beg (point-max))))
+                           (push ov hidden)
+                           (overlay-put ov 'window win)
+                           (overlay-put ov 'invisible 'conn-dispatch-select-mode))))
               (setf (alist-get win (oref state hidden))
-                    (cons (buffer-chars-modified-tick) hidden))
-              (when (cdr hidden)
-                (let ((this-scroll-margin
-                       (min (max 0 scroll-margin)
-                            (truncate (/ (window-body-height) 4.0)))))
-                  (pcase (alist-get win
-                                    (oref state cursor-location)
-                                    (oref state cursor-default-location))
-                    ('middle (recenter nil))
-                    ('top (recenter this-scroll-margin))
-                    ('bottom (recenter (- -1 this-scroll-margin)))
-                    ('nil (setf (alist-get win (oref state cursor-location))
-                                lines)
-                          (recenter lines))
-                    (loc (recenter loc)))))))))))
+                    (cons (buffer-chars-modified-tick) hidden)))
+            (when hidden
+              (let ((this-scroll-margin
+                     (min (max 0 scroll-margin)
+                          (truncate (/ (window-body-height) 4.0)))))
+                (pcase recenter-pos
+                  ('middle (recenter nil))
+                  ('top (recenter this-scroll-margin))
+                  ('bottom (recenter (- -1 this-scroll-margin)))
+                  (loc (recenter loc))))))))))
   (redisplay))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
@@ -3633,38 +3630,6 @@ contain targets."
                             (conn--flush-left-padding ov width nil)))
        (when (eobp) (cl-return nil))
        (vertical-motion 1)))))
-
-(conn-define-target-finder conn-expansion-targets
-    (conn-dispatch-focus-mixin)
-    ((expansions :initform nil)
-     (cursor-default-location :initform 'bottom)
-     (context-lines
-      :initform 2
-      :initarg :context-lines)
-     (window-predicate
-      :initform (lambda (win)
-                  (eq (window-buffer win)
-                      (current-buffer)))))
-  ( :default-update-handler (state &optional len)
-    (let* ((expansions (oref state expansions))
-           (bounds nil)
-           (thing
-            (conn-anonymous-thing
-              '(region)
-              :multi-thing-p (lambda (_self target)
-                               (length> (alist-get (overlay-start target) bounds)
-                                        1))
-              :pretty-print ( :method (self) "Expansion")
-              :bounds-op ( :method (_ _)
-                           (conn-multi-thing-select
-                            (alist-get (point) bounds))))))
-      (unless expansions
-        (setf expansions (conn--expand-create-expansions)
-              (oref state expansions) expansions))
-      (pcase-dolist ((and cons `(,beg . ,end)) expansions)
-        (push (conn-make-bounds 'region nil cons)
-              (alist-get beg bounds))
-        (conn-make-target-overlay beg 0 :thing thing)))))
 
 ;;;;; Dispatch Actions
 
