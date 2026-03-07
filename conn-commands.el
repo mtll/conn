@@ -4111,6 +4111,83 @@ Interactively REPEAT is given by the prefix argument."
          (conn-push-state 'conn-one-emacs-state)
        (conn-push-state 'conn-emacs-state)))))
 
+(cl-defmethod conn-change-thing-do ((thing (conn-thing isearch))
+                                    arg
+                                    transform)
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (let ((opoint (point-marker)))
+       (goto-char beg)
+       (delete-region beg end)
+       (if (= (- end beg) 1)
+           (conn-push-state 'conn-one-emacs-state)
+         (conn-push-state 'conn-emacs-state))
+       (conn-state-on-exit _
+         (goto-char opoint)
+         (set-marker opoint nil))))))
+
+(cl-defmethod conn-change-thing-do ((thing (conn-thing dispatch))
+                                    arg
+                                    transform)
+  (conn-read-args (conn-dispatch-bounds-state
+                   :history-var 'conn-mark-thing-dispatch
+                   :prefix arg
+                   :reference (list conn-dispatch-thing-reference)
+                   :prompt "Thing")
+      ((`(,dthing ,darg) (conn-dispatch-thing-argument t))
+       (dtform (conn-dispatch-transform-argument))
+       (other-end
+        (conn-boolean-argument "other-end"
+                               'other-end
+                               conn-other-end-argument-map))
+       (restrict-windows
+        (conn-boolean-argument "this-win"
+                               'restrict-windows
+                               conn-restrict-windows-argument-map))
+       (repeat
+        (conn-boolean-argument "repeat"
+                               'repeat-dispatch
+                               conn-dispatch-repeat-argument-map)))
+    (conn-dispatch-setup
+     (oclosure-lambda (conn-action
+                       (action-description "Change"))
+         ()
+       (pcase-let ((`(,pt ,window ,thing ,arg ,dtform)
+                    (conn-select-target)))
+         (conn-dispatch-select-window window)
+         (conn-dispatch-change-group)
+         (if (and (or (conn-subthing-p thing 'point)
+                      (conn-subthing-p thing 'char))
+                  (not (memq 'conn-dispatch-bounds-anchored dtform)))
+             (save-excursion
+               (goto-char pt)
+               (pcase (conn-bounds-of thing arg)
+                 ((conn-bounds `(,beg . ,end) transform)
+                  (goto-char beg)
+                  (delete-region beg end)
+                  (if (= (- end beg) 1)
+                      (conn-push-state 'conn-one-emacs-state)
+                    (conn-push-state 'conn-emacs-state))
+                  (save-selected-window
+                    (cl-with-gensyms (hook)
+                      (fset hook (lambda ()
+                                   (remove-hook 'conn-state-entry-hook hook t)
+                                   (exit-recursive-edit)))
+                      (add-hook 'conn-state-entry-hook hook 100 t))
+                    (recursive-edit)))))
+           (pcase (conn-bounds-of-dispatch thing arg pt)
+             ((conn-bounds `(,beg . ,end) (nconc dtform transform))
+              (save-excursion
+                (goto-char beg)
+                (delete-region beg end)
+                (conn-push-state 'conn-emacs-state)
+                (save-selected-window
+                  (recursive-edit))))))))
+     dthing darg dtform
+     :other-end other-end
+     :restrict-windows restrict-windows
+     :repeat repeat)))
+
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
                                     transform)

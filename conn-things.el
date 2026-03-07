@@ -1133,7 +1133,7 @@ the point is within the region then the entire region is returned.")))
                                  (cons (min (point) isearch-other-end)
                                        (max (point) isearch-other-end)))))))
     (unwind-protect
-        (save-mark-and-excursion
+        (save-excursion
           (add-hook 'isearch-mode-end-hook quit)
           (if (conn-thing-get cmd :command)
               (progn

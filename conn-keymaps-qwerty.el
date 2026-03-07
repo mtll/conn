@@ -448,6 +448,7 @@
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-to-replace
   "q" 'conn-dispatch-copy-from-replace
+  "F" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from

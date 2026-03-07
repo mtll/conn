@@ -882,10 +882,6 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-bounds-of-dispatch (thing arg location))
 
-(cl-defmethod conn-bounds-of-dispatch :around (&rest _)
-  (conn-without-dispatch-invisible-property
-    (cl-call-next-method)))
-
 (cl-defmethod conn-bounds-of-dispatch (thing arg location)
   (when-let* ((bounds (save-excursion
                         (goto-char location)
@@ -3586,8 +3582,9 @@ contain targets."
                    '(conn-forward-inner-line)
                    :pretty-print ( :method (_self) "inner-line")
                    :bounds-op ( :method (_self _arg)
-                                (goto-char (pos-bol))
-                                (cl-call-next-method)))))
+                                (save-excursion
+                                  (goto-char (pos-bol))
+                                  (cl-call-next-method))))))
       (conn-for-each-visible (window-start) (window-end)
         (goto-char (point-max))
         (while (let ((pt (point)))
