@@ -704,12 +704,12 @@
 
 ;;;; Expand
 
-(define-keymap
-  :keymap conn-expand-repeat-map
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
   "E" 'conn-expand
   "z" 'exchange-point-and-mark
-  "j" 'conn-contract
-  "l" 'conn-expand)
+  "b" 'conn-contract
+  "f" 'conn-expand)
 
 ;;;; Dispatch
 

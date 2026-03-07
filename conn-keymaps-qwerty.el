@@ -731,7 +731,7 @@
 ;;;; Expand
 
 (defvar-keymap conn-expand-repeat-map
-  :repeat (:exit (ignore))
+  :repeat t
   "E" 'conn-expand
   "z" 'exchange-point-and-mark
   "j" 'conn-contract

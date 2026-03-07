@@ -3036,7 +3036,11 @@ to the key binding for that target."
    (context-lines :initform 0 :initarg :context-lines)
    (cursor-location :initform nil)
    (cursor-default-location :initform nil)
-   (separator-p :initarg :separator))
+   (separator-p :initarg :separator)
+   (fringe-indicator
+    :initform (propertize " " 'display (list 'left-fringe
+                                             'right-triangle))
+    :initarg :fringe-indicator))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
@@ -3102,7 +3106,8 @@ contain targets."
                (regions (list (cons (max (1- (pos-bol)) (point-min))
                                     (if (< context-lines 1)
                                         (1- (pos-bol 2))
-                                      (pos-bol 2))))))
+                                      (pos-bol 2)))))
+               (fringe-indicator (oref state fringe-indicator)))
           (setf (alist-get win (oref state current-window-lines))
                 recenter-pos)
           (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
@@ -3117,18 +3122,19 @@ contain targets."
                     (push (or (overlay-get tar 'context)
                               (progn
                                 (goto-char (overlay-start tar))
-                                (let ((beg (1- (pos-bol (- 1 context-lines))))
+                                (let ((beg (pos-bol (- 1 context-lines)))
                                       (end (pos-bol (+ 2 context-lines))))
-                                  (when (< context-lines 1)
-                                    (cl-decf end))
                                   (cons (max (if (invisible-p end) (1- beg) beg)
                                              (point-min))
                                         end))))
                           regions)))
                 (cl-callf conn--merge-overlapping-regions regions t)
                 (conn--compat-callf sort regions :key #'car :in-place t)
-                (cl-loop for (beg . end) in regions
+                (cl-loop for region in regions
+                         for (beg . end) = region
                          sum (count-lines beg end) into lines
+                         do (setf (car region) (max (1- beg) (point-min))
+                                  (cdr region) (1- end))
                          finally (let ((diff (- (ceiling (window-screen-lines))
                                                 lines)))
                                    (when (> diff 0)
@@ -3142,7 +3148,8 @@ contain targets."
                  do (let ((ov (make-overlay beg end)))
                       (push ov hidden)
                       (overlay-put ov 'invisible 'conn-dispatch-invisible)
-                      (overlay-put ov 'window win))
+                      (overlay-put ov 'window win)
+                      (overlay-put ov 'before-string fringe-indicator))
                  finally (let ((ov (make-overlay beg (point-max))))
                            (push ov hidden)
                            (overlay-put ov 'window win)

@@ -35,8 +35,6 @@ potential expansions.  Functions may return invalid expansions
 (defvar-local conn--current-expansions nil)
 (defvar-local conn--current-expansions-tick nil)
 
-(defvar-keymap conn-expand-repeat-map)
-
 (conn-register-thing 'expansion)
 
 (defun conn--expand-filter-regions (regions)
