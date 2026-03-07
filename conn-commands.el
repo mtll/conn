@@ -4126,7 +4126,7 @@ Interactively REPEAT is given by the prefix argument."
          (goto-char opoint)
          (set-marker opoint nil))))))
 
-(cl-defmethod conn-change-thing-do ((thing (conn-thing dispatch))
+(cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
                                     arg
                                     transform)
   (conn-read-args (conn-dispatch-bounds-state
@@ -4156,33 +4156,32 @@ Interactively REPEAT is given by the prefix argument."
                     (conn-select-target)))
          (conn-dispatch-select-window window)
          (conn-dispatch-change-group)
-         (if (and (or (conn-subthing-p thing 'point)
-                      (conn-subthing-p thing 'char))
-                  (not (memq 'conn-dispatch-bounds-anchored dtform)))
-             (save-excursion
-               (goto-char pt)
-               (pcase (conn-bounds-of thing arg)
-                 ((conn-bounds `(,beg . ,end) transform)
-                  (goto-char beg)
-                  (delete-region beg end)
-                  (if (= (- end beg) 1)
-                      (conn-push-state 'conn-one-emacs-state)
-                    (conn-push-state 'conn-emacs-state))
-                  (save-selected-window
-                    (cl-with-gensyms (hook)
-                      (fset hook (lambda ()
-                                   (remove-hook 'conn-state-entry-hook hook t)
-                                   (exit-recursive-edit)))
-                      (add-hook 'conn-state-entry-hook hook 100 t))
-                    (recursive-edit)))))
-           (pcase (conn-bounds-of-dispatch thing arg pt)
-             ((conn-bounds `(,beg . ,end) (nconc dtform transform))
-              (save-excursion
+         (save-excursion
+           (if (and (or (conn-subthing-p thing 'point)
+                        (conn-subthing-p thing 'char))
+                    (not (memq 'conn-dispatch-bounds-anchored dtform)))
+               (progn
+                 (goto-char pt)
+                 (pcase (conn-bounds-of thing arg)
+                   ((conn-bounds `(,beg . ,end) transform)
+                    (goto-char beg)
+                    (delete-region beg end)
+                    (if (= (- end beg) 1)
+                        (progn
+                          (conn-push-state 'conn-one-emacs-state)
+                          (cl-with-gensyms (hook)
+                            (fset hook (lambda ()
+                                         (remove-hook 'conn-state-entry-hook hook t)
+                                         (exit-recursive-edit)))
+                            (add-hook 'conn-state-entry-hook hook 100 t)))
+                      (conn-push-state 'conn-emacs-state)))))
+             (pcase (conn-bounds-of-dispatch thing arg pt)
+               ((conn-bounds `(,beg . ,end) (nconc dtform transform))
                 (goto-char beg)
                 (delete-region beg end)
-                (conn-push-state 'conn-emacs-state)
-                (save-selected-window
-                  (recursive-edit))))))))
+                (conn-push-state 'conn-emacs-state))))
+           (save-selected-window
+             (recursive-edit)))))
      dthing darg dtform
      :other-end other-end
      :restrict-windows restrict-windows

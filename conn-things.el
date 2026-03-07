@@ -461,14 +461,19 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                             bounds-of-thing-at-point)))
       (inline-quote
        (put ,thing ,property ,val))
-    (inline-letevals (thing)
+    (inline-letevals (thing property)
       (inline-quote
-       (setf (alist-get ,property
-                        (if (conn-anonymous-thing-p ,thing)
-                            (conn--anonymous-thing-properties ,thing)
-                          (conn--thing-properties
-                           (conn--find-thing ,thing))))
-             ,val)))))
+       (if (memq ,property '(forward-op
+                             beginning-op
+                             end-op
+                             bounds-of-thing-at-point))
+           (put ,thing ,property ,val)
+         (setf (alist-get ,property
+                          (if (conn-anonymous-thing-p ,thing)
+                              (conn--anonymous-thing-properties ,thing)
+                            (conn--thing-properties
+                             (conn--find-thing ,thing))))
+               ,val))))))
 
 (defun conn-declare-thing-property (property doc-string &optional static)
   "Declare a thing property PROPERTY.
