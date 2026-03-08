@@ -1373,18 +1373,14 @@ selected by dispatch with it."))
        :other-end other-end
        :restrict-windows restrict-windows))))
 
-(cl-defmethod conn-yank-replace-do ((_thing (conn-thing expansion))
+(cl-defmethod conn-yank-replace-do ((thing (conn-thing expansion))
                                     arg
                                     transform
                                     &optional
-                                    swap
+                                    _swap
                                     register
                                     check-bounds)
-  (let ((str (if register
-                 (get-register register)
-               (or read-from-kill-ring
-                   (current-kill 0)))))
-    (cl-assert (stringp str))
+  (let (beg end)
     (conn-dispatch-setup
      (oclosure-lambda (conn-action
                        (action-description "Yank and Replace To")
@@ -1397,32 +1393,26 @@ selected by dispatch with it."))
                         "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it."))
          ()
-       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+       (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
                      (conn-select-target)))
-         (unless (funcall conn-dispatch-other-end)
-           (select-window window))
-         (with-selected-window window
-           (conn-dispatch-change-group)
-           (pcase (conn-bounds-of-dispatch thing arg pt)
-             ((conn-bounds `(,beg . ,end)
-                           `(,@transform
-                             ,@(when check-bounds
-                                 (list 'conn-check-bounds))))
-              (conn-dispatch-goto-char beg)
-              (if swap
-                  (let ((newstr (filter-buffer-substring beg end)))
-                    (delete-region beg end)
-                    (save-excursion
-                      (goto-char beg)
-                      (insert-for-yank str))
-                    (conn-dispatch-action-pulse
-                     beg (+ beg (length str)))
-                    (setq str newstr))
-                (delete-region beg end)
-                (conn-dispatch-action-pulse
-                 beg (+ beg (length str)))))
-             (_ (user-error "Cannot find thing at point"))))))
-     thing arg nil)))
+         (conn-dispatch-change-group)
+         (pcase (conn-bounds-of-dispatch thing arg pt)
+           ((conn-bounds `(,b . ,e) `(,@transform
+                                      ,@(when check-bounds
+                                          (list 'conn-check-bounds))))
+            (conn-dispatch-goto-char b)
+            (setq beg b
+                  end e))
+           (_ (user-error "Cannot find thing at point")))))
+     thing arg nil
+     :other-end :no-other-end)
+    (if register
+        (progn
+          (delete-region beg end)
+          (insert-for-yank (get-register register)))
+      (conn-yank-replace-subr beg end))
+    (conn-dispatch-action-pulse
+     beg (point))))
 
 (defun conn-yank-replace (thing
                           arg
@@ -3286,7 +3276,9 @@ hook, which see."
                                          ,@(when check-bounds
                                              (list 'conn-check-bounds)))))
             (conn-dispatch-goto-char beg)
-            (conn--kill-region beg end t append register separator)
+            (if delete
+                (delete-region beg end)
+              (conn--kill-region beg end t append register separator))
             (when reformat
               (funcall conn-kill-reformat-function bounds)))
            (_ (user-error "No %s found" thing)))))
