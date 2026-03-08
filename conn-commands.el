@@ -4261,7 +4261,7 @@ Interactively REPEAT is given by the prefix argument."
                        register
                        check-bounds)))
 
-(defun conn-change-thing (thing arg transform)
+(defun conn-change-thing (thing arg transform &optional check-bounds)
   "Change region defined by THING, ARG, and TRANSFORM.
 
 For how the region is determined using THING, ARG, and TRANSFORM see
@@ -4272,9 +4272,15 @@ For how the region is determined using THING, ARG, and TRANSFORM see
                     :prompt "Thing"
                     :reference conn-change-reference)
        ((`(,thing ,arg) (conn-change-thing-argument))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (conn-change-thing-do thing arg transform))
+        (transform (conn-transform-argument))
+        (check-bounds (conn-check-bounds-argument)))
+     (list thing arg transform check-bounds)))
+  (conn-change-thing-do thing
+                        arg
+                        (if check-bounds
+                            (append transform
+                                    (list 'conn-check-bounds))
+                          transform)))
 
 ;;;;; Indent
 

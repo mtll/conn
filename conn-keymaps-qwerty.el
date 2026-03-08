@@ -770,7 +770,7 @@
 
 (define-keymap
   :keymap conn-check-bounds-argument-map
-  "q" 'check-bounds)
+  "!" 'check-bounds)
 
 (define-keymap
   :keymap conn-transform-map
