@@ -2031,10 +2031,10 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
           (cl-loop
            (catch 'dispatch-redisplay
              (pcase-let* ((emulation-mode-map-alists
-                           `(((a test
-                                 . ,(make-composed-keymap
-                                     (conn-target-finder-keymaps
-                                      conn-dispatch-target-finder))))
+                           `(((conn-dispatch-select-mode
+                               . ,(make-composed-keymap
+                                   (conn-target-finder-keymaps
+                                    conn-dispatch-target-finder))))
                              ,@emulation-mode-map-alists))
                           (`(,pt ,win ,thing-override)
                            (conn-target-finder-select
