@@ -747,8 +747,10 @@ themselves once the selection process has concluded."
                                     break)
   (cl-symbol-macrolet ((curr (conn-dispatch-action-argument-curr arg)))
     (pcase cmd
-      ('repeat-dispatch
-       (cl-callf not (conn-dispatch-action-argument-repeat arg))
+      ((and 'repeat-dispatch)
+       (when (or (null (conn-argument-value arg))
+                 (conn-action-repeatable-p (conn-argument-value arg)))
+         (cl-callf not (conn-dispatch-action-argument-repeat arg)))
        (funcall break))
       ((guard (conn-argument-predicate arg cmd))
        (conn-action-cancel (conn-argument-value arg))
@@ -767,6 +769,7 @@ themselves once the selection process has concluded."
                        (conn-argument-set-flag arg) t)
                  (setf (conn-dispatch-action-argument-repeat arg)
                        (pcase (conn-dispatch-action-argument-repeat arg)
+                         ((guard (not (conn-action-repeatable-p action))))
                          ((or 'auto 'nil)
                           (and (conn-action--action-auto-repeat action)
                                'auto))
@@ -865,34 +868,6 @@ themselves once the selection process has concluded."
     (setf (conn-bounds-get bounds :origin) (point))
     bounds))
 
-(cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing point))
-                                       arg
-                                       location)
-  (when-let* ((bounds (save-excursion
-                        (goto-char location)
-                        (conn-bounds-of thing arg))))
-    (setf (conn-bounds-get bounds :origin) (point))
-    (pcase bounds
-      ((conn-bounds `(,beg . ,end))
-       (setf (conn-bounds--whole bounds)
-             (cons (if (funcall conn-dispatch-other-end) end beg)
-                   (point)))))
-    bounds))
-
-(cl-defmethod conn-bounds-of-dispatch ((thing (conn-thing char))
-                                       arg
-                                       location)
-  (when-let* ((bounds (save-excursion
-                        (goto-char location)
-                        (conn-bounds-of thing arg))))
-    (setf (conn-bounds-get bounds :origin) (point))
-    (pcase bounds
-      ((conn-bounds `(,beg . ,end))
-       (setf (conn-bounds--whole bounds)
-             (cons (if (funcall conn-dispatch-other-end) end beg)
-                   (point)))))
-    bounds))
-
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
   (declare (important-return-value t)
            (conn-anonymous-thing-property :over)
@@ -938,19 +913,13 @@ nearest to point.  Can only be used during `conn-dispatch'.")))
       bounds
       (if (< beg origin)
           (if (funcall conn-dispatch-other-end)
-              (cons (min origin end)
-                    (max origin end))
-            (cons beg origin))
+              (cons beg origin)
+            (cons (min origin end)
+                  (max origin end)))
         (if (funcall conn-dispatch-other-end)
-            (cons origin beg)
-          (cons origin end)))))
+            (cons origin end)
+          (cons origin beg)))))
     (_ bounds)))
-
-(cl-defmethod conn-dispatch-bounds-anchored ((bounds (conn-thing point)))
-  bounds)
-
-(cl-defmethod conn-dispatch-bounds-anchored ((bounds (conn-thing char)))
-  bounds)
 
 (cl-defgeneric conn-dispatch-bounds-between (bounds)
   (declare (important-return-value t)
@@ -1056,6 +1025,7 @@ buffer is a valid target.")
 `conn-target-sort-function'.")
 
 (put 'conn-target-overlay 'priority 2002)
+(put 'conn-target-overlay 'face 'conn-target-overlay-face)
 
 (cl-defun conn-make-target-overlay (pt
                                     length
@@ -1093,7 +1063,6 @@ Optionally the overlay may have an associated THING."
              (delete-overlay ov)))
       (when point (overlay-put ov 'point point))
       (overlay-put ov 'category 'conn-target-overlay)
-      (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
       (overlay-put ov 'padding-function padding-function)
       (catch 'done
@@ -1800,7 +1769,6 @@ Target overlays may override this default by setting the
         (progn
           (pcase-dolist (`(,_ . ,targets) conn-targets)
             (dolist (target targets)
-              (overlay-put target 'category 'conn-old-target)
               (push target old)))
           (setq conn-targets nil
                 conn-target-count nil)
@@ -1842,7 +1810,8 @@ Target overlays may override this default by setting the
             (conn-dispatch-select-mode 1)
             (let ((inhibit-message t))
               (cl-call-next-method)))
-        (conn-dispatch-select-mode -1)))))
+        (conn-dispatch-select-mode -1)
+        (conn-target-finder-suspend target-finder)))))
 
 (cl-defmethod conn-target-finder-select (target-finder)
   (conn-with-dispatch-labels
@@ -1986,11 +1955,12 @@ depths will be sorted before greater depths.
           (while (or repeat (< conn-dispatch-iteration-count 1))
             (condition-case err
                 (conn-with-dispatch-event-handlers
-                  ( :handler (obj)
-                    (when (eq obj 'repeat-dispatch)
-                      (cl-callf not repeat)
-                      (cl-callf not conn-dispatch-repeating)
-                      (conn-dispatch-handle)))
+                  (when (conn-action-repeatable-p action)
+                    ( :handler (obj)
+                      (when (eq obj 'repeat-dispatch)
+                        (cl-callf not repeat)
+                        (cl-callf not conn-dispatch-repeating)
+                        (conn-dispatch-handle))))
                   ( :message -51 (keymap)
                     (when-let* ((_ repeat)
                                 (binding
@@ -3080,10 +3050,7 @@ contain targets."
                     (oref state cursor-default-location)
                     (count-screen-lines (window-start) (point))))
                (context-lines (oref state context-lines))
-               (regions (list (cons (max (1- (pos-bol)) (point-min))
-                                    (if (< context-lines 1)
-                                        (1- (pos-bol 2))
-                                      (pos-bol 2)))))
+               (regions (list (cons (pos-bol) (pos-bol 2))))
                (fringe-indicator (oref state fringe-indicator)))
           (setf (alist-get win (oref state current-window-lines))
                 recenter-pos)
@@ -3662,7 +3629,8 @@ contain targets."
   (action-thing-predicate :type function)
   (action-always-retarget :type boolean)
   (action-always-prompt :type boolean)
-  (action-reference :type string))
+  (action-reference :type string)
+  (action-not-repeatable :type boolean))
 
 (defalias 'conn-action-no-history 'conn-action--action-no-history)
 (defalias 'conn-action-auto-repeat 'conn-action--action-auto-repeat)
@@ -3673,6 +3641,9 @@ contain targets."
 (defalias 'conn-action-always-retarget 'conn-action--action-always-retarget)
 (defalias 'conn-action-always-prompt 'conn-action--action-always-prompt)
 (defalias 'conn-action-reference 'conn-action--action-reference)
+
+(defun conn-action-repeatable-p (action)
+  (not (conn-action--action-not-repeatable action)))
 
 (defun conn-action-get-reference (action)
   (when-let* ((doc-string (and action
@@ -4777,7 +4748,8 @@ it."))
        (eldoc-display-functions nil)
        (recenter-last-op nil)
        (conn-read-args-last-command nil)
-       (conn-dispatch-repeating (and repeat t))
+       (conn-dispatch-repeating
+        (and repeat (conn-action-repeatable-p action)))
        (conn--dispatch-prev-state
         (list conn-target-window-predicate
               conn-target-predicate

@@ -1903,22 +1903,23 @@ finishing showing the buffers that were visited."))
   (conn-<
     (save-excursion
       (goto-char (point-min))
-      (cl-loop for match = (text-property-search-forward 'compilation-message)
-               while match
-               collect (pcase (compilation--message->loc
-                               (prop-match-value match))
-                         (`(,col ,line (,file . ,_) . ,_)
-                          (with-current-buffer
-                              (let ((name (apply #'expand-file-name file)))
-                                (or (get-file-buffer name)
-                                    (find-file-noselect name)))
-                            (goto-char (point-min))
-                            (save-excursion
-                              (forward-line (1- line))
-                              (forward-char (1- col))
-                              (conn-kapply-make-region
-                               (point)
-                               (line-end-position))))))))
+      (cl-loop
+       for match = (text-property-search-forward 'compilation-message)
+       while match
+       collect (pcase (compilation--message->loc
+                       (prop-match-value match))
+                 (`(,col ,line (,file . ,_) . ,_)
+                  (with-current-buffer
+                      (let ((name (apply #'expand-file-name file)))
+                        (or (get-file-buffer name)
+                            (find-file-noselect name)))
+                    (goto-char (point-min))
+                    (save-excursion
+                      (forward-line (1- line))
+                      (forward-char (1- col))
+                      (conn-kapply-make-region
+                       (point)
+                       (line-end-position))))))))
     (conn-kapply-region-iterator)
     (conn-kapply-on-iterator)))
 

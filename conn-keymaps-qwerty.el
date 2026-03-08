@@ -743,7 +743,7 @@
 (define-keymap
   :keymap conn-dispatch-transform-argument-map
   "a" 'conn-dispatch-bounds-anchored
-  "B" 'conn-dispatch-bounds-between
+  "b" 'conn-dispatch-bounds-between
   "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset)

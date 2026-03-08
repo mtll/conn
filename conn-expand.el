@@ -149,12 +149,15 @@ Expansions and contractions are provided by functions in
   (let ((bounds))
     (conn-dispatch-setup
      (oclosure-lambda (conn-action
-                       (action-description "Bounds"))
+                       (action-description "Bounds")
+                       (action-not-repeatable t))
          ()
        (pcase-let ((`(,pt ,window ,thing ,_arg ,_transform)
                     (conn-select-target)))
-         (with-selected-window window
-           (conn-dispatch-goto-char pt)
+         (unless (eq window (selected-window))
+           (error "Window not selected window"))
+         (save-excursion
+           (goto-char pt)
            (setf bounds (conn-bounds-of thing nil)))))
      (conn-anonymous-thing
        '(expansion)
