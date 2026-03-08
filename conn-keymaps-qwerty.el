@@ -244,9 +244,9 @@
   "<conn-thing-map> (" 'list
   "<conn-thing-map> )" 'forward-list
   "<conn-inner-thing-map> (" 'inner-list
+  "e" 'conn-expand
   "k" 'forward-line
   "i" 'conn-backward-line
-  "e" 'conn-expand
   "L" 'conn-forward-inner-line
   "J" 'conn-backward-inner-line
   "S" 'conn-thing-at-isearch
@@ -310,7 +310,7 @@
   "<escape>" 'conn-pop-state
   "q" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
-  "E" 'conn-expand
+  "E" 'conn-emacs-state-record-insert
   "b" 'conn-repeat
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
@@ -491,7 +491,13 @@
 ;;;;; Other States
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-record-emacs-state)
+  "<escape>" 'exit-recursive-edit
+  "C-." 'conn-emacs-state-record-set-region)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "," 'conn-record-emacs-state
   "y" 'yank
   "Y" 'yank-from-kill-ring
   "r" 'conn-emacs-state-overwrite
@@ -733,7 +739,6 @@
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
-  "E" 'conn-expand
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand)

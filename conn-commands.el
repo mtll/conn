@@ -730,6 +730,21 @@ for the meaning of prefix ARG."
 
 ;;;;; Misc Commands
 
+(conn-define-state conn-record-set-region-state (conn-read-thing-state)
+  :lighter "SETREC")
+
+(defun conn-emacs-state-record-set-region ()
+  (interactive)
+  (unless (overlayp conn-insertion-recording-region)
+    (error "No insertion recording region"))
+  (conn-read-args (conn-record-set-region-state
+                   :prompt "Thing")
+      ((`(,thing ,arg) (conn-thing-argument t))
+       (transform (conn-transform-argument)))
+    (pcase (conn-bounds-of thing arg)
+      ((conn-bounds `(,beg . ,end) transform)
+       (move-overlay conn-insertion-recording-region beg end)))))
+
 (defun conn-outline-insert-heading ()
   (interactive)
   (conn-with-recursive-stack 'conn-emacs-state
@@ -4071,64 +4086,75 @@ Interactively REPEAT is given by the prefix argument."
                                        (_cmd (eql yank-replace)))
   t)
 
-(cl-defgeneric conn-change-thing-do (thing arg transform)
+(cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
+                                       (_cmd (eql conn-record-emacs-state)))
+  t)
+
+(defun conn--change-thing (thing arg transform &optional with)
+  (atomic-change-group
+    (pcase (conn-bounds-of thing arg)
+      ((conn-bounds `(,beg . ,end) transform)
+       (goto-char beg)
+       (delete-region beg end)
+       (pcase with
+         (`(,string . ,offset)
+          (with-buffer-unmodified-if-unchanged
+            (insert string)
+            (forward-char offset)))
+         (_
+          (setq with
+                (if (and (= (abs (- end beg)) 1)
+                         (or (conn-subthing-p thing 'char)
+                             (conn-subthing-p thing 'point)))
+                    (conn-record-one-insertion)
+                  (conn-record-insertion)))))
+       (conn-push-command-history 'conn-change-thing-do
+                                  thing
+                                  arg
+                                  transform
+                                  with)))))
+
+(cl-defgeneric conn-change-thing-do (thing arg transform &optional with)
   (declare (conn-anonymous-thing-property :change-op)))
 
-(cl-defmethod conn-change-thing-do (thing arg transform)
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (goto-char beg)
-     (delete-region beg end)
-     (if (eq 'conn-emacs-state (conn-peek-state))
-         (conn-pop-state)
-       (conn-push-state 'conn-emacs-state)))))
+(cl-defmethod conn-change-thing-do (thing arg transform &optional with)
+  (conn--change-thing thing arg transform with))
+
+(cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
+                                    _arg
+                                    _transform
+                                    &optional
+                                    with)
+  (conn-emacs-state-record-insert with))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite))
                                     _arg
-                                    _transform)
+                                    _transform
+                                    &optional
+                                    _with)
   (conn-emacs-state-overwrite))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite-binary))
                                     _arg
-                                    _transform)
+                                    _transform
+                                    &optional
+                                    _with)
   (conn-emacs-state-overwrite-binary))
 
 (cl-defmethod conn-change-thing-do :extra "rectangle" ((_thing (conn-thing region))
                                                        _arg
-                                                       _transform)
+                                                       _transform
+                                                       &optional
+                                                       _with)
   (if (bound-and-true-p rectangle-mark-mode)
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
 
-(cl-defmethod conn-change-thing-do ((thing (conn-thing char))
+(cl-defmethod conn-change-thing-do ((thing (conn-thing dispatch))
                                     arg
-                                    transform)
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (goto-char beg)
-     (delete-region beg end)
-     (if (= (- end beg) 1)
-         (conn-push-state 'conn-one-emacs-state)
-       (conn-push-state 'conn-emacs-state)))))
-
-(cl-defmethod conn-change-thing-do ((thing (conn-thing isearch))
-                                    arg
-                                    transform)
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (let ((opoint (point-marker)))
-       (goto-char beg)
-       (delete-region beg end)
-       (if (= (- end beg) 1)
-           (conn-push-state 'conn-one-emacs-state)
-         (conn-push-state 'conn-emacs-state))
-       (conn-state-on-exit _
-         (goto-char opoint)
-         (set-marker opoint nil))))))
-
-(cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
-                                    arg
-                                    transform)
+                                    transform
+                                    &optional
+                                    with)
   (conn-read-args (conn-dispatch-bounds-state
                    :history-var 'conn-mark-thing-dispatch
                    :prefix arg
@@ -4140,10 +4166,6 @@ Interactively REPEAT is given by the prefix argument."
         (conn-boolean-argument "other-end"
                                'other-end
                                conn-other-end-argument-map))
-       (restrict-windows
-        (conn-boolean-argument "this-win"
-                               'restrict-windows
-                               conn-restrict-windows-argument-map))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
@@ -4152,37 +4174,38 @@ Interactively REPEAT is given by the prefix argument."
      (oclosure-lambda (conn-action
                        (action-description "Change"))
          ()
-       (pcase-let ((`(,pt ,window ,thing ,arg ,dtform)
-                    (conn-select-target)))
-         (conn-dispatch-select-window window)
+       (pcase-let ((`(,pt ,_window ,thing ,arg ,dtform)
+                    (conn-select-target))
+                   (end-pt nil))
          (conn-dispatch-change-group)
-         (save-excursion
-           (pcase (conn-bounds-of-dispatch thing arg pt)
-             ((conn-bounds `(,beg . ,end) (nconc dtform transform))
-              (conn-dispatch-goto-char beg)
+         (pcase (conn-bounds-of-dispatch thing arg pt)
+           ((conn-bounds `(,beg . ,end) (nconc dtform transform))
+            (save-excursion
+              (conn-dispatch-goto-char beg 'nopush)
               (delete-region beg end)
-              (if (and (= (abs (- end beg)) 1)
-                       (or (conn-subthing-p thing 'char)
-                           (conn-subthing-p thing 'point)))
-                  (conn-with-recursive-stack 'conn-command-state
-                    (conn-state-on-re-entry _
-                      (cl-with-gensyms (hook)
-                        (fset hook (lambda ()
-                                     (remove-hook 'conn-state-entry-hook hook t)
-                                     (exit-recursive-edit)))
-                        (add-hook 'conn-state-entry-hook hook 100 t)))
-                    (conn-push-state 'conn-one-emacs-state)
-                    (with-undo-amalgamate
-                      (save-selected-window
-                        (recursive-edit))))
-                (conn-with-recursive-stack 'conn-emacs-state
-                  (with-undo-amalgamate
-                    (save-selected-window
-                      (recursive-edit))))))))))
+              (pcase with
+                (`(,string . ,offset)
+                 (with-buffer-unmodified-if-unchanged
+                   (insert string)
+                   (forward-char offset)))
+                (_
+                 (setq with
+                       (if (and (= (abs (- end beg)) 1)
+                                (or (conn-subthing-p thing 'char)
+                                    (conn-subthing-p thing 'point)))
+                           (conn-record-one-insertion)
+                         (conn-record-insertion)))))
+              (setq end-pt (point)))
+            (unless (funcall conn-dispatch-other-end)
+              (conn-dispatch-goto-char end-pt))))))
      dthing darg dtform
      :other-end other-end
-     :restrict-windows restrict-windows
-     :repeat repeat)))
+     :repeat repeat)
+    (conn-push-command-history 'conn-change-thing-do
+                               thing
+                               arg
+                               transform
+                               with)))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
@@ -4251,11 +4274,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
        ((`(,thing ,arg) (conn-change-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (conn-change-thing-do thing arg transform)
-  (conn-push-command-history 'conn-change-thing
-                             thing
-                             arg
-                             transform))
+  (conn-change-thing-do thing arg transform))
 
 ;;;;; Indent
 

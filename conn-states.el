@@ -1384,6 +1384,78 @@ state.")
       (conn-ring-insert-front conn-emacs-state-ring pt)))
   (cl-call-next-method))
 
+;;;;;; Record Emacs State
+
+(conn-define-state conn-record-emacs-state (conn-emacs-state)
+  :lighter "REC")
+
+(defvar conn-insertion-recording-region nil)
+
+(define-minor-mode conn-insertion-recording-mode
+  "Minor mode active during insertion recording")
+
+(defun conn-record-insertion (&optional state)
+  (require 'diff-mode)
+  (atomic-change-group
+    (let ((conn-insertion-recording-region
+           (make-overlay (point) (point) nil nil t)))
+      (overlay-put conn-insertion-recording-region 'face 'diff-added)
+      (unwind-protect
+          (conn-with-recursive-stack (or state 'conn-record-emacs-state)
+            (conn-insertion-recording-mode 1)
+            (with-undo-amalgamate
+              (save-selected-window
+                (recursive-edit)))
+            (cons (filter-buffer-substring
+                   (overlay-start conn-insertion-recording-region)
+                   (overlay-end conn-insertion-recording-region))
+                  (max (- (overlay-start conn-insertion-recording-region)
+                          (overlay-end conn-insertion-recording-region))
+                       (min 0 (- (point)
+                                 (overlay-end conn-insertion-recording-region))))))
+        (delete-overlay conn-insertion-recording-region)
+        (conn-insertion-recording-mode -1)))))
+
+(defun conn-record-one-insertion ()
+  (require 'diff-mode)
+  (atomic-change-group
+    (let ((conn-insertion-recording-region
+           (make-overlay (point) (point) nil nil t)))
+      (overlay-put conn-insertion-recording-region 'face 'diff-added)
+      (unwind-protect
+          (conn-with-recursive-stack 'conn-command-state
+            (conn-insertion-recording-mode 1)
+            (conn-state-on-re-entry _
+              (cl-with-gensyms (hook)
+                (fset hook (lambda ()
+                             (remove-hook 'conn-state-entry-hook hook t)
+                             (exit-recursive-edit)))
+                (add-hook 'conn-state-entry-hook hook 100 t)))
+            (conn-push-state 'conn-one-emacs-state)
+            (with-undo-amalgamate
+              (save-selected-window
+                (recursive-edit)))
+            (cons (filter-buffer-substring
+                   (overlay-start conn-insertion-recording-region)
+                   (overlay-end conn-insertion-recording-region))
+                  (max (- (overlay-start conn-insertion-recording-region)
+                          (overlay-end conn-insertion-recording-region))
+                       (min 0 (- (point)
+                                 (overlay-end conn-insertion-recording-region))))))
+        (delete-overlay conn-insertion-recording-region)
+        (conn-insertion-recording-mode -1)))))
+
+(defun conn-emacs-state-record-insert (&optional with offset)
+  (interactive)
+  (if with
+      (progn
+        (insert with)
+        (forward-char offset))
+    (pcase-setq `(,with . ,offset) (conn-record-insertion)))
+  (unless (or (not (stringp with))
+              (string-empty-p with))
+    (conn-push-command-history 'conn-emacs-state-record-insert with offset)))
+
 ;;;;; Autopop State
 
 (oclosure-define (conn-stack-autopop

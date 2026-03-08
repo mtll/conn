@@ -2026,15 +2026,15 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
           (dolist (win (conn--get-target-windows))
             (with-selected-window win
               (setf (alist-get win recenter-pos)
-                    (count-screen-lines (window-start) (point)))
+                    (1- (count-screen-lines (window-start) (point) t)))
               (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
           (cl-loop
            (catch 'dispatch-redisplay
              (pcase-let* ((emulation-mode-map-alists
-                           `(((conn-dispatch-select-mode
-                               . ,(make-composed-keymap
-                                   (conn-target-finder-keymaps
-                                    conn-dispatch-target-finder))))
+                           `(((a test
+                                 . ,(make-composed-keymap
+                                     (conn-target-finder-keymaps
+                                      conn-dispatch-target-finder))))
                              ,@emulation-mode-map-alists))
                           (`(,pt ,win ,thing-override)
                            (conn-target-finder-select
@@ -2050,7 +2050,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
       (dolist (win (conn--get-target-windows))
         (with-selected-window win
           (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
-          (recenter (1- (alist-get win recenter-pos))))))))
+          (recenter (alist-get win recenter-pos)))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -3048,7 +3048,7 @@ contain targets."
         (let* ((recenter-pos
                 (or (alist-get win (oref state cursor-location))
                     (oref state cursor-default-location)
-                    (count-screen-lines (window-start) (point))))
+                    (1- (count-screen-lines (window-start) (point) t))))
                (context-lines (oref state context-lines))
                (regions (list (cons (pos-bol) (pos-bol 2))))
                (fringe-indicator (oref state fringe-indicator)))
@@ -3107,7 +3107,7 @@ contain targets."
                 ('middle (recenter nil))
                 ('top (recenter this-scroll-margin))
                 ('bottom (recenter (- -1 this-scroll-margin)))
-                (loc (recenter (1- loc))))))))))
+                (loc (recenter loc)))))))))
   (redisplay))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point

@@ -76,6 +76,13 @@
   (or (eq sym :whole)
       (eq sym :inner)))
 
+(cl-defmethod conn-argument-display ((arg conn-surround-property-argument))
+  (when-let* ((val (conn-argument-value arg)))
+    (propertize (format "%s" val)
+                'face 'conn-argument-active-face)))
+
+(conn-register-thing 'conn-surround)
+
 (cl-defmethod conn-bounds-of ((_cmd (eql conn-surround))
                               arg)
   (conn-read-args (conn-surround-with-state

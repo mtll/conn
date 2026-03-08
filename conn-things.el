@@ -1088,20 +1088,23 @@ the point is within the region then the entire region is returned.")))
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-mark))
                               arg)
-  (unwind-protect
-      (progn
-        (conn-bounds-of-recursive-edit-mode 1)
-        (conn-with-recursive-stack 'conn-command-state
-          (conn-read-args (conn-mark-thing-state
-                           :prompt "Thing"
-                           :prefix arg)
-              ((`(,thing ,arg) (conn-mark-thing-argument))
-               (transform (conn-transform-argument)))
-            (conn-mark-thing-do thing arg transform))
-          (conn--bounds-of-recursive-edit-message)
-          (recursive-edit))
-        (conn-bounds-of 'region nil))
-    (conn-bounds-of-recursive-edit-mode -1)))
+  (save-mark-and-excursion
+    (unwind-protect
+        (progn
+          (conn-bounds-of-recursive-edit-mode 1)
+          (conn-with-recursive-stack 'conn-command-state
+            (conn-read-args (conn-mark-thing-state
+                             :prompt "Thing"
+                             :prefix arg)
+                ((`(,thing ,arg) (conn-mark-thing-argument))
+                 (transform (conn-transform-argument)))
+              (conn-mark-thing-do thing arg transform))
+            (conn--bounds-of-recursive-edit-message)
+            (save-selected-window
+              (let ((buffer-read-only t))
+                (recursive-edit))))
+          (conn-bounds-of 'region nil))
+      (conn-bounds-of-recursive-edit-mode -1))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
