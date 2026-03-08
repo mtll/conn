@@ -1583,6 +1583,12 @@ Target overlays may override this default by setting the
               (setq prev (point))))))
       (nreverse lines))))
 
+(defun conn-dispatch-recenter ()
+  (cl-loop for i from 0
+           for (beg . end) in (conn--dispatch-window-lines)
+           when (<= beg (point) end)
+           return (recenter i)))
+
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
 (defun conn-dispatch-pixelwise-label-p (ov)
@@ -1757,75 +1763,6 @@ Target overlays may override this default by setting the
      `(conn--with-dispatch-labels ,val (lambda (,var) ,@body)))
     (_ (error "Unexpected binder form"))))
 
-(cl-defgeneric conn-target-finder-select (target-finder)
-  (declare (important-return-value t)))
-
-(cl-defmethod conn-target-finder-select :before (target-finder)
-  (conn-cleanup-labels)
-  (when conn--dispatch-always-retarget
-    (conn-target-finder-retarget target-finder))
-  (let ((old nil))
-    (unwind-protect
-        (progn
-          (pcase-dolist (`(,_ . ,targets) conn-targets)
-            (dolist (target targets)
-              (push target old)))
-          (setq conn-targets nil
-                conn-target-count nil)
-          (conn-target-finder-update target-finder)
-          (pcase-dolist ((and cons `(,window . ,targets))
-                         (cl-callf nreverse conn-targets))
-            (cl-loop for tar in targets
-                     if (<= (window-start window)
-                            (overlay-start tar)
-                            (overlay-end tar)
-                            (window-end window))
-                     collect tar into filtered
-                     and sum 1 into count
-                     else do (delete-overlay tar)
-                     finally (setf (alist-get window conn-target-count) count
-                                   (cdr cons) filtered))))
-      (mapc #'delete-overlay old)))
-  (conn-target-finder-label-faces target-finder))
-
-(cl-defmethod conn-target-finder-select :around (target-finder)
-  (let ((conn--dispatch-remap-cookies nil)
-        (conn-dispatch-label-input-method nil)
-        (conn-target-sort-function (or (oref target-finder label-sort-function)
-                                       conn-target-sort-function)))
-    (conn-with-dispatch-event-handlers
-      ( :handler (cmd)
-        (when (or (and (eq cmd 'act)
-                       (mouse-event-p last-input-event))
-                  (eq 'dispatch-mouse-repeat
-                      (event-basic-type last-input-event)))
-          (let* ((posn (event-start last-input-event))
-                 (win (posn-window posn))
-                 (pt (posn-point posn)))
-            (when (and (not (posn-area posn))
-                       (funcall conn-target-window-predicate win))
-              (:return (list pt win nil))))))
-      (unwind-protect
-          (progn
-            (conn-dispatch-select-mode 1)
-            (let ((inhibit-message t))
-              (cl-call-next-method)))
-        (conn-dispatch-select-mode -1)
-        (conn-targets-step)))))
-
-(cl-defmethod conn-target-finder-select (target-finder)
-  (conn-with-dispatch-labels
-      (labels (conn-dispatch-get-labels))
-    (conn-label-select
-     labels
-     (lambda (prompt) (conn-dispatch-read-char prompt 'label))
-     (cl-loop for (_ . c) in conn-target-count
-              sum c into count
-              finally return (conn-target-finder-prompt-string
-                              target-finder
-                              (format "[%s]" count)))
-     (conn-dispatch-prompt-p))))
-
 ;;;;; Dispatch Loop
 
 (defvar conn-dispatch-in-progress nil)
@@ -1918,21 +1855,18 @@ depths will be sorted before greater depths.
      ,@body))
 
 (defun conn-dispatch-goto-char (position &optional nopush)
-  (let ((buffer (current-buffer)))
-    (goto-char position)
-    (cl-loop for i from 0
-             for (beg . end) in (conn--dispatch-window-lines)
-             when (<= beg position end)
-             return (recenter i))
-    (when-let* ((mk (and (not nopush)
-                         (gethash buffer conn--current-dispatch-buffers))))
-      (unless (region-active-p)
-        (push-mark mk))
-      (unless (or (not conn-jump-ring-mode)
-                  (gethash conn-jump-ring conn--current-dispatch-buffers))
-        (conn-push-jump-ring mk)
-        (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
-      (set-marker mk (point)))))
+  (goto-char position)
+  (conn-dispatch-recenter)
+  (when-let* ((mk (and (not nopush)
+                       (gethash (current-buffer)
+                                conn--current-dispatch-buffers))))
+    (unless (region-active-p)
+      (push-mark mk))
+    (unless (or (not conn-jump-ring-mode)
+                (gethash conn-jump-ring conn--current-dispatch-buffers))
+      (conn-push-jump-ring mk)
+      (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
+    (set-marker mk (point))))
 
 (cl-defgeneric conn-dispatch-perform-action (action repeat))
 
@@ -2020,37 +1954,34 @@ depths will be sorted before greater depths.
   "Prompt the user to select a target during dispatch.
 
 Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
-  (let ((recenter-pos nil))
-    (unwind-protect
-        (progn
-          (dolist (win (conn--get-target-windows))
-            (with-selected-window win
-              (setf (alist-get win recenter-pos)
-                    (1- (count-screen-lines (window-start) (point) t)))
-              (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
-          (cl-loop
-           (catch 'dispatch-redisplay
-             (pcase-let* ((emulation-mode-map-alists
-                           `(((conn-dispatch-select-mode
-                               . ,(make-composed-keymap
-                                   (conn-target-finder-keymaps
-                                    conn-dispatch-target-finder))))
-                             ,@emulation-mode-map-alists))
-                          (`(,pt ,win ,thing-override)
-                           (conn-target-finder-select
-                            conn-dispatch-target-finder))
-                          (`(,thing ,arg ,transform)
-                           conn--dispatch-current-thing))
-               (cl-return
-                (list pt
-                      win
-                      (or thing-override thing)
-                      arg
-                      transform))))))
-      (dolist (win (conn--get-target-windows))
-        (with-selected-window win
-          (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
-          (recenter (alist-get win recenter-pos)))))))
+  (unwind-protect
+      (progn
+        (dolist (win (conn--get-target-windows))
+          (with-selected-window win
+            (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
+        (cl-loop
+         (catch 'dispatch-redisplay
+           (pcase-let* ((emulation-mode-map-alists
+                         `(((conn-dispatch-select-mode
+                             . ,(make-composed-keymap
+                                 (conn-target-finder-keymaps
+                                  conn-dispatch-target-finder))))
+                           ,@emulation-mode-map-alists))
+                        (`(,pt ,win ,thing-override)
+                         (conn-target-finder-select
+                          conn-dispatch-target-finder))
+                        (`(,thing ,arg ,transform)
+                         conn--dispatch-current-thing))
+             (cl-return
+              (list pt
+                    win
+                    (or thing-override thing)
+                    arg
+                    transform))))))
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
+        (conn-dispatch-recenter)))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -2631,6 +2562,75 @@ updated.")
       (overlay-put target 'category 'conn-old-target)
       (overlay-put target 'face nil)))
   (setq conn-target-count nil))
+
+(cl-defgeneric conn-target-finder-select (target-finder)
+  (declare (important-return-value t)))
+
+(cl-defmethod conn-target-finder-select :before (target-finder)
+  (conn-cleanup-labels)
+  (when conn--dispatch-always-retarget
+    (conn-target-finder-retarget target-finder))
+  (let ((old nil))
+    (unwind-protect
+        (progn
+          (pcase-dolist (`(,_ . ,targets) conn-targets)
+            (dolist (target targets)
+              (push target old)))
+          (setq conn-targets nil
+                conn-target-count nil)
+          (conn-target-finder-update target-finder)
+          (pcase-dolist ((and cons `(,window . ,targets))
+                         (cl-callf nreverse conn-targets))
+            (cl-loop for tar in targets
+                     if (<= (window-start window)
+                            (overlay-start tar)
+                            (overlay-end tar)
+                            (window-end window))
+                     collect tar into filtered
+                     and sum 1 into count
+                     else do (delete-overlay tar)
+                     finally (setf (alist-get window conn-target-count) count
+                                   (cdr cons) filtered))))
+      (mapc #'delete-overlay old)))
+  (conn-target-finder-label-faces target-finder))
+
+(cl-defmethod conn-target-finder-select :around (target-finder)
+  (let ((conn--dispatch-remap-cookies nil)
+        (conn-dispatch-label-input-method nil)
+        (conn-target-sort-function (or (oref target-finder label-sort-function)
+                                       conn-target-sort-function)))
+    (conn-with-dispatch-event-handlers
+      ( :handler (cmd)
+        (when (or (and (eq cmd 'act)
+                       (mouse-event-p last-input-event))
+                  (eq 'dispatch-mouse-repeat
+                      (event-basic-type last-input-event)))
+          (let* ((posn (event-start last-input-event))
+                 (win (posn-window posn))
+                 (pt (posn-point posn)))
+            (when (and (not (posn-area posn))
+                       (funcall conn-target-window-predicate win))
+              (:return (list pt win nil))))))
+      (unwind-protect
+          (progn
+            (conn-dispatch-select-mode 1)
+            (let ((inhibit-message t))
+              (cl-call-next-method)))
+        (conn-dispatch-select-mode -1)
+        (conn-targets-step)))))
+
+(cl-defmethod conn-target-finder-select (target-finder)
+  (conn-with-dispatch-labels
+      (labels (conn-dispatch-get-labels))
+    (conn-label-select
+     labels
+     (lambda (prompt) (conn-dispatch-read-char prompt 'label))
+     (cl-loop for (_ . c) in conn-target-count
+              sum c into count
+              finally return (conn-target-finder-prompt-string
+                              target-finder
+                              (format "[%s]" count)))
+     (conn-dispatch-prompt-p))))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))

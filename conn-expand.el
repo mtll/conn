@@ -143,7 +143,7 @@ Expansions and contractions are provided by functions in
   "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
-(cl-defmethod conn-bounds-of ((_cmd (conn-thing expansion))
+(cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               _arg)
   (conn--expand-create-expansions)
   (let ((bounds))
@@ -159,11 +159,7 @@ Expansions and contractions are provided by functions in
          (save-excursion
            (goto-char pt)
            (setf bounds (conn-bounds-of thing nil)))))
-     (conn-anonymous-thing
-       '(expansion)
-       :pretty-print ( :method (_) "expansion")
-       :target-finder (:method (_self _arg) (conn-expansion-targets)))
-     nil nil
+     cmd nil nil
      :other-end :no-other-end)
     bounds))
 
@@ -195,5 +191,9 @@ Expansions and contractions are provided by functions in
         (push (conn-make-bounds 'region nil cons)
               (alist-get beg bounds))
         (conn-make-target-overlay beg 0 :thing thing)))))
+
+(cl-defmethod conn-get-target-finder ((_ (conn-thing expansion))
+                                      _arg)
+  (conn-expansion-targets))
 
 (provide 'conn-expand)
