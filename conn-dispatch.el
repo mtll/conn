@@ -1811,7 +1811,7 @@ Target overlays may override this default by setting the
             (let ((inhibit-message t))
               (cl-call-next-method)))
         (conn-dispatch-select-mode -1)
-        (conn-target-finder-suspend target-finder)))))
+        (conn-targets-step)))))
 
 (cl-defmethod conn-target-finder-select (target-finder)
   (conn-with-dispatch-labels
@@ -2625,6 +2625,13 @@ updated.")
                                                          'conn-target-overlay
                                                          (selected-window))))))))
 
+(defun conn-targets-step ()
+  (pcase-dolist (`(_ . ,targets) conn-targets)
+    (dolist (target targets)
+      (overlay-put target 'category 'conn-old-target)
+      (overlay-put target 'face nil)))
+  (setq conn-target-count nil))
+
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
 
@@ -2716,11 +2723,7 @@ updated.")
 (cl-defgeneric conn-target-finder-suspend (target-finder))
 
 (cl-defmethod conn-target-finder-suspend (_target-finder)
-  (pcase-dolist (`(_ . ,targets) conn-targets)
-    (dolist (target targets)
-      (overlay-put target 'category 'conn-old-target)
-      (overlay-put target 'face nil)))
-  (setq conn-target-count nil))
+  (conn-targets-step))
 
 (cl-defgeneric conn-target-finder-other-end (target-finder)
   "Default value for :other-end parameter in `conn-dispatch-perform-action'."
