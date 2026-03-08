@@ -154,7 +154,7 @@ Expansions and contractions are provided by functions in
        (pcase-let ((`(,pt ,window ,thing ,_arg ,_transform)
                     (conn-select-target)))
          (with-selected-window window
-           (goto-char pt)
+           (conn-dispatch-goto-char pt)
            (setf bounds (conn-bounds-of thing nil)))))
      (conn-anonymous-thing
        '(expansion)

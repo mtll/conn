@@ -231,30 +231,6 @@ strings have `conn-dispatch-label-face'."
   (declare (indent 0))
   (conn--with-dispatch-event-handlers body))
 
-(defmacro conn-with-dispatch-invisible-property (&rest body)
-  (declare (indent 0))
-  `(unwind-protect
-       (progn
-         (dolist (win (conn--get-target-windows))
-           (with-current-buffer (window-buffer win)
-             (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
-         ,@body)
-     (dolist (win (conn--get-target-windows))
-       (with-current-buffer (window-buffer win)
-         (remove-from-invisibility-spec '(conn-dispatch-invisible . t))))))
-
-(defmacro conn-without-dispatch-invisible-property (&rest body)
-  (declare (indent 0))
-  `(unwind-protect
-       (progn
-         (dolist (win (conn--get-target-windows))
-           (with-current-buffer (window-buffer win)
-             (remove-from-invisibility-spec '(conn-dispatch-invisible . t))))
-         ,@body)
-     (dolist (win (conn--get-target-windows))
-       (with-current-buffer (window-buffer win)
-         (add-to-invisibility-spec '(conn-dispatch-invisible . t))))))
-
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
 
@@ -1620,8 +1596,9 @@ Target overlays may override this default by setting the
 
 (defconst conn--dispatch-window-lines-cache (make-hash-table :test 'eq))
 
-(defun conn--dispatch-window-lines (window)
+(defun conn--dispatch-window-lines (&optional window)
   (declare (important-return-value t))
+  (unless window (setq window (selected-window)))
   (with-memoization (gethash window conn--dispatch-window-lines-cache)
     (let (lines prev)
       (with-selected-window window
@@ -1635,7 +1612,7 @@ Target overlays may override this default by setting the
             (unless (eobp)
               (forward-char)
               (setq prev (point))))))
-      lines)))
+      (nreverse lines))))
 
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
@@ -1769,6 +1746,7 @@ Target overlays may override this default by setting the
 
 (defun conn--with-dispatch-labels (labels body)
   (conn-cleanup-labels)
+  (clrhash conn--dispatch-window-lines-cache)
   (let ((conn-dispatch-hide-labels nil))
     (unwind-protect
         (conn-with-dispatch-event-handlers
@@ -1799,7 +1777,6 @@ Target overlays may override this default by setting the
             (setq conn--previous-labels-cleanup fn))
           (funcall body labels))
       (clrhash conn--pixelwise-window-cache)
-      (clrhash conn--dispatch-window-lines-cache)
       (when conn--previous-labels-cleanup
         (add-hook 'pre-redisplay-functions
                   conn--previous-labels-cleanup)))))
@@ -1974,6 +1951,10 @@ depths will be sorted before greater depths.
 (defun conn-dispatch-goto-char (position &optional nopush)
   (let ((buffer (current-buffer)))
     (goto-char position)
+    (cl-loop for i from 0
+             for (beg . end) in (conn--dispatch-window-lines)
+             when (<= beg position end)
+             return (recenter i))
     (when-let* ((mk (and (not nopush)
                          (gethash buffer conn--current-dispatch-buffers))))
       (unless (region-active-p)
@@ -2031,8 +2012,7 @@ depths will be sorted before greater depths.
                         :depth 100
                         (:undo (redisplay)))
                       (unwind-protect
-                          (conn-without-dispatch-invisible-property
-                            (funcall action))
+                          (funcall action)
                         (unless (or (equal wconf (current-window-configuration))
                                     (null (car conn--dispatch-change-groups)))
                           (conn-dispatch-undo-case
@@ -2070,26 +2050,37 @@ depths will be sorted before greater depths.
   "Prompt the user to select a target during dispatch.
 
 Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
-  (conn-with-dispatch-invisible-property
-    (cl-loop
-     (catch 'dispatch-redisplay
-       (pcase-let* ((emulation-mode-map-alists
-                     `(((conn-dispatch-select-mode
-                         . ,(make-composed-keymap
-                             (conn-target-finder-keymaps
-                              conn-dispatch-target-finder))))
-                       ,@emulation-mode-map-alists))
-                    (`(,pt ,win ,thing-override)
-                     (conn-target-finder-select
-                      conn-dispatch-target-finder))
-                    (`(,thing ,arg ,transform)
-                     conn--dispatch-current-thing))
-         (cl-return
-          (list pt
-                win
-                (or thing-override thing)
-                arg
-                transform)))))))
+  (let ((recenter-pos nil))
+    (unwind-protect
+        (progn
+          (dolist (win (conn--get-target-windows))
+            (with-selected-window win
+              (setf (alist-get win recenter-pos)
+                    (count-screen-lines (window-start) (point)))
+              (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
+          (cl-loop
+           (catch 'dispatch-redisplay
+             (pcase-let* ((emulation-mode-map-alists
+                           `(((conn-dispatch-select-mode
+                               . ,(make-composed-keymap
+                                   (conn-target-finder-keymaps
+                                    conn-dispatch-target-finder))))
+                             ,@emulation-mode-map-alists))
+                          (`(,pt ,win ,thing-override)
+                           (conn-target-finder-select
+                            conn-dispatch-target-finder))
+                          (`(,thing ,arg ,transform)
+                           conn--dispatch-current-thing))
+               (cl-return
+                (list pt
+                      win
+                      (or thing-override thing)
+                      arg
+                      transform))))))
+      (dolist (win (conn--get-target-windows))
+        (with-selected-window win
+          (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
+          (recenter (1- (alist-get win recenter-pos))))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -2266,7 +2257,7 @@ the meaning of depth."
   "Execute BODY with dispatch suspended."
   (declare (indent 0))
   (cl-with-gensyms (select-mode)
-    `(progn
+    `(let ((conn-dispatch-in-progress nil))
        (unless (conn-substate-p conn-current-state
                                 'conn-dispatch-targets-state)
          (error "Trying to suspend dispatch when state not active"))
@@ -2281,7 +2272,6 @@ the meaning of depth."
                    (conn-targets nil)
                    (conn--dispatch-label-state nil)
                    (conn-dispatch-target-finder nil)
-                   (conn-dispatch-in-progress nil)
                    (conn--dispatch-change-groups nil)
                    (inhibit-message nil)
                    (recenter-last-op nil)
@@ -3045,17 +3035,8 @@ contain targets."
   t)
 
 (defun conn-focus-targets-remove-overlays (state)
-  (pcase-dolist (`(,win ,_tick . ,ovs) (oref state hidden))
-    (with-selected-window win
-      (cond (conn-dispatch-in-progress
-             (mapc #'delete-overlay ovs))
-            (conn-dispatch-quit-flag
-             (mapc #'delete-overlay ovs)
-             (recenter (1- (alist-get win (oref state current-window-lines)))))
-            (t
-             (let ((recenter-line (count-screen-lines (window-start) (point))))
-               (mapc #'delete-overlay ovs)
-               (recenter (1- recenter-line)))))))
+  (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
+    (mapc #'delete-overlay ovs))
   (setf (oref state hidden) nil))
 
 (cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
@@ -4899,31 +4880,30 @@ it."))
            (conn-dispatch-handle))))
       (conn-with-recursive-stack 'conn-dispatch-state
         (let ((conn-disable-input-method-hooks t))
-          (conn-with-dispatch-invisible-property
-            (conn--unwind-protect-all
-              (let ((conn-dispatch-in-progress t))
-                (conn-get-target-finder thing arg)
-                (add-function :before-while conn-dispatch-other-end
-                              (lambda () (not conn-dispatch-no-other-end))
-                              '((depth . -100)
-                                (name . no-other-end)))
-                (when-let* ((predicate (conn-action-window-predicate action)))
-                  (add-function :after-while conn-target-window-predicate predicate))
-                (when-let* ((predicate (conn-action-target-predicate action)))
-                  (add-function :after-while conn-target-predicate predicate))
-                (when restrict-windows
-                  (add-function :after-while conn-target-window-predicate
-                                'conn--dispatch-restrict-windows))
-                (activate-input-method conn--input-method)
-                (when setup-function (funcall setup-function))
-                (conn-dispatch-perform-action action repeat)
-                (conn-dispatch-push-history (conn-make-dispatch action)))
-              (with-current-buffer conn-dispatch-input-buffer
-                (activate-input-method prev-input-method))
-              (conn-cleanup-targets)
-              (conn-cleanup-labels)
-              (let ((inhibit-message conn-read-args-inhibit-message))
-                (message nil)))))))))
+          (conn--unwind-protect-all
+            (let ((conn-dispatch-in-progress t))
+              (conn-get-target-finder thing arg)
+              (add-function :before-while conn-dispatch-other-end
+                            (lambda () (not conn-dispatch-no-other-end))
+                            '((depth . -100)
+                              (name . no-other-end)))
+              (when-let* ((predicate (conn-action-window-predicate action)))
+                (add-function :after-while conn-target-window-predicate predicate))
+              (when-let* ((predicate (conn-action-target-predicate action)))
+                (add-function :after-while conn-target-predicate predicate))
+              (when restrict-windows
+                (add-function :after-while conn-target-window-predicate
+                              'conn--dispatch-restrict-windows))
+              (activate-input-method conn--input-method)
+              (when setup-function (funcall setup-function))
+              (conn-dispatch-perform-action action repeat)
+              (conn-dispatch-push-history (conn-make-dispatch action)))
+            (with-current-buffer conn-dispatch-input-buffer
+              (activate-input-method prev-input-method))
+            (conn-cleanup-targets)
+            (conn-cleanup-labels)
+            (let ((inhibit-message conn-read-args-inhibit-message))
+              (message nil))))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)

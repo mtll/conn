@@ -1100,7 +1100,7 @@ Currently selected window remains selected afterwards."
            (pcase (conn-bounds-of-dispatch thing arg pt)
              ((conn-dispatch-bounds `(,beg . ,end)
                                     (nconc dtform transform))
-              (goto-char beg)
+              (conn-dispatch-goto-char beg)
               (push-mark end t t))
              (_ (user-error "No %s found" thing))))))
      thing arg dtform
@@ -1311,7 +1311,7 @@ selected by dispatch with it."))
                                ,@(when check-bounds
                                    (list 'conn-check-bounds))))
                 (unless (funcall conn-dispatch-other-end)
-                  (goto-char beg))
+                  (conn-dispatch-goto-char beg))
                 (if swap
                     (let ((newstr (filter-buffer-substring beg end)))
                       (delete-region beg end)
@@ -3118,7 +3118,7 @@ hook, which see."
                                                    (list 'conn-check-bounds)))))
                   (unless (funcall conn-dispatch-other-end)
                     (push-mark (conn-bounds-get bounds :origin))
-                    (goto-char beg))
+                    (conn-dispatch-goto-char beg))
                   (unless delete
                     (push (cons append (filter-buffer-substring beg end))
                           strings))
@@ -4164,7 +4164,7 @@ Interactively REPEAT is given by the prefix argument."
                  (goto-char pt)
                  (pcase (conn-bounds-of thing arg)
                    ((conn-bounds `(,beg . ,end) transform)
-                    (goto-char beg)
+                    (conn-dispatch-goto-char beg)
                     (delete-region beg end)
                     (if (= (- end beg) 1)
                         (progn
@@ -4177,7 +4177,7 @@ Interactively REPEAT is given by the prefix argument."
                       (conn-push-state 'conn-emacs-state)))))
              (pcase (conn-bounds-of-dispatch thing arg pt)
                ((conn-bounds `(,beg . ,end) (nconc dtform transform))
-                (goto-char beg)
+                (conn-dispatch-goto-char beg)
                 (delete-region beg end)
                 (conn-push-state 'conn-emacs-state))))
            (save-selected-window
