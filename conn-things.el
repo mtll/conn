@@ -446,11 +446,12 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                             end-op
                                             bounds-of-thing-at-point))
                for p in (conn-thing-all-parents thing)
-               for v = (if getp
-                           (get p property)
-                         (assq property (conn--thing-properties
-                                         (conn--find-thing p))))
-               when v return v
+               do (if getp
+                      (and-let* ((val (get p property)))
+                        (cl-return val))
+                    (and-let* ((val (assq property (conn--thing-properties
+                                                    (conn--find-thing p)))))
+                      (cl-return (cdr val))))
                finally return default)))))
 
 (define-inline conn-thing-set (thing property val)
@@ -610,12 +611,15 @@ command moves over."
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(if (conn-anonymous-thing-p ,thing)
-            (with-memoization (gethash (conn-thing-all-parents ,thing)
-                                       conn--anonymous-thing-tag-cache)
-              (cons 'internal--anonymous-thing-method
-                    (conn-thing-all-parents ,thing)))
-          (conn-thing-all-parents ,thing)))
+       `(progn
+          (when (conn-bounds-p ,thing)
+            (setq ,thing (conn-bounds-thing ,thing)))
+          (if (conn-anonymous-thing-p ,thing)
+              (with-memoization (gethash (conn-thing-all-parents ,thing)
+                                         conn--anonymous-thing-tag-cache)
+                (cons 'internal--anonymous-thing-method
+                      (conn-thing-all-parents ,thing)))
+            (conn-thing-all-parents ,thing))))
   (lambda (thing &rest _)
     (when thing
       `(,@(cl-loop for parent in thing

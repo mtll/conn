@@ -526,7 +526,7 @@
               :multi-thing-p (lambda (_self target)
                                (length> (alist-get (overlay-start target) bounds-alist)
                                         1))
-              :bounds-op ( :method (self _arg)
+              :bounds-op ( :method (_self _arg)
                            (conn-with-dispatch-suspended
                              (conn-multi-thing-select
                               (alist-get (point) bounds-alist)
