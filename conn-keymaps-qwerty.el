@@ -310,7 +310,7 @@
   "<escape>" 'conn-pop-state
   "q" 'conn-duplicate-thing
   "+" 'conn-set-register-separator
-  "E" 'conn-emacs-state-record-insert
+  "E" 'conn-expand
   "b" 'conn-repeat
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
@@ -739,6 +739,7 @@
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
+  "E" 'conn-expand
   "z" 'exchange-point-and-mark
   "j" 'conn-contract
   "l" 'conn-expand)

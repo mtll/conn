@@ -4358,7 +4358,12 @@ Interactively REPEAT is given by the prefix argument."
           (unless (funcall conn-dispatch-other-end)
             (conn-dispatch-goto-char end-pt))))))
    thing arg nil
-   :other-end :no-other-end))
+   :other-end :no-other-end)
+  (conn-push-command-history 'conn-change-thing-do
+                             thing
+                             arg
+                             transform
+                             with))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg

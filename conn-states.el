@@ -2072,6 +2072,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
                    (conn-reading-args t)
+                   (conn-wincontrol-mode nil)
+                   (conn-wincontrol-one-command-mode nil)
                    (maps `((,state . ,keymap)
                            ,@(when history-var
                                `((,state . ,conn-read-args-previous-map)))))
