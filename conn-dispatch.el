@@ -24,6 +24,8 @@
 
 (defvar outline-heading-end-regexp)
 (defvar treesit-defun-type-regexp)
+(defvar conn-wincontrol-mode)
+(defvar conn-wincontrol-one-command-mode)
 
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
@@ -4744,7 +4746,9 @@ it."))
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
   (conn-protected-let*
-      ((action action (conn-action-cancel action))
+      ((conn-wincontrol-mode nil)
+       (conn-wincontrol-one-command-mode nil)
+       (action action (conn-action-cancel action))
        (conn-dispatch-quit-flag nil)
        (conn-dispatch-action-reference
         (conn-action-get-reference action))

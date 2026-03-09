@@ -129,11 +129,12 @@
    'conn-wincontrol-string t))
 
 (defun conn-wincontrol-message-function (string)
-  (if (text-property-any 0 (length string)
-                         'conn-wincontrol-string
-                         t string)
-      string
-    (concat (conn--wincontrol-message) string)))
+  (when conn-wincontrol-mode
+    (if (text-property-any 0 (length string)
+                           'conn-wincontrol-string
+                           t string)
+        string
+      (concat (conn--wincontrol-message) string))))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
