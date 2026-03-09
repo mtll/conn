@@ -739,11 +739,12 @@ for the meaning of prefix ARG."
     (error "No insertion recording region"))
   (conn-read-args (conn-record-set-region-state
                    :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument t))
+      ((`(,thing ,arg) (conn-thing-argument-dwim t))
        (transform (conn-transform-argument)))
     (pcase (conn-bounds-of thing arg)
       ((conn-bounds `(,beg . ,end) transform)
-       (move-overlay conn-insertion-recording-region beg end)))))
+       (move-overlay conn-insertion-recording-region beg end)
+       (deactivate-mark)))))
 
 (defun conn-outline-insert-heading ()
   (interactive)
