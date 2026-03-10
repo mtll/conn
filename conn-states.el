@@ -1398,15 +1398,17 @@ state.")
 
 (defun conn-record-insertion (&optional state)
   (require 'diff-mode)
-  (atomic-change-group
-    (let ((conn-insertion-recording-region
-           (make-overlay (point) (point) nil nil t)))
-      (overlay-put conn-insertion-recording-region 'face 'diff-added)
+  (let ((conn-insertion-recording-region
+         (make-overlay (point) (point) nil nil t)))
+    (atomic-change-group
       (unwind-protect
           (conn-with-recursive-stack (or state 'conn-record-emacs-state)
             (conn-insertion-recording-mode 1)
+            (set-transient-map
+             (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
+            (overlay-put conn-insertion-recording-region 'face 'diff-added)
             (with-undo-amalgamate
-              (save-selected-window
+              (save-current-buffer
                 (recursive-edit)))
             (cons (filter-buffer-substring
                    (overlay-start conn-insertion-recording-region)
@@ -1420,10 +1422,9 @@ state.")
 
 (defun conn-record-one-insertion ()
   (require 'diff-mode)
-  (atomic-change-group
-    (let ((conn-insertion-recording-region
-           (make-overlay (point) (point) nil nil t)))
-      (overlay-put conn-insertion-recording-region 'face 'diff-added)
+  (let ((conn-insertion-recording-region
+         (make-overlay (point) (point) nil nil t)))
+    (atomic-change-group
       (unwind-protect
           (conn-with-recursive-stack 'conn-command-state
             (conn-insertion-recording-mode 1)
@@ -1434,6 +1435,9 @@ state.")
                              (exit-recursive-edit)))
                 (add-hook 'conn-state-entry-hook hook 100 t)))
             (conn-push-state 'conn-one-emacs-state)
+            (set-transient-map
+             (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
+            (overlay-put conn-insertion-recording-region 'face 'diff-added)
             (with-undo-amalgamate
               (save-selected-window
                 (recursive-edit)))

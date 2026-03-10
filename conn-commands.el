@@ -4208,28 +4208,28 @@ Interactively REPEAT is given by the prefix argument."
   t)
 
 (defun conn--change-thing (thing arg transform &optional with)
-  (atomic-change-group
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds `(,beg . ,end) transform)
-       (goto-char beg)
-       (delete-region beg end)
-       (pcase with
-         (`(,string . ,offset)
-          (with-buffer-unmodified-if-unchanged
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (conn-protected-let* ((opoint (point) (goto-char opoint)))
+       (atomic-change-group
+         (goto-char beg)
+         (delete-region beg end)
+         (pcase with
+           (`(,string . ,offset)
             (insert string)
-            (forward-char offset)))
-         (_
-          (setq with
-                (if (and (= (abs (- end beg)) 1)
-                         (or (conn-subthing-p thing 'char)
-                             (conn-subthing-p thing 'point)))
-                    (conn-record-one-insertion)
-                  (conn-record-insertion)))))
-       (conn-push-command-history 'conn-change-thing-do
-                                  thing
-                                  arg
-                                  transform
-                                  with)))))
+            (forward-char offset))
+           (_
+            (setq with
+                  (if (and (= (abs (- end beg)) 1)
+                           (or (conn-subthing-p thing 'char)
+                               (conn-subthing-p thing 'point)))
+                      (conn-record-one-insertion)
+                    (conn-record-insertion)))))))
+     (conn-push-command-history 'conn-change-thing-do
+                                thing
+                                arg
+                                transform
+                                with))))
 
 (cl-defgeneric conn-change-thing-do (thing arg transform &optional with)
   (declare (conn-anonymous-thing-property :change-op)))
@@ -4302,9 +4302,8 @@ Interactively REPEAT is given by the prefix argument."
               (delete-region beg end)
               (pcase with
                 (`(,string . ,offset)
-                 (with-buffer-unmodified-if-unchanged
-                   (insert string)
-                   (forward-char offset)))
+                 (insert string)
+                 (forward-char offset))
                 (_
                  (setq with
                        (if (and (= (abs (- end beg)) 1)

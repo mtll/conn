@@ -80,17 +80,25 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                         when (conn-simple-thing-p th) return th)))
     (ignore-errors
       (cond ((< beg (point))
-             (min (or (conn-continuous-thing-handler thing beg)
-                      most-positive-fixnum)
-                  (save-excursion
-                    (forward-thing thing -1)
-                    (point))))
+             (let ((obeg (save-excursion
+                           (goto-char beg)
+                           (forward-thing thing 1)
+                           (forward-thing thing -1)
+                           (point))))
+               (save-excursion
+                 (while (< obeg (point))
+                   (forward-thing thing -1))
+                 (point))))
             ((> beg (point))
-             (max (or (conn-continuous-thing-handler thing beg)
-                      most-negative-fixnum)
-                  (save-excursion
-                    (forward-thing thing 1)
-                    (point))))
+             (let ((obeg (save-excursion
+                           (goto-char beg)
+                           (forward-thing thing -1)
+                           (forward-thing thing 1)
+                           (point))))
+               (save-excursion
+                 (while (< (point) obeg)
+                   (forward-thing thing 1))
+                 (point))))
             (t nil)))))
 
 (defun conn-discrete-thing-handler (thing _beg)
@@ -1143,7 +1151,8 @@ the point is within the region then the entire region is returned.")))
                    (setq bounds (conn-make-bounds
                                  cmd arg
                                  (cons (min (point) isearch-other-end)
-                                       (max (point) isearch-other-end)))))))
+                                       (max (point) isearch-other-end))
+                                 :direction (if isearch-forward 1 -1))))))
     (unwind-protect
         (save-excursion
           (add-hook 'isearch-mode-end-hook quit)
@@ -2067,9 +2076,7 @@ Only the background color is used."
  'recursive-edit-mark
  'exit-recursive-edit)
 
-(conn-register-thing
- 'isearch
- :parents '(region))
+(conn-register-thing 'isearch)
 
 (conn-register-thing-commands
  '(isearch) nil
