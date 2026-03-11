@@ -1097,9 +1097,10 @@ Currently selected window remains selected afterwards."
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map))
        (other-end
-        (conn-boolean-argument "other-end"
+        (conn-boolean-argument "stay"
                                'other-end
-                               conn-other-end-argument-map))
+                               conn-other-end-argument-map
+                               t))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
@@ -1318,7 +1319,8 @@ Currently selected window remains selected afterwards."
        (other-end (conn-boolean-argument
                    "stay"
                    'other-end
-                   conn-other-end-argument-map))
+                   conn-other-end-argument-map
+                   t))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
@@ -3140,7 +3142,8 @@ hook, which see."
          (other-end
           (conn-boolean-argument "stay"
                                  'other-end
-                                 conn-other-end-argument-map))
+                                 conn-other-end-argument-map
+                                 t))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
@@ -4292,9 +4295,10 @@ Interactively REPEAT is given by the prefix argument."
       ((`(,dthing ,darg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
        (other-end
-        (conn-boolean-argument "other-end"
+        (conn-boolean-argument "stay"
                                'other-end
-                               conn-other-end-argument-map))
+                               conn-other-end-argument-map
+                               t))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
@@ -4367,9 +4371,8 @@ Interactively REPEAT is given by the prefix argument."
             (delete-region beg end)
             (pcase with
               (`(,string . ,offset)
-               (with-buffer-unmodified-if-unchanged
-                 (insert string)
-                 (forward-char offset)))
+               (insert string)
+               (forward-char offset))
               (_
                (setq with
                      (if (and (= (abs (- end beg)) 1)
