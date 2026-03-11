@@ -2560,7 +2560,7 @@ append to that place."
                   &aux
                   (name "append")
                   (choices '(nil append prepend repeat))
-                  (cycling-command 'append)
+                  (cycling-commands '(append append-on-repeat))
                   (keymap conn-kill-append-argument-map)))))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-append-argument)
@@ -2578,10 +2578,6 @@ append to that place."
 (cl-defmethod conn-argument-predicate ((_arg conn-kill-append-argument)
                                        (_sym (eql append-on-repeat)))
   t)
-
-(cl-defmethod conn-argument-display ((_arg conn-kill-append-argument))
-  (concat (substitute-command-keys "\\[append-on-repeat], ")
-          (cl-call-next-method)))
 
 (defvar-keymap conn-delete-argument-map)
 
@@ -4207,9 +4203,26 @@ Interactively REPEAT is given by the prefix argument."
                                        (_cmd (eql conn-record-emacs-state)))
   t)
 
-(defun conn--change-thing (thing arg transform &optional with)
+(cl-defgeneric conn-change-thing-do (thing
+                                     arg
+                                     transform
+                                     &optional
+                                     check-bounds
+                                     with)
+  (declare (conn-anonymous-thing-property :change-op)))
+
+(cl-defmethod conn-change-thing-do ((thing (conn-thing t))
+                                    arg
+                                    transform
+                                    &optional
+                                    check-bounds
+                                    with)
   (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
+    ((conn-bounds `(,beg . ,end)
+                  (if check-bounds
+                      (append transform
+                              (list 'conn-check-bounds))
+                    transform))
      (conn-protected-let* ((opoint (point) (goto-char opoint)))
        (atomic-change-group
          (goto-char beg)
@@ -4229,18 +4242,14 @@ Interactively REPEAT is given by the prefix argument."
                                 thing
                                 arg
                                 transform
+                                check-bounds
                                 with))))
-
-(cl-defgeneric conn-change-thing-do (thing arg transform &optional with)
-  (declare (conn-anonymous-thing-property :change-op)))
-
-(cl-defmethod conn-change-thing-do (thing arg transform &optional with)
-  (conn--change-thing thing arg transform with))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
                                     _arg
                                     _transform
                                     &optional
+                                    _check-bounds
                                     with)
   (conn-emacs-state-record-insert with))
 
@@ -4255,6 +4264,7 @@ Interactively REPEAT is given by the prefix argument."
                                     _arg
                                     _transform
                                     &optional
+                                    _check-bounds
                                     _with)
   (conn-emacs-state-overwrite-binary))
 
@@ -4262,6 +4272,7 @@ Interactively REPEAT is given by the prefix argument."
                                                        _arg
                                                        _transform
                                                        &optional
+                                                       _check-bounds
                                                        _with)
   (if (bound-and-true-p rectangle-mark-mode)
       (call-interactively #'string-rectangle)
@@ -4271,6 +4282,7 @@ Interactively REPEAT is given by the prefix argument."
                                     arg
                                     transform
                                     &optional
+                                    check-bounds
                                     with)
   (conn-read-args (conn-dispatch-bounds-state
                    :history-var 'conn-mark-thing-dispatch
@@ -4296,7 +4308,12 @@ Interactively REPEAT is given by the prefix argument."
                    (end-pt nil))
          (conn-dispatch-change-group)
          (pcase (conn-bounds-of-dispatch thing arg pt)
-           ((conn-bounds `(,beg . ,end) (nconc dtform transform))
+           ((conn-bounds `(,beg . ,end)
+                         (nconc dtform
+                                (if check-bounds
+                                    (append transform
+                                            (list 'conn-check-bounds))
+                                  transform)))
             (save-excursion
               (conn-dispatch-goto-char beg 'nopush)
               (delete-region beg end)
@@ -4321,12 +4338,14 @@ Interactively REPEAT is given by the prefix argument."
                                thing
                                arg
                                transform
+                               check-bounds
                                with)))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing expansion))
                                     arg
                                     transform
                                     &optional
+                                    check-bounds
                                     with)
   (conn-dispatch-setup
    (oclosure-lambda (conn-action
@@ -4338,7 +4357,11 @@ Interactively REPEAT is given by the prefix argument."
                  (end-pt nil))
        (conn-dispatch-change-group)
        (pcase (conn-bounds-of-dispatch thing arg pt)
-         ((conn-bounds `(,beg . ,end) transform)
+         ((conn-bounds `(,beg . ,end)
+                       (if check-bounds
+                           (append transform
+                                   (list 'conn-check-bounds))
+                         transform))
           (save-excursion
             (conn-dispatch-goto-char beg 'nopush)
             (delete-region beg end)
@@ -4363,11 +4386,15 @@ Interactively REPEAT is given by the prefix argument."
                              thing
                              arg
                              transform
+                             check-bounds
                              with))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
-                                    transform)
+                                    transform
+                                    &optional
+                                    _check-bounds
+                                    _with)
   (conn-read-args (conn-replace-state
                    :history-var 'conn-replace
                    :prefix arg
@@ -4397,7 +4424,10 @@ Interactively REPEAT is given by the prefix argument."
 
 (cl-defmethod conn-change-thing-do ((_thing (eql yank))
                                     arg
-                                    transform)
+                                    transform
+                                    &optional
+                                    check-bounds
+                                    _with)
   (conn-read-args (conn-yank-replace-state
                    :history-var 'conn-yank-replace
                    :prefix arg
@@ -4411,7 +4441,7 @@ Interactively REPEAT is given by the prefix argument."
                   conn-register-argument-map
                   (lambda (_) (register-read-with-preview "Register:"))
                   :formatter #'conn-argument-format-register))
-       (check-bounds (conn-check-bounds-argument)))
+       (check-bounds (conn-check-bounds-argument check-bounds)))
     (conn-yank-replace thing
                        arg
                        transform
@@ -4435,10 +4465,8 @@ For how the region is determined using THING, ARG, and TRANSFORM see
      (list thing arg transform check-bounds)))
   (conn-change-thing-do thing
                         arg
-                        (if check-bounds
-                            (append transform
-                                    (list 'conn-check-bounds))
-                          transform)))
+                        transform
+                        check-bounds))
 
 ;;;;; Indent
 

@@ -1400,56 +1400,56 @@ state.")
   (require 'diff-mode)
   (let ((conn-insertion-recording-region
          (make-overlay (point) (point) nil nil t)))
-    (atomic-change-group
-      (unwind-protect
-          (conn-with-recursive-stack (or state 'conn-record-emacs-state)
-            (conn-insertion-recording-mode 1)
-            (set-transient-map
-             (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
-            (overlay-put conn-insertion-recording-region 'face 'diff-added)
+    (unwind-protect
+        (conn-with-recursive-stack (or state 'conn-record-emacs-state)
+          (conn-insertion-recording-mode 1)
+          (set-transient-map
+           (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
+          (overlay-put conn-insertion-recording-region 'face 'diff-added)
+          (atomic-change-group
             (with-undo-amalgamate
               (save-current-buffer
-                (recursive-edit)))
-            (cons (filter-buffer-substring
-                   (overlay-start conn-insertion-recording-region)
-                   (overlay-end conn-insertion-recording-region))
-                  (max (- (overlay-start conn-insertion-recording-region)
-                          (overlay-end conn-insertion-recording-region))
-                       (min 0 (- (point)
-                                 (overlay-end conn-insertion-recording-region))))))
-        (delete-overlay conn-insertion-recording-region)
-        (conn-insertion-recording-mode -1)))))
+                (recursive-edit))))
+          (cons (filter-buffer-substring
+                 (overlay-start conn-insertion-recording-region)
+                 (overlay-end conn-insertion-recording-region))
+                (max (- (overlay-start conn-insertion-recording-region)
+                        (overlay-end conn-insertion-recording-region))
+                     (min 0 (- (point)
+                               (overlay-end conn-insertion-recording-region))))))
+      (delete-overlay conn-insertion-recording-region)
+      (conn-insertion-recording-mode -1))))
 
 (defun conn-record-one-insertion ()
   (require 'diff-mode)
   (let ((conn-insertion-recording-region
          (make-overlay (point) (point) nil nil t)))
-    (atomic-change-group
-      (unwind-protect
-          (conn-with-recursive-stack 'conn-command-state
-            (conn-insertion-recording-mode 1)
-            (conn-state-on-re-entry _
-              (cl-with-gensyms (hook)
-                (fset hook (lambda ()
-                             (remove-hook 'conn-state-entry-hook hook t)
-                             (exit-recursive-edit)))
-                (add-hook 'conn-state-entry-hook hook 100 t)))
-            (conn-push-state 'conn-one-emacs-state)
-            (set-transient-map
-             (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
-            (overlay-put conn-insertion-recording-region 'face 'diff-added)
+    (unwind-protect
+        (conn-with-recursive-stack 'conn-command-state
+          (conn-insertion-recording-mode 1)
+          (conn-state-on-re-entry _
+            (cl-with-gensyms (hook)
+              (fset hook (lambda ()
+                           (remove-hook 'conn-state-entry-hook hook t)
+                           (exit-recursive-edit)))
+              (add-hook 'conn-state-entry-hook hook 100 t)))
+          (conn-push-state 'conn-one-emacs-state)
+          (set-transient-map
+           (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
+          (overlay-put conn-insertion-recording-region 'face 'diff-added)
+          (atomic-change-group
             (with-undo-amalgamate
-              (save-selected-window
-                (recursive-edit)))
-            (cons (filter-buffer-substring
-                   (overlay-start conn-insertion-recording-region)
-                   (overlay-end conn-insertion-recording-region))
-                  (max (- (overlay-start conn-insertion-recording-region)
-                          (overlay-end conn-insertion-recording-region))
-                       (min 0 (- (point)
-                                 (overlay-end conn-insertion-recording-region))))))
-        (delete-overlay conn-insertion-recording-region)
-        (conn-insertion-recording-mode -1)))))
+              (save-current-buffer
+                (recursive-edit))))
+          (cons (filter-buffer-substring
+                 (overlay-start conn-insertion-recording-region)
+                 (overlay-end conn-insertion-recording-region))
+                (max (- (overlay-start conn-insertion-recording-region)
+                        (overlay-end conn-insertion-recording-region))
+                     (min 0 (- (point)
+                               (overlay-end conn-insertion-recording-region))))))
+      (delete-overlay conn-insertion-recording-region)
+      (conn-insertion-recording-mode -1))))
 
 (defun conn-emacs-state-record-insert (&optional with offset)
   (interactive)
@@ -2444,7 +2444,7 @@ be displayed in the echo area during `conn-read-args'."
                ( :constructor conn-cycling-argument
                  (name
                   choices
-                  cycling-command
+                  cycling-commands
                   &key
                   keymap
                   (formatter #'conn-format-cycling-argument)
@@ -2455,14 +2455,14 @@ be displayed in the echo area during `conn-read-args'."
                   (value (car choices)))))
   (display-prefix nil :type (or nil string))
   (choices nil :type list :read-only t)
-  (cycling-command nil :type symbol :read-only t)
+  (cycling-commands nil :type symbol :read-only t)
   (formatter #'conn-format-cycling-argument
              :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
                                     break)
-  (when (eq cmd (conn-cycling-argument-cycling-command arg))
+  (when (eq cmd (conn-cycling-argument-cycling-commands arg))
     (pcase (memq (conn-cycling-argument-value arg)
                  (conn-cycling-argument-choices arg))
       (`(,_ ,next . ,_)
@@ -2479,7 +2479,7 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
                                        sym)
-  (eq sym (conn-cycling-argument-cycling-command arg)))
+  (eq sym (conn-cycling-argument-cycling-commands arg)))
 
 (cl-defmethod conn-argument-display ((arg conn-cycling-argument))
   (let ((choices (conn-cycling-argument-choices arg))
@@ -2490,7 +2490,13 @@ be displayed in the echo area during `conn-read-args'."
                  (conn-cycling-argument-value arg))))
     (concat
      (substitute-command-keys
-      (format "\\[%s] " (conn-cycling-argument-cycling-command arg)))
+      (concat
+       (string-join
+        (cl-loop for cmd in (ensure-list
+                             (conn-cycling-argument-cycling-commands arg))
+                 collect (format "\\[%s]" cmd))
+        ", ")
+       " "))
      (cond
       ((>= (seq-count #'identity choices) 3)
        (if value

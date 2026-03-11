@@ -1333,7 +1333,7 @@ The iterator must be the first argument in ARGLIST.
                             (list (conn-buffer-base-state)
                                   'conn-command-state
                                   'conn-emacs-state)))
-                  (cycling-command 'kapply-state)
+                  (cycling-commands 'kapply-state)
                   (keymap conn-kapply-state-argument-map)
                   (formatter #'conn--format-state-argument)))))
 
@@ -1351,7 +1351,7 @@ The iterator must be the first argument in ARGLIST.
                  (&aux
                   (name "order")
                   (choices '(nil forward backward))
-                  (cycling-command 'kapply-order)
+                  (cycling-commands 'kapply-order)
                   (keymap conn-kapply-order-argument-map)
                   (formatter #'conn-format-cycling-argument)))))
 
@@ -1427,7 +1427,7 @@ finishing showing the buffers that were visited."))
                   (name "merge undo")
                   (display-prefix "merge undo ")
                   (choices '(buffer-atomic buffer iteration nil))
-                  (cycling-command 'kapply-undo)
+                  (cycling-commands 'kapply-undo)
                   (keymap conn-kapply-undo-argument-map)
                   (value (car choices))))))
 
