@@ -619,15 +619,15 @@ command moves over."
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (thing &rest _)
-       `(progn
-          (when (conn-bounds-p ,thing)
-            (setq ,thing (conn-bounds-thing ,thing)))
-          (if (conn-anonymous-thing-p ,thing)
-              (with-memoization (gethash (conn-thing-all-parents ,thing)
+       `(let ((th (if (conn-bounds-p ,thing)
+                      (conn-bounds-thing ,thing)
+                    ,thing)))
+          (if (conn-anonymous-thing-p th)
+              (with-memoization (gethash (conn-thing-all-parents th)
                                          conn--anonymous-thing-tag-cache)
                 (cons 'internal--anonymous-thing-method
-                      (conn-thing-all-parents ,thing)))
-            (conn-thing-all-parents ,thing))))
+                      (conn-thing-all-parents th)))
+            (conn-thing-all-parents th))))
   (lambda (thing &rest _)
     (when thing
       `(,@(cl-loop for parent in thing
