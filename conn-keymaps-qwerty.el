@@ -752,7 +752,9 @@
   "b" 'conn-dispatch-bounds-between
   "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
-  "C-t" 'conn-transform-reset)
+  "C-t" 'conn-transform-reset
+  "G" 'conn-bounds-butlast
+  "T" 'conn-bounds-last)
 
 ;;;; Things
 

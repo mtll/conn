@@ -690,14 +690,15 @@ command moves over."
                (:constructor conn--make-bounds-transform))
   (transforms nil :type list))
 
-(defun conn-make-transformed-bounds (transform from to)
+(defun conn-make-transformed-bounds (transform from to &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
               `(conn--make-bounds-transform
                 :thing (conn-bounds-thing ,from)
                 :arg (conn-bounds-arg ,from)
                 :whole ,to
-                :properties (conn-bounds--properties ,from)
+                :properties (nconc (list ,@properties)
+                                   (conn-bounds--properties ,from))
                 :transforms (append (when (conn-transformed-bounds-p ,from)
                                       (conn-transformed-bounds-transforms ,from))
                                     (list ,transform))))))
@@ -705,7 +706,7 @@ command moves over."
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)
    :whole to
-   :properties (conn-bounds--properties from)
+   :properties (nconc properties (conn-bounds--properties from))
    :transforms (append (when (conn-transformed-bounds-p from)
                          (conn-transformed-bounds-transforms from))
                        (list transform))))
@@ -954,17 +955,18 @@ Returns a `conn-bounds' struct."
 the point is within the region then the entire region is returned.")))
 
 (cl-defmethod conn-bounds-butlast (bounds)
-  (pcase (or (car (last (conn-bounds-get bounds :subregions)))
-             bounds)
-    ((conn-bounds (and `(,beg . ,end) last))
+  (pcase (car (last (conn-bounds-get bounds :subregions)))
+    ((and (conn-bounds `(,lbeg . ,lend))
+          (let (conn-bounds `(,beg . ,end))
+            bounds))
      (conn-make-transformed-bounds
       'conn-bounds-butlast
       bounds
-      (cond ((< (point) beg)
-             (cons (point) beg))
-            ((> (point) end)
-             (cons end (point)))
-            (t last))))))
+      (if (= beg lbeg)
+          (cons lend end)
+        (cons beg lbeg))
+      :subregions (butlast (conn-bounds-get bounds :subregions))))
+    (_ bounds)))
 
 ;;;;;; Last Bounds
 
@@ -978,12 +980,10 @@ the point is within the region then the entire region is returned.")))
   (pcase (car (last (conn-bounds-get bounds :subregions)))
     ((conn-bounds last)
      (conn-make-transformed-bounds
-      'conn-bounds-trim
-      bounds last))
-    (_
-     (conn-make-transformed-bounds
-      'conn-bounds-trim
-      bounds bounds))))
+      'conn-bounds-last
+      bounds last
+      :subregions (list last)))
+    (_ bounds)))
 
 ;;;;;; Trim Bounds
 

@@ -3149,8 +3149,7 @@ hook, which see."
                                  'restrict-windows
                                  conn-restrict-windows-argument-map))
          (`(,dtform ,reformat)
-          (conn-dispatch-transform-and-fixup-argument
-           reformat)))
+          (conn-dispatch-transform-and-fixup-argument reformat)))
       (conn-with-dispatch-event-handlers
         ( :handler (thing)
           (when (eq thing 'append)
