@@ -1711,24 +1711,15 @@ entering mark state.")
 (defvar-keymap conn-read-args-previous-map
   "RET" 'previous-args)
 
-(defvar conn-read-args-ref-bindings
-  (conn-reference-quote
-    ((:keymap conn-read-args-map)
-     ("backward delete arg" backward-delete-arg)
-     ("reset arg" reset-arg)
-     ("completing-read available commands" help)
-     (:keymap conn-quick-ref-map)
-     ("close quick reference" close)
-     ("next/previous page" next previous))))
-
 (defvar conn-read-args-reference-page
   (conn-reference-page
-    :depth 50
+    :depth 80
     (:heading "Read Args")
-    "Interactively reading arguments for a command.
-"
-    (:eval (conn-quick-ref-to-cols
-            conn-read-args-ref-bindings 1))))
+    "Interactively reading arguments for a command."
+    (((:keymap conn-read-args-map)
+      ("backward delete arg" backward-delete-arg)
+      ("reset arg" reset-arg)
+      ("available commands with completion" help)))))
 
 (defun conn-read-args-prefix-arg ()
   "Return the value of the current prefix argument during `conn-read-args'."
@@ -2415,23 +2406,31 @@ be displayed in the echo area during `conn-read-args'."
                   value
                   annotation
                   reference)))
-  (toggle-command nil :read-only t))
+  (toggle-command nil :type (or symbol list) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
                                     cmd
                                     break)
-  (when (eq cmd (conn-boolean-argument-toggle-command arg))
-    (cl-callf not (conn-boolean-argument-value arg))
-    (funcall break)))
+  (let ((toggles (conn-boolean-argument-toggle-command arg)))
+    (when (if (consp toggles)
+              (memq cmd toggles)
+            (eq cmd toggles))
+      (cl-callf not (conn-boolean-argument-value arg))
+      (funcall break))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
-  (eq cmd (conn-boolean-argument-toggle-command arg)))
+  (let ((toggles (conn-boolean-argument-toggle-command arg)))
+    (if (consp toggles)
+        (memq cmd toggles)
+      (eq cmd toggles))))
 
 (cl-defmethod conn-argument-display ((arg conn-boolean-argument))
   (concat
    (substitute-command-keys
-    (format "\\[%s]" (conn-boolean-argument-toggle-command arg)))
+    (mapconcat (lambda (cmd) (format "\\[%s]" cmd))
+               (ensure-list (conn-boolean-argument-toggle-command arg))
+               ", "))
    " "
    (propertize (conn-boolean-argument-name arg)
                'face (when (conn-argument-value arg)
@@ -2458,7 +2457,7 @@ be displayed in the echo area during `conn-read-args'."
                   (value (car choices)))))
   (display-prefix nil :type (or nil string))
   (choices nil :type list :read-only t)
-  (cycling-commands nil :type symbol :read-only t)
+  (cycling-commands nil :type (or symbol list) :read-only t)
   (formatter #'conn-format-cycling-argument
              :type function :read-only t))
 
@@ -2545,29 +2544,37 @@ be displayed in the echo area during `conn-read-args'."
                   annotation)))
   (reader nil :type function :read-only t)
   (formatter nil :type function :read-only t)
-  (toggle-command nil :type symbol :read-only t))
+  (toggle-command nil :type (or symbol list) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd
                                     break)
-  (condition-case err
-      (when (eq cmd (conn-read-argument-toggle-command arg))
-        (setf (conn-argument-value arg)
-              (unless (conn-argument-value arg)
-                (funcall (conn-read-argument-reader arg)
-                         (conn-argument-value arg))))
-        (funcall break))
-    (quit (conn-read-args-error "Quit"))
-    (error (conn-read-args-error (error-message-string err)))))
+  (let ((toggles (conn-read-argument-toggle-command arg)))
+    (condition-case err
+        (when (if (consp toggles)
+                  (memq cmd toggles)
+                (eq cmd toggles))
+          (setf (conn-argument-value arg)
+                (unless (conn-argument-value arg)
+                  (funcall (conn-read-argument-reader arg)
+                           (conn-argument-value arg))))
+          (funcall break))
+      (quit (conn-read-args-error "Quit"))
+      (error (conn-read-args-error (error-message-string err))))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-read-argument)
                                        sym)
-  (eq sym (conn-read-argument-toggle-command arg)))
+  (let ((toggles (conn-read-argument-toggle-command arg)))
+    (if (consp toggles)
+        (memq sym toggles)
+      (eq sym toggles))))
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
   (concat
    (substitute-command-keys
-    (format "\\[%s] " (conn-read-argument-toggle-command arg)))
+    (mapconcat (lambda (cmd) (format "\\[%s]" cmd))
+               (ensure-list (conn-read-argument-toggle-command arg))
+               ", "))
    (or (and-let* ((fn (conn-read-argument-formatter arg))
                   (str (funcall fn
                                 (conn-read-argument-name arg)

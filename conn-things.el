@@ -1615,9 +1615,10 @@ words."))
   (conn-reference-page
     :depth 70
     (:heading "Reformat")
-    "Attempt to reformat the buffer around the killed region.  If toggled
+    (:eval (substitute-command-keys "Attempt to reformat the buffer around the killed region.  If toggled
 with a prefix argument then set the default value of reformat in the
-current buffer."))
+current buffer.
+\\[set-reformat] toggle and set the buffer local value of reformat."))))
 
 (defvar-keymap conn-reformat-argument-map)
 
@@ -1644,20 +1645,27 @@ current buffer."))
 (cl-defmethod conn-argument-update ((arg conn-reformat-argument)
                                     cmd
                                     break)
-  (when (eq cmd 'reformat)
-    (cl-callf null (conn-argument-value arg))
-    (when (conn-read-args-consume-prefix-arg)
-      (setq-local conn-reformat-default (conn-argument-value arg)))
-    (funcall break)))
+  (pcase cmd
+    ('reformat
+     (cl-callf null (conn-argument-value arg))
+     (funcall break))
+    ('set-reformat
+     (cl-callf null (conn-argument-value arg))
+     (setq-local conn-reformat-default (conn-argument-value arg))
+     (funcall break))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
                                        (_sym (eql reformat)))
   t)
 
+(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
+                                       (_sym (eql set-reformat)))
+  t)
+
 (cl-defmethod conn-argument-display ((arg conn-reformat-argument))
   (substitute-command-keys
    (concat
-    (substitute-command-keys "\\[reformat] ")
+    (substitute-command-keys "\\[reformat], \\[set-reformat] ")
     (if-let* ((ts (conn-argument-value arg)))
         (propertize
          "reformat"
@@ -1679,7 +1687,8 @@ not be delete.  The the value returned by each function is ignored.")
     (:heading "Check Bounds Argument")
     "Toggle running `conn-check-bounds-functions' to ensure that the region
 being killed is valid.  With a prefix argument set the default value for
-check bounds in the current buffer."))
+check bounds in the current buffer.
+\\[set-check-bounds] toggle and set buffer local value of check-bounds."))
 
 (defvar-keymap conn-check-bounds-argument-map)
 
@@ -1690,9 +1699,9 @@ check bounds in the current buffer."))
                ( :constructor conn--check-bounds-argument
                  (&optional
                   value
-                  &key
+                  &aux
                   (name "check bounds")
-                  (toggle-command 'check-bounds)
+                  (toggle-command (list 'check-bounds 'set-check-bounds))
                   (keymap conn-check-bounds-argument-map)
                   (reference conn-check-bounds-argument-reference)))))
 
@@ -1706,10 +1715,10 @@ check bounds in the current buffer."))
      (conn--check-bounds-argument (or ,value conn-check-bounds-default)))))
 
 (cl-defmethod conn-argument-update ((arg conn-check-bounds-argument)
-                                    _cmd
+                                    cmd
                                     _break)
   (cl-call-next-method)
-  (when (conn-read-args-consume-prefix-arg)
+  (when (eq cmd 'set-check-bounds)
     (setq-local conn-check-bounds-default (conn-argument-value arg))))
 
 ;;;;; Thing Transform Argument

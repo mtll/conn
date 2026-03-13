@@ -1179,7 +1179,8 @@ The iterator must be the first argument in ARGLIST.
 
 (conn-define-kapplier conn-kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
-    (kmacro-start-macro (if skip-exec '(16) '(4)))
+    (let ((kmacro-execute-before-append t))
+      (kmacro-start-macro (if skip-exec '(16) '(4))))
     (unwind-protect
         (progn
           (recursive-edit)
@@ -1212,6 +1213,7 @@ The iterator must be the first argument in ARGLIST.
     (("record a new macro in the current state" record)
      ("apply the previous macro" apply)
      ("apply and then append to the previous macro" append)
+     ("apply and append without executing macro first" append-skip-exec)
      ("step edit the previous macro" step-edit))))
 
 (defvar conn-kapply-ring-command-list
@@ -1255,13 +1257,14 @@ The iterator must be the first argument in ARGLIST.
   (memq cmd '(apply
               record
               append
+              append-skip-exec
               step-edit
               register)))
 
 (cl-defmethod conn-argument-update ((arg conn-kapply-macro-argument)
                                     cmd
                                     break)
-  (cond ((memq cmd '(apply append step-edit))
+  (cond ((memq cmd '(apply append append-skip-exec step-edit))
          (if (and (kmacro-ring-empty-p)
                   (not (conn-kapply-macro-argument-register arg)))
              (conn-read-args-error "Kmacro ring empty")
@@ -1294,12 +1297,12 @@ The iterator must be the first argument in ARGLIST.
       ('apply
        (let ((macro (if register (get-register register) last-kbd-macro)))
          (lambda (it) (conn-kmacro-apply it nil macro))))
-      ('append
+      ((and cmd (or 'append 'append-skip-exec))
        (when register
          (kmacro-split-ring-element (get-register register)))
        (lambda (it)
          (conn-kmacro-apply-append
-          it nil (conn-read-args-consume-prefix-arg))
+          it nil (eq cmd 'append-skip-exec))
          (when register
            (set-register register (kmacro-ring-head)))))
       ('step-edit

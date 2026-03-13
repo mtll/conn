@@ -70,15 +70,14 @@
                   (`(,(and (or :eval :splice :keymap :heading)
                            type)
                      . ,form)
-                   (cons type (list '\, (cons 'lambda (cons nil form)))))
+                   `(cons ,type (lambda () ,@form)))
                   ((pred consp)
-                   (mapcar #'process-definition def))
-                  (_ def))))
-    (list '\`
-          (cl-loop for elem in form
-                   if (listp elem)
-                   collect (process-definition elem)
-                   else collect elem))))
+                   `(list ,@(mapcar #'process-definition def)))
+                  (_ `(quote ,def)))))
+    `(list ,@(cl-loop for elem in form
+                      if (listp elem)
+                      collect (process-definition elem)
+                      else collect elem))))
 
 (defmacro conn-reference-page (&rest definition)
   (declare (indent 0))
@@ -91,15 +90,15 @@
                     (`(,(and (or :eval :splice :keymap :heading)
                              type)
                        . ,form)
-                     (cons type (list '\, (cons 'lambda (cons nil form)))))
+                     `(cons ,type (lambda () ,@form)))
                     ((pred consp)
-                     (mapcar #'process-definition def))
-                    (_ def))))
+                     `(list ,@(mapcar #'process-definition def)))
+                    (_ `(quote ,def)))))
       `(conn--make-reference-page
         ,depth
         (list ,@(cl-loop for row in definition
                          if (listp row)
-                         collect (list '\` (process-definition row))
+                         collect (process-definition row)
                          else
                          collect row))))))
 

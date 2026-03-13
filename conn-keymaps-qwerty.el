@@ -628,6 +628,7 @@
   "." 'register
   "a" 'apply
   "x" 'append
+  "X" 'append-skip-exec
   "r" 'step-edit
   "e" 'record
   "+" 'kmacro-set-counter
@@ -655,7 +656,7 @@
 
 (define-keymap
   :keymap conn-kapply-excursions-argument-map
-  "X" 'save-excursions)
+  "o" 'save-excursions)
 
 (define-keymap
   :keymap conn-kapply-restrictions-argument-map
@@ -777,11 +778,13 @@
 
 (define-keymap
   :keymap conn-reformat-argument-map
-  ":" 'reformat)
+  ":" 'reformat
+  "M-:" 'set-reformat)
 
 (define-keymap
   :keymap conn-check-bounds-argument-map
-  "!" 'check-bounds)
+  "!" 'check-bounds
+  "M-!" 'set-check-bounds)
 
 (define-keymap
   :keymap conn-transform-map
