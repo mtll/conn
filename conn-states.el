@@ -2033,10 +2033,13 @@ This skips executing the body of the `conn-read-args' form entirely."
                      cmd (key-binding keyseq t))
                (while (arrayp cmd) ; keyboard macro
                  (setq cmd (key-binding cmd t)))
-               (when (and (null cmd)
-                          (eql help-char (aref keyseq (1- (length keyseq)))))
-                 (setq cmd 'execute-extended-command
-                       partial-keymap (key-binding (seq-subseq keyseq 0 -1)))))
+               (cond ((and (null cmd)
+                           (eql help-char (aref keyseq (1- (length keyseq)))))
+                      (setq cmd 'execute-extended-command
+                            partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
+                     ((and (symbolp cmd)
+                           (autoloadp (symbol-function cmd)))
+                      (autoload-do-load (symbol-function cmd)))))
              (when (eql (aref keyseq 0) quit-event)
                (setq cmd 'keyboard-quit))
              (when cmd
