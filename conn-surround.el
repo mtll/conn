@@ -135,13 +135,30 @@
 
 ;;;;; Delete
 
-(cl-defgeneric conn-delete-surround (cmd arg transform))
+(cl-defgeneric conn-delete-surround (cmd
+                                     arg
+                                     transform
+                                     &optional
+                                     delete
+                                     register))
 
-(cl-defmethod conn-delete-surround (cmd arg transform)
+(cl-defmethod conn-delete-surround (cmd
+                                    arg
+                                    transform
+                                    &optional
+                                    delete
+                                    register)
   (pcase-exhaustive (conn-bounds-of cmd arg)
-    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,_oend)))
-          (conn-bounds-get :close nil (conn-bounds `(,_cbeg . ,cend)))
+    ((and (conn-bounds-get :open nil (conn-bounds `(,obeg . ,oend)))
+          (conn-bounds-get :close nil (conn-bounds `(,cbeg . ,cend)))
           (conn-bounds-get :inner nil (conn-bounds `(,ibeg . ,iend) transform)))
+     (cond (register
+            (set-register register
+                          (concat (filter-buffer-substring obeg oend)
+                                  (filter-buffer-substring cbeg cend))))
+           ((not delete)
+            (kill-new (concat (filter-buffer-substring obeg oend)
+                              (filter-buffer-substring cbeg cend)))))
      (delete-region iend cend)
      (delete-region obeg ibeg))))
 
@@ -150,8 +167,8 @@
                                   transform
                                   &optional
                                   _append
-                                  _delete
-                                  _register
+                                  delete
+                                  register
                                   _separator
                                   _reformat
                                   _check-bounds)
@@ -159,8 +176,20 @@
                    :prompt "Surrounding"
                    :prefix arg)
       ((`(,thing ,arg) (conn-surround-with-argument))
-       (transform (conn-transform-argument transform)))
-    (conn-delete-surround thing arg transform)))
+       (transform (conn-transform-argument transform))
+       (delete
+        (conn-boolean-argument "delete"
+                               'delete
+                               conn-delete-argument-map
+                               delete))
+       (register
+        (conn-read-argument "register"
+                            'register
+                            conn-register-argument-map
+                            (lambda (_) (register-read-with-preview "Register:"))
+                            :formatter #'conn-argument-format-register
+                            :value register)))
+    (conn-delete-surround thing arg transform delete register)))
 
 ;;;;; Surround
 

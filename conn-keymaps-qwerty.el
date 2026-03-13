@@ -466,18 +466,18 @@
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
   "M-f" 'conn-dispatch-ring-describe-head
-  "g e" (conn-anonymous-thing
-          '(point)
-          :pretty-print ( :method (_) "prev-emacs-state")
-          :default-action ( :method (_self)
-                            (let ((jump (conn-dispatch-jump)))
-                              (oclosure-lambda (conn-action
-                                                (action-description "Previous Emacs State")
-                                                (action-no-history t))
-                                  ()
-                                (funcall jump)
-                                (conn-push-state 'conn-emacs-state))))
-          :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
+  "p" (conn-anonymous-thing
+        '(point)
+        :pretty-print ( :method (_) "prev-emacs-state")
+        :default-action ( :method (_self)
+                          (let ((jump (conn-dispatch-jump)))
+                            (oclosure-lambda (conn-action
+                                              (action-description "Previous Emacs State")
+                                              (action-no-history t))
+                                ()
+                              (funcall jump)
+                              (conn-push-state 'conn-emacs-state))))
+        :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
   "j" 'point
   "S-SPC" (conn-anonymous-thing
             '(point)
@@ -563,6 +563,14 @@
 (define-keymap
   :keymap conn-swap-argument-map
   "~" 'swap)
+
+(define-keymap
+  :keymap conn-stay-argument-map
+  "g" 'stay)
+
+(define-keymap
+  :keymap conn-dispatch-stay-map
+  "M-g" 'stay)
 
 (define-keymap
   :keymap conn-replace-thing-argument-map
@@ -753,8 +761,8 @@
   "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
-  "G" 'conn-bounds-butlast
-  "T" 'conn-bounds-last)
+  "g" 'conn-bounds-butlast
+  "G" 'conn-bounds-last)
 
 ;;;; Things
 
@@ -782,7 +790,7 @@
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
-  "t" 'conn-bounds-last
+  "G" 'conn-bounds-last
   "g" 'conn-bounds-butlast
   "C-t" 'conn-transform-reset)
 

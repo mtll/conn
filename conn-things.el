@@ -950,7 +950,7 @@ Returns a `conn-bounds' struct."
 
 (cl-defgeneric conn-bounds-butlast (bounds)
   (declare (conn-bounds-transformation
-            "upto"
+            "butlast"
             "Bounds from point up to the nearest bound of the final subregion.  If
 the point is within the region then the entire region is returned.")))
 
@@ -1143,16 +1143,31 @@ the point is within the region then the entire region is returned.")))
                               arg)
   (let* ((bounds nil)
          (quit (make-symbol "quit")))
-    (fset quit (lambda ()
-                 (unless isearch-suspended
-                   (when (or isearch-mode-end-hook-quit
-                             (null isearch-other-end))
-                     (abort-recursive-edit))
-                   (setq bounds (conn-make-bounds
-                                 cmd arg
-                                 (cons (min (point) isearch-other-end)
-                                       (max (point) isearch-other-end))
-                                 :direction (if isearch-forward 1 -1))))))
+    (fset quit
+          (lambda ()
+            (unless isearch-suspended
+              (when (or isearch-mode-end-hook-quit
+                        (null isearch-other-end))
+                (abort-recursive-edit))
+              (let* ((beg (min (point) isearch-other-end))
+                     (end (max (point) isearch-other-end))
+                     (subregions
+                      (unless (<= beg isearch-opoint end)
+                        (list (conn-make-bounds
+                               cmd arg
+                               (cons beg end))
+                              (conn-make-bounds
+                               cmd arg
+                               (cons (min isearch-opoint end)
+                                     (max isearch-opoint beg)))))))
+                (when isearch-forward
+                  (cl-callf nreverse subregions))
+                (setq bounds (conn-make-bounds
+                              cmd arg
+                              (cons (min isearch-opoint beg)
+                                    (max isearch-opoint end))
+                              :direction (if isearch-forward 1 -1)
+                              :subregions subregions))))))
     (unwind-protect
         (save-excursion
           (add-hook 'isearch-mode-end-hook quit)

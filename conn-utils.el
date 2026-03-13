@@ -259,10 +259,11 @@ See `quail-add-unread-command-events'."
        'face 'conn-argument-active-face)))))
 
 (defun conn-push-command-history (command &rest args)
-  (add-to-history 'conn-command-history
-                  (cons command args)
-                  conn-command-history-max
-                  t))
+  (unless conn-repeating-command
+    (add-to-history 'conn-command-history
+                    (cons command args)
+                    conn-command-history-max
+                    t)))
 
 ;;;;; Keyboard Macro
 

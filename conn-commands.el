@@ -1040,6 +1040,9 @@ Currently selected window remains selected afterwards."
 
 ;;;; Thing Commands
 
+(defvar-keymap conn-stay-argument-map)
+(defvar-keymap conn-dispatch-stay-map)
+
 ;;;;; Mark
 
 (conn-define-state conn-mark-thing-state (conn-read-thing-state)
@@ -1097,10 +1100,9 @@ Currently selected window remains selected afterwards."
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map))
        (other-end
-        (conn-boolean-argument "stay"
+        (conn-boolean-argument "other-end"
                                'other-end
-                               conn-other-end-argument-map
-                               t))
+                               conn-other-end-argument-map))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
@@ -1220,6 +1222,14 @@ Currently selected window remains selected afterwards."
                                      check-bounds)
   (declare (conn-anonymous-thing-property :yank-replace-op)))
 
+(cl-defmethod conn-yank-replace-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history
+             'conn-yank-replace-do
+             args))))
+
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing t))
                                     arg
                                     transform
@@ -1247,14 +1257,7 @@ Currently selected window remains selected afterwards."
              (let ((str (filter-buffer-substring beg end t)))
                (yank)
                (kill-new str))
-           (conn-yank-replace-subr beg end))))
-     (conn-push-command-history 'conn-yank-replace
-                                thing
-                                arg
-                                transform
-                                swap
-                                register
-                                check-bounds))))
+           (conn-yank-replace-subr beg end)))))))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing region))
                                     arg
@@ -1281,14 +1284,7 @@ Currently selected window remains selected afterwards."
                    (when swap (set-register register str)))
                (goto-char beg)
                (delete-region beg end)
-               (yank))))
-         (conn-push-command-history 'conn-yank-replace
-                                    thing
-                                    arg
-                                    transform
-                                    swap
-                                    register
-                                    check-bounds)))
+               (yank))))))
     (cl-call-next-method)))
 
 (cl-defmethod conn-yank-replace-do ((_thing (conn-thing dispatch))
@@ -1317,64 +1313,85 @@ Currently selected window remains selected afterwards."
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map))
        (other-end (conn-boolean-argument
-                   "stay"
+                   "other-end"
                    'other-end
-                   conn-other-end-argument-map
-                   t))
+                   conn-other-end-argument-map))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
-                               conn-restrict-windows-argument-map)))
+                               conn-restrict-windows-argument-map))
+       (stay
+        (conn-boolean-argument "stay"
+                               'stay
+                               conn-stay-argument-map
+                               t)))
     (let ((str (if register
                    (get-register register)
                  (or read-from-kill-ring
                      (current-kill 0)))))
       (cl-assert (stringp str))
-      (conn-dispatch-setup
-       (oclosure-lambda (conn-action
-                         (action-description "Yank and Replace To")
-                         (action-window-predicate
-                          (lambda (win)
-                            (not
-                             (buffer-local-value 'buffer-read-only
-                                                 (window-buffer win)))))
-                         (action-reference
-                          "Yank the the last killed text from the kill ring and replace the region
+      (conn-with-dispatch-event-handlers
+        ( :handler (cmd)
+          (when (eq cmd 'stay)
+            (cl-callf not stay)
+            (conn-dispatch-handle)))
+        ( :keymap conn-dispatch-stay-map)
+        ( :message 0 (keymap)
+          (when-let* ((binding (where-is-internal 'stay keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "stay"
+              'face (when stay 'eldoc-highlight-function-argument)))))
+        (conn-dispatch-setup
+         (oclosure-lambda (conn-action
+                           (action-description "Yank and Replace To")
+                           (action-window-predicate
+                            (lambda (win)
+                              (not
+                               (buffer-local-value 'buffer-read-only
+                                                   (window-buffer win)))))
+                           (action-reference
+                            "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it."))
-           ()
-         (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                       (conn-select-target)))
-           (unless (funcall conn-dispatch-other-end)
-             (select-window window))
-           (with-selected-window window
-             (conn-dispatch-change-group)
-             (pcase (conn-bounds-of-dispatch thing arg pt)
-               ((conn-bounds `(,beg . ,end)
-                             `(,@transform
-                               ,@(when check-bounds
-                                   (list 'conn-check-bounds))))
-                (unless (funcall conn-dispatch-other-end)
-                  (conn-dispatch-goto-char beg))
-                (if swap
-                    (let ((newstr (filter-buffer-substring beg end)))
-                      (delete-region beg end)
-                      (save-excursion
-                        (goto-char beg)
-                        (insert-for-yank str))
-                      (conn-dispatch-action-pulse
-                       beg (+ beg (length str)))
-                      (setq str newstr))
-                  (delete-region beg end)
-                  (save-excursion
-                    (goto-char beg)
-                    (insert-for-yank str))
-                  (conn-dispatch-action-pulse
-                   beg (+ beg (length str)))))
-               (_ (user-error "Cannot find thing at point"))))))
-       thing arg transform
-       :repeat repeat
-       :other-end other-end
-       :restrict-windows restrict-windows))))
+             ()
+           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                         (conn-select-target)))
+             (unless stay
+               (select-window window))
+             (with-selected-window window
+               (conn-dispatch-change-group)
+               (pcase (conn-bounds-of-dispatch thing arg pt)
+                 ((conn-bounds `(,beg . ,end)
+                               `(,@transform
+                                 ,@(when check-bounds
+                                     (list 'conn-check-bounds))))
+                  (unless stay
+                    (conn-dispatch-goto-char beg))
+                  (if swap
+                      (let ((newstr (filter-buffer-substring beg end)))
+                        (delete-region beg end)
+                        (save-excursion
+                          (goto-char beg)
+                          (insert-for-yank str))
+                        (conn-dispatch-action-pulse
+                         beg (+ beg (length str)))
+                        (setq str newstr))
+                    (delete-region beg end)
+                    (save-excursion
+                      (goto-char beg)
+                      (insert-for-yank str))
+                    (conn-dispatch-action-pulse
+                     beg (+ beg (length str)))))
+                 (_ (user-error "Cannot find thing at point"))))))
+         thing arg transform
+         :repeat repeat
+         :other-end other-end
+         :restrict-windows restrict-windows))))
+  (conn-push-command-history #'conn-dispatch-setup-previous
+                             (conn-ring-head conn-dispatch-ring)))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing expansion))
                                     arg
@@ -1415,7 +1432,9 @@ selected by dispatch with it."))
           (insert-for-yank (get-register register)))
       (conn-yank-replace-subr beg end))
     (conn-dispatch-action-pulse
-     beg (point))))
+     beg (point)))
+  (conn-push-command-history #'conn-dispatch-setup-previous
+                             (conn-ring-head conn-dispatch-ring)))
 
 (defun conn-yank-replace (thing
                           arg
@@ -1439,14 +1458,12 @@ selected by dispatch with it."))
                    :formatter #'conn-argument-format-register))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform swap register check-bounds)))
-  (conn-yank-replace-do thing arg transform swap register check-bounds)
-  (conn-push-command-history 'conn-yank-replace
-                             thing
-                             arg
-                             transform
-                             swap
-                             register
-                             check-bounds))
+  (conn-yank-replace-do thing
+                        arg
+                        transform
+                        swap
+                        register
+                        check-bounds))
 
 ;;;;; Replace
 
@@ -1602,6 +1619,12 @@ selected by dispatch with it."))
                                 to)
   (declare (conn-anonymous-thing-property :replace-op)))
 
+(cl-defmethod conn-replace-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-replace-do args))))
+
 (cl-defmethod conn-replace-do ((thing (conn-thing t))
                                arg
                                transform
@@ -1654,7 +1677,7 @@ selected by dispatch with it."))
                              nil nil beg end backward t))
         (perform-replace from to t regexp-flag delimited
                          nil nil beg end backward))))
-  (conn-push-command-history 'conn-replace
+  (conn-push-command-history 'conn-replace-do
                              thing
                              arg
                              transform
@@ -1693,7 +1716,7 @@ selected by dispatch with it."))
                         (gethash (current-buffer) mstart (point-min))
                         (point-max)))))
   (fileloop-continue)
-  (conn-push-command-history 'conn-replace
+  (conn-push-command-history 'conn-replace-do
                              thing
                              arg
                              transform
@@ -1738,7 +1761,7 @@ selected by dispatch with it."))
                           (gethash (current-buffer) mstart (point-min))
                           (point-max)))))
     (fileloop-continue)
-    (conn-push-command-history 'conn-replace
+    (conn-push-command-history 'conn-replace-do
                                thing
                                arg
                                transform
@@ -2795,18 +2818,7 @@ hook, which see."
                           check-bounds)
       (setq this-command 'conn-kill-thing
             last-command 'conn-kill-thing
-            conn-repeating-command t))
-    (conn-push-command-history 'conn-kill-thing
-                               thing
-                               arg
-                               transform
-                               append
-                               delete
-                               register
-                               separator
-                               reformat
-                               check-bounds
-                               repeat-count)))
+            conn-repeating-command t))))
 
 (cl-defgeneric conn-kill-reformat (bounds))
 
@@ -2959,6 +2971,12 @@ hook, which see."
                                    check-bounds)
   (declare (conn-anonymous-thing-property :kill-op)))
 
+(cl-defmethod conn-kill-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-kill-thing args))))
+
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing conn-things-in-region))
                                   arg
                                   transform
@@ -2991,7 +3009,8 @@ hook, which see."
      (delete-region beg end)
      (when reformat
        (goto-char beg)
-       (funcall conn-kill-reformat-function bounds)))))
+       (funcall conn-kill-reformat-function bounds)))
+    (_ (user-error "No thing found"))))
 
 (cl-defmethod conn-kill-thing-do ((_thing (eql buffer-filename))
                                   _arg
@@ -3089,7 +3108,8 @@ hook, which see."
       ((conn-bounds (and region `(,beg . ,end)) transform)
        (keep-lines
         (conn-read-regexp "Keep lines containing match for regexp" region)
-        beg end t)))))
+        beg end t))
+      (_ (user-error "No thing found")))))
 
 (defun conn-kill-separator-for-region (beg end separator)
   (pcase separator
@@ -3140,14 +3160,18 @@ hook, which see."
            :register register
            :separator separator))
          (other-end
-          (conn-boolean-argument "stay"
+          (conn-boolean-argument "other-end"
                                  'other-end
-                                 conn-other-end-argument-map
-                                 t))
+                                 conn-other-end-argument-map))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
                                  conn-restrict-windows-argument-map))
+         (stay
+          (conn-boolean-argument "stay"
+                                 'stay
+                                 conn-stay-argument-map
+                                 t))
          (`(,dtform ,reformat)
           (conn-dispatch-transform-and-fixup-argument reformat)))
       (conn-with-dispatch-event-handlers
@@ -3175,13 +3199,27 @@ hook, which see."
                  (propertize "|" 'face 'shadow)
                  (propertize (truncate-string-ellipsis) 'face 'shadow)
                  (propertize ")" 'face 'shadow)))))))
+        ( :handler (cmd)
+          (when (eq cmd 'stay)
+            (cl-callf not stay)
+            (conn-dispatch-handle)))
+        ( :keymap conn-dispatch-stay-map)
+        ( :message 0 (keymap)
+          (when-let* ((binding (where-is-internal 'stay keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "stay"
+              'face (when stay 'eldoc-highlight-function-argument)))))
         (conn-dispatch-setup
          (oclosure-lambda (conn-action
                            (action-description "Kill"))
              ()
            (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                          (conn-select-target)))
-             (unless (funcall conn-dispatch-other-end)
+             (unless stay
                (select-window window))
              (with-selected-window window
                (conn-dispatch-change-group)
@@ -3192,7 +3230,7 @@ hook, which see."
                                                ,@transform
                                                ,@(when check-bounds
                                                    (list 'conn-check-bounds)))))
-                  (unless (funcall conn-dispatch-other-end)
+                  (unless stay
                     (push-mark (conn-bounds-get bounds :origin))
                     (conn-dispatch-goto-char beg))
                   (unless delete
@@ -3223,7 +3261,9 @@ hook, which see."
                   (if append
                       (concat result (and result sep) string)
                     (concat string (and result sep) result))))
-          (conn--kill-string result append register sep))))))
+          (conn--kill-string result append register sep)))
+      (conn-push-command-history 'conn-dispatch-setup-previous
+                                 (conn-ring-head conn-dispatch-ring)))))
 
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing expansion))
                                   arg
@@ -3281,7 +3321,9 @@ hook, which see."
             (when reformat
               (funcall conn-kill-reformat-function bounds)))
            (_ (user-error "No %s found" thing)))))
-     thing arg nil)))
+     thing arg nil)
+    (conn-push-command-history 'conn-dispatch-setup-previous
+                               (conn-ring-head conn-dispatch-ring))))
 
 (cl-defmethod conn-kill-thing-do (thing
                                   arg
@@ -3305,7 +3347,8 @@ hook, which see."
                           (or separator (when transform 'no))))
      (when reformat
        (goto-char beg)
-       (funcall conn-kill-reformat-function bounds)))))
+       (funcall conn-kill-reformat-function bounds)))
+    (_ (user-error "No thing found"))))
 
 (cl-defmethod conn-kill-thing-do ((_thing (conn-thing line))
                                   &rest _)
@@ -3483,14 +3526,7 @@ that place."
                       transform
                       append
                       register
-                      separator)
-  (conn-push-command-history 'conn-copy-thing
-                             thing
-                             arg
-                             transform
-                             append
-                             register
-                             separator))
+                      separator))
 
 (cl-defgeneric conn-copy-thing-do (thing
                                    arg
@@ -3500,6 +3536,12 @@ that place."
                                    register
                                    separator)
   (declare (conn-anonymous-thing-property :copy-op)))
+
+(cl-defmethod conn-copy-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-copy-thing args))))
 
 (cl-defmethod conn-copy-thing-do (thing
                                   arg
@@ -3512,7 +3554,8 @@ that place."
     ((conn-bounds `(,beg . ,end) transform)
      (conn--kill-region beg end nil append register separator)
      (unless executing-kbd-macro
-       (pulse-momentary-highlight-region beg end)))))
+       (pulse-momentary-highlight-region beg end)))
+    (_ (user-error "No thing found"))))
 
 (cl-defmethod conn-copy-thing-do ((thing (conn-thing conn-things-in-region))
                                   arg
@@ -3533,7 +3576,8 @@ that place."
                       (or separator 'default)))
         append
         register
-        separator)))))
+        separator)))
+    (_ (user-error "No thing found"))))
 
 (cl-defmethod conn-copy-thing-do ((_thing (eql copy-matching-lines))
                                   arg
@@ -3553,7 +3597,8 @@ that place."
        (when append (setq last-command 'kill-region))
        (copy-matching-lines
         (conn-read-regexp "Copy lines containing match for regexp" region)
-        beg end t)))))
+        beg end t))
+      (_ (user-error "No thing found")))))
 
 (cl-defmethod conn-copy-thing-do ((_thing (eql buffer-filename))
                                   _arg
@@ -3683,7 +3728,9 @@ that place."
                     (if prepend
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
-            (conn--kill-string result append register sep)))))))
+            (conn--kill-string result append register sep)))
+        (conn-push-command-history 'conn-dispatch-setup-previous
+                                   (conn-ring-head conn-dispatch-ring))))))
 
 ;;;;; How Many
 
@@ -3734,14 +3781,16 @@ The regexp is read interactively."
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (conn-how-many-in-thing-do thing arg transform)
-  (conn-push-command-history 'conn-how-many-in-thing
-                             thing
-                             arg
-                             transform))
+  (conn-how-many-in-thing-do thing arg transform))
 
 (cl-defgeneric conn-how-many-in-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :how-many-op)))
+
+(cl-defmethod conn-how-many-in-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-how-many-in-thing args))))
 
 (cl-defmethod conn-how-many-in-thing-do ((thing (conn-thing t))
                                          arg
@@ -3750,7 +3799,8 @@ The regexp is read interactively."
     ((conn-bounds (and region `(,beg . ,end)) transform)
      (how-many
       (conn-read-regexp "How many matches for regexp" region)
-      beg end t))))
+      beg end t))
+    (_ (user-error "No thing found"))))
 
 ;;;;; Comment
 
@@ -3773,6 +3823,12 @@ The regexp is read interactively."
 
 (cl-defgeneric conn-comment-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :comment-op)))
+
+(cl-defmethod conn-comment-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-comment-thing args))))
 
 (cl-defmethod conn-comment-thing-do (thing arg transform)
   (pcase (conn-bounds-of thing arg)
@@ -3806,11 +3862,7 @@ For how they are used to define the region see `conn-bounds-of' and
        ((`(,thing ,arg) (conn-comment-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (conn-comment-thing-do thing arg transform)
-  (conn-push-command-history 'conn-comment-thing
-                             thing
-                             arg
-                             transform))
+  (conn-comment-thing-do thing arg transform))
 
 ;;;;; Duplicate
 
@@ -4091,6 +4143,12 @@ Only available during repeating duplicate."
                                         repeat)
   (declare (conn-anonymous-thing-property :duplicate-op)))
 
+(cl-defmethod conn-duplicate-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-duplicate-thing args))))
+
 (cl-defmethod conn-duplicate-thing-do (thing
                                        arg
                                        transform
@@ -4142,12 +4200,7 @@ Interactively REPEAT is given by the prefix argument."
         (transform (conn-transform-argument)))
      (list thing arg transform
            (prefix-numeric-value current-prefix-arg))))
-  (conn-duplicate-thing-do thing arg transform repeat)
-  (conn-push-command-history 'conn-duplicate-thing
-                             thing
-                             arg
-                             transform
-                             repeat))
+  (conn-duplicate-thing-do thing arg transform repeat))
 
 ;;;;; Change
 
@@ -4212,6 +4265,12 @@ Interactively REPEAT is given by the prefix argument."
                                      check-bounds
                                      with)
   (declare (conn-anonymous-thing-property :change-op)))
+
+(cl-defmethod conn-change-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-change-thing-do args))))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing t))
                                     arg
@@ -4280,7 +4339,7 @@ Interactively REPEAT is given by the prefix argument."
       (call-interactively #'string-rectangle)
     (cl-call-next-method)))
 
-(cl-defmethod conn-change-thing-do ((thing (conn-thing dispatch))
+(cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
                                     arg
                                     transform
                                     &optional
@@ -4294,55 +4353,70 @@ Interactively REPEAT is given by the prefix argument."
       ((`(,dthing ,darg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
        (other-end
-        (conn-boolean-argument "stay"
+        (conn-boolean-argument "other-end"
                                'other-end
-                               conn-other-end-argument-map
-                               t))
+                               conn-other-end-argument-map))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
-                               conn-dispatch-repeat-argument-map)))
-    (conn-dispatch-setup
-     (oclosure-lambda (conn-action
-                       (action-description "Change"))
-         ()
-       (pcase-let ((`(,pt ,_window ,thing ,arg ,dtform)
-                    (conn-select-target))
-                   (end-pt nil))
-         (conn-dispatch-change-group)
-         (pcase (conn-bounds-of-dispatch thing arg pt)
-           ((conn-bounds `(,beg . ,end)
-                         (nconc dtform
-                                (if check-bounds
-                                    (append transform
-                                            (list 'conn-check-bounds))
-                                  transform)))
-            (save-excursion
-              (conn-dispatch-goto-char beg 'nopush)
-              (delete-region beg end)
-              (pcase with
-                (`(,string . ,offset)
-                 (insert string)
-                 (forward-char offset))
-                (_
-                 (setq with
-                       (if (and (= (abs (- end beg)) 1)
-                                (or (conn-subthing-p thing 'char)
-                                    (conn-subthing-p thing 'point)))
-                           (conn-record-one-insertion)
-                         (conn-record-insertion)))))
-              (setq end-pt (point)))
-            (unless (funcall conn-dispatch-other-end)
-              (conn-dispatch-goto-char end-pt))))))
-     dthing darg dtform
-     :other-end other-end
-     :repeat repeat)
-    (conn-push-command-history 'conn-change-thing-do
-                               thing
-                               arg
-                               transform
-                               check-bounds
-                               with)))
+                               conn-dispatch-repeat-argument-map))
+       (stay
+        (conn-boolean-argument "stay"
+                               'stay
+                               conn-stay-argument-map
+                               t)))
+    (conn-with-dispatch-event-handlers
+      ( :handler (cmd)
+        (when (eq cmd 'stay)
+          (cl-callf not stay)
+          (conn-dispatch-handle)))
+      ( :keymap conn-dispatch-stay-map)
+      ( :message 0 (keymap)
+        (when-let* ((binding (where-is-internal 'stay keymap t)))
+          (concat
+           (propertize (key-description binding)
+                       'face 'help-key-binding)
+           " "
+           (propertize
+            "stay"
+            'face (when stay 'eldoc-highlight-function-argument)))))
+      (conn-dispatch-setup
+       (oclosure-lambda (conn-action
+                         (action-description "Change"))
+           ()
+         (pcase-let ((`(,pt ,_window ,thing ,arg ,dtform)
+                      (conn-select-target))
+                     (end-pt nil))
+           (conn-dispatch-change-group)
+           (pcase (conn-bounds-of-dispatch thing arg pt)
+             ((conn-bounds `(,beg . ,end)
+                           (nconc dtform
+                                  (if check-bounds
+                                      (append transform
+                                              (list 'conn-check-bounds))
+                                    transform)))
+              (save-excursion
+                (conn-dispatch-goto-char beg 'nopush)
+                (delete-region beg end)
+                (pcase with
+                  (`(,string . ,offset)
+                   (insert string)
+                   (forward-char offset))
+                  (_
+                   (setq with
+                         (if (and (= (abs (- end beg)) 1)
+                                  (or (conn-subthing-p thing 'char)
+                                      (conn-subthing-p thing 'point)))
+                             (conn-record-one-insertion)
+                           (conn-record-insertion)))))
+                (setq end-pt (point)))
+              (unless stay
+                (conn-dispatch-goto-char end-pt))))))
+       dthing darg dtform
+       :other-end other-end
+       :repeat repeat))
+    (conn-push-command-history 'conn-dispatch-setup-previous
+                               (conn-ring-head conn-dispatch-ring))))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing expansion))
                                     arg
@@ -4356,8 +4430,7 @@ Interactively REPEAT is given by the prefix argument."
                      (action-not-repeatable t))
        ()
      (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
-                  (conn-select-target))
-                 (end-pt nil))
+                  (conn-select-target)))
        (conn-dispatch-change-group)
        (pcase (conn-bounds-of-dispatch thing arg pt)
          ((conn-bounds `(,beg . ,end)
@@ -4365,31 +4438,23 @@ Interactively REPEAT is given by the prefix argument."
                            (append transform
                                    (list 'conn-check-bounds))
                          transform))
-          (save-excursion
-            (conn-dispatch-goto-char beg 'nopush)
-            (delete-region beg end)
-            (pcase with
-              (`(,string . ,offset)
-               (insert string)
-               (forward-char offset))
-              (_
-               (setq with
-                     (if (and (= (abs (- end beg)) 1)
-                              (or (conn-subthing-p thing 'char)
-                                  (conn-subthing-p thing 'point)))
-                         (conn-record-one-insertion)
-                       (conn-record-insertion)))))
-            (setq end-pt (point)))
-          (unless (funcall conn-dispatch-other-end)
-            (conn-dispatch-goto-char end-pt))))))
+          (conn-dispatch-goto-char beg 'nopush)
+          (delete-region beg end)
+          (pcase with
+            (`(,string . ,offset)
+             (insert string)
+             (forward-char offset))
+            (_
+             (setq with
+                   (if (and (= (abs (- end beg)) 1)
+                            (or (conn-subthing-p thing 'char)
+                                (conn-subthing-p thing 'point)))
+                       (conn-record-one-insertion)
+                     (conn-record-insertion)))))))))
    thing arg nil
    :other-end :no-other-end)
-  (conn-push-command-history 'conn-change-thing-do
-                             thing
-                             arg
-                             transform
-                             check-bounds
-                             with))
+  (conn-push-command-history #'conn-dispatch-setup-previous
+                             (conn-ring-head conn-dispatch-ring)))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
@@ -4507,6 +4572,12 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 (cl-defgeneric conn-indent-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :indent-op)))
 
+(cl-defmethod conn-indent-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history 'conn-indent-thing-do args))))
+
 (cl-defmethod conn-indent-thing-do (thing arg transform)
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -4549,12 +4620,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
                                 'cleanup-whitespace
                                 conn-indent-cleanup-whitespace-map)))
      (list thing arg transform cleanup-whitespace)))
-  (conn-indent-thing-do thing arg transform cleanup-whitespace)
-  (conn-push-command-history 'conn-indent-thing
-                             thing
-                             arg
-                             transform
-                             cleanup-whitespace))
+  (conn-indent-thing-do thing arg transform cleanup-whitespace))
 
 (defun conn-indent-right ()
   (interactive)
@@ -4950,13 +5016,7 @@ subregion."
                                         'replace
                                         conn-shell-command-replace-map)))
      (list thing arg transform replace subregions)))
-  (conn-shell-command-on-thing-do thing arg transform replace subregions)
-  (conn-push-command-history 'conn-shell-command-on-thing
-                             thing
-                             arg
-                             transform
-                             replace
-                             subregions))
+  (conn-shell-command-on-thing-do thing arg transform replace subregions))
 
 (cl-defgeneric conn-shell-command-on-thing-do (thing
                                                arg
@@ -4965,6 +5025,14 @@ subregion."
                                                replace
                                                subregions)
   (declare (conn-anonymous-thing-property :shell-command-op)))
+
+(cl-defmethod conn-shell-command-on-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history
+             'conn-shell-command-on-thing-do
+             args))))
 
 (cl-defmethod conn-shell-command-on-thing-do (thing
                                               arg
