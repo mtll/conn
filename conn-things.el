@@ -1094,7 +1094,8 @@ the point is within the region then the entire region is returned.")))
       (progn
         (conn-bounds-of-recursive-edit-mode 1)
         (conn-with-recursive-stack 'conn-command-state
-          (recursive-edit))
+          (let ((buffer-read-only t))
+            (recursive-edit)))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
@@ -1175,7 +1176,8 @@ the point is within the region then the entire region is returned.")))
               (progn
                 (call-interactively cmd)
                 (when isearch-mode
-                  (let ((isearch-recursive-edit t))
+                  (let ((isearch-recursive-edit t)
+                        (buffer-read-only t))
                     (recursive-edit))))
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
@@ -1202,7 +1204,8 @@ the point is within the region then the entire region is returned.")))
                 (progn
                   (call-interactively cmd)
                   (when isearch-mode
-                    (let ((isearch-recursive-edit t))
+                    (let ((isearch-recursive-edit t)
+                          (buffer-read-only t))
                       (recursive-edit))))
               (isearch-forward)))
         (remove-hook 'isearch-mode-end-hook quit))
@@ -1395,41 +1398,46 @@ the point is within the region then the entire region is returned.")))
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     (cmd (conn-thing kbd-macro))
                                     break)
-  (unless (and conn--last-thing-kbd-macro
-               (memq cmd '(kmacro-call-macro
-                           call-last-kbd-macro
-                           kmacro-end-and-call-macro)))
-    (setf conn--last-thing-kbd-macro
-          (conn-anonymous-thing
-            (list 'kbd-macro)
-            :bounds-op
-            ( :method (self _arg)
-              (save-mark-and-excursion
-                (save-current-buffer
-                  (let ((buffer-read-only t)
-                        (buf (current-buffer))
-                        (conn-command-history conn-command-history))
-                    (if-let* ((macro (conn-thing-get self :kmacro)))
-                        (conn-with-recursive-stack 'conn-command-state
-                          (execute-kbd-macro macro))
-                      (let ((last-kbd-macro nil))
-                        (start-kbd-macro nil)
-                        (unwind-protect
-                            (conn-with-recursive-stack 'conn-command-state
-                              (recursive-edit))
-                          (if defining-kbd-macro
-                              (end-kbd-macro)
-                            (error "Not defining kbd macro"))
-                          (setf (conn-thing-get self :kmacro) last-kbd-macro))))
-                    (if (eq buf (current-buffer))
-                        (conn-make-bounds
-                         self nil
-                         (cons (region-beginning) (region-end))
-                         :subregions (cl-loop for r in (region-bounds)
-                                              collect (conn-make-bounds cmd nil r)))
-                      (error "Buffer change during keyboard macro")))))))))
-  (setf (conn-argument-set-flag arg) t
-        (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
+  (if (and conn--last-thing-kbd-macro
+           (memq cmd '(kmacro-call-macro
+                       call-last-kbd-macro
+                       kmacro-end-and-call-macro)))
+      (setf (conn-argument-set-flag arg) t
+            (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
+    (setf (conn-argument-set-flag arg) t
+          (conn-argument-value arg)
+          (list
+           (conn-anonymous-thing
+             (list 'kbd-macro)
+             :bounds-op
+             ( :method (self _arg)
+               (prog1
+                   (save-mark-and-excursion
+                     (save-current-buffer
+                       (let ((buffer-read-only t)
+                             (buf (current-buffer))
+                             (conn-command-history conn-command-history))
+                         (if-let* ((macro (conn-thing-get self :kmacro)))
+                             (conn-with-recursive-stack 'conn-command-state
+                               (execute-kbd-macro macro))
+                           (let ((last-kbd-macro nil))
+                             (conn-with-recursive-stack 'conn-command-state
+                               (start-kbd-macro nil)
+                               (recursive-edit))
+                             (if defining-kbd-macro
+                                 (end-kbd-macro)
+                               (error "Not defining kbd macro"))
+                             (setf (conn-thing-get self :kmacro) last-kbd-macro)))
+                         (if (eq buf (current-buffer))
+                             (conn-make-bounds
+                              self nil
+                              (cons (region-beginning) (region-end))
+                              :subregions
+                              (cl-loop for r in (region-bounds)
+                                       collect (conn-make-bounds cmd nil r)))
+                           (error "Buffer change during keyboard macro")))))
+                 (setf conn--last-thing-kbd-macro self))))
+           nil)))
   (funcall break))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)

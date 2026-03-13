@@ -3900,7 +3900,7 @@ after the region selected by dispatch."))
   (oclosure-lambda (conn-dispatch-yank-to
                     (action-description "Yank To")
                     (str (current-kill 0))
-                    (separator (conn-separator-argument))
+                    (separator (conn-separator-argument 'default))
                     (action-window-predicate
                      (lambda (win)
                        (not
