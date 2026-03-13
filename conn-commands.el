@@ -4304,7 +4304,8 @@ Interactively REPEAT is given by the prefix argument."
                                 arg
                                 transform
                                 check-bounds
-                                with))))
+                                with))
+    (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
                                     _arg

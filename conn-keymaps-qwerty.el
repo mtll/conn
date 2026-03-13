@@ -566,11 +566,11 @@
 
 (define-keymap
   :keymap conn-stay-argument-map
-  "g" 'stay)
+  "f" 'stay)
 
 (define-keymap
   :keymap conn-dispatch-stay-map
-  "M-g" 'stay)
+  "M-f" 'stay)
 
 (define-keymap
   :keymap conn-replace-thing-argument-map

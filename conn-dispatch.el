@@ -2795,8 +2795,8 @@ to the key binding for that target."
   :abstract t)
 
 (defvar-keymap conn-dispatch-retargeting-argument-map
-  "M-f" 'always-retarget
-  "C-f" 'retarget)
+  "C-M-r" 'always-retarget
+  "M-r" 'retarget)
 
 (cl-defgeneric conn-target-finder-retarget (target-finder)
   (:method (_) nil))
