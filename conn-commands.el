@@ -3111,22 +3111,6 @@ hook, which see."
         beg end t))
       (_ (user-error "No thing found")))))
 
-(defun conn-kill-separator-for-region (beg end separator)
-  (pcase separator
-    ('t (save-excursion
-         (goto-char beg)
-         (if (search-forward "\n" end t) "\n" " ")))
-    ((pred stringp) separator)))
-
-(defun conn-kill-separator-for-strings (strings separator)
-  (pcase separator
-    ('t (catch 'sep
-          (dolist (str (ensure-list strings))
-            (when (string-match "\n" str nil t)
-              (throw 'sep "\n")))
-          " "))
-    ((pred stringp) separator)))
-
 (defvar-keymap conn-kill-dispatch-append-map)
 
 (cl-defmethod conn-kill-thing-do ((_thing (conn-thing dispatch))

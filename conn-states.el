@@ -1973,11 +1973,6 @@ This skips executing the body of the `conn-read-args' form entirely."
   (let ((arguments arglist)
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
-        (keymap (thread-last
-                  (mapcar #'conn-argument-compose-keymap arglist)
-                  (cons overriding-map)
-                  (delq nil)
-                  (make-composed-keymap)))
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil))
@@ -2074,13 +2069,19 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn-reading-args t)
                    (conn-wincontrol-mode nil)
                    (conn-wincontrol-one-command-mode nil)
-                   (maps `((,state . ,keymap)
+                   (maps `((,state . nil)
                            ,@(when history-var
                                `((,state . ,conn-read-args-previous-map)))))
                    (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
                (while (continue-p)
+                 (setf (cdar maps)
+                       (thread-last
+                         (mapcar #'conn-argument-compose-keymap arglist)
+                         (cons overriding-map)
+                         (delq nil)
+                         (make-composed-keymap)))
                  (conn->f emulation-mode-map-alists
                    (delq maps)
                    (cons maps))
@@ -2575,6 +2576,7 @@ be displayed in the echo area during `conn-read-args'."
     (mapconcat (lambda (cmd) (format "\\[%s]" cmd))
                (ensure-list (conn-read-argument-toggle-command arg))
                ", "))
+   " "
    (or (and-let* ((fn (conn-read-argument-formatter arg))
                   (str (funcall fn
                                 (conn-read-argument-name arg)

@@ -573,6 +573,28 @@ the same form and contains disjoint (BEG . END) pairs."
          :lax-whitespace nil)
       (read-regexp prompt nil 'regexp-history))))
 
+(defun conn-kill-separator-for-region (beg end separator)
+  (pcase separator
+    ('default
+     (save-excursion
+       (goto-char beg)
+       (if (search-forward "\n" end t) "\n" " ")))
+    ((pred stringp)
+     separator)
+    (_ "")))
+
+(defun conn-kill-separator-for-strings (strings separator)
+  (pcase separator
+    ('default
+     (catch 'sep
+       (dolist (str (ensure-list strings))
+         (when (string-match "\n" str nil t)
+           (throw 'sep "\n")))
+       " "))
+    ((pred stringp)
+     separator)
+    (_ "")))
+
 ;;;;; Derived Mode Utils
 
 (static-if (< emacs-major-version 30)

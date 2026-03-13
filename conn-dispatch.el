@@ -726,7 +726,8 @@ themselves once the selection process has concluded."
 (cl-defstruct (conn-dispatch-action-argument
                (:include conn-argument))
   (repeat nil)
-  (curr nil))
+  (action-command nil)
+  (arguments nil :type list))
 
 (defun conn-dispatch-action-argument (&optional required)
   (setq conn--dispatch-thing-predicate #'always)
@@ -747,59 +748,88 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd
                                     break)
-  (cl-symbol-macrolet ((curr (conn-dispatch-action-argument-curr arg)))
+  (cl-symbol-macrolet ((action (conn-dispatch-action-argument-action-command arg))
+                       (arguments (conn-dispatch-action-argument-arguments arg))
+                       (action-command (conn-dispatch-action-argument-action-command arg)))
     (pcase cmd
       ((and 'repeat-dispatch)
        (when (or (null (conn-argument-value arg))
                  (conn-action-repeatable-p (conn-argument-value arg)))
          (cl-callf not (conn-dispatch-action-argument-repeat arg)))
        (funcall break))
-      ((guard (conn-argument-predicate arg cmd))
+      ((guard (function-get cmd :conn-dispatch-action))
        (conn-action-cancel (conn-argument-value arg))
-       (condition-case err
-           (if-let* ((_(not (eq curr cmd)))
-                     (action (or (atomic-change-group
-                                   (save-window-excursion
-                                     (funcall cmd)))
-                                 (error "Failed to construct %s" cmd))))
-               (progn
-                 (setf curr cmd)
-                 (setf conn--dispatch-thing-predicate
-                       (or (conn-action--action-thing-predicate action)
-                           #'always))
-                 (setf (conn-argument-value arg) action
-                       (conn-argument-set-flag arg) t)
-                 (setf (conn-dispatch-action-argument-repeat arg)
-                       (pcase (conn-dispatch-action-argument-repeat arg)
-                         ((guard (not (conn-action-repeatable-p action))))
-                         ((or 'auto 'nil)
-                          (and (conn-action--action-auto-repeat action)
-                               'auto))
-                         (_ (conn-dispatch-action-argument-repeat arg)))))
-             (setf conn--dispatch-thing-predicate #'always
-                   (conn-argument-value arg) nil
-                   (conn-argument-set-flag arg) nil
-                   curr nil))
-         (error
-          (conn-read-args-error (error-message-string err))
-          (setf (conn-argument-value arg) nil)))
-       (funcall break)))))
+       (mapc #'conn-argument-cancel arguments)
+       (setf conn--dispatch-thing-predicate #'always
+             (conn-argument-value arg) nil
+             (conn-argument-set-flag arg) nil
+             action nil
+             arguments nil
+             action-command nil)
+       (when-let* ((_(not (eq action-command cmd)))
+                   (action (or (atomic-change-group
+                                 (save-window-excursion
+                                   (funcall cmd)))
+                               (user-error "Failed to construct %s" cmd))))
+         (setf action-command cmd
+               (conn-argument-value arg) action
+               (conn-argument-set-flag arg) t)
+         (cl-loop for slot in (oclosure--class-slots
+                               (cl--find-class
+                                (oclosure-type action)))
+                  for val = (slot-value action
+                                        (cl--slot-descriptor-name slot))
+                  when (conn-read-argument-p val)
+                  do (push val arguments))
+         (setf conn--dispatch-thing-predicate
+               (or (conn-action--action-thing-predicate action)
+                   #'always))
+         (setf (conn-dispatch-action-argument-repeat arg)
+               (pcase (conn-dispatch-action-argument-repeat arg)
+                 ((guard (not (conn-action-repeatable-p action))))
+                 ((or 'auto 'nil)
+                  (and (conn-action--action-auto-repeat action)
+                       'auto))
+                 (_ (conn-dispatch-action-argument-repeat arg)))))
+       (funcall break))
+      (_
+       (dolist (a arguments)
+         (conn-argument-update a cmd break))))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
-  (conn-action-cancel (conn-argument-value arg)))
+  (conn-action-cancel (conn-argument-value arg))
+  (mapc #'conn-argument-cancel (conn-dispatch-action-argument-arguments arg)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
-  (list (conn-argument-value arg)
+  (when-let* ((action (conn-dispatch-action-argument-value arg)))
+    (cl-loop for desc in (oclosure--class-slots
+                          (cl--find-class
+                           (oclosure-type action)))
+             for slot = (cl--slot-descriptor-name desc)
+             when (conn-read-argument-p (slot-value action slot))
+             do (cl-callf conn-argument-extract-value
+                    (slot-value action slot))))
+  (list (conn-dispatch-action-argument-value arg)
         (conn-dispatch-action-argument-repeat arg)))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-action-argument)
+(cl-defmethod conn-argument-predicate ((arg conn-dispatch-action-argument)
                                        sym)
-  (function-get sym :conn-dispatch-action))
+  (or (function-get sym :conn-dispatch-action)
+      (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
+               thereis (conn-argument-predicate a sym))))
 
-(cl-defmethod conn-argument-completion-annotation ((_arg conn-dispatch-action-argument)
+(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-action-argument)
                                                    sym)
-  (when (function-get sym :conn-dispatch-action)
-    " (action)"))
+  (or (and (function-get sym :conn-dispatch-action)
+           " (action)")
+      (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
+               thereis (conn-argument-completion-annotation a sym))))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-action-argument))
+  (make-composed-keymap
+   (cons (cl-call-next-method)
+         (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
+                  collect (conn-argument-compose-keymap a)))))
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (list
@@ -814,7 +844,9 @@ themselves once the selection process has concluded."
                          'conn-read-args-display-depth -50)
              ": "
              (propertize (conn-action-pretty-print action)
-                         'face 'eldoc-highlight-function-argument)))))
+                         'face 'eldoc-highlight-function-argument)))
+   (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
+            collect (conn-argument-display a))))
 
 ;;;;;; Command Handler
 
@@ -3727,25 +3759,6 @@ contain targets."
          (when cur-mark-active
            (run-hooks 'deactivate-mark-hook)))))))
 
-(defun conn-dispatch-insert-separator (separator)
-  (pcase separator
-    ('nil)
-    ('register
-     (insert (get-register register-separator))
-     (fixup-whitespace))
-    ('space
-     (insert " ")
-     (fixup-whitespace))
-    ('newline
-     (unless (or (bobp)
-                 (save-excursion
-                   (forward-line -1)
-                   (looking-at-p (rx (seq (* (syntax whitespace))
-                                          eol)))))
-       (insert "\n")))
-    (_
-     (insert separator))))
-
 (oclosure-define (conn-change-group-action
                   (:parent conn-action))
   (action-change-group :mutable t))
@@ -3753,7 +3766,7 @@ contain targets."
 (cl-defmethod conn-action-accept ((action conn-change-group-action))
   (conn--action-accept-change-group
    (conn-change-group-action--action-change-group action))
-  action)
+  (cl-call-next-method))
 
 (cl-defmethod conn-action-cancel ((action conn-change-group-action))
   (conn--action-cancel-change-group
@@ -3790,7 +3803,7 @@ contain targets."
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
   (str :type string)
-  (separator :type string))
+  (separator :type string :mutable t))
 
 (defun conn-dispatch-copy-to ()
   (declare (conn-dispatch-action)
@@ -3798,22 +3811,16 @@ contain targets."
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
       ((`(,fthing ,farg) (conn-thing-argument))
-       (ftransform (conn-transform-argument))
-       (separator (conn-separator-argument 'default)))
+       (ftransform (conn-transform-argument)))
     (let ((str (pcase (conn-bounds-of fthing farg)
                  ((conn-bounds `(,beg . ,end) ftransform)
                   (conn-dispatch-action-pulse beg end)
                   (filter-buffer-substring beg end))
                  (_ (user-error "No %s found" (conn-thing-pretty-print fthing))))))
       (oclosure-lambda (conn-dispatch-copy-to
+                        (action-description "Copy To")
                         (str str)
-                        (separator
-                         (if (eq separator 'default)
-                             (cond ((eq fthing 'region))
-                                   ((seq-contains-p str ?\n #'eql)
-                                    'newline)
-                                   (t 'space))
-                           separator))
+                        (separator (conn-separator-argument 'default))
                         (action-window-predicate
                          (lambda (win)
                            (not
@@ -3834,22 +3841,14 @@ after the region selected by dispatch."))
                 ((conn-dispatch-bounds `(,beg . ,end) transform)
                  (goto-char beg)
                  (when (and separator (< end beg))
-                   (conn-dispatch-insert-separator separator))
+                   (insert (conn-kill-separator-for-strings str separator)))
                  (insert-for-yank str)
-                 (when (and separator (not (< end beg)))
-                   (conn-dispatch-insert-separator separator))
                  (conn-dispatch-action-pulse
                   (- (point) (length str))
-                  (point)))
+                  (point))
+                 (when (and separator (not (< end beg)))
+                   (insert (conn-kill-separator-for-strings str separator))))
                 (_ (user-error "Cannot find thing at point"))))))))))
-
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-copy-to)
-                                        &optional
-                                        short)
-  (if-let* ((sep (and (not short)
-                      (conn-dispatch-copy-to--separator action))))
-      (format "Copy To <%s>" sep)
-    "Copy To"))
 
 (defun conn-dispatch-copy-to-replace ()
   (declare (conn-dispatch-action)
@@ -3893,20 +3892,15 @@ after the region selected by dispatch."))
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
   (str :type string)
-  (separator :type string))
+  (separator :type string :mutable t))
 
 (defun conn-dispatch-yank-to ()
   (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-yank-to
+                    (action-description "Yank To")
                     (str (current-kill 0))
-                    (separator
-                     (cond ((conn-read-args-consume-prefix-arg)
-                            (read-string "Separator: " nil nil nil t))
-                           ((and register-separator
-                                 (get-register register-separator))
-                            'register)
-                           (t 'default)))
+                    (separator (conn-separator-argument))
                     (action-window-predicate
                      (lambda (win)
                        (not
@@ -3927,42 +3921,28 @@ region selected by dispatch."))
             ((conn-dispatch-bounds `(,beg . ,end) transform)
              (goto-char beg)
              (when (and separator (< end beg))
-               (conn-dispatch-insert-separator separator))
+               (insert (conn-kill-separator-for-strings str separator)))
              (insert-for-yank str)
-             (when (and separator (not (< end beg)))
-               (conn-dispatch-insert-separator separator))
              (conn-dispatch-action-pulse
               (- (point) (length str))
-              (point)))
+              (point))
+             (when (and separator (not (< end beg)))
+               (insert (conn-kill-separator-for-strings str separator))))
             (_ (user-error "Cannot find thing at point"))))))))
-
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-yank-to)
-                                        &optional
-                                        short)
-  (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
-      (format "Yank To <%s>" (if (eq sep 'register)
-                                 (get-register register-separator)
-                               sep))
-    "Yank To"))
 
 (oclosure-define (conn-dispatch-reading-yank-to
                   (:parent conn-action))
   (str :type string)
-  (separator :type string))
+  (separator :type string :mutable t))
 
 (defun conn-dispatch-reading-yank-to ()
   (declare (conn-dispatch-action)
            (important-return-value t))
   (let ((str (read-from-kill-ring "Yank To: ")))
     (oclosure-lambda (conn-dispatch-reading-yank-to
+                      (action-description "Yank To")
                       (str str)
-                      (separator
-                       (cond ((conn-read-args-consume-prefix-arg)
-                              (read-string "Separator: " nil nil nil t))
-                             ((and register-separator
-                                   (get-register register-separator))
-                              'register)
-                             (t 'default)))
+                      (separator (conn-separator-argument 'default))
                       (action-window-predicate
                        (lambda (win)
                          (not
@@ -3983,30 +3963,22 @@ the string after the region selected by dispatch."))
               ((conn-dispatch-bounds `(,beg . ,end) transform)
                (goto-char beg)
                (when (and separator (< end beg))
-                 (conn-dispatch-insert-separator separator))
+                 (insert (conn-kill-separator-for-strings str separator)))
                (insert-for-yank str)
-               (when (and separator (not (< end beg)))
-                 (conn-dispatch-insert-separator separator))
                (conn-dispatch-action-pulse
                 (- (point) (length str))
-                (point)))
+                (point))
+               (when (and separator (not (< end beg)))
+                 (insert (conn-kill-separator-for-strings str separator))))
               (_ (user-error "Cannot find thing at point")))
             (conn-dispatch-action-pulse
              (- (point) (length str))
              (point))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-reading-yank-to)
-                                        &optional
-                                        short)
-  (if-let* ((sep (and (not short)
-                      (conn-dispatch-reading-yank-to--separator action))))
-      (format "Yank To <%s>" sep)
-    "Yank To"))
-
 (oclosure-define (conn-dispatch-send
                   (:parent conn-change-group-action))
   (str :type string)
-  (separator :type string))
+  (separator :type string :mutable t))
 
 (defun conn-dispatch-send ()
   (declare (conn-dispatch-action)
@@ -4021,8 +3993,7 @@ the string after the region selected by dispatch."))
         (conn-boolean-argument "check bounds"
                                'check-bounds
                                conn-check-bounds-argument-map
-                               t))
-       (separator (conn-separator-argument 'default)))
+                               t)))
     (let* ((cg (conn--action-buffer-change-group))
            (str (save-excursion
                   (conn-kill-thing thing arg transform
@@ -4033,12 +4004,7 @@ the string after the region selected by dispatch."))
                         (action-description "Send")
                         (action-change-group cg)
                         (str str)
-                        (separator
-                         (if (eq separator 'default)
-                             (cond ((eq thing 'region))
-                                   ((seq-contains-p str ?\n #'eql) 'newline)
-                                   (t 'space))
-                           separator))
+                        (separator (conn-separator-argument 'default))
                         (action-window-predicate
                          (lambda (win)
                            (not
@@ -4059,13 +4025,13 @@ the string after the region selected by dispatch."))
                 ((conn-dispatch-bounds `(,beg . ,end) transform)
                  (goto-char beg)
                  (when (< end beg)
-                   (conn-dispatch-insert-separator separator))
+                   (insert (conn-kill-separator-for-strings str separator)))
                  (insert-for-yank str)
-                 (when (not (< end beg))
-                   (conn-dispatch-insert-separator separator))
                  (conn-dispatch-action-pulse
                   (- (point) (length str))
-                  (point)))
+                  (point))
+                 (when (not (< end beg))
+                   (insert (conn-kill-separator-for-strings str separator))))
                 (_ (user-error "Cannot find thing at point")))
               (conn-dispatch-action-pulse
                (- (point) (length str))
@@ -4074,7 +4040,7 @@ the string after the region selected by dispatch."))
 (cl-defmethod conn-action-accept ((action conn-dispatch-send))
   (conn--action-accept-change-group
    (conn-dispatch-send--action-change-group action))
-  action)
+  (cl-call-next-method))
 
 (cl-defmethod conn-action-cancel ((action conn-dispatch-send))
   (conn--action-cancel-change-group
@@ -4135,7 +4101,7 @@ it."))
 (cl-defmethod conn-action-accept ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group
    (conn-dispatch-send-replace--action-change-group action))
-  action)
+  (cl-call-next-method))
 
 (cl-defmethod conn-action-cancel ((action conn-dispatch-send-replace))
   (conn--action-cancel-change-group
@@ -4313,7 +4279,8 @@ it."))
 
 (cl-defmethod conn-action-accept ((action conn-dispatch-copy-from-replace))
   (conn--action-accept-change-group
-   (conn-dispatch-copy-from-replace--action-change-group action)))
+   (conn-dispatch-copy-from-replace--action-change-group action))
+  (cl-call-next-method))
 
 (oclosure-define (conn-dispatch-take
                   (:parent conn-action)

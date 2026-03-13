@@ -188,7 +188,7 @@
   ")" 'forward-list
   "SPC" 'forward-whitespace
   "v" 'conn-forward-visual-line
-  "h" 'outline-previous-visible-heading)
+  "h" 'outline-up-heading)
 
 (keymap-set
  (with-memoization (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)

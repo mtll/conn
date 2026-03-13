@@ -99,14 +99,6 @@
 (declare-function outline-on-heading-p "outline")
 (declare-function outline-up-heading "outline")
 
-(cl-defmethod conn-bounds-of ((cmd (eql outline-up-heading))
-                              arg)
-  (cl-callf prefix-numeric-value arg)
-  (cl-call-next-method cmd
-                       (if (looking-at-p outline-regexp)
-                           arg
-                         (1- arg))))
-
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
                                       _arg)
   (conn-dispatch-headings
