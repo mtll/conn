@@ -261,9 +261,9 @@
        (if (conn-read-args-consume-prefix-arg)
            (read-string "Padding: ")
          " ")))
-   :formatter (lambda (name val)
+   :formatter (lambda (key-string name val)
                 (concat
-                 name
+                 key-string " " name
                  (when val
                    (concat
                     " "

@@ -4415,18 +4415,33 @@ it."))
 
 (oclosure-define (conn-dispatch-repeat-command
                   (:parent conn-action))
-  (command :type list))
+  (command :type list :mutable t))
 
 (defun conn-dispatch-repeat-command ()
   (declare (conn-dispatch-action)
            (important-return-value t))
   (when command-history
-    (oclosure-lambda (conn-dispatch-repeat-command
-                      (command (car command-history))
-                      (action-window-predicate
-                       (lambda (win)
-                         (not (buffer-local-value 'buffer-read-only
-                                                  (window-buffer win))))))
+    (oclosure-lambda
+        (conn-dispatch-repeat-command
+         (command
+          (conn-read-argument
+           "command"
+           'read-previous-command
+           (define-keymap "+" 'read-previous-command)
+           (lambda (_cmd) (conn-read-from-command-history))
+           :formatter (lambda (key-string name _val)
+                        (concat
+                         (propertize key-string
+                                     'conn-read-args-display-depth -49)
+                         " "
+                         (propertize name
+                                     'face 'conn-argument-active-face)))
+           :value (car conn-command-history)
+           :always-read t))
+         (action-window-predicate
+          (lambda (win)
+            (not (buffer-local-value 'buffer-read-only
+                                     (window-buffer win))))))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -4436,14 +4451,16 @@ it."))
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-dispatch-bounds `(,beg . ,_end) transform)
                (goto-char beg)
-               (eval command))
+               (let ((conn-repeating-command t))
+                 (when (commandp (car command))
+                   (setq this-command (car command)))
+                 (apply #'funcall-interactively command)))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-repeat-command)
+(cl-defmethod conn-action-pretty-print ((_action conn-dispatch-repeat-command)
                                         &optional
-                                        short)
-  (if short "Repeat Cmd"
-    (format "Repeat <%s>" (car (oref action command)))))
+                                        _short)
+  "Repeat")
 
 (oclosure-define (conn-dispatch-highlight-symbol
                   (:parent conn-action)))

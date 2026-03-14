@@ -1475,7 +1475,7 @@ command was a prefix command.")
   :lighter "REC")
 
 (defvar conn-insertion-recording-overlay nil)
-(defvar conn-insertion-recording-point nil)
+(defvar conn-insertion-recording-other-end nil)
 
 (define-minor-mode conn-insertion-recording-mode
   "Minor mode active during insertion recording"
@@ -1489,21 +1489,21 @@ command was a prefix command.")
   (with-current-buffer (window-buffer window)
     (when (overlayp conn-insertion-recording-overlay)
       (move-overlay conn-insertion-recording-overlay
-                    (min (point) conn-insertion-recording-point)
-                    (max (point) conn-insertion-recording-point)))))
+                    (min (point) conn-insertion-recording-other-end)
+                    (max (point) conn-insertion-recording-other-end)))))
 
 (defun conn-record-exhange ()
   (interactive)
   (goto-char
-   (prog1 conn-insertion-recording-point
-     (setf conn-insertion-recording-point (point)))))
+   (prog1 conn-insertion-recording-other-end
+     (setf conn-insertion-recording-other-end (point)))))
 
 (defun conn-record-insertion (&optional state)
   (require 'diff-mode)
   (when conn-insertion-recording-mode
     (error "Already recording"))
   (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
-        (conn-insertion-recording-point (point)))
+        (conn-insertion-recording-other-end (point)))
     (unwind-protect
         (conn-with-recursive-stack (or state 'conn-record-emacs-state)
           (conn-insertion-recording-mode 1)
@@ -1519,8 +1519,8 @@ command was a prefix command.")
               (save-current-buffer
                 (recursive-edit))))
           (filter-buffer-substring
-           (min (point) conn-insertion-recording-point)
-           (max (point) conn-insertion-recording-point)))
+           (min (point) conn-insertion-recording-other-end)
+           (max (point) conn-insertion-recording-other-end)))
       (remove-hook 'pre-redisplay-functions
                    #'conn---update-record-insertion-region
                    'local)
@@ -1542,7 +1542,7 @@ command was a prefix command.")
   (require 'diff-mode)
   (when conn-insertion-recording-mode
     (error "Already recording"))
-  (let ((conn-insertion-recording-point (point))
+  (let ((conn-insertion-recording-other-end (point))
         (pre (make-symbol "post-hook")))
     (unwind-protect
         (conn-with-recursive-stack 'conn-command-state
@@ -1566,8 +1566,8 @@ command was a prefix command.")
               (save-current-buffer
                 (recursive-edit))))
           (filter-buffer-substring
-           (min (point) conn-insertion-recording-point)
-           (max (point) conn-insertion-recording-point)))
+           (min (point) conn-insertion-recording-other-end)
+           (max (point) conn-insertion-recording-other-end)))
       (remove-hook 'pre-command-hook pre t)
       (conn-insertion-recording-mode -1))))
 
@@ -2578,10 +2578,12 @@ be displayed in the echo area during `conn-read-args'."
                   formatter
                   value
                   reference
-                  annotation)))
+                  annotation
+                  always-read)))
   (reader nil :type function :read-only t)
   (formatter nil :type function :read-only t)
-  (toggle-command nil :type (or symbol list) :read-only t))
+  (toggle-command nil :type (or symbol list) :read-only t)
+  (always-read nil :type boolean :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd
@@ -2592,7 +2594,8 @@ be displayed in the echo area during `conn-read-args'."
                   (memq cmd toggles)
                 (eq cmd toggles))
           (setf (conn-argument-value arg)
-                (unless (conn-argument-value arg)
+                (unless (and (conn-argument-value arg)
+                             (not (conn-read-argument-always-read arg)))
                   (funcall (conn-read-argument-reader arg)
                            (conn-argument-value arg))))
           (funcall break))
@@ -2607,21 +2610,20 @@ be displayed in the echo area during `conn-read-args'."
       (eq sym toggles))))
 
 (cl-defmethod conn-argument-display ((arg conn-read-argument))
-  (concat
-   (substitute-command-keys
-    (mapconcat (lambda (cmd) (format "\\[%s]" cmd))
-               (ensure-list (conn-read-argument-toggle-command arg))
-               ", "))
-   " "
-   (or (and-let* ((fn (conn-read-argument-formatter arg))
-                  (str (funcall fn
-                                (conn-read-argument-name arg)
-                                (conn-argument-value arg)))
-                  (_ (not (string-empty-p str))))
-         str)
-       (propertize (conn-read-argument-name arg)
-                   'face (when (conn-argument-value arg)
-                           'conn-argument-active-face)))))
+  (let ((key-string
+         (substitute-command-keys
+          (mapconcat (lambda (cmd) (format "\\[%s]" cmd))
+                     (ensure-list (conn-read-argument-toggle-command arg))
+                     ", "))))
+    (if-let* ((fn (conn-read-argument-formatter arg)))
+        (funcall fn
+                 key-string
+                 (conn-read-argument-name arg)
+                 (conn-argument-value arg))
+      (propertize
+       (concat key-string " " (conn-read-argument-name arg))
+       'face (when (conn-argument-value arg)
+               'conn-argument-active-face)))))
 
 ;;;;; Protected Argument
 

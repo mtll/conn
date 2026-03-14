@@ -248,9 +248,9 @@ See `quail-add-unread-command-events'."
              collect (cons 'no-record e) into evs
              finally (cl-callf2 nconc evs unread-command-events))))
 
-(defun conn-argument-format-register (name register)
+(defun conn-argument-format-register (key-string name register)
   (concat
-   name
+   key-string " " name
    (when register
      (concat
       " "
@@ -258,12 +258,27 @@ See `quail-add-unread-command-events'."
        (concat "<" (char-to-string register) ">")
        'face 'conn-argument-active-face)))))
 
+;;;;; Command History
+
 (defun conn-push-command-history (command &rest args)
   (unless conn-repeating-command
     (add-to-history 'conn-command-history
                     (cons command args)
                     conn-command-history-max
                     t)))
+
+(defun conn-read-from-command-history ()
+  (let* ((print-level nil)
+         (cmds (cl-loop for cmd in conn-command-history
+                        collect (cons (prin1-to-string cmd) cmd))))
+    (alist-get (completing-read
+                "Command: "
+                (lambda (string pred action)
+                  (if (eq action 'metadata)
+                      `(metadata (display-sort-function . ,#'identity))
+                    (complete-with-action action cmds string pred)))
+                nil t)
+               cmds nil nil #'equal)))
 
 ;;;;; Keyboard Macro
 

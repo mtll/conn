@@ -108,17 +108,7 @@ execution."
   (unless conn-command-history
     (user-error "No repeatable last command"))
   (let ((cmd (if arg
-                 (let* ((print-level nil)
-                        (cmds (cl-loop for cmd in conn-command-history
-                                       collect (cons (prin1-to-string cmd) cmd))))
-                   (alist-get (completing-read
-                               "Command: "
-                               (lambda (string pred action)
-                                 (if (eq action 'metadata)
-                                     `(metadata (display-sort-function . ,#'identity))
-                                   (complete-with-action action cmds string pred)))
-                               nil t)
-                              cmds nil nil #'equal))
+                 (conn-read-from-command-history)
                (car conn-command-history)))
         (conn-repeating-command t))
     (setq this-command (car cmd))

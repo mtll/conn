@@ -459,7 +459,7 @@
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   ">" 'conn-dispatch-register-load-replace
-  "B" 'conn-dispatch-repeat-command
+  "b" 'conn-dispatch-repeat-command
   "=" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch
@@ -761,7 +761,7 @@
 (define-keymap
   :keymap conn-dispatch-transform-argument-map
   "a" 'conn-dispatch-bounds-anchored
-  "b" 'conn-dispatch-bounds-between
+  "B" 'conn-dispatch-bounds-between
   "<" 'conn-bounds-trim
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
