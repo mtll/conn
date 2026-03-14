@@ -1361,118 +1361,6 @@ state.")
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
 
-;;;;; Emacs State
-
-(defvar-local conn-emacs-state-ring nil
-  "Ring of previous positions where `conn-emacs-state' was exited.")
-
-(defvar conn-emacs-state-preserve-prefix-commands
-  '(conn-pop-state
-    conn-emacs-state-at-mark
-    conn-emacs-state))
-
-(cl-defmethod conn-enter-state ((_state (eql conn-emacs-state))
-                                _transition)
-  (when (memq this-command conn-emacs-state-preserve-prefix-commands)
-    (run-hooks 'prefix-command-preserve-state-hook)
-    (prefix-command-update))
-  (cl-call-next-method))
-
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state))
-                                _transition)
-  (conn-state-on-exit _transition
-    (conn-ring-delete (point) conn-emacs-state-ring #'=)
-    (let ((pt (conn--create-marker (point) nil t)))
-      (conn-ring-insert-front conn-emacs-state-ring pt)))
-  (cl-call-next-method))
-
-;;;;;; Record Emacs State
-
-(conn-define-state conn-record-emacs-state (conn-emacs-state)
-  :lighter "REC")
-
-(defvar conn-insertion-recording-overlay nil)
-(defvar conn-insertion-recording-point nil)
-
-(define-minor-mode conn-insertion-recording-mode
-  "Minor mode active during insertion recording"
-  :keymap (make-sparse-keymap))
-
-(defun conn---update-record-insertion-region (window)
-  (with-current-buffer (window-buffer window)
-    (when (overlayp conn-insertion-recording-overlay)
-      (move-overlay conn-insertion-recording-overlay
-                    (min (point) conn-insertion-recording-point)
-                    (max (point) conn-insertion-recording-point)))))
-
-(defun conn-record-exhange ()
-  (interactive)
-  (goto-char
-   (prog1 conn-insertion-recording-point
-     (setf conn-insertion-recording-point (point)))))
-
-(defun conn-record-insertion (&optional state)
-  (require 'diff-mode)
-  (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
-        (conn-insertion-recording-point (point)))
-    (unwind-protect
-        (conn-with-recursive-stack (or state 'conn-record-emacs-state)
-          (conn-insertion-recording-mode 1)
-          (set-transient-map
-           (define-keymap
-             "<remap> <keyboard-quit>" 'abort-recursive-edit))
-          (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
-          (add-hook 'pre-redisplay-functions
-                    #'conn---update-record-insertion-region
-                    nil t)
-          (atomic-change-group
-            (with-undo-amalgamate
-              (save-current-buffer
-                (recursive-edit))))
-          (filter-buffer-substring
-           (min (point) conn-insertion-recording-point)
-           (max (point) conn-insertion-recording-point)))
-      (remove-hook 'pre-redisplay-functions
-                   #'conn---update-record-insertion-region
-                   t)
-      (delete-overlay conn-insertion-recording-overlay)
-      (conn-insertion-recording-mode -1))))
-
-(defun conn-record-one-insertion ()
-  (require 'diff-mode)
-  (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
-        (conn-insertion-recording-point (point)))
-    (unwind-protect
-        (conn-with-recursive-stack 'conn-command-state
-          (conn-insertion-recording-mode 1)
-          (conn-state-on-re-entry _
-            (cl-with-gensyms (hook)
-              (fset hook (lambda ()
-                           (remove-hook 'conn-state-entry-hook hook t)
-                           (exit-recursive-edit)))
-              (add-hook 'conn-state-entry-hook hook 100 t)))
-          (conn-push-state 'conn-one-emacs-state)
-          (set-transient-map
-           (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
-          (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
-          (atomic-change-group
-            (with-undo-amalgamate
-              (save-current-buffer
-                (recursive-edit))))
-          (filter-buffer-substring
-           (min (point) conn-insertion-recording-point)
-           (max (point) conn-insertion-recording-point)))
-      (delete-overlay conn-insertion-recording-overlay)
-      (conn-insertion-recording-mode -1))))
-
-(defun conn-emacs-state-record-insert (&optional with)
-  (interactive)
-  (if with
-      (insert with)
-    (setq with (conn-record-insertion)))
-  (unless (or (not (stringp with))
-              (string-empty-p with))
-    (conn-push-command-history 'conn-emacs-state-record-insert with)))
 
 ;;;;; Autopop State
 
@@ -1555,6 +1443,134 @@ command was a prefix command.")
                                          conn-autopop-state)
   "Execute one command in `conn-emacs-state'."
   :lighter "1E")
+
+;;;;; Emacs State
+
+(defvar-local conn-emacs-state-ring nil
+  "Ring of previous positions where `conn-emacs-state' was exited.")
+
+(defvar conn-emacs-state-preserve-prefix-commands
+  '(conn-pop-state
+    conn-emacs-state-at-mark
+    conn-emacs-state))
+
+(cl-defmethod conn-enter-state ((_state (eql conn-emacs-state))
+                                _transition)
+  (when (memq this-command conn-emacs-state-preserve-prefix-commands)
+    (run-hooks 'prefix-command-preserve-state-hook)
+    (prefix-command-update))
+  (cl-call-next-method))
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state))
+                                _transition)
+  (conn-state-on-exit _transition
+    (conn-ring-delete (point) conn-emacs-state-ring #'=)
+    (let ((pt (conn--create-marker (point) nil t)))
+      (conn-ring-insert-front conn-emacs-state-ring pt)))
+  (cl-call-next-method))
+
+;;;;;; Record Emacs State
+
+(conn-define-state conn-record-emacs-state (conn-emacs-state)
+  :lighter "REC")
+
+(defvar conn-insertion-recording-overlay nil)
+(defvar conn-insertion-recording-point nil)
+
+(define-minor-mode conn-insertion-recording-mode
+  "Minor mode active during insertion recording"
+  :keymap (make-sparse-keymap))
+
+(defun conn---update-record-insertion-region (window)
+  (with-current-buffer (window-buffer window)
+    (when (overlayp conn-insertion-recording-overlay)
+      (move-overlay conn-insertion-recording-overlay
+                    (min (point) conn-insertion-recording-point)
+                    (max (point) conn-insertion-recording-point)))))
+
+(defun conn-record-exhange ()
+  (interactive)
+  (goto-char
+   (prog1 conn-insertion-recording-point
+     (setf conn-insertion-recording-point (point)))))
+
+(defun conn-record-insertion (&optional state)
+  (require 'diff-mode)
+  (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
+        (conn-insertion-recording-point (point)))
+    (unwind-protect
+        (conn-with-recursive-stack (or state 'conn-record-emacs-state)
+          (conn-insertion-recording-mode 1)
+          (set-transient-map
+           (define-keymap
+             "<remap> <keyboard-quit>" 'abort-recursive-edit))
+          (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
+          (add-hook 'pre-redisplay-functions
+                    #'conn---update-record-insertion-region
+                    nil t)
+          (atomic-change-group
+            (with-undo-amalgamate
+              (save-current-buffer
+                (recursive-edit))))
+          (filter-buffer-substring
+           (min (point) conn-insertion-recording-point)
+           (max (point) conn-insertion-recording-point)))
+      (remove-hook 'pre-redisplay-functions
+                   #'conn---update-record-insertion-region
+                   t)
+      (delete-overlay conn-insertion-recording-overlay)
+      (conn-insertion-recording-mode -1))))
+
+(conn-define-state conn-record-one-emacs-state (conn-record-emacs-state
+                                                conn-autopop-state)
+  :lighter "1REC"
+  :pop-predicate (lambda () (not (eq this-command 'ignore))))
+
+(defvar conn-record-one-insert-command-predicate
+  (lambda (cmd)
+    (memq cmd '(self-insert-command
+                quoted-insert
+                abort-recursive-edit))))
+
+(defun conn-record-one-insertion ()
+  (require 'diff-mode)
+  (let ((conn-insertion-recording-point (point))
+        (pre (make-symbol "post-hook")))
+    (unwind-protect
+        (conn-with-recursive-stack 'conn-command-state
+          (conn-insertion-recording-mode 1)
+          (conn-state-on-re-entry _
+            (cl-with-gensyms (hook)
+              (fset hook (lambda ()
+                           (remove-hook 'conn-state-entry-hook hook t)
+                           (exit-recursive-edit)))
+              (add-hook 'conn-state-entry-hook hook 100 t)))
+          (conn-push-state 'conn-record-one-emacs-state)
+          (set-transient-map
+           (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
+          (fset pre (lambda ()
+                      (unless (funcall conn-record-one-insert-command-predicate
+                                       this-command)
+                        (setq this-command #'ignore))))
+          (add-hook 'pre-command-hook pre -100 t)
+          (atomic-change-group
+            (with-undo-amalgamate
+              (save-current-buffer
+                (recursive-edit))))
+          (filter-buffer-substring
+           (min (point) conn-insertion-recording-point)
+           (max (point) conn-insertion-recording-point)))
+      (remove-hook 'pre-command-hook pre t)
+      (conn-insertion-recording-mode -1))))
+
+(defun conn-emacs-state-record-insert (&optional with)
+  (interactive)
+  (if with
+      (insert with)
+    (setq with (conn-record-insertion)))
+  (unless (or (not (stringp with))
+              (string-empty-p with))
+    (conn-push-command-history 'conn-emacs-state-record-insert with)))
 
 ;;;;; Mark State
 
