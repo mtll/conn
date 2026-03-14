@@ -733,19 +733,6 @@ for the meaning of prefix ARG."
 (conn-define-state conn-record-set-region-state (conn-read-thing-state)
   :lighter "SETREC")
 
-(defun conn-emacs-state-record-set-region ()
-  (interactive)
-  (unless (overlayp conn-insertion-recording-region)
-    (error "No insertion recording region"))
-  (conn-read-args (conn-record-set-region-state
-                   :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim t))
-       (transform (conn-transform-argument)))
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds `(,beg . ,end) transform)
-       (move-overlay conn-insertion-recording-region beg end)
-       (deactivate-mark)))))
-
 (defun conn-outline-insert-heading ()
   (interactive)
   (conn-with-recursive-stack 'conn-emacs-state
@@ -4272,17 +4259,14 @@ Interactively REPEAT is given by the prefix argument."
        (atomic-change-group
          (goto-char beg)
          (delete-region beg end)
-         (pcase with
-           (`(,string . ,offset)
-            (insert string)
-            (forward-char offset))
-           (_
-            (setq with
-                  (if (and (= (abs (- end beg)) 1)
-                           (or (conn-subthing-p thing 'char)
-                               (conn-subthing-p thing 'point)))
-                      (conn-record-one-insertion)
-                    (conn-record-insertion)))))))
+         (if (stringp with)
+             (insert with)
+           (setq with
+                 (if (and (= (abs (- end beg)) 1)
+                          (or (conn-subthing-p thing 'char)
+                              (conn-subthing-p thing 'point)))
+                     (conn-record-one-insertion)
+                   (conn-record-insertion))))))
      (conn-push-command-history 'conn-change-thing-do
                                 thing
                                 arg
@@ -4383,17 +4367,14 @@ Interactively REPEAT is given by the prefix argument."
               (save-excursion
                 (conn-dispatch-goto-char beg 'nopush)
                 (delete-region beg end)
-                (pcase with
-                  (`(,string . ,offset)
-                   (insert string)
-                   (forward-char offset))
-                  (_
-                   (setq with
-                         (if (and (= (abs (- end beg)) 1)
-                                  (or (conn-subthing-p thing 'char)
-                                      (conn-subthing-p thing 'point)))
-                             (conn-record-one-insertion)
-                           (conn-record-insertion)))))
+                (if (stringp with)
+                    (insert with)
+                  (setq with
+                        (if (and (= (abs (- end beg)) 1)
+                                 (or (conn-subthing-p thing 'char)
+                                     (conn-subthing-p thing 'point)))
+                            (conn-record-one-insertion)
+                          (conn-record-insertion))))
                 (setq end-pt (point)))
               (unless stay
                 (conn-dispatch-goto-char end-pt))))))
@@ -4425,17 +4406,14 @@ Interactively REPEAT is given by the prefix argument."
                          transform))
           (conn-dispatch-goto-char beg 'nopush)
           (delete-region beg end)
-          (pcase with
-            (`(,string . ,offset)
-             (insert string)
-             (forward-char offset))
-            (_
-             (setq with
-                   (if (and (= (abs (- end beg)) 1)
-                            (or (conn-subthing-p thing 'char)
-                                (conn-subthing-p thing 'point)))
-                       (conn-record-one-insertion)
-                     (conn-record-insertion)))))))))
+          (if (stringp with)
+              (insert with)
+            (setq with
+                  (if (and (= (abs (- end beg)) 1)
+                           (or (conn-subthing-p thing 'char)
+                               (conn-subthing-p thing 'point)))
+                      (conn-record-one-insertion)
+                    (conn-record-insertion))))))))
    thing arg nil
    :other-end :no-other-end)
   (conn-push-command-history #'conn-dispatch-setup-previous

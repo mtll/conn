@@ -797,8 +797,8 @@ themselves once the selection process has concluded."
          (conn-argument-update a cmd break))))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
-  (conn-action-cancel (conn-argument-value arg))
-  (mapc #'conn-argument-cancel (conn-dispatch-action-argument-arguments arg)))
+  (mapc #'conn-argument-cancel (conn-dispatch-action-argument-arguments arg))
+  (conn-action-cancel (conn-argument-value arg)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-dispatch-action-argument-value arg)))

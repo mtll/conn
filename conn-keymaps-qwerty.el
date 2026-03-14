@@ -491,9 +491,12 @@
 ;;;;; Other States
 
 (define-keymap
+  :keymap conn-insertion-recording-mode-map
+  "C-." 'conn-record-exhange)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-state)
-  "<escape>" 'exit-recursive-edit
-  "C-." 'conn-emacs-state-record-set-region)
+  "<escape>" 'exit-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
