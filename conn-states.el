@@ -1479,7 +1479,11 @@ command was a prefix command.")
 
 (define-minor-mode conn-insertion-recording-mode
   "Minor mode active during insertion recording"
-  :keymap (make-sparse-keymap))
+  :keymap (make-sparse-keymap)
+  (when conn-insertion-recording-mode
+    (setf (alist-get 'conn-insertion-recording-mode
+                     minor-mode-overriding-map-alist)
+          conn-insertion-recording-mode-map)))
 
 (defun conn---update-record-insertion-region (window)
   (with-current-buffer (window-buffer window)
@@ -1496,6 +1500,8 @@ command was a prefix command.")
 
 (defun conn-record-insertion (&optional state)
   (require 'diff-mode)
+  (when conn-insertion-recording-mode
+    (error "Already recording"))
   (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
         (conn-insertion-recording-point (point)))
     (unwind-protect
@@ -1507,7 +1513,7 @@ command was a prefix command.")
           (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
           (add-hook 'pre-redisplay-functions
                     #'conn---update-record-insertion-region
-                    nil t)
+                    nil 'local)
           (atomic-change-group
             (with-undo-amalgamate
               (save-current-buffer
@@ -1517,7 +1523,7 @@ command was a prefix command.")
            (max (point) conn-insertion-recording-point)))
       (remove-hook 'pre-redisplay-functions
                    #'conn---update-record-insertion-region
-                   t)
+                   'local)
       (delete-overlay conn-insertion-recording-overlay)
       (conn-insertion-recording-mode -1))))
 
@@ -1534,6 +1540,8 @@ command was a prefix command.")
 
 (defun conn-record-one-insertion ()
   (require 'diff-mode)
+  (when conn-insertion-recording-mode
+    (error "Already recording"))
   (let ((conn-insertion-recording-point (point))
         (pre (make-symbol "post-hook")))
     (unwind-protect
