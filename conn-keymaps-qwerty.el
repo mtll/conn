@@ -721,6 +721,13 @@
   "c" 'conn-duplicate-repeat-comment)
 
 (define-keymap
+  :keymap conn-duplicate-repeat-no-padding-map
+  "M-?" 'conn-duplicate-repeat-help
+  "DEL" 'conn-duplicate-delete-repeat
+  "<backspace>" 'conn-duplicate-delete-repeat
+  "q" 'conn-duplicate-repeat)
+
+(define-keymap
   :keymap conn-indent-cleanup-whitespace-map
   "w" 'cleanup-whitespace)
 

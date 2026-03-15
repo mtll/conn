@@ -458,7 +458,7 @@ The command to be stored is read from `command-history'."
   (if (region-active-p)
       (rectangle-mark-mode 'toggle)
     (push-mark)
-    (rectangle-mark-mode)
+    (rectangle-mark-mode 1)
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-set-mark-command ()
@@ -3871,6 +3871,7 @@ For how they are used to define the region see `conn-bounds-of' and
   :lighter "DUPLICATE")
 
 (defvar-keymap conn-duplicate-repeat-map)
+(defvar-keymap conn-duplicate-repeat-no-padding-map)
 
 (defun conn-duplicate-repeat ()
   "Repeat the previous duplicate.
@@ -3908,7 +3909,7 @@ Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
-(defun conn-duplicate-subr (beg end &optional repeat)
+(defun conn-duplicate-subr (beg end &optional repeat no-padding)
   "Duplicate the region from BEG to END REPEAT times."
   (unless repeat (setq repeat 1))
   (deactivate-mark)
@@ -3938,7 +3939,8 @@ Only available during repeating duplicate."
          (dup ()
            (save-excursion
              (goto-char end-marker)
-             (unless (looking-back regexp 1)
+             (unless (or no-padding
+                         (looking-back regexp 1))
                (insert padding))
              (when extra-newline
                (if block
@@ -4037,7 +4039,8 @@ Only available during repeating duplicate."
                         do (save-excursion
                              (goto-char e1)
                              (delete-region e1 b2)
-                             (unless (looking-back regexp 1)
+                             (unless (or no-padding
+                                         (looking-back regexp 1))
                                (insert padding))))))
            (setq extra-newline (not extra-newline)
                  padding (if extra-newline "\n" " ")
@@ -4046,14 +4049,17 @@ Only available during repeating duplicate."
       (undo-boundary)
       (dotimes (_ repeat) (dup))
       (goto-char (+ offset (overlay-start (car regions))))
-      (advice-add 'conn-duplicate-indent-repeat :override #'indent)
       (advice-add 'conn-duplicate-repeat :override #'repeat)
       (advice-add 'conn-duplicate-delete-repeat :override #'delete)
-      (advice-add 'conn-duplicate-repeat-comment :override #'comment)
-      (advice-add 'conn-duplicate-repeat-toggle-padding :override
-                  (if block #'block-padding #'non-block-padding))
+      (unless no-padding
+        (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+        (advice-add 'conn-duplicate-repeat-comment :override #'comment)
+        (advice-add 'conn-duplicate-repeat-toggle-padding :override
+                    (if block #'block-padding #'non-block-padding)))
       (set-transient-map
-       conn-duplicate-repeat-map
+       (if no-padding
+           conn-duplicate-repeat-no-padding-map
+         conn-duplicate-repeat-map)
        (lambda ()
          (pcase this-command
            ((or 'recenter-top-bottom 'reposition-window
@@ -4065,43 +4071,65 @@ Only available during repeating duplicate."
               (setq mc (or (command-remapping mc) mc)))
             (and mc (eq this-command mc)))))
        #'cleanup
-       (format "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat-toggle-padding
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-indent-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat-comment
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-delete-repeat
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding)
-               (propertize
-                (key-description
-                 (where-is-internal 'conn-duplicate-repeat-help
-                                    (list conn-duplicate-repeat-map)
-                                    t))
-                'face 'help-key-binding))))))
+       (if no-padding
+           (format
+            "%s repeat; %s delete; %s help"
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-repeat
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding)
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-delete-repeat
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding)
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-repeat-help
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding))
+         (format
+          "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-repeat
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-repeat-toggle-padding
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-indent-repeat
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-repeat-comment
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-delete-repeat
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)
+          (propertize
+           (key-description
+            (where-is-internal 'conn-duplicate-repeat-help
+                               (list conn-duplicate-repeat-map)
+                               t))
+           'face 'help-key-binding)))))))
 
 (cl-defgeneric conn-duplicate-thing-do (thing
                                         arg
@@ -4123,7 +4151,7 @@ Only available during repeating duplicate."
                                        repeat)
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (conn-duplicate-subr beg end repeat))))
+     (conn-duplicate-subr beg end repeat (conn-subthing-p thing 'region)))))
 
 (cl-defmethod conn-duplicate-thing-do ((_thing (eql copy-from-above-command))
                                        arg
@@ -4133,27 +4161,59 @@ Only available during repeating duplicate."
   (copy-from-above-command arg))
 
 (cl-defmethod conn-duplicate-thing-do ((_thing (conn-thing region))
-                                       arg
+                                       _arg
                                        _transform
                                        &optional
-                                       _repeat)
+                                       repeat)
   (if (and (bound-and-true-p rectangle-mark-mode)
            (fboundp 'rectangle--duplicate-right))
-      (let ((cg (prepare-change-group)))
-        (rectangle--duplicate-right (prefix-numeric-value arg) 1)
-        (set-transient-map
-         (let ((map (make-sparse-keymap)))
-           (define-key map (vector last-command-event) 'conn-repeat)
-           map)
-         t
-         (lambda ()
-           (accept-change-group cg)
-           (undo-amalgamate-change-group cg))
-         "Repeat with %k")
-        (conn-push-command-history
-         (lambda ()
-           (let ((inhibit-message t))
-             (rectangle--duplicate-right (prefix-numeric-value arg) 1)))))
+      (let ((cgs (list (prepare-change-group))))
+        (cl-flet
+            ((dup ()
+               (interactive)
+               (let ((inhibit-message t))
+                 (push (prepare-change-group) cgs)
+                 (rectangle--duplicate-right 1 0)))
+             (delete ()
+               (interactive)
+               (when (cdr cgs)
+                 (cancel-change-group (pop cgs))))
+             (remove-all-advice (symbol)
+               (setf (symbol-function symbol)
+                     (advice--cd*r (symbol-function symbol)))))
+          (advice-add 'conn-duplicate-repeat :override #'dup)
+          (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+          (undo-boundary)
+          (rectangle--duplicate-right repeat 1)
+          (set-transient-map
+           conn-duplicate-repeat-no-padding-map
+           t
+           (lambda ()
+             (dolist (cg cgs)
+               (accept-change-group cg))
+             (undo-amalgamate-change-group (car (last cgs)))
+             (remove-all-advice 'conn-duplicate-repeat)
+             (remove-all-advice 'conn-duplicate-delete-repeat))
+           (format
+            "%s repeat; %s delete; %s help"
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-repeat
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding)
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-delete-repeat
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding)
+            (propertize
+             (key-description
+              (where-is-internal 'conn-duplicate-repeat-help
+                                 (list conn-duplicate-repeat-map)
+                                 t))
+             'face 'help-key-binding)))))
     (cl-call-next-method)))
 
 (defvar-keymap conn-duplicate-thing-argument-map)
