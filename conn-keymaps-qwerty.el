@@ -709,7 +709,7 @@
 
 (define-keymap
   :keymap conn-duplicate-repeat-map
-  "M-?" 'conn-duplicate-repeat-help
+  "?" 'conn-duplicate-repeat-help
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
   "q" 'conn-duplicate-repeat

@@ -3919,19 +3919,21 @@ Only available during repeating duplicate."
   (user-error "Not repeating duplicate"))
 
 (defun conn--duplicate-message-string (keymap &rest desc-and-commands)
-  (conn--with-work-buffer
-    (conn-to-vtable
-     (cl-loop for (d c) on desc-and-commands by #'cddr
-              collect (format "%s %s"
-                              (propertize
-                               (key-description
-                                (where-is-internal c (list keymap) t))
-                               'face 'help-key-binding)
-                              d))
-     4 (current-buffer)
-     :separator-width 3
-     :use-header-line nil)
-    (buffer-substring (point-min) (1- (point-max)))))
+  (cl-macrolet ((key-desc (command)
+                  `(propertize
+                    (key-description
+                     (where-is-internal ,command (list keymap) 'first-only))
+                    'face 'help-key-binding)))
+    (conn--with-work-buffer
+      (insert (format "Repeat duplicate (%s reference):\n"
+                      (key-desc 'conn-duplicate-repeat-help)))
+      (conn-to-vtable
+       (cl-loop for (d c) on desc-and-commands by #'cddr
+                collect (format "%s %s" (key-desc c) d))
+       4 (current-buffer)
+       :separator-width 3
+       :use-header-line nil)
+      (buffer-substring (point-min) (1- (point-max))))))
 
 (defun conn-duplicate-subr (beg end &optional repeat no-padding)
   "Duplicate the region from BEG to END REPEAT times."
@@ -4115,8 +4117,7 @@ Only available during repeating duplicate."
                     keymap
                     "repeat" 'conn-duplicate-repeat
                     "indent" 'conn-duplicate-delete-repeat
-                    "kapply" 'conn-duplicate-repeat-kapply
-                    "help" 'conn-duplicate-repeat-help)
+                    "kapply" 'conn-duplicate-repeat-kapply)
                  (conn--duplicate-message-string
                   keymap
                   "repeat" 'conn-duplicate-repeat
@@ -4124,8 +4125,7 @@ Only available during repeating duplicate."
                   "newline" 'conn-duplicate-indent-repeat
                   "comment" 'conn-duplicate-repeat-comment
                   "indent" 'conn-duplicate-delete-repeat
-                  "kapply" 'conn-duplicate-repeat-kapply
-                  "help" 'conn-duplicate-repeat-help))))))))
+                  "kapply" 'conn-duplicate-repeat-kapply))))))))
 
 (cl-defgeneric conn-duplicate-thing-do (thing
                                         arg
@@ -4210,8 +4210,7 @@ Only available during repeating duplicate."
                   conn-duplicate-repeat-map
                   "repeat" 'conn-duplicate-repeat
                   "indent" 'conn-duplicate-delete-repeat
-                  "kapply" 'conn-duplicate-repeat-kapply
-                  "help" 'conn-duplicate-repeat-help)))))
+                  "kapply" 'conn-duplicate-repeat-kapply)))))
     (cl-call-next-method)))
 
 (defvar-keymap conn-duplicate-thing-argument-map)
