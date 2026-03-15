@@ -168,8 +168,17 @@
                         ((and str (pred stringp))
                          (push str keys))
                         (bind (push (get-key bind keymap) keys))))
-                    (concat (string-join (nreverse keys) ", ")
-                            ": " description)))
+                    (conn--with-work-buffer
+                      (dolist (key (nreverse keys))
+                        (insert key ", "))
+                      (delete-char -2)
+                      (insert ": ")
+                      (let ((col (current-column)))
+                        (save-excursion
+                          (insert description))
+                        (while (= 0 (forward-line))
+                          (indent-to col))
+                        (buffer-string)))))
                 (process-col (col keymap)
                   (let ((result nil))
                     (while col

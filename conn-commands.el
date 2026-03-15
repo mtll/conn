@@ -3858,6 +3858,9 @@ For how they are used to define the region see `conn-bounds-of' and
      ("Indent each duplicate" conn-duplicate-indent-repeat)
      ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
      ("Comment or uncomment each duplicate" conn-duplicate-repeat-comment)
+     ("Apply a keyboard macro at each duplicate.
+With a prefix argument include the original."
+      conn-duplicate-repeat-kapply)
      ("Recenter" recenter-top-bottom))))
 
 (defvar conn-duplicate-repeat-reference
@@ -4282,9 +4285,13 @@ Interactively REPEAT is given by the prefix argument."
                   &aux
                   (keymap conn-change-thing-argument-map)
                   (required t)
-                  (value (when (use-region-p)
+                  (value (when (and (use-region-p)
+                                    (not (or defining-kbd-macro
+                                             executing-kbd-macro)))
                            (list 'region nil)))
-                  (set-flag (use-region-p))))))
+                  (set-flag (and (use-region-p)
+                                 (not (or defining-kbd-macro
+                                          executing-kbd-macro))))))))
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
                                        (_cmd (eql conn-emacs-state-overwrite-binary)))
@@ -4311,7 +4318,8 @@ Interactively REPEAT is given by the prefix argument."
                                      transform
                                      &optional
                                      check-bounds
-                                     with)
+                                     with
+                                     kbd-macro-query)
   (declare (conn-anonymous-thing-property :change-op)))
 
 (cl-defmethod conn-change-thing-do :around (&rest args)
@@ -4325,7 +4333,8 @@ Interactively REPEAT is given by the prefix argument."
                                     transform
                                     &optional
                                     check-bounds
-                                    with)
+                                    with
+                                    kbd-macro-query)
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end)
                   (if check-bounds
@@ -4342,14 +4351,15 @@ Interactively REPEAT is given by the prefix argument."
                  (if (and (= (abs (- end beg)) 1)
                           (or (conn-subthing-p thing 'char)
                               (conn-subthing-p thing 'point)))
-                     (conn-record-one-insertion)
-                   (conn-record-insertion))))))
-     (conn-push-command-history 'conn-change-thing-do
-                                thing
-                                arg
-                                transform
-                                check-bounds
-                                with))
+                     (conn-record-one-insertion kbd-macro-query)
+                   (conn-record-insertion nil kbd-macro-query))))))
+     (unless kbd-macro-query
+       (conn-push-command-history 'conn-change-thing-do
+                                  thing
+                                  arg
+                                  transform
+                                  check-bounds
+                                  with)))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
@@ -4357,15 +4367,25 @@ Interactively REPEAT is given by the prefix argument."
                                     _transform
                                     &optional
                                     _check-bounds
-                                    with)
-  (conn-emacs-state-record-insert with))
+                                    with
+                                    kbd-macro-query)
+  (conn-emacs-state-record-insert with)
+  (when kbd-macro-query
+    (let (executing-kbd-macro
+          defining-kbd-macro)
+      (recursive-edit))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite))
                                     _arg
                                     _transform
                                     &optional
-                                    _with)
-  (conn-emacs-state-overwrite))
+                                    _with
+                                    kbd-macro-query)
+  (conn-emacs-state-overwrite)
+  (when kbd-macro-query
+    (let (executing-kbd-macro
+          defining-kbd-macro)
+      (recursive-edit))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite-binary))
                                     _arg
@@ -4380,9 +4400,14 @@ Interactively REPEAT is given by the prefix argument."
                                                        _transform
                                                        &optional
                                                        _check-bounds
-                                                       _with)
+                                                       _with
+                                                       kbd-macro-query)
   (if (bound-and-true-p rectangle-mark-mode)
-      (call-interactively #'string-rectangle)
+      (if kbd-macro-query
+          (let (executing-kbd-macro
+                defining-kbd-macro)
+            (call-interactively #'string-rectangle))
+        (call-interactively #'string-rectangle))
     (cl-call-next-method)))
 
 (cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
@@ -4390,7 +4415,8 @@ Interactively REPEAT is given by the prefix argument."
                                     transform
                                     &optional
                                     check-bounds
-                                    with)
+                                    with
+                                    _kbd-macro-query)
   (conn-read-args (conn-dispatch-bounds-state
                    :history-var 'conn-mark-thing-dispatch
                    :prefix arg
@@ -4466,7 +4492,8 @@ Interactively REPEAT is given by the prefix argument."
                                     transform
                                     &optional
                                     check-bounds
-                                    with)
+                                    with
+                                    _kbd-macro-query)
   (conn-dispatch-setup
    (oclosure-lambda (conn-action
                      (action-description "Change")
@@ -4501,7 +4528,8 @@ Interactively REPEAT is given by the prefix argument."
                                     transform
                                     &optional
                                     _check-bounds
-                                    _with)
+                                    _with
+                                    _kbd-macro-query)
   (conn-read-args (conn-replace-state
                    :history-var 'conn-replace
                    :prefix arg
@@ -4534,7 +4562,8 @@ Interactively REPEAT is given by the prefix argument."
                                     transform
                                     &optional
                                     check-bounds
-                                    _with)
+                                    _with
+                                    _kbd-macro-query)
   (conn-read-args (conn-yank-replace-state
                    :history-var 'conn-yank-replace
                    :prefix arg
@@ -4582,25 +4611,12 @@ For how the region is determined using THING, ARG, and TRANSFORM see
             'conn-kapply-kbd-macro-query
             nil))))
      (list thing arg transform check-bounds kbd-macro-query)))
-  (if kbd-macro-query
-      (progn
-        (let (executing-kbd-macro
-              defining-kbd-macro
-              conn-command-history)
-          (conn-change-thing-do thing
-                                arg
-                                transform
-                                check-bounds))
-        (conn-push-command-history 'conn-change-thing
-                                   thing
-                                   arg
-                                   transform
-                                   check-bounds
-                                   kbd-macro-query))
-    (conn-change-thing-do thing
-                          arg
-                          transform
-                          check-bounds)))
+  (conn-change-thing-do thing
+                        arg
+                        transform
+                        check-bounds
+                        nil
+                        kbd-macro-query))
 
 ;;;;; Indent
 

@@ -1498,7 +1498,7 @@ command was a prefix command.")
    (prog1 conn-insertion-recording-other-end
      (setf conn-insertion-recording-other-end (point)))))
 
-(defun conn-record-insertion (&optional state)
+(defun conn-record-insertion (&optional state kbd-macro-query)
   (require 'diff-mode)
   (when conn-insertion-recording-mode
     (error "Already recording"))
@@ -1517,7 +1517,11 @@ command was a prefix command.")
           (atomic-change-group
             (with-undo-amalgamate
               (save-current-buffer
-                (recursive-edit))))
+                (if kbd-macro-query
+                    (let (executing-kbd-macro
+                          defining-kbd-macro)
+                      (recursive-edit))
+                  (recursive-edit)))))
           (filter-buffer-substring
            (min (point) conn-insertion-recording-other-end)
            (max (point) conn-insertion-recording-other-end)))
@@ -1538,7 +1542,7 @@ command was a prefix command.")
                 quoted-insert
                 abort-recursive-edit))))
 
-(defun conn-record-one-insertion ()
+(defun conn-record-one-insertion (&optional kbd-macro-query)
   (require 'diff-mode)
   (when conn-insertion-recording-mode
     (error "Already recording"))
@@ -1564,7 +1568,11 @@ command was a prefix command.")
           (atomic-change-group
             (with-undo-amalgamate
               (save-current-buffer
-                (recursive-edit))))
+                (if kbd-macro-query
+                    (let (executing-kbd-macro
+                          defining-kbd-macro)
+                      (recursive-edit))
+                  (recursive-edit)))))
           (filter-buffer-substring
            (min (point) conn-insertion-recording-other-end)
            (max (point) conn-insertion-recording-other-end)))
