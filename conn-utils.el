@@ -258,6 +258,11 @@ See `quail-add-unread-command-events'."
        (concat "<" (char-to-string register) ">")
        'face 'conn-argument-active-face)))))
 
+(defun conn--remove-all-advice (&rest symbols)
+  (dolist (symbol symbols)
+    (setf (symbol-function symbol)
+          (advice--cd*r (symbol-function symbol)))))
+
 ;;;;; Command History
 
 (defun conn-push-command-history (command &rest args)

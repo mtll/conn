@@ -45,6 +45,10 @@
 (declare-function rectangle--col-pos "rect")
 (declare-function fileloop-continue "fileloop")
 (declare-function hi-lock-read-face-name "hi-lock")
+(declare-function conn-kapply-on-things "conn-kapply")
+(declare-function conn-kapply-region-iterator "conn-kapply")
+(declare-function conn-kapply-on-iterator "conn-kapply")
+(declare-function conn-kapply-make-region "conn-kapply")
 
 (defvar hi-lock-auto-select-face)
 (defvar hi-lock-interactive-patterns)
@@ -3871,7 +3875,7 @@ For how they are used to define the region see `conn-bounds-of' and
   :lighter "DUPLICATE")
 
 (defvar-keymap conn-duplicate-repeat-map)
-(defvar-keymap conn-duplicate-repeat-no-padding-map)
+(defvar-keymap conn-duplicate-repeat-padding-map)
 
 (defun conn-duplicate-repeat ()
   "Repeat the previous duplicate.
@@ -3909,14 +3913,34 @@ Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
+(defun conn-duplicate-repeat-kapply ()
+  "Kapply on each duplicate"
+  (interactive)
+  (user-error "Not repeating duplicate"))
+
+(defun conn--duplicate-message-string (keymap &rest desc-and-commands)
+  (conn--with-work-buffer
+    (conn-to-vtable
+     (cl-loop for (d c) on desc-and-commands by #'cddr
+              collect (format "%s %s"
+                              (propertize
+                               (key-description
+                                (where-is-internal c (list keymap) t))
+                               'face 'help-key-binding)
+                              d))
+     4 (current-buffer)
+     :separator-width 3
+     :use-header-line nil)
+    (buffer-substring (point-min) (1- (point-max)))))
+
 (defun conn-duplicate-subr (beg end &optional repeat no-padding)
   "Duplicate the region from BEG to END REPEAT times."
   (unless repeat (setq repeat 1))
   (deactivate-mark)
   (conn-protected-let*
       ((keymap (if no-padding
-                   conn-duplicate-repeat-no-padding-map
-                 conn-duplicate-repeat-map))
+                   conn-duplicate-repeat-map
+                 conn-duplicate-repeat-padding-map))
        (regions (list (make-overlay beg end nil t))
                 (mapc #'delete-overlay regions))
        (end-marker (copy-marker end)
@@ -3933,13 +3957,11 @@ Only available during repeating duplicate."
        (extra-newline nil)
        (padding (if block "\n" " "))
        (regexp (if block "\n" "[\t ]"))
-       (commented nil))
+       (commented nil)
+       (exit-fn nil))
     (set-marker-insertion-type m2 t)
     (cl-labels
-        ((remove-all-advice (symbol)
-           (setf (symbol-function symbol)
-                 (advice--cd*r (symbol-function symbol))))
-         (dup ()
+        ((dup ()
            (save-excursion
              (goto-char end-marker)
              (unless (or no-padding
@@ -3976,11 +3998,12 @@ Only available during repeating duplicate."
            (set-marker m2 nil)
            (mapc #'delete-overlay regions)
            (undo-amalgamate-change-group cg)
-           (remove-all-advice 'conn-duplicate-indent-repeat)
-           (remove-all-advice 'conn-duplicate-repeat)
-           (remove-all-advice 'conn-duplicate-delete-repeat)
-           (remove-all-advice 'conn-duplicate-repeat-comment)
-           (remove-all-advice 'conn-duplicate-repeat-toggle-padding))
+           (conn--remove-all-advice 'conn-duplicate-indent-repeat
+                                    'conn-duplicate-repeat-kapply
+                                    'conn-duplicate-repeat
+                                    'conn-duplicate-delete-repeat
+                                    'conn-duplicate-repeat-comment
+                                    'conn-duplicate-repeat-toggle-padding))
          (indent ()
            (interactive)
            (indent-region (overlay-start (car (last regions)))
@@ -4048,11 +4071,16 @@ Only available during repeating duplicate."
            (setq extra-newline (not extra-newline)
                  padding (if extra-newline "\n" " ")
                  regexp (if extra-newline "\n" "[\t ]")))
-         (key-desc (cmd)
-           (propertize
-            (key-description
-             (where-is-internal cmd (list keymap) t))
-            'face 'help-key-binding))
+         (kapply (all)
+           (interactive "P")
+           (let ((kapply-regions nil))
+             (dolist (ov (if all regions (butlast regions)))
+               (push (conn-kapply-make-region (overlay-start ov)
+                                              (overlay-end ov))
+                     kapply-regions))
+             (funcall exit-fn)
+             (conn-kapply-on-iterator
+              (conn-kapply-region-iterator kapply-regions))))
          (pred ()
            (pcase this-command
              ((or 'recenter-top-bottom 'reposition-window
@@ -4068,6 +4096,7 @@ Only available during repeating duplicate."
       (goto-char (+ offset (overlay-start (car regions))))
       (advice-add 'conn-duplicate-repeat :override #'repeat)
       (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+      (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
       (unless no-padding
         (advice-add 'conn-duplicate-indent-repeat :override #'indent)
         (advice-add 'conn-duplicate-repeat-comment :override #'comment)
@@ -4076,26 +4105,27 @@ Only available during repeating duplicate."
       (if (and conn-dispatch-in-progress
                conn-dispatch-repeating)
           (cleanup)
-        (set-transient-map
-         keymap
-         #'pred
-         #'cleanup
-         (if no-padding
-             (apply #'format
-                    "%s repeat; %s delete; %s help"
-                    (mapcar #'key-desc
-                            '(conn-duplicate-repeat
-                              conn-duplicate-delete-repeat
-                              conn-duplicate-repeat-help)))
-           (apply #'format
-                  "%s repeat; %s newline; %s indent; %s comment; %s delete; %s help"
-                  (mapcar #'key-desc
-                          '(conn-duplicate-repeat
-                            conn-duplicate-repeat-toggle-padding
-                            conn-duplicate-indent-repeat
-                            conn-duplicate-repeat-comment
-                            conn-duplicate-delete-repeat
-                            conn-duplicate-repeat-help)))))))))
+        (setq exit-fn
+              (set-transient-map
+               keymap
+               #'pred
+               #'cleanup
+               (if no-padding
+                   (conn--duplicate-message-string
+                    keymap
+                    "repeat" 'conn-duplicate-repeat
+                    "indent" 'conn-duplicate-delete-repeat
+                    "kapply" 'conn-duplicate-repeat-kapply
+                    "help" 'conn-duplicate-repeat-help)
+                 (conn--duplicate-message-string
+                  keymap
+                  "repeat" 'conn-duplicate-repeat
+                  "delete" 'conn-duplicate-repeat-toggle-padding
+                  "newline" 'conn-duplicate-indent-repeat
+                  "comment" 'conn-duplicate-repeat-comment
+                  "indent" 'conn-duplicate-delete-repeat
+                  "kapply" 'conn-duplicate-repeat-kapply
+                  "help" 'conn-duplicate-repeat-help))))))))
 
 (cl-defgeneric conn-duplicate-thing-do (thing
                                         arg
@@ -4133,7 +4163,8 @@ Only available during repeating duplicate."
                                        repeat)
   (if (and (bound-and-true-p rectangle-mark-mode)
            (fboundp 'rectangle--duplicate-right))
-      (let ((cgs (list (prepare-change-group))))
+      (let ((cgs (list (prepare-change-group)))
+            (exit-fn nil))
         (cl-flet
             ((dup ()
                (interactive)
@@ -4144,42 +4175,43 @@ Only available during repeating duplicate."
                (interactive)
                (when (cdr cgs)
                  (cancel-change-group (pop cgs))))
-             (remove-all-advice (symbol)
-               (setf (symbol-function symbol)
-                     (advice--cd*r (symbol-function symbol)))))
+             (kapply ()
+               (funcall exit-fn)
+               (activate-mark)
+               (rectangle-mark-mode 1)
+               (conn-kapply-on-things 'region nil nil))
+             (pred ()
+               (pcase this-command
+                 ((or 'recenter-top-bottom 'reposition-window
+                      'universal-argument 'digit-argument 'negative-argument)
+                  t)
+                 ((let mc (lookup-key conn-duplicate-repeat-map
+                                      (this-command-keys-vector)))
+                  (when (and mc (symbolp mc))
+                    (setq mc (or (command-remapping mc) mc)))
+                  (and mc (eq this-command mc))))))
           (advice-add 'conn-duplicate-repeat :override #'dup)
           (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+          (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
           (undo-boundary)
           (rectangle--duplicate-right repeat 1)
-          (set-transient-map
-           conn-duplicate-repeat-no-padding-map
-           t
-           (lambda ()
-             (dolist (cg cgs)
-               (accept-change-group cg))
-             (undo-amalgamate-change-group (car (last cgs)))
-             (remove-all-advice 'conn-duplicate-repeat)
-             (remove-all-advice 'conn-duplicate-delete-repeat))
-           (format
-            "%s repeat; %s delete; %s help"
-            (propertize
-             (key-description
-              (where-is-internal 'conn-duplicate-repeat
-                                 (list conn-duplicate-repeat-map)
-                                 t))
-             'face 'help-key-binding)
-            (propertize
-             (key-description
-              (where-is-internal 'conn-duplicate-delete-repeat
-                                 (list conn-duplicate-repeat-map)
-                                 t))
-             'face 'help-key-binding)
-            (propertize
-             (key-description
-              (where-is-internal 'conn-duplicate-repeat-help
-                                 (list conn-duplicate-repeat-map)
-                                 t))
-             'face 'help-key-binding)))))
+          (setq exit-fn
+                (set-transient-map
+                 conn-duplicate-repeat-map
+                 #'pred
+                 (lambda ()
+                   (dolist (cg cgs)
+                     (accept-change-group cg))
+                   (undo-amalgamate-change-group (car (last cgs)))
+                   (conn--remove-all-advice 'conn-duplicate-repeat
+                                            'conn-duplicate-delete-repeat
+                                            'conn-duplicate-repeat-kapply))
+                 (conn--duplicate-message-string
+                  conn-duplicate-repeat-map
+                  "repeat" 'conn-duplicate-repeat
+                  "indent" 'conn-duplicate-delete-repeat
+                  "kapply" 'conn-duplicate-repeat-kapply
+                  "help" 'conn-duplicate-repeat-help)))))
     (cl-call-next-method)))
 
 (defvar-keymap conn-duplicate-thing-argument-map)
@@ -4676,10 +4708,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (setq end (copy-marker end))
-     (cl-labels ((remove-all-advice (symbol)
-                   (setf (symbol-function symbol)
-                         (advice--cd*r (symbol-function symbol))))
-                 (right ()
+     (cl-labels ((right ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
@@ -4712,10 +4741,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
         t
         (lambda ()
           (set-marker end nil)
-          (remove-all-advice 'conn-indent-left)
-          (remove-all-advice 'conn-indent-right)
-          (remove-all-advice 'conn-indent-right-to-tab-stop)
-          (remove-all-advice 'conn-indent-left-to-tab-stop))
+          (conn--remove-all-advice 'conn-indent-left
+                                   'conn-indent-right
+                                   'conn-indent-right-to-tab-stop
+                                   'conn-indent-left-to-tab-stop))
         "Type %k to indent region interactively")
        (conn-push-command-history 'conn-indent-thing-rigidly
                                   thing

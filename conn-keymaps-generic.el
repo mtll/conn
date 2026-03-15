@@ -270,6 +270,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "R" 'conn-rectangle-mark
+  "V" 'conn-previous-mark-command
   "o" conn-forward-word-remap
   "O" conn-backward-word-remap
   "m" conn-end-of-defun-remap
@@ -280,10 +282,8 @@
   "I" conn-backward-sexp-remap
   "k" 'conn-duplicate-thing
   "," conn-thing-remap
-  "@" 'kmacro-start-macro
-  "#" 'kmacro-call-macro
-  "%" 'eshell
-  "$" 'project-eshell
+  "@" 'kmacro-start-macro-or-insert-counter
+  "#" 'kmacro-end-or-call-macro
   "S-<return>" 'conn-open-line-and-indent
   "{" 'conn-backward-up-inner-list
   "}" 'conn-forward-up-inner-list
@@ -468,6 +468,14 @@
 ;;;;; Other States
 
 (define-keymap
+  :keymap conn-insertion-recording-mode-map
+  "C-." 'conn-record-exhange)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-record-emacs-state)
+  "<escape>" 'exit-recursive-edit)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
   "y" 'yank
   "Y" 'yank-from-kill-ring
@@ -496,6 +504,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-thing-state)
+  "r" 'conn-rectangle-mark
   "z" 'conn-exchange-mark-command)
 
 (static-if (<= 30 emacs-major-version)
@@ -521,6 +530,14 @@
                         (conn--query-replace-read-transpose-from-to))))
 
 ;;;; Argument Keymaps
+
+(define-keymap
+  :keymap conn-stay-argument-map
+  "d" 'stay)
+
+(define-keymap
+  :keymap conn-dispatch-stay-map
+  "M-d" 'stay)
 
 (define-keymap
   :keymap conn-register-argument-map
@@ -586,6 +603,7 @@
   "." 'register
   "a" 'apply
   "x" 'append
+  "X" 'append-skip-exec
   "r" 'step-edit
   "e" 'record
   "c" 'record
@@ -614,7 +632,7 @@
 
 (define-keymap
   :keymap conn-kapply-excursions-argument-map
-  "X" 'save-excursions)
+  "S" 'save-excursions)
 
 (define-keymap
   :keymap conn-kapply-restrictions-argument-map
@@ -665,11 +683,16 @@
 (define-keymap
   :keymap conn-duplicate-repeat-map
   "M-?" 'conn-duplicate-repeat-help
-  "TAB" 'conn-duplicate-indent-repeat
-  "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
   "m" 'conn-duplicate-repeat
+  "'" 'conn-duplicate-repeat-kapply)
+
+(define-keymap
+  :keymap conn-duplicate-repeat-padding-map
+  :parent conn-duplicate-repeat-map
+  "TAB" 'conn-duplicate-indent-repeat
+  "<tab>" 'conn-duplicate-indent-repeat
   "RET" 'conn-duplicate-repeat-toggle-padding
   "<return>" 'conn-duplicate-repeat-toggle-padding
   "c" 'conn-duplicate-repeat-comment)

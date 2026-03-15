@@ -296,14 +296,16 @@
             cands)))
       (conn-kapply-on-iterator
        (conn-kapply-region-iterator regions)
-       :query t))
+       :query t
+       :ibuffer t))
     (conn--embark-save-selected-window))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
     (conn-kapply-on-iterator
      (conn--consult-grep-iterator cands)
-     :query t)
+     :query t
+     :ibuffer t)
     (conn--embark-save-selected-window))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 

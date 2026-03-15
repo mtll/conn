@@ -1867,7 +1867,7 @@ The duration of the message display is controlled by
                         collect (conn-argument-display arg))))
              (prompt-line (conn-read-args-prompt-line prompt)))
          (if (length> to-display column-count)
-             (with-work-buffer
+             (conn--with-work-buffer
                (insert prompt-line "\n")
                (conn-to-vtable to-display
                                column-count

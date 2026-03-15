@@ -500,7 +500,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
-  "," 'conn-record-emacs-state
   "y" 'yank
   "Y" 'yank-from-kill-ring
   "r" 'conn-emacs-state-overwrite
@@ -660,7 +659,7 @@
 
 (define-keymap
   :keymap conn-kapply-excursions-argument-map
-  "o" 'save-excursions)
+  "S" 'save-excursions)
 
 (define-keymap
   :keymap conn-kapply-restrictions-argument-map
@@ -711,21 +710,19 @@
 (define-keymap
   :keymap conn-duplicate-repeat-map
   "M-?" 'conn-duplicate-repeat-help
-  "TAB" 'conn-duplicate-indent-repeat
-  "<tab>" 'conn-duplicate-indent-repeat
   "DEL" 'conn-duplicate-delete-repeat
   "<backspace>" 'conn-duplicate-delete-repeat
   "q" 'conn-duplicate-repeat
+  "'" 'conn-duplicate-repeat-kapply)
+
+(define-keymap
+  :keymap conn-duplicate-repeat-padding-map
+  :parent conn-duplicate-repeat-map
+  "TAB" 'conn-duplicate-indent-repeat
+  "<tab>" 'conn-duplicate-indent-repeat
   "RET" 'conn-duplicate-repeat-toggle-padding
   "<return>" 'conn-duplicate-repeat-toggle-padding
   "c" 'conn-duplicate-repeat-comment)
-
-(define-keymap
-  :keymap conn-duplicate-repeat-no-padding-map
-  "M-?" 'conn-duplicate-repeat-help
-  "DEL" 'conn-duplicate-delete-repeat
-  "<backspace>" 'conn-duplicate-delete-repeat
-  "q" 'conn-duplicate-repeat)
 
 (define-keymap
   :keymap conn-indent-cleanup-whitespace-map

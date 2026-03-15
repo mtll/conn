@@ -471,7 +471,8 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
            ((or :next :record)
             (unless matches (next))
             (conn-kapply-consume-region (pop matches)))))
-       :query t))))
+       :query t
+       :ibuffer t))))
 
 (cl-defmethod conn-kapply-on-matches ((thing (conn-thing t))
                                       arg
@@ -1613,7 +1614,7 @@ finishing showing the buffers that were visited."))
                                    other-end
                                    query
                                    empty
-                                   (ibuffer t)
+                                   ibuffer
                                    (excursions t)
                                    (restrictions t)
                                    (windows t))
@@ -1924,7 +1925,8 @@ finishing showing the buffers that were visited."))
                        (point)
                        (line-end-position))))))))
     (conn-kapply-region-iterator)
-    (conn-kapply-on-iterator)))
+    (conn-kapply-on-iterator
+     :ibuffer t)))
 
 ;;;;; Dispatch Kapply
 
