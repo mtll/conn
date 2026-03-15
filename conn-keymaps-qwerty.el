@@ -29,9 +29,7 @@
   "h" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
-  ";" 'conn-things-in-region
-  "@" 'kmacro-start-macro
-  "#" 'kmacro-call-macro)
+  ";" 'conn-things-in-region)
 
 (define-keymap
   :keymap conn-other-end-argument-map
@@ -270,9 +268,9 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "@" 'kmacro-start-macro-or-insert-counter
+  "#" 'kmacro-end-or-call-macro
   "," conn-thing-remap
-  "#" 'eshell
-  "$" 'project-eshell
   "S-<return>" 'conn-open-line-and-indent
   "p" 'conn-other-window-prefix
   "o" conn-forward-word-remap
