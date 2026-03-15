@@ -2082,6 +2082,7 @@ Only the background color is used."
 
 (conn-register-thing-commands
  '(region) nil
+ 'conn-rectangle-mark
  'yank
  'conn-exchange-mark-command
  'conn-mark-thing

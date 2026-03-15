@@ -457,7 +457,7 @@ The command to be stored is read from `command-history'."
   (interactive)
   (if (region-active-p)
       (rectangle-mark-mode 'toggle)
-    (activate-mark)
+    (push-mark)
     (rectangle-mark-mode)
     (conn-push-state 'conn-mark-state)))
 
@@ -1061,6 +1061,12 @@ Currently selected window remains selected afterwards."
                                   _arg
                                   _transform)
   (conn-exchange-and-mark-command))
+
+(cl-defmethod conn-mark-thing-do ((_thing (eql conn-rectangle-mark))
+                                  _arg
+                                  _transform)
+  (cl-call-next-method)
+  (rectangle-mark-mode 1))
 
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -4125,6 +4131,30 @@ Only available during repeating duplicate."
                                        &optional
                                        _repeat)
   (copy-from-above-command arg))
+
+(cl-defmethod conn-duplicate-thing-do ((_thing (conn-thing region))
+                                       arg
+                                       _transform
+                                       &optional
+                                       _repeat)
+  (if (and (bound-and-true-p rectangle-mark-mode)
+           (fboundp 'rectangle--duplicate-right))
+      (let ((cg (prepare-change-group)))
+        (rectangle--duplicate-right (prefix-numeric-value arg) 1)
+        (set-transient-map
+         (let ((map (make-sparse-keymap)))
+           (define-key map (vector last-command-event) 'conn-repeat)
+           map)
+         t
+         (lambda ()
+           (accept-change-group cg)
+           (undo-amalgamate-change-group cg))
+         "Repeat with %k")
+        (conn-push-command-history
+         (lambda ()
+           (let ((inhibit-message t))
+             (rectangle--duplicate-right (prefix-numeric-value arg) 1)))))
+    (cl-call-next-method)))
 
 (defvar-keymap conn-duplicate-thing-argument-map)
 

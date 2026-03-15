@@ -268,6 +268,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "R" 'conn-rectangle-mark
+  "V" 'conn-previous-mark-command
   "@" 'kmacro-start-macro-or-insert-counter
   "#" 'kmacro-end-or-call-macro
   "," conn-thing-remap
@@ -526,6 +528,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-thing-state)
+  "r" 'conn-rectangle-mark
   "z" 'conn-exchange-mark-command)
 
 (static-if (<= 30 emacs-major-version)
