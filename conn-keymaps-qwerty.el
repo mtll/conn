@@ -500,6 +500,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "w" 'conn-kapply-kbd-macro-query
   "y" 'yank
   "Y" 'yank-from-kill-ring
   "r" 'conn-emacs-state-overwrite

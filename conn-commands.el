@@ -4556,7 +4556,12 @@ Interactively REPEAT is given by the prefix argument."
                        register
                        check-bounds)))
 
-(defun conn-change-thing (thing arg transform &optional check-bounds)
+(defun conn-change-thing (thing
+                          arg
+                          transform
+                          &optional
+                          check-bounds
+                          kbd-macro-query)
   "Change region defined by THING, ARG, and TRANSFORM.
 
 For how the region is determined using THING, ARG, and TRANSFORM see
@@ -4568,12 +4573,34 @@ For how the region is determined using THING, ARG, and TRANSFORM see
                     :reference conn-change-reference)
        ((`(,thing ,arg) (conn-change-thing-argument))
         (transform (conn-transform-argument))
-        (check-bounds (conn-check-bounds-argument)))
-     (list thing arg transform check-bounds)))
-  (conn-change-thing-do thing
-                        arg
-                        transform
-                        check-bounds))
+        (check-bounds (conn-check-bounds-argument))
+        (kbd-macro-query
+         (when (or defining-kbd-macro
+                   executing-kbd-macro)
+           (conn-boolean-argument
+            "kbd-macro-query"
+            'conn-kapply-kbd-macro-query
+            nil))))
+     (list thing arg transform check-bounds kbd-macro-query)))
+  (if kbd-macro-query
+      (progn
+        (let (executing-kbd-macro
+              defining-kbd-macro
+              conn-command-history)
+          (conn-change-thing-do thing
+                                arg
+                                transform
+                                check-bounds))
+        (conn-push-command-history 'conn-change-thing
+                                   thing
+                                   arg
+                                   transform
+                                   check-bounds
+                                   kbd-macro-query))
+    (conn-change-thing-do thing
+                          arg
+                          transform
+                          check-bounds)))
 
 ;;;;; Indent
 
