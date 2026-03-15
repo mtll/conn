@@ -71,10 +71,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
   (macroexp-let2 nil keymap keymap
     `(progn
-       (if ,keymap (internal-push-keymap ,keymap 'overriding-terminal-local-map))
+       (when ,keymap
+         (internal-push-keymap ,keymap 'overriding-terminal-local-map))
        (unwind-protect
            ,(macroexp-progn body)
-         (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))))
+         (when ,keymap
+           (internal-pop-keymap ,keymap 'overriding-terminal-local-map))))))
 
 (defmacro conn-< (&rest forms)
   (declare (indent 0))

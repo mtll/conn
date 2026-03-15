@@ -2194,7 +2194,7 @@ the meaning of depth."
 (defmacro conn-with-dispatch-suspended (&rest body)
   "Execute BODY with dispatch suspended."
   (declare (indent 0))
-  (cl-with-gensyms (select-mode)
+  (cl-with-gensyms (select-mode cookie)
     `(let ((conn-dispatch-in-progress nil))
        (unless (conn-substate-p conn-current-state
                                 'conn-dispatch-targets-state)
@@ -2221,13 +2221,16 @@ the meaning of depth."
                    (conn--dispatch-read-char-handlers nil)
                    (conn--dispatch-read-char-message-prefixes nil)
                    (conn--dispatch-always-retarget nil)
+                   (,cookie (conn--state-stack-cookie))
                    (,select-mode conn-dispatch-select-mode))
          (message nil)
          (unwind-protect
              (progn
                (if ,select-mode (conn-dispatch-select-mode -1))
-               (conn-without-recursive-stack
-                 ,@body))
+               (setq ,cookie
+                     (conn-exit-recursive-stack conn--dispatch-stack-cookie))
+               ,@body)
+           (conn-restore-recursive-stack ,cookie)
            (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
@@ -4717,6 +4720,8 @@ it."))
 
 ;;;;; Dispatch Commands
 
+(defvar conn--dispatch-stack-cookie nil)
+
 (cl-defun conn-dispatch-setup (action
                                thing
                                arg
@@ -4768,7 +4773,8 @@ it."))
        (prev-input-method current-input-method)
        (default-input-method default-input-method)
        (input-method-history input-method-history)
-       (conn-dispatch-target-finder nil))
+       (conn-dispatch-target-finder nil)
+       (conn--dispatch-stack-cookie nil))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
       ( :message -99 (_)
@@ -4844,32 +4850,34 @@ it."))
           ('negative-argument
            (cl-callf not conn--read-args-prefix-sign)
            (conn-dispatch-handle))))
-      (conn-with-recursive-stack 'conn-dispatch-state
-        (let ((conn-disable-input-method-hooks t))
-          (conn--unwind-protect-all
-            (let ((conn-dispatch-in-progress t))
-              (conn-get-target-finder thing arg)
-              (add-function :before-while conn-dispatch-other-end
-                            (lambda () (not conn-dispatch-no-other-end))
-                            '((depth . -100)
-                              (name . no-other-end)))
-              (when-let* ((predicate (conn-action-window-predicate action)))
-                (add-function :after-while conn-target-window-predicate predicate))
-              (when-let* ((predicate (conn-action-target-predicate action)))
-                (add-function :after-while conn-target-predicate predicate))
-              (when restrict-windows
-                (add-function :after-while conn-target-window-predicate
-                              'conn--dispatch-restrict-windows))
-              (activate-input-method conn--input-method)
-              (when setup-function (funcall setup-function))
-              (conn-dispatch-perform-action action repeat)
-              (conn-dispatch-push-history (conn-make-dispatch action)))
-            (with-current-buffer conn-dispatch-input-buffer
-              (activate-input-method prev-input-method))
-            (conn-cleanup-targets)
-            (conn-cleanup-labels)
-            (let ((inhibit-message conn-read-args-inhibit-message))
-              (message nil))))))))
+      (setq conn--dispatch-stack-cookie
+            (conn-enter-recursive-stack 'conn-dispatch-state))
+      (let ((conn-disable-input-method-hooks t))
+        (conn--unwind-protect-all
+          (let ((conn-dispatch-in-progress t))
+            (conn-get-target-finder thing arg)
+            (add-function :before-while conn-dispatch-other-end
+                          (lambda () (not conn-dispatch-no-other-end))
+                          '((depth . -100)
+                            (name . no-other-end)))
+            (when-let* ((predicate (conn-action-window-predicate action)))
+              (add-function :after-while conn-target-window-predicate predicate))
+            (when-let* ((predicate (conn-action-target-predicate action)))
+              (add-function :after-while conn-target-predicate predicate))
+            (when restrict-windows
+              (add-function :after-while conn-target-window-predicate
+                            'conn--dispatch-restrict-windows))
+            (activate-input-method conn--input-method)
+            (when setup-function (funcall setup-function))
+            (conn-dispatch-perform-action action repeat)
+            (conn-dispatch-push-history (conn-make-dispatch action)))
+          (conn-exit-recursive-stack conn--dispatch-stack-cookie)
+          (with-current-buffer conn-dispatch-input-buffer
+            (activate-input-method prev-input-method))
+          (conn-cleanup-targets)
+          (conn-cleanup-labels)
+          (let ((inhibit-message conn-read-args-inhibit-message))
+            (message nil)))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)

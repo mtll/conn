@@ -747,46 +747,11 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (buffer stack)
-    `(let ((,stack conn--state-stack)
-           (,buffer (current-buffer)))
+  (cl-with-gensyms (cookie)
+    `(let ((,cookie (conn-enter-recursive-stack ,state)))
        (unwind-protect
-           (progn
-             (ignore (conn-enter-recursive-stack ,state))
-             ,@body)
-         (with-current-buffer ,buffer
-           (conn-enter-state
-            (car ,stack)
-            (conn-stack-transition conn-stack-exit-recursive
-              (setq conn--state-stack ,stack)
-              (conn-call-re-entry-fns)))
-           (conn-update-lighter))))))
-
-(defmacro conn-without-recursive-stack (&rest body)
-  "Execute BODY with the most recent recursive stack temporarily exited."
-  (declare (debug (body))
-           (indent 0))
-  (cl-with-gensyms (stack buffer)
-    `(let ((,stack conn--state-stack)
-           (,buffer (current-buffer)))
-       (unwind-protect
-           (progn
-             (if-let* ((tail (memq nil conn--state-stack)))
-                 (progn
-                   (conn-enter-state
-                    (cadr tail)
-                    (conn-stack-transition conn-stack-exit-recursive
-                      (setq conn--state-stack (cdr tail))
-                      (conn-call-re-entry-fns)))
-                   (conn-update-lighter))
-               (error "Not in a recursive state"))
-             ,@body)
-         (with-current-buffer ,buffer
-           (conn-enter-state
-            (car ,stack)
-            (conn-stack-transition conn-stack-enter-recursive
-              (setq conn--state-stack ,stack)))
-           (conn-update-lighter))))))
+           ,(macroexp-progn body)
+         (conn-exit-recursive-stack ,cookie)))))
 
 ;;;;; Cl-Generic Specializers
 
@@ -843,7 +808,6 @@ Can only be used within the body of `conn-stack-transition'."
     (let ((run-re-entry
            ``(when-let* ((fns (cdr (gethash conn--state-stack
                                             conn--state-re-entry-functions))))
-               (remhash conn--state-stack conn--state-re-entry-functions)
                (funcall (car fns) ,',self (cdr fns)))))
       `(letrec ((,self
                  (oclosure-lambda (,name)
@@ -909,28 +873,11 @@ For more information see `conn-state-on-exit'."
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-on-re-entry (transition &rest body)
+(defmacro conn-state-on-re-entry (name transition &rest body)
   "Defer evaluation of BODY until the current state is re-entered.
 
 BODY will never be evaluated if the state is not re-entered."
-  (declare (indent 1))
-  (when (eql ?_ (string-to-char (symbol-name transition)))
-    (setq transition (gensym)))
-  (cl-with-gensyms (rest fns)
-    `(let ((,fns (with-memoization (gethash conn--state-stack
-                                            conn--state-re-entry-functions)
-                   (cons nil nil))))
-       (push (lambda (,transition ,rest)
-               (unwind-protect
-                   ,(macroexp-progn body)
-                 (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
-             (cdr ,fns)))))
-
-(defmacro conn-state-on-re-entry-once (name transition &rest body)
-  "Defer evaluation of BODY until the current state is re-entered.
-
-BODY will never be evaluated if the state is not re-entered."
-  (declare (indent 1))
+  (declare (indent 2))
   (when (eql ?_ (string-to-char (symbol-name transition)))
     (setq transition (gensym)))
   (cl-with-gensyms (rest fns)
@@ -1020,35 +967,35 @@ To execute code when a state is exiting use `conn-state-on-exit'."
 
 (cl-defmethod conn-enter-state :around ((state (conn-substate t))
                                         transition)
-  (unless (symbol-value state)
-    (when (conn-state-get state :abstract)
-      (error "Attempting to enter abstract state %s" state))
-    (let (conn-previous-state)
-      (unwind-protect
-          (progn
-            (let ((conn-next-state state))
-              (conn--run-exit-fns transition))
-            (cl-shiftf conn-previous-state conn-current-state state)
+  (when (conn-state-get state :abstract)
+    (error "Attempting to enter abstract state %s" state))
+  (let (conn-previous-state)
+    (unwind-protect
+        (progn
+          (let ((conn-next-state state))
+            (conn--run-exit-fns transition))
+          (cl-shiftf conn-previous-state conn-current-state state)
+          (unless (eq state conn-previous-state)
             (conn--setup-state-properties)
             (conn--setup-state-keymaps)
             (conn--activate-input-method)
             (unless (conn--mode-maps-sorted-p state)
-              (conn--sort-mode-maps state))
-            (cl-call-next-method)
-            (conn-update-lighter)
-            (set state t)
-            (funcall transition))
-        (unless (symbol-value state)
-          (conn-local-mode -1)
-          (message "Error entering state %s." state)))
-      (run-hook-wrapped
-       'conn-state-entry-hook
-       (lambda (fn)
-         (condition-case err
-             (funcall fn)
-           (error
-            (remove-hook 'conn-state-entry-hook fn)
-            (message "Error in conn-state-entry-hook: %s" (car err)))))))))
+              (conn--sort-mode-maps state)))
+          (cl-call-next-method)
+          (conn-update-lighter)
+          (set state t)
+          (funcall transition))
+      (unless (symbol-value state)
+        (conn-local-mode -1)
+        (message "Error entering state %s." state)))
+    (run-hook-wrapped
+     'conn-state-entry-hook
+     (lambda (fn)
+       (condition-case err
+           (funcall fn)
+         (error
+          (remove-hook 'conn-state-entry-hook fn)
+          (message "Error in conn-state-entry-hook: %s" (car err))))))))
 
 (defun conn-push-state (state)
   "Enter STATE and push it to the state stack."
@@ -1092,37 +1039,48 @@ current state does not have a :pop-alternate property then push
     last
     car))
 
+(defun conn--state-stack-cookie ()
+  (cons (current-buffer) conn--state-stack))
+
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
   (declare (important-return-value t))
-  (prog1 conn--state-stack
-    (unwind-protect
-        (progn
-          (conn-enter-state
-           state
-           (conn-stack-transition conn-stack-enter-recursive
-             (push nil conn--state-stack)
-             (push state conn--state-stack)))
-          ;; Ensure the lighter gets updates even if we haven't changed state
-          (conn-update-lighter))
-      (unless (car conn--state-stack)
-        (pop conn--state-stack)))))
+  (prog1 (conn--state-stack-cookie)
+    (conn-enter-state
+     state
+     (conn-stack-transition conn-stack-enter-recursive
+       (push nil conn--state-stack)
+       (push state conn--state-stack)))))
+
+(defun conn-restore-recursive-stack (cookie)
+  (pcase cookie
+    (`(,buffer . ,stack)
+     (with-current-buffer buffer
+       (conn-enter-state
+        (car stack)
+        (conn-stack-transition conn-stack-enter-recursive
+          (setq conn--state-stack stack)
+          (conn-call-re-entry-fns)))))
+    (_ (error "Invalid recursive stack cookie"))))
 
 (defun conn-exit-recursive-stack (cookie)
   "Exit the recursive state stack associated with COOKIE.
 
 COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
-  (if (cl-loop for cons on conn--state-stack
-               thereis (eq cons cookie))
-      (progn
-        (conn-enter-state
-         (car conn--state-stack)
-         (conn-stack-transition conn-stack-enter-recursive
-           (setq conn--state-stack cookie)))
-        ;; Ensure the lighter gets updates
-        ;; even if we haven't changed state
-        (conn-update-lighter))
-    (error "Invalid recursive stack cookie")))
+  (pcase cookie
+    (`(,(and buffer (pred bufferp))
+       . ,stack)
+     (with-current-buffer buffer
+       (if (cl-loop for cons on conn--state-stack
+                    thereis (eq cons stack))
+           (prog1 (conn--state-stack-cookie)
+             (conn-enter-state
+              (car stack)
+              (conn-stack-transition conn-stack-exit-recursive
+                (setq conn--state-stack stack)
+                (conn-call-re-entry-fns))))
+         (error "Invalid recursive stack cookie"))))
+    (_ (error "Invalid recursive stack cookie"))))
 
 ;;;;; Definitions
 
@@ -1551,7 +1509,7 @@ command was a prefix command.")
     (unwind-protect
         (conn-with-recursive-stack 'conn-command-state
           (conn-insertion-recording-mode 1)
-          (conn-state-on-re-entry _
+          (conn-state-on-re-entry conn-record-insert _
             (cl-with-gensyms (hook)
               (fset hook (lambda ()
                            (remove-hook 'conn-state-entry-hook hook t)
@@ -1647,7 +1605,7 @@ entering mark state.")
         conn-record-mark-state t)
   (conn-state-on-exit transition
     (when (bound-and-true-p rectangle-mark-mode)
-      (conn-state-on-re-entry _transition
+      (conn-state-on-re-entry conn-mark-rmm _transition
         (activate-mark)
         (rectangle-mark-mode 1)))
     (unless (conn-mark-state-keep-mark-active-p transition)
