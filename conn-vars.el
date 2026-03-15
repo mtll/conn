@@ -50,6 +50,10 @@ disabled.")
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits)
 
+(defvar-keymap conn-regexp-argument-map)
+(defvar-keymap conn-delimited-argument-map)
+(defvar-keymap conn-backward-argument-map)
+
 ;;;; Custom Variables
 
 (defgroup conn nil

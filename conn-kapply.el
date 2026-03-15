@@ -24,12 +24,16 @@
 (require 'conn-utils)
 (require 'conn-states)
 (require 'conn-things)
-(require 'conn-commands)
+(require 'conn-dispatch)
+
+(autoload 'multi-isearch-read-files "misearch")
 
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function project-files "project")
 (declare-function ibuffer-unmark-all-marks "ibuffer")
 (declare-function compilation--message->loc "compile")
+(declare-function conn-replace-thing-argument "conn-commands")
+(declare-function conn-exchange-mark-command "conn-commands")
 
 ;;;; Kapply
 
@@ -378,48 +382,8 @@ of highlighting."
          (query-replace-read-from-suggestions)
          t)))))
 
-(cl-defgeneric conn-kapply-on-matches (thing
-                                       arg
-                                       transform
-                                       &optional
-                                       subregions
-                                       regexp-flag
-                                       delimited-flag
-                                       string)
-  "Create an iterator over matches for a string in a region.
-
-The region is defined by THING, ARG, and TRANSFORM.  For how they are
-used to define the region see `conn-bounds-of' and
-`conn-transform-bounds'.
-
-If SUBREGIONS is non-nil then restrict matching to the subregions of the
-region.
-
-The string to match is read interactively.
-
-If REGEXP-FLAG is non-nil then the string is taken to be a regexp.
-
-If DELIMITED-FLAG is non-nil then only match regions surrounded by word
-boundaries.
-
-SORT-FUNCTION if non-nil is a function to sort the regions before
-iterating over them.  SORT-FUNCTION should take a list of overlays.")
-
-(cl-defmethod conn-kapply-on-matches ((_thing (eql project))
-                                      _arg
-                                      _transform
-                                      &optional
-                                      _subregions
-                                      regexp-flag
-                                      delimited-flag
-                                      string)
-  (require 'project)
-  (let ((files (or (project-files (project-current t))
-                   (user-error "No files for kapply.")))
-        (string (or string (conn--kapply-read-from-with-preview
-                            (if regexp-flag "Regexp: " "String: ")
-                            nil regexp-flag)))
-        (sort-function #'nreverse)
+(defun conn--kapply-multi-file-matches (files string regexp-flag delimited-flag)
+  (let ((sort-function #'nreverse)
         matches)
     (cl-labels
         ((collect-matches (buffer)
@@ -473,6 +437,67 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
             (conn-kapply-consume-region (pop matches)))))
        :query t
        :ibuffer t))))
+
+(cl-defgeneric conn-kapply-on-matches (thing
+                                       arg
+                                       transform
+                                       &optional
+                                       subregions
+                                       regexp-flag
+                                       delimited-flag
+                                       string)
+  "Create an iterator over matches for a string in a region.
+
+The region is defined by THING, ARG, and TRANSFORM.  For how they are
+used to define the region see `conn-bounds-of' and
+`conn-transform-bounds'.
+
+If SUBREGIONS is non-nil then restrict matching to the subregions of the
+region.
+
+The string to match is read interactively.
+
+If REGEXP-FLAG is non-nil then the string is taken to be a regexp.
+
+If DELIMITED-FLAG is non-nil then only match regions surrounded by word
+boundaries.
+
+SORT-FUNCTION if non-nil is a function to sort the regions before
+iterating over them.  SORT-FUNCTION should take a list of overlays.")
+
+(cl-defmethod conn-kapply-on-matches ((_thing (eql multi-file))
+                                      _arg
+                                      _transform
+                                      &optional
+                                      _subregions
+                                      regexp-flag
+                                      delimited-flag
+                                      string)
+  (conn--kapply-multi-file-matches
+   (multi-isearch-read-files)
+   (or string (conn--kapply-read-from-with-preview
+               (if regexp-flag "Regexp: " "String: ")
+               nil regexp-flag))
+   regexp-flag
+   delimited-flag))
+
+(cl-defmethod conn-kapply-on-matches ((_thing (eql project))
+                                      _arg
+                                      _transform
+                                      &optional
+                                      _subregions
+                                      regexp-flag
+                                      delimited-flag
+                                      string)
+  (require 'project)
+  (conn--kapply-multi-file-matches
+   (or (project-files (project-current t))
+       (user-error "No files for kapply."))
+   (or string (conn--kapply-read-from-with-preview
+               (if regexp-flag "Regexp: " "String: ")
+               nil regexp-flag))
+   regexp-flag
+   delimited-flag))
 
 (cl-defmethod conn-kapply-on-matches ((thing (conn-thing t))
                                       arg
@@ -752,7 +777,7 @@ If the region is invisible and cannot be opened then skip it."
    `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
-(defun conn-kapply-relocate-to-region (iterator)
+(defun conn-kapply-relocate-to-region (iterator &optional offset)
   "Relocate point and mark the bounds of region return by ITERATOR.
 
 This also handles switching to the regions buffer if it is not the
@@ -773,7 +798,7 @@ current buffer."
                (deactivate-mark)
                (unless (eq buffer (window-buffer (selected-window)))
                  (error "Could not pop to buffer %s" buffer)))
-             (goto-char beg)
+             (goto-char (+ beg (or offset 0)))
              (push-mark end))
             (_ region))))
        region))
@@ -1083,10 +1108,14 @@ When kapply finishes restore the restrictions in each buffer."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
-   :after (var iterator)
-   (lambda (state)
-     (when (eq state :record)
-       (pulse-momentary-highlight-region (point) (mark t) 'query-replace)))
+   :around (var iterator)
+   (lambda (iterator state)
+     (let ((val (funcall iterator state)))
+       (when (eq state :record)
+         (pcase val
+           (`[,beg ,end ,_buffer]
+            (pulse-momentary-highlight-region beg end 'query-replace))))
+       val))
    `((depth . ,(alist-get 'kapply-pulse conn--kapply-pipeline-depths))
      (name . kapply-pulse))))
 
@@ -1650,6 +1679,54 @@ finishing showing the buffers that were visited."))
        conn-kapply-pulse-region
        ,@pipeline))))
 
+(defvar conn-kapply-matches-special-ref
+  (append
+   (conn-reference-quote
+     (("In project" project)
+      ("In files" multi-file)))))
+
+(defvar conn-kapply-matches-reference
+  (list (conn-reference-page
+          "Replace instances of a pattern in a thing."
+          (:heading "Special Bindings")
+          (:eval (conn-quick-ref-to-cols
+                  conn-kapply-matches-special-ref 2))
+          (:heading "Transformations")
+          (:eval (conn-quick-ref-to-cols
+                  conn-transformations-quick-ref 3)))))
+
+(conn-define-state conn-kapply-matches-state (conn-read-thing-state)
+  :lighter "MATCHES")
+
+(cl-defstruct (conn-kapply-matches-thing-argument
+               (:include conn-thing-with-subregions-argument)
+               ( :constructor conn-kapply-matches-thing-argument
+                 (&optional
+                  subregions-default
+                  &aux
+                  (required t)
+                  (recursive-edit t)
+                  (value
+                   (when (and (use-region-p)
+                              (bound-and-true-p rectangle-mark-mode))
+                     (list 'region nil)))
+                  (subregions
+                   (or (and (use-region-p)
+                            (bound-and-true-p rectangle-mark-mode))
+                       subregions-default))
+                  (subregions-explicit-flag subregions-default)
+                  (set-flag
+                   (and (use-region-p)
+                        (bound-and-true-p rectangle-mark-mode)))))))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kapply-matches-thing-argument)
+                                       (_cmd (eql project)))
+  t)
+
+(cl-defmethod conn-argument-predicate ((_arg conn-kapply-matches-thing-argument)
+                                       (_cmd (eql multi-file)))
+  t)
+
 (cl-defmethod conn-replace-do ((_thing (eql kapply))
                                _arg
                                transform
@@ -1660,11 +1737,11 @@ finishing showing the buffers that were visited."))
                                subregions-p
                                _from
                                _to)
-  (conn-read-args (conn-replace-state
-                   :reference conn-replace-reference
+  (conn-read-args (conn-kapply-matches-state
+                   :reference conn-kapply-matches-reference
                    :prompt "Kapply in Thing")
       ((`(,thing ,arg ,subregions-p)
-        (conn-replace-thing-argument subregions-p))
+        (conn-kapply-matches-thing-argument subregions-p))
        (transform (conn-transform-argument transform))
        (regexp-flag
         (conn-boolean-argument "regexp"

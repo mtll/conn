@@ -491,6 +491,11 @@
 ;;;;; Other States
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-kapply-matches-state)
+  "p" 'project
+  "/" 'multi-file)
+
+(define-keymap
   :keymap conn-insertion-recording-mode-map
   "C-." 'conn-record-exhange)
 

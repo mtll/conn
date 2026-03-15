@@ -1811,6 +1811,8 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-current-thing nil)
 
+(defvar conn--dispatch-stack-cookie nil)
+
 (defvar conn-dispatch-amalgamate-undo nil
   "Controls undo amalgamation of multiple dispatch loop iterations.
 
@@ -4719,8 +4721,6 @@ it."))
               :setup-function ,setup-function))))
 
 ;;;;; Dispatch Commands
-
-(defvar conn--dispatch-stack-cookie nil)
 
 (cl-defun conn-dispatch-setup (action
                                thing

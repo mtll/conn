@@ -26,6 +26,7 @@
 (require 'conn-things)
 (require 'conn-states)
 (require 'conn-dispatch)
+(require 'conn-kapply)
 (require 'conn-expand)
 (eval-when-compile
   (require 'cl-lib))
@@ -45,10 +46,6 @@
 (declare-function rectangle--col-pos "rect")
 (declare-function fileloop-continue "fileloop")
 (declare-function hi-lock-read-face-name "hi-lock")
-(declare-function conn-kapply-on-things "conn-kapply")
-(declare-function conn-kapply-region-iterator "conn-kapply")
-(declare-function conn-kapply-on-iterator "conn-kapply")
-(declare-function conn-kapply-make-region "conn-kapply")
 
 (defvar hi-lock-auto-select-face)
 (defvar hi-lock-interactive-patterns)
@@ -1887,10 +1884,6 @@ selected by dispatch with it."))
       (cl-defmethod conn-argument-predicate ((_arg conn-replace-thing-argument)
                                              (_cmd (eql multi-file-as-diff)))
         t)))
-
-(defvar-keymap conn-regexp-argument-map)
-(defvar-keymap conn-delimited-argument-map)
-(defvar-keymap conn-backward-argument-map)
 
 (defun conn-replace (thing
                      arg
@@ -4078,14 +4071,19 @@ Only available during repeating duplicate."
                  regexp (if extra-newline "\n" "[\t ]")))
          (kapply (all)
            (interactive "P")
-           (let ((kapply-regions nil))
+           (let ((kapply-regions nil)
+                 (offset 0))
              (dolist (ov (if all regions (butlast regions)))
+               (when (<= (overlay-start ov) (point) (overlay-end ov))
+                 (setq offset (- (point) (overlay-start ov))))
                (push (conn-kapply-make-region (overlay-start ov)
                                               (overlay-end ov))
                      kapply-regions))
              (funcall exit-fn)
              (conn-kapply-on-iterator
-              (conn-kapply-region-iterator kapply-regions))))
+              (conn-kapply-region-iterator kapply-regions)
+              :extra (lambda (it)
+                       (conn-kapply-relocate-to-region it offset)))))
          (pred ()
            (pcase this-command
              ((or 'recenter-top-bottom 'reposition-window
