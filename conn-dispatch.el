@@ -846,7 +846,10 @@ themselves once the selection process has concluded."
              (propertize (conn-action-pretty-print action)
                          'face 'eldoc-highlight-function-argument)))
    (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
-            collect (conn-argument-display a))))
+            collect (mapcar
+                     (lambda (str)
+                       (propertize str 'conn-read-args-display-depth -49))
+                     (flatten-tree (conn-argument-display a))))))
 
 ;;;;;; Command Handler
 
@@ -4431,8 +4434,7 @@ it."))
            (lambda (_cmd) (conn-read-from-command-history))
            :formatter (lambda (key-string name _val)
                         (concat
-                         (propertize key-string
-                                     'conn-read-args-display-depth -49)
+                         key-string
                          " "
                          (propertize name
                                      'face 'conn-argument-active-face)))

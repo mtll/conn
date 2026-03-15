@@ -2620,10 +2620,11 @@ be displayed in the echo area during `conn-read-args'."
                  key-string
                  (conn-read-argument-name arg)
                  (conn-argument-value arg))
-      (propertize
-       (concat key-string " " (conn-read-argument-name arg))
-       'face (when (conn-argument-value arg)
-               'conn-argument-active-face)))))
+      (concat key-string " "
+              (propertize
+               (conn-read-argument-name arg)
+               'face (when (conn-argument-value arg)
+                       'conn-argument-active-face))))))
 
 ;;;;; Protected Argument
 
