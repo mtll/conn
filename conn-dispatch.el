@@ -2196,44 +2196,54 @@ the meaning of depth."
 (defmacro conn-with-dispatch-suspended (&rest body)
   "Execute BODY with dispatch suspended."
   (declare (indent 0))
-  (cl-with-gensyms (select-mode handle)
-    `(let ((conn-dispatch-in-progress nil))
+  (cl-with-gensyms (select-mode stack-handle)
+    `(let ((conn-dispatch-in-progress nil)
+           (,select-mode conn-dispatch-select-mode)
+           (,stack-handle nil))
        (unless (conn-substate-p conn-current-state
                                 'conn-dispatch-targets-state)
          (error "Trying to suspend dispatch when state not active"))
        (conn-target-finder-suspend conn-dispatch-target-finder)
        (conn-cleanup-labels)
-       (pcase-let ((`(,conn-target-window-predicate
-                      ,conn-target-predicate
-                      ,conn-target-sort-function)
-                    conn--dispatch-prev-state)
-                   (conn-dispatch-repeating nil)
-                   (conn-dispatch-action-reference nil)
-                   (conn-targets nil)
-                   (conn--dispatch-label-state nil)
-                   (conn-dispatch-target-finder nil)
-                   (conn--dispatch-change-groups nil)
-                   (inhibit-message nil)
-                   (recenter-last-op nil)
-                   (conn-dispatch-iteration-count nil)
-                   (conn-dispatch-other-end nil)
-                   (conn-read-args-last-command nil)
-                   (conn--read-args-prefix-mag nil)
-                   (conn--read-args-prefix-sign nil)
-                   (conn--dispatch-read-char-handlers nil)
-                   (conn--dispatch-read-char-message-prefixes nil)
-                   (conn--dispatch-always-retarget nil)
-                   (conn--dispatch-stack-handle nil)
-                   (,handle (conn-exit-recursive-stack
-                             conn--dispatch-stack-handle))
-                   (,select-mode conn-dispatch-select-mode))
-         (message nil)
-         (unwind-protect
-             (progn
-               (if ,select-mode (conn-dispatch-select-mode -1))
-               ,@body)
-           (conn-restore-recursive-stack ,handle)
-           (if ,select-mode (conn-dispatch-select-mode 1)))))))
+       (setq ,stack-handle (conn-exit-recursive-stack
+                            conn--dispatch-stack-handle))
+       (unwind-protect
+           (pcase-let ((`(,conn-target-window-predicate
+                          ,conn-target-predicate
+                          ,conn-target-sort-function)
+                        conn--dispatch-prev-state)
+                       (conn--dispatch-prev-state nil)
+                       (conn--dispatch-must-prompt nil)
+                       (conn--dispatch-action-always-prompt nil)
+                       (conn-dispatch-label-function nil)
+                       (conn-dispatch-quit-flag nil)
+                       (conn-dispatch-amalgamate-undo nil)
+                       (conn-dispatch-current-action nil)
+                       (conn--dispatch-current-thing nil)
+                       (conn-dispatch-repeating nil)
+                       (conn-dispatch-action-reference nil)
+                       (conn-targets nil)
+                       (conn--dispatch-label-state nil)
+                       (conn-dispatch-target-finder nil)
+                       (conn--dispatch-change-groups nil)
+                       (inhibit-message nil)
+                       (conn-dispatch-iteration-count nil)
+                       (conn-dispatch-no-other-end nil)
+                       (conn-dispatch-other-end nil)
+                       (conn-read-args-last-command nil)
+                       (conn--read-args-prefix-mag nil)
+                       (conn--read-args-prefix-sign nil)
+                       (conn--dispatch-read-char-handlers nil)
+                       (conn--dispatch-read-char-message-prefixes nil)
+                       (conn--dispatch-always-retarget nil))
+             (if ,select-mode (conn-dispatch-select-mode -1))
+             (conn-dispatch-restore-state)
+             (message nil)
+             (let ((conn-dispatch-input-buffer nil))
+               ,@body))
+         (conn-dispatch-save-state)
+         (conn-restore-recursive-stack ,stack-handle)
+         (if ,select-mode (conn-dispatch-select-mode 1))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
   "Command handler active during `conn-dispatch-select-mode'."
@@ -4722,6 +4732,59 @@ it."))
 
 ;;;;; Dispatch Commands
 
+(defvar conn-dispatch-save-state-hook nil)
+(defvar conn--dispatch-restore-state-functions nil)
+
+(defmacro conn-dispatch-on-restore-state (&rest body)
+  (declare (indent 0))
+  `(push (lambda () ,@body) conn--dispatch-restore-state-functions))
+
+(defmacro conn-dispatch-set-state (&rest state)
+  (declare (indent 0))
+  (let ((vals nil)
+        (places nil)
+        (temps nil))
+    (while state
+      (pcase (take 2 state)
+        (`(,place ,val)
+         (push place places)
+         (push val vals)
+         (push (gensym "temp") temps)))
+      (cl-callf cddr state))
+    (setq vals (nreverse vals)
+          places (nreverse places)
+          temps (nreverse temps))
+    `(progn
+       (let ,(cl-loop for place in places
+                      for temp in temps
+                      collect (list temp place))
+         (conn-dispatch-on-restore-state
+           ,@(cl-loop for place in places
+                      for temp in temps
+                      collect `(setf ,place ,temp))))
+       ,@(cl-loop for place in places
+                  for val in vals
+                  collect `(setf ,place ,val)))))
+
+(defun conn-dispatch-save-state ()
+  (conn-dispatch-set-state
+    default-input-method default-input-method
+    recenter-last-op nil
+    eldoc-display-functions nil
+    (buffer-local-value 'input-method-history (current-buffer))
+    input-method-history)
+  (conn-dispatch-on-restore-state
+    (activate-input-method conn--input-method))
+  (run-hooks 'conn-dispatch-save-state-hook))
+
+(defun conn-dispatch-restore-state ()
+  (with-current-buffer conn-dispatch-input-buffer
+    (unwind-protect
+        (while-let ((fn (pop conn--dispatch-restore-state-functions)))
+          (funcall fn))
+      (mapc (lambda (fn) (ignore-errors (funcall fn)))
+            (cl-shiftf conn--dispatch-restore-state-functions nil)))))
+
 (cl-defun conn-dispatch-setup (action
                                thing
                                arg
@@ -4736,6 +4799,7 @@ it."))
     (setq action (conn-make-default-action thing)))
   (when (or defining-kbd-macro executing-kbd-macro)
     (error "Dispatch not available in keyboard macros"))
+  (conn-dispatch-save-state)
   (conn-protected-let*
       ((conn-wincontrol-mode nil)
        (conn-wincontrol-one-command-mode nil)
@@ -4744,8 +4808,6 @@ it."))
        (conn-dispatch-action-reference
         (conn-action-get-reference action))
        (conn--dispatch-current-thing (list thing arg transform))
-       (eldoc-display-functions nil)
-       (recenter-last-op nil)
        (conn-read-args-last-command nil)
        (conn-dispatch-repeating
         (and repeat (conn-action-repeatable-p action)))
@@ -4770,9 +4832,6 @@ it."))
           (list t)))
        (conn-dispatch-other-end (lambda () (and other-end t)))
        (conn-dispatch-input-buffer (current-buffer))
-       (prev-input-method current-input-method)
-       (default-input-method default-input-method)
-       (input-method-history input-method-history)
        (conn-dispatch-target-finder nil)
        (conn--dispatch-stack-handle nil))
     (conn-with-dispatch-event-handlers
@@ -4872,10 +4931,9 @@ it."))
             (conn-dispatch-perform-action action repeat)
             (conn-dispatch-push-history (conn-make-dispatch action)))
           (conn-exit-recursive-stack conn--dispatch-stack-handle)
-          (with-current-buffer conn-dispatch-input-buffer
-            (activate-input-method prev-input-method))
           (conn-cleanup-targets)
           (conn-cleanup-labels)
+          (conn-dispatch-restore-state)
           (let ((inhibit-message conn-read-args-inhibit-message))
             (message nil)))))))
 

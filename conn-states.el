@@ -840,30 +840,24 @@ current state.  See also `conn--clone-buffer-setup'.
 
 When BODY is evaluated `conn-next-state' will be bound to the state that
 is being entered after the current state has exited or nil if
-`conn-local-mode' is being exited or a cloned buffer is being setup."
+`conn-local-mode' is being exited or a cloned buffer is being setup.
+
+\(fn [:label LABEL] BODY)"
   (declare (indent 1)
            (debug (def-body)))
   (when (eql ?_ (string-to-char (symbol-name transition)))
     (setq transition (gensym)))
   (cl-with-gensyms (rest)
-    `(push (lambda (,transition ,rest)
-             (unwind-protect
-                 ,(macroexp-progn body)
-               (funcall (car ,rest) ,transition (cdr ,rest))))
-           conn--state-exit-functions)))
-
-(defmacro conn-state-on-exit-once (name transition &rest body)
-  "Like `conn-state-on-exit' but BODY will be evaluated only once per state.
-
-For more information see `conn-state-on-exit'."
-  (declare (indent 2)
-           (debug (def-body)))
-  (when (eql ?_ (string-to-char (symbol-name transition)))
-    (setq transition (gensym)))
-  (cl-with-gensyms (rest)
-    `(unless (memq ',name conn--state-exit-functions-ids)
-       (push ',name conn--state-exit-functions-ids)
-       (push (lambda (,transition ,rest)
+    (if (eq (car body) :label)
+        `(let ((label ,(cadr body)))
+           (unless (memq label conn--state-exit-functions-ids)
+             (push label conn--state-exit-functions-ids)
+             (push (lambda (,transition ,rest)
+                     (unwind-protect
+                         ,(macroexp-progn (cddr body))
+                       (funcall (car ,rest) ,transition (cdr ,rest))))
+                   conn--state-exit-functions)))
+      `(push (lambda (,transition ,rest)
                (unwind-protect
                    ,(macroexp-progn body)
                  (funcall (car ,rest) ,transition (cdr ,rest))))
@@ -1056,11 +1050,12 @@ current state does not have a :pop-alternate property then push
   (pcase handle
     (`(,buffer . ,stack)
      (with-current-buffer buffer
-       (conn-enter-state
-        (car stack)
-        (conn-stack-transition conn-stack-enter-recursive
-          (setq conn--state-stack stack)
-          (conn-call-re-entry-fns)))))
+       (unless (eq stack conn--state-stack)
+         (conn-enter-state
+          (car stack)
+          (conn-stack-transition conn-stack-enter-recursive
+            (setq conn--state-stack stack)
+            (conn-call-re-entry-fns))))))
     (_ (error "Invalid recursive stack handle"))))
 
 (defun conn-exit-recursive-stack (handle)
@@ -1068,8 +1063,7 @@ current state does not have a :pop-alternate property then push
 
 HANDLE should be a handle returned by `conn-enter-recursive-stack'."
   (pcase handle
-    (`(,(and buffer (pred bufferp))
-       . ,stack)
+    (`(,buffer . ,stack)
      (with-current-buffer buffer
        (if (cl-loop for cons on conn--state-stack
                     thereis (eq cons stack))
