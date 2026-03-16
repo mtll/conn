@@ -4190,7 +4190,14 @@ Only available during repeating duplicate."
                                       (this-command-keys-vector)))
                   (when (and mc (symbolp mc))
                     (setq mc (or (command-remapping mc) mc)))
-                  (and mc (eq this-command mc))))))
+                  (and mc (eq this-command mc)))))
+             (cleanup ()
+               (dolist (cg cgs)
+                 (accept-change-group cg))
+               (undo-amalgamate-change-group (car (last cgs)))
+               (conn--remove-all-advice 'conn-duplicate-repeat
+                                        'conn-duplicate-delete-repeat
+                                        'conn-duplicate-repeat-kapply)))
           (advice-add 'conn-duplicate-repeat :override #'dup)
           (advice-add 'conn-duplicate-delete-repeat :override #'delete)
           (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
@@ -4200,13 +4207,7 @@ Only available during repeating duplicate."
                 (set-transient-map
                  conn-duplicate-repeat-map
                  #'pred
-                 (lambda ()
-                   (dolist (cg cgs)
-                     (accept-change-group cg))
-                   (undo-amalgamate-change-group (car (last cgs)))
-                   (conn--remove-all-advice 'conn-duplicate-repeat
-                                            'conn-duplicate-delete-repeat
-                                            'conn-duplicate-repeat-kapply))
+                 #'cleanup
                  (conn--duplicate-message-string
                   conn-duplicate-repeat-map
                   "repeat" 'conn-duplicate-repeat

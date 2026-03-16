@@ -1811,7 +1811,7 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-current-thing nil)
 
-(defvar conn--dispatch-stack-cookie nil)
+(defvar conn--dispatch-stack-handle nil)
 
 (defvar conn-dispatch-amalgamate-undo nil
   "Controls undo amalgamation of multiple dispatch loop iterations.
@@ -2196,7 +2196,7 @@ the meaning of depth."
 (defmacro conn-with-dispatch-suspended (&rest body)
   "Execute BODY with dispatch suspended."
   (declare (indent 0))
-  (cl-with-gensyms (select-mode cookie)
+  (cl-with-gensyms (select-mode handle)
     `(let ((conn-dispatch-in-progress nil))
        (unless (conn-substate-p conn-current-state
                                 'conn-dispatch-targets-state)
@@ -2223,16 +2223,16 @@ the meaning of depth."
                    (conn--dispatch-read-char-handlers nil)
                    (conn--dispatch-read-char-message-prefixes nil)
                    (conn--dispatch-always-retarget nil)
-                   (,cookie (conn--state-stack-cookie))
+                   (conn--dispatch-stack-handle nil)
+                   (,handle (conn-exit-recursive-stack
+                             conn--dispatch-stack-handle))
                    (,select-mode conn-dispatch-select-mode))
          (message nil)
          (unwind-protect
              (progn
                (if ,select-mode (conn-dispatch-select-mode -1))
-               (setq ,cookie
-                     (conn-exit-recursive-stack conn--dispatch-stack-cookie))
                ,@body)
-           (conn-restore-recursive-stack ,cookie)
+           (conn-restore-recursive-stack ,handle)
            (if ,select-mode (conn-dispatch-select-mode 1)))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
@@ -4774,7 +4774,7 @@ it."))
        (default-input-method default-input-method)
        (input-method-history input-method-history)
        (conn-dispatch-target-finder nil)
-       (conn--dispatch-stack-cookie nil))
+       (conn--dispatch-stack-handle nil))
     (conn-with-dispatch-event-handlers
       ( :handler #'conn-handle-dispatch-select-command)
       ( :message -99 (_)
@@ -4850,7 +4850,7 @@ it."))
           ('negative-argument
            (cl-callf not conn--read-args-prefix-sign)
            (conn-dispatch-handle))))
-      (setq conn--dispatch-stack-cookie
+      (setq conn--dispatch-stack-handle
             (conn-enter-recursive-stack 'conn-dispatch-state))
       (let ((conn-disable-input-method-hooks t))
         (conn--unwind-protect-all
@@ -4871,7 +4871,7 @@ it."))
             (when setup-function (funcall setup-function))
             (conn-dispatch-perform-action action repeat)
             (conn-dispatch-push-history (conn-make-dispatch action)))
-          (conn-exit-recursive-stack conn--dispatch-stack-cookie)
+          (conn-exit-recursive-stack conn--dispatch-stack-handle)
           (with-current-buffer conn-dispatch-input-buffer
             (activate-input-method prev-input-method))
           (conn-cleanup-targets)

@@ -747,11 +747,11 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (cookie)
-    `(let ((,cookie (conn-enter-recursive-stack ,state)))
+  (cl-with-gensyms (handle)
+    `(let ((,handle (conn-enter-recursive-stack ,state)))
        (unwind-protect
            ,(macroexp-progn body)
-         (conn-exit-recursive-stack ,cookie)))))
+         (conn-exit-recursive-stack ,handle)))))
 
 ;;;;; Cl-Generic Specializers
 
@@ -1039,21 +1039,21 @@ current state does not have a :pop-alternate property then push
     last
     car))
 
-(defun conn--state-stack-cookie ()
+(defun conn--state-stack-handle ()
   (cons (current-buffer) conn--state-stack))
 
 (defun conn-enter-recursive-stack (state)
   "Enter a recursive stack with STATE as the base state."
   (declare (important-return-value t))
-  (prog1 (conn--state-stack-cookie)
+  (prog1 (conn--state-stack-handle)
     (conn-enter-state
      state
      (conn-stack-transition conn-stack-enter-recursive
        (push nil conn--state-stack)
        (push state conn--state-stack)))))
 
-(defun conn-restore-recursive-stack (cookie)
-  (pcase cookie
+(defun conn-restore-recursive-stack (handle)
+  (pcase handle
     (`(,buffer . ,stack)
      (with-current-buffer buffer
        (conn-enter-state
@@ -1061,26 +1061,26 @@ current state does not have a :pop-alternate property then push
         (conn-stack-transition conn-stack-enter-recursive
           (setq conn--state-stack stack)
           (conn-call-re-entry-fns)))))
-    (_ (error "Invalid recursive stack cookie"))))
+    (_ (error "Invalid recursive stack handle"))))
 
-(defun conn-exit-recursive-stack (cookie)
-  "Exit the recursive state stack associated with COOKIE.
+(defun conn-exit-recursive-stack (handle)
+  "Exit the recursive state stack associated with HANDLE.
 
-COOKIE should be a cookie returned by `conn-enter-recursive-stack'."
-  (pcase cookie
+HANDLE should be a handle returned by `conn-enter-recursive-stack'."
+  (pcase handle
     (`(,(and buffer (pred bufferp))
        . ,stack)
      (with-current-buffer buffer
        (if (cl-loop for cons on conn--state-stack
                     thereis (eq cons stack))
-           (prog1 (conn--state-stack-cookie)
+           (prog1 (conn--state-stack-handle)
              (conn-enter-state
               (car stack)
               (conn-stack-transition conn-stack-exit-recursive
                 (setq conn--state-stack stack)
                 (conn-call-re-entry-fns))))
-         (error "Invalid recursive stack cookie"))))
-    (_ (error "Invalid recursive stack cookie"))))
+         (error "Invalid recursive stack handle"))))
+    (_ (error "Invalid recursive stack handle"))))
 
 ;;;;; Definitions
 
