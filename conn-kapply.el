@@ -1168,8 +1168,9 @@ After kapply has finished restore the previous window configuration."
             (message "Kapply completed successfully after %s iterations"
                      iterations)))
       (let ((conn-kmacro-apply-error (not success)))
-        (funcall iterator :cleanup)
-        (run-hooks 'conn-kmacro-apply-end-hook)))))
+        (with-delayed-message (0.4 "Finalizing Kapply...")
+          (funcall iterator :cleanup)
+          (run-hooks 'conn-kmacro-apply-end-hook))))))
 
 (defmacro conn-define-kapplier (name arglist &rest body)
   "Define a macro application function.
@@ -1765,22 +1766,26 @@ finishing showing the buffers that were visited."))
    (conn-read-args (conn-read-thing-state
                     :prompt "Thing")
        ((`(,thing ,arg)
-         (conn-thing-argument-dwim-rectangle t (use-region-p)))
+         (conn-thing-argument t (use-region-p)))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((and bounds (conn-bounds-get :subregions transform))
-     (when conn-mark-state (conn-pop-state))
-     (deactivate-mark)
-     (conn-kapply-on-iterator
-      (conn-kapply-region-iterator
-       (cl-loop for b in (or subregions (list bounds))
-                for (beg . end) = (conn-bounds b)
-                collect (conn-kapply-make-region beg end))))
-     (conn-push-command-history 'conn-kapply-on-things
-                                thing
-                                arg
-                                transform))))
+  (let ((rmm (bound-and-true-p rectangle-mark-mode))
+        (all-empty t))
+    (pcase (conn-bounds-of thing arg)
+      ((and bounds (conn-bounds-get :subregions transform))
+       (when conn-mark-state (conn-pop-state))
+       (deactivate-mark)
+       (conn-kapply-on-iterator
+        (conn-kapply-region-iterator
+         (cl-loop for b in (or subregions (list bounds))
+                  for (beg . end) = (conn-bounds b)
+                  when (< beg end) do (setq all-empty nil)
+                  collect (conn-kapply-make-region beg end)))
+        :empty (and rmm (not all-empty)))
+       (conn-push-command-history 'conn-kapply-on-things
+                                  thing
+                                  arg
+                                  transform)))))
 
 (defun conn-kapply-count-iterator (&optional count)
   (interactive "P")

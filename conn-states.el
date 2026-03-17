@@ -1600,8 +1600,10 @@ entering mark state.")
   (conn-state-on-exit transition
     (when (bound-and-true-p rectangle-mark-mode)
       (conn-state-on-re-entry conn-mark-rmm _transition
-        (activate-mark)
-        (rectangle-mark-mode 1)))
+        (unless (region-active-p)
+          (activate-mark))
+        (unless (bound-and-true-p rectangle-mark-mode)
+          (rectangle-mark-mode 1))))
     (unless (conn-mark-state-keep-mark-active-p transition)
       (deactivate-mark)
       (setq conn-record-mark-state nil))

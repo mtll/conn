@@ -1215,79 +1215,84 @@ the point is within the region then the entire region is returned.")))
 
 ;;;; Bounds of Things in Region
 
-(cl-defgeneric conn-get-things-in-region (thing arg transforms beg end)
+(cl-defgeneric conn-get-things-in-region (thing arg transforms bounds)
   (declare (conn-anonymous-thing-property :things-in-region)
            (important-return-value t)))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing t))
                                          arg
                                          transforms
-                                         beg
-                                         end)
-  (save-excursion
-    (goto-char beg)
-    (when-let* ((thing (seq-find #'conn-simple-thing-p
-                                 (conn-thing-all-parents thing)))
-                (_ (ignore-errors
+                                         bounds)
+  (when-let* ((thing (seq-find #'conn-simple-thing-p
+                               (conn-thing-all-parents thing)))
+              (_ (save-excursion
+                   (ignore-errors
                      (forward-thing thing 1)
-                     t)))
-      (let ((subregions nil)
-            (things-beg most-positive-fixnum)
-            (things-end most-negative-fixnum))
-        (catch 'end
-          (while (< things-end end)
-            (let ((sub-beg most-positive-fixnum)
-                  (sub-end most-negative-fixnum)
-                  (ssr nil))
-              (cl-flet ((push-bound ()
-                          (push (conn-transform-bounds
-                                 (conn-make-bounds
-                                  thing arg
-                                  (cons sub-beg sub-end)
-                                  :subregions ssr)
-                                 transforms)
-                                subregions)))
-                (dotimes (_ (prefix-numeric-value arg))
-                  (pcase-let (((and bounds (conn-bounds `(,b . ,e)))
-                               (conn-make-bounds
-                                thing arg
-                                (cons (save-excursion
-                                        (forward-thing thing -1)
-                                        (point))
-                                      (point))
-                                :subregions ssr)))
-                    (unless (< b end)
-                      (when ssr (push-bound))
-                      (throw 'end nil))
-                    (cl-callf min sub-beg b)
-                    (cl-callf min things-beg b)
-                    (cl-callf max sub-end e)
-                    (cl-callf max things-end e)
-                    (push bounds ssr)
-                    (unless (and (< (point) end)
-                                 (ignore-errors
-                                   (forward-thing thing 1)
-                                   t))
-                      (push-bound)
-                      (throw 'end nil))))
-                (push-bound)))))
-        (conn-make-bounds
-         (conn-anonymous-thing
-           (list thing)
-           :bounds-op ( :method (_self _arg)
-                        (conn-make-bounds
-                         thing nil
-                         (bounds-of-thing-at-point thing)
-                         :direction 1)))
-         nil
-         (cons things-beg things-end)
-         :subregions (nreverse subregions))))))
+                     t))))
+    (let ((subregions nil)
+          (things-beg most-positive-fixnum)
+          (things-end most-negative-fixnum))
+      (cl-macrolet ((push-bound (beg end sr)
+                      `(push (conn-transform-bounds
+                              (conn-make-bounds
+                               thing arg
+                               (cons ,beg ,end)
+                               :subregions ,sr)
+                              transforms)
+                             subregions)))
+        (dolist (bound bounds)
+          (pcase bound
+            ((or `(,beg . ,end)
+                 (conn-bounds `(,beg . ,end)))
+             (ignore-errors
+               (save-excursion
+                 (goto-char beg)
+                 (forward-thing thing 1)
+                 (catch 'end
+                   (while (< things-end end)
+                     (let ((sub-beg most-positive-fixnum)
+                           (sub-end most-negative-fixnum)
+                           (ssr nil))
+                       (dotimes (_ (prefix-numeric-value arg))
+                         (pcase-let (((and bounds (conn-bounds `(,b . ,e)))
+                                      (conn-make-bounds
+                                       thing arg
+                                       (cons (save-excursion
+                                               (forward-thing thing -1)
+                                               (point))
+                                             (point))
+                                       :subregions ssr)))
+                           (unless (< b end)
+                             (when ssr (push-bound sub-beg sub-end ssr))
+                             (throw 'end nil))
+                           (cl-callf min sub-beg b)
+                           (cl-callf min things-beg b)
+                           (cl-callf max sub-end e)
+                           (cl-callf max things-end e)
+                           (push bounds ssr)
+                           (unless (and (< (point) end)
+                                        (ignore-errors
+                                          (forward-thing thing 1)
+                                          t))
+                             (push-bound sub-beg sub-end ssr)
+                             (throw 'end nil))))
+                       (push-bound sub-beg sub-end ssr))))))))))
+      (conn-make-bounds
+       (conn-anonymous-thing
+         (list thing)
+         :bounds-op ( :method (_self _arg)
+                      (conn-make-bounds
+                       thing nil
+                       (bounds-of-thing-at-point thing)
+                       :direction 1)))
+       nil
+       (cons things-beg things-end)
+       :subregions (nreverse subregions)))))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing region))
                                          arg
                                          transforms
-                                         _beg
-                                         _end)
+                                         _bounds)
   (conn-transform-bounds (conn-bounds-of thing arg)
                          transforms))
 
@@ -1302,7 +1307,7 @@ the point is within the region then the entire region is returned.")))
        (transform (conn-transform-argument)))
     (conn-get-things-in-region
      thing arg transform
-     (region-beginning) (region-end))))
+     (region-bounds))))
 
 ;;;; Pretty Print Thing
 
@@ -1486,11 +1491,10 @@ the point is within the region then the entire region is returned.")))
      (if (conn-thing-argument-in-region arg)
          (list (conn-anonymous-thing
                  '(conn-things-in-region)
-                 :bounds-op ( :method (_self arg)
-                              (conn-get-things-in-region
-                               cmd arg nil
-                               (region-beginning)
-                               (region-end))))
+                 :bounds-op (let ((bounds (region-bounds)))
+                              ( :method (_self arg)
+                                (conn-get-things-in-region
+                                 cmd arg nil bounds))))
                prefix)
        val))))
 
