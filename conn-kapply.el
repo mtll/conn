@@ -1168,7 +1168,7 @@ After kapply has finished restore the previous window configuration."
             (message "Kapply completed successfully after %s iterations"
                      iterations)))
       (let ((conn-kmacro-apply-error (not success)))
-        (with-delayed-message (0.4 "Finalizing Kapply...")
+        (with-delayed-message (1 "Finalizing Kapply...")
           (funcall iterator :cleanup)
           (run-hooks 'conn-kmacro-apply-end-hook))))))
 

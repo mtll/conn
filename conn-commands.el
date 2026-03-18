@@ -2865,12 +2865,16 @@ hook, which see."
              (forward-char 1)))
           ((looking-at (rx (syntax whitespace)))
            (fixup-whitespace)))
-    (when (and (conn-thing-get bounds :linewise)
-               (save-excursion
-                 (beginning-of-line)
-                 (looking-at-p (rx eol))))
-      (dotimes (_ (min (empty-lines) (empty-lines t)))
-        (join-line)))))
+    (cond ((and (conn-thing-get bounds :linewise)
+                (save-excursion
+                  (beginning-of-line)
+                  (looking-at-p (rx eol))))
+           (dotimes (_ (min (empty-lines) (empty-lines t)))
+             (join-line)))
+          ((and (bolp)
+                (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
+                (not (or (eobp) (bobp))))
+           (join-line)))))
 
 (defun conn--kill-region (beg
                           end
@@ -4378,6 +4382,7 @@ Interactively REPEAT is given by the prefix argument."
                                     _arg
                                     _transform
                                     &optional
+                                    _check-bounds
                                     _with
                                     kbd-macro-query)
   (conn-emacs-state-overwrite)

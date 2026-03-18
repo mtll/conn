@@ -505,14 +505,14 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
-  "'" 'conn-kapply-kbd-macro-query
+  "q" 'conn-kapply-kbd-macro-query
   "y" 'yank
   "Y" 'yank-from-kill-ring
-  "r" 'conn-emacs-state-overwrite
-  "R" 'conn-emacs-state-overwrite-binary
+  "w" 'conn-emacs-state-overwrite
+  "W" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
   "l" conn-forward-char-remap
-  "q" 'conn-replace)
+  "r" 'conn-replace)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kill-state)
@@ -959,8 +959,8 @@
   "c" (conn-remap-key "C-c" t)
   "d" 'conn-delete-window
   "e" 'conn-wincontrol-exit
-  "w" 'conn-goto-window
-  "f" 'conn-dispatch
+  "f" 'conn-goto-window
+  "w" 'conn-dispatch
   "g" conn-goto-remap
   "x" (conn-remap-key "C-x" t)
   "n" 'conn-wincontrol-scroll-down

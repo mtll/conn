@@ -22,7 +22,8 @@
   :suppress t
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
-  "M-j" 'conn-command-state
+  "M-j" 'conn-one-command
+  "M-J" 'conn-command-state
   "w" 'conn-wincontrol-one-command-mode
   ";" 'conn-wincontrol-mode
   "`" 'conn-wincontrol-mru-window)
@@ -455,8 +456,6 @@
   "n" 'pdf-history-backward
   ">" 'pdf-view-position-to-register
   "." 'conn-register-load
-  "y" image-map
-  "<escape>" 'undefined
-  "M-j" 'undefined)
+  "y" image-map)
 
 (provide 'conn-extras-qwerty)
