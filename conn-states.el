@@ -2358,7 +2358,7 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-required-p ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
-           always (conn-argument-required-p a)))
+           thereis (conn-argument-required-p a)))
 
 (cl-defmethod conn-argument-update ((arg conn-composite-argument)
                                     form
@@ -2377,7 +2377,8 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-compose-keymap ((arg conn-composite-argument))
   (make-composed-keymap
    (cl-loop for a in (conn-composite-argument-value arg)
-            collect (conn-argument-compose-keymap a))))
+            for map = (conn-argument-compose-keymap a)
+            when map collect map)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-composite-argument)
                                        cmd)

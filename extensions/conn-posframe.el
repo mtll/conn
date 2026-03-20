@@ -169,13 +169,17 @@
         (cl-pushnew new-buffer found-buffers)))
     (mapconcat
      (lambda (buf)
-       (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                   (concat conn-posframe--padding
-                           (with-current-buffer buf
-                             (nerd-icons-icon-for-buffer))
-                           conn-posframe--padding)
-                 conn-posframe--padding)
-               (buffer-name buf)))
+       (truncate-string-to-width
+        (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                    (concat conn-posframe--padding
+                            (with-current-buffer buf
+                              (nerd-icons-icon-for-buffer))
+                            conn-posframe--padding)
+                  conn-posframe--padding)
+                (buffer-name buf))
+        (- conn-posframe-width
+           (string-width (truncate-string-ellipsis)))
+        nil nil t))
      (reverse found-buffers)
      "\n")))
 
@@ -240,13 +244,17 @@
         (cl-pushnew new-buffer found-buffers)))
     (mapconcat
      (lambda (buf)
-       (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                   (concat conn-posframe--padding
-                           (with-current-buffer buf
-                             (nerd-icons-icon-for-buffer))
-                           conn-posframe--padding)
-                 conn-posframe--padding)
-               (buffer-name buf)))
+       (truncate-string-to-width
+        (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                    (concat conn-posframe--padding
+                            (with-current-buffer buf
+                              (nerd-icons-icon-for-buffer))
+                            conn-posframe--padding)
+                  conn-posframe--padding)
+                (buffer-name buf))
+        (- conn-posframe-width
+           (string-width (truncate-string-ellipsis)))
+        nil nil t))
      found-buffers
      "\n")))
 
@@ -265,11 +273,16 @@
                                              'conn-posframe-header 'append)
                      (buffer-string)))
            (current (concat
-                     (when (fboundp 'nerd-icons-icon-for-buffer)
-                       (concat conn-posframe--padding
-                               (nerd-icons-icon-for-buffer)))
-                     conn-posframe--padding
-                     (buffer-name (current-buffer))
+                     (truncate-string-to-width
+                      (concat
+                       (when (fboundp 'nerd-icons-icon-for-buffer)
+                         (concat conn-posframe--padding
+                                 (nerd-icons-icon-for-buffer)))
+                       conn-posframe--padding
+                       (buffer-name (current-buffer)))
+                      (- conn-posframe-width
+                         (string-width (truncate-string-ellipsis)))
+                      nil nil t)
                      "\n"))
            (prev (conn-posframe--previous-buffers))
            (next (conn-posframe--next-buffers)))
@@ -305,11 +318,17 @@
           (tabs (mapconcat
                  (lambda (tab)
                    (concat
-                    (if (eq (car tab) 'current-tab)
-                        (propertize
-                         (concat (alist-get 'name (cdr tab)) "\n")
-                         'face 'conn-posframe-highlight)
-                      (concat (alist-get 'name (cdr tab)) "\n"))))
+                    (let ((tab-name
+                           (truncate-string-to-width
+                            (alist-get 'name (cdr tab))
+                            (- conn-posframe-width
+                               (string-width (truncate-string-ellipsis)))
+                            nil nil t)))
+                      (if (eq (car tab) 'current-tab)
+                          (propertize
+                           (concat tab-name "\n")
+                           'face 'conn-posframe-highlight)
+                        (concat tab-name "\n")))))
                  (funcall tab-bar-tabs-function))))
       (posframe-show
        " *conn-list-posframe*"

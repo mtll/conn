@@ -2595,10 +2595,10 @@ append to that place."
                   separator
                   &aux
                   (value (list delete append register separator)))))
-  (delete nil :type boolean)
-  (append nil :type symbol)
-  (register nil :type (or char nil))
-  (separator nil :type (or string nil)))
+  (delete nil)
+  (append nil)
+  (register nil)
+  (separator nil))
 
 (cl-defsubst conn-kill-how-argument (&key delete
                                           append
@@ -2710,8 +2710,8 @@ append to that place."
                                initial-reformat)))
                   (transform (conn-dispatch-transform-argument))
                   (value (list transform reformat)))))
-  (transform nil :type list)
-  (reformat nil :type boolean)
+  (transform nil)
+  (reformat nil)
   (explicit nil :type boolean))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-and-fixup-argument)

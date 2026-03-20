@@ -508,11 +508,11 @@
   "q" 'conn-kapply-kbd-macro-query
   "y" 'yank
   "Y" 'yank-from-kill-ring
-  "w" 'conn-emacs-state-overwrite
-  "W" 'conn-emacs-state-overwrite-binary
+  "r" 'conn-emacs-state-overwrite
+  "R" 'conn-emacs-state-overwrite-binary
   "j" conn-backward-char-remap
   "l" conn-forward-char-remap
-  "r" 'conn-replace)
+  "w" 'conn-replace)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kill-state)
