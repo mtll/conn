@@ -2454,7 +2454,7 @@ be displayed in the echo area during `conn-read-args'."
                ( :constructor conn-cycling-argument
                  (name
                   choices
-                  cycling-commands
+                  commands
                   &key
                   keymap
                   (formatter #'conn-format-cycling-argument)
@@ -2462,17 +2462,19 @@ be displayed in the echo area during `conn-read-args'."
                   annotation
                   reference
                   display-prefix
-                  (value (car choices)))))
+                  (value (car choices))
+                  &aux
+                  (cycling-commands (ensure-list commands)))))
   (display-prefix nil :type (or nil string))
   (choices nil :type list :read-only t)
-  (cycling-commands nil :type (or symbol list) :read-only t)
+  (cycling-commands nil :type list :read-only t)
   (formatter #'conn-format-cycling-argument
              :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
                                     break)
-  (when (eq cmd (conn-cycling-argument-cycling-commands arg))
+  (when (memq cmd (conn-cycling-argument-cycling-commands arg))
     (pcase (memq (conn-cycling-argument-value arg)
                  (conn-cycling-argument-choices arg))
       (`(,_ ,next . ,_)
