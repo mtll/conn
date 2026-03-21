@@ -2076,9 +2076,9 @@ finishing showing the buffers that were visited."))
       (message "Kapply completed successfully after %s iterations"
                conn-dispatch-iteration-count))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-kapply)
-                                        &optional
-                                        short)
+(cl-defmethod conn-action-display ((action conn-dispatch-kapply)
+                                   &optional
+                                   short)
   (if short "Kapply"
     (concat "Kapply"
             (when-let* ((macro (oref action macro)))

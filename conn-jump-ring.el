@@ -126,11 +126,9 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
                                   (conn--create-marker location))))))
     (when msg (message "Jump ring pushed"))))
 
-;;;###autoload
 (setf (alist-get 'conn-jump defun-declarations-alist)
       (list #'conn--set-jump-property))
 
-;;;###autoload
 (defun conn--set-jump-property (f _args &optional predicate)
   `(progn
      :autoload-end

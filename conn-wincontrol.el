@@ -81,12 +81,10 @@
     (setq conn--wincontrol-preserve-arg t)))
 
 (eval-and-compile
-;;;###autoload
   (defun conn--set-wincontrol-arg-property (f _args)
     `(progn
        :autoload-end
        (function-put ',f :conn-wincontrol-preserve-arg t)))
-;;;###autoload
   (setf (alist-get 'conn-wincontrol-preserve-arg defun-declarations-alist)
         (list #'conn--set-wincontrol-arg-property)))
 

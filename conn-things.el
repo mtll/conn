@@ -314,10 +314,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-;;;###autoload
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property))
-;;;###autoload
   (defun conn--set-anonymous-thing-property (f args &rest properties)
     `(progn
        (eval-and-compile
@@ -595,7 +593,6 @@ command moves over."
                     :other-end-handler ,handler))))
 
 (eval-and-compile
-;;;###autoload
   (defun conn--declare-thing-command (f _args thing &optional other-end-handler)
     `(progn
        ,(unless (conn-thing-p thing)
@@ -603,7 +600,6 @@ command moves over."
            (format "The thing %S is not known to be defined" thing)
            nil t nil thing))
        (conn-register-thing-commands '(,thing) ,other-end-handler ',f)))
-;;;###autoload
   (setf (alist-get 'conn-thing-command defun-declarations-alist)
         (list #'conn--declare-thing-command)))
 
@@ -934,7 +930,6 @@ Returns a `conn-bounds' struct."
      '(conn--make-transform-bounds-docstring))
 
 (eval-and-compile
-;;;###autoload
   (defun conn--set-bounds-transform-property (f _args short-name doc-string)
     `(eval-and-compile
        (setf (alist-get ',f (get 'conn-transform-bounds
@@ -942,7 +937,6 @@ Returns a `conn-bounds' struct."
              ,doc-string)
        (function-put ',f :conn-bounds-transformation t)
        (function-put ',f :conn-transform-description ,short-name)))
-;;;###autoload
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 

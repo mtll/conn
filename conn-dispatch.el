@@ -848,7 +848,7 @@ themselves once the selection process has concluded."
                          'face 'bold
                          'conn-read-args-display-depth -50)
              ": "
-             (propertize (conn-action-pretty-print action)
+             (propertize (conn-action-display action)
                          'face 'eldoc-highlight-function-argument)))
    (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
             collect (mapcar
@@ -3711,14 +3711,12 @@ contain targets."
                                (conn-action-reference action))))
     (conn-reference-quote
       ((:heading (concat "Current Action: "
-                         (conn-action-pretty-print action)))
+                         (conn-action-display action)))
        (:eval doc-string)))))
 
 (eval-and-compile
-;;;###autoload
   (defun conn--set-action-property (f _args)
     `(function-put ',f :conn-dispatch-action t))
-;;;###autoload
   (setf (alist-get 'conn-dispatch-action defun-declarations-alist)
         (list #'conn--set-action-property)))
 
@@ -3744,7 +3742,7 @@ contain targets."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
-(cl-defgeneric conn-action-pretty-print (action &optional short)
+(cl-defgeneric conn-action-display (action &optional short)
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method ((action conn-action) &optional _)
@@ -4153,9 +4151,9 @@ it."))
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load)
-                                        &optional
-                                        short)
+(cl-defmethod conn-action-display ((action conn-dispatch-register-load)
+                                   &optional
+                                   short)
   (if short "Register"
     (format "Register <%c>" (conn-dispatch-register-load--register action))))
 
@@ -4182,9 +4180,9 @@ it."))
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-pretty-print ((action conn-dispatch-register-load-replace)
-                                        &optional
-                                        short)
+(cl-defmethod conn-action-display ((action conn-dispatch-register-load-replace)
+                                   &optional
+                                   short)
   (if short "Register Replace"
     (format "Register Replace <%c>"
             (conn-dispatch-register-load-replace--register action))))
@@ -4479,9 +4477,9 @@ it."))
                  (apply #'funcall-interactively command)))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-action-pretty-print ((_action conn-dispatch-repeat-command)
-                                        &optional
-                                        _short)
+(cl-defmethod conn-action-display ((_action conn-dispatch-repeat-command)
+                                   &optional
+                                   _short)
   "Repeat")
 
 (oclosure-define (conn-dispatch-highlight-symbol
@@ -4504,9 +4502,9 @@ it."))
            (goto-char pt)
            (conn--unhighlight-at-point)))))))
 
-(cl-defmethod conn-action-pretty-print ((_action conn-dispatch-highlight-symbol)
-                                        &optional
-                                        _short)
+(cl-defmethod conn-action-display ((_action conn-dispatch-highlight-symbol)
+                                   &optional
+                                   _short)
   "Highlight Symbol")
 
 (defun conn-dispatch-transpose ()
@@ -4667,7 +4665,7 @@ it."))
 (defun conn-describe-dispatch (dispatch)
   (declare (side-effect-free t))
   (format "%s @ %s <%s%s>"
-          (conn-action-pretty-print
+          (conn-action-display
            (conn-previous-dispatch-action dispatch))
           (conn-thing-pretty-print
            (car (conn-previous-dispatch-thing-state dispatch)))
@@ -4855,7 +4853,7 @@ it."))
                (t "[1]"))
          'face 'read-multiple-choice-face))
       ( :message -95 (_)
-        (propertize (conn-action-pretty-print action t)
+        (propertize (conn-action-display action t)
                     'face 'conn-argument-active-face))
       ( :message -90 (keymap)
         (when-let* ((binding (where-is-internal 'help keymap t)))
