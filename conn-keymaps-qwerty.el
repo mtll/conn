@@ -982,7 +982,7 @@
 
 (define-keymap
   :keymap conn-wincontrol-one-command-map
-  "f" 'conn-other-place-prefix
+  "w" 'conn-other-place-prefix
   "k" 'kill-buffer-and-window
   "I" 'undefined
   "K" 'undefined

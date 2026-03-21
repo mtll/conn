@@ -2394,6 +2394,14 @@ be displayed in the echo area during `conn-read-args'."
   (mapcar #'conn-argument-get-reference
           (conn-composite-argument-value arg)))
 
+(cl-defmethod conn-argument-accept ((arg conn-composite-argument))
+  (mapc #'conn-argument-accept
+        (conn-composite-argument-value arg)))
+
+(cl-defmethod conn-argument-cancel ((arg conn-composite-argument))
+  (mapc #'conn-argument-cancel
+        (conn-composite-argument-value arg)))
+
 ;;;;;; Boolean Argument
 
 (cl-defstruct (conn-boolean-argument

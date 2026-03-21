@@ -4101,17 +4101,17 @@ Only available during repeating duplicate."
       (undo-boundary)
       (dotimes (_ repeat) (dup))
       (goto-char (+ offset (overlay-start (car regions))))
-      (advice-add 'conn-duplicate-repeat :override #'repeat)
-      (advice-add 'conn-duplicate-delete-repeat :override #'delete)
-      (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
-      (unless no-padding
-        (advice-add 'conn-duplicate-indent-repeat :override #'indent)
-        (advice-add 'conn-duplicate-repeat-comment :override #'comment)
-        (advice-add 'conn-duplicate-repeat-toggle-padding :override
-                    (if block #'block-padding #'non-block-padding)))
       (if (and conn-dispatch-in-progress
                conn-dispatch-repeating)
           (cleanup)
+        (advice-add 'conn-duplicate-repeat :override #'repeat)
+        (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+        (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
+        (unless no-padding
+          (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+          (advice-add 'conn-duplicate-repeat-comment :override #'comment)
+          (advice-add 'conn-duplicate-repeat-toggle-padding :override
+                      (if block #'block-padding #'non-block-padding)))
         (setq exit-fn
               (set-transient-map
                keymap
