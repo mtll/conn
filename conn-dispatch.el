@@ -748,9 +748,11 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd
                                     break)
-  (cl-symbol-macrolet ((action (conn-dispatch-action-argument-action-command arg))
-                       (arguments (conn-dispatch-action-argument-arguments arg))
-                       (action-command (conn-dispatch-action-argument-action-command arg)))
+  (cl-symbol-macrolet
+      ((arguments (conn-dispatch-action-argument-arguments arg))
+       (action (conn-argument-value arg))
+       (set-flag (conn-argument-set-flag arg))
+       (action-command (conn-dispatch-action-argument-action-command arg)))
     (pcase cmd
       ((and 'repeat-dispatch)
        (when (or (null (conn-argument-value arg))
@@ -761,34 +763,32 @@ themselves once the selection process has concluded."
        (conn-action-cancel (conn-argument-value arg))
        (mapc #'conn-argument-cancel arguments)
        (setf conn--dispatch-thing-predicate #'always
-             (conn-argument-value arg) nil
-             (conn-argument-set-flag arg) nil
              action nil
-             arguments nil
-             action-command nil)
-       (when-let* ((_(not (eq action-command cmd)))
-                   (action (or (atomic-change-group
-                                 (save-window-excursion
-                                   (funcall cmd)))
-                               (user-error "Failed to construct %s" cmd))))
+             set-flag nil
+             arguments nil)
+       (when-let* ((_ (not (eq cmd (cl-shiftf action-command nil))))
+                   (new-action (or (atomic-change-group
+                                     (save-window-excursion
+                                       (funcall cmd)))
+                                   (user-error "Failed to construct %s" cmd))))
          (setf action-command cmd
-               (conn-argument-value arg) action
-               (conn-argument-set-flag arg) t)
+               action new-action
+               set-flag t)
          (cl-loop for slot in (oclosure--class-slots
                                (cl--find-class
-                                (oclosure-type action)))
-                  for val = (slot-value action
+                                (oclosure-type new-action)))
+                  for val = (slot-value new-action
                                         (cl--slot-descriptor-name slot))
                   when (conn-read-argument-p val)
                   do (push val arguments))
          (setf conn--dispatch-thing-predicate
-               (or (conn-action--action-thing-predicate action)
+               (or (conn-action--action-thing-predicate new-action)
                    #'always))
          (setf (conn-dispatch-action-argument-repeat arg)
                (pcase (conn-dispatch-action-argument-repeat arg)
-                 ((guard (not (conn-action-repeatable-p action))))
+                 ((guard (not (conn-action-repeatable-p new-action))))
                  ((or 'auto 'nil)
-                  (and (conn-action--action-auto-repeat action)
+                  (and (conn-action--action-auto-repeat new-action)
                        'auto))
                  (_ (conn-dispatch-action-argument-repeat arg)))))
        (funcall break))
