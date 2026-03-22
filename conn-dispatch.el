@@ -578,9 +578,11 @@ themselves once the selection process has concluded."
 (cl-defstruct (conn-dispatch-target-argument
                (:include conn-thing-argument)
                (:constructor conn-dispatch-target-argument
-                             (&aux
-                              (required t)
-                              (recursive-edit t)))))
+                             (&aux (required t)))))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-target-argument))
+  (make-composed-keymap conn-recursive-edit-thing-map
+                        (conn-thing-argument-keymap arg)))
 
 (cl-defmethod conn-argument-predicate :around ((_arg conn-dispatch-target-argument)
                                                sym)
@@ -4053,10 +4055,7 @@ the string after the region selected by dispatch."))
                   (point))
                  (when (not (< end beg))
                    (insert (conn-kill-separator-for-strings str separator))))
-                (_ (user-error "Cannot find thing at point")))
-              (conn-dispatch-action-pulse
-               (- (point) (length str))
-               (point)))))))))
+                (_ (user-error "Cannot find thing at point"))))))))))
 
 (cl-defmethod conn-action-accept ((action conn-dispatch-send))
   (conn--action-accept-change-group

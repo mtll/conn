@@ -446,7 +446,7 @@
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
   "W" 'conn-dispatch-copy-to-replace
-  "q" 'conn-dispatch-copy-from-replace
+  "r" 'conn-dispatch-copy-from-replace
   "F" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
@@ -782,7 +782,10 @@
 
 (define-keymap
   :keymap conn-recursive-edit-thing-map
-  "R" 'recursive-edit
+  "R" 'recursive-edit)
+
+(define-keymap
+  :keymap conn-recursive-edit-mark-thing-map
   "r" 'recursive-edit-mark)
 
 (define-keymap

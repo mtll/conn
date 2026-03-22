@@ -58,17 +58,31 @@
 		 (find-tag-default-as-symbol-regexp))))
     (hi-lock-unface-buffer regexp)))
 
+(defvar conn-highlight-region-history nil)
+
 (defun conn-toggle-highlight-at-point ()
   (interactive)
-  (let ((regexp (hi-lock-regexp-okay
-		 (find-tag-default-as-symbol-regexp))))
-    (if (or (when (assoc regexp hi-lock-interactive-lighters)
-              (setq regexp (cadr (assoc regexp hi-lock-interactive-lighters))))
-            (assoc regexp hi-lock-interactive-patterns))
-        (hi-lock-unface-buffer regexp)
+  (if (use-region-p)
       (let* ((hi-lock-auto-select-face t)
              (face (hi-lock-read-face-name)))
-        (hi-lock-face-buffer regexp face)))))
+        (hi-lock-face-buffer
+         (read-regexp "Regexp"
+                      (regexp-quote
+                       (buffer-substring-no-properties
+                        (region-beginning)
+                        (region-end)))
+                      'conn-highlight-region-history)
+         face)
+        (deactivate-mark))
+    (let ((regexp (hi-lock-regexp-okay
+		   (find-tag-default-as-symbol-regexp))))
+      (if (or (when (assoc regexp hi-lock-interactive-lighters)
+                (setq regexp (cadr (assoc regexp hi-lock-interactive-lighters))))
+              (assoc regexp hi-lock-interactive-patterns))
+          (hi-lock-unface-buffer regexp)
+        (let* ((hi-lock-auto-select-face t)
+               (face (hi-lock-read-face-name)))
+          (hi-lock-face-buffer regexp face))))))
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
@@ -103,8 +117,7 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-(defun conn-repeat-try-next ()
-  (error "Not repeating a command"))
+(defun conn-repeat-try-next () nil)
 
 (defun conn-repeat (&optional arg)
   "Repeat the last conn operator."

@@ -1345,6 +1345,8 @@ the point is within the region then the entire region is returned.")))
 
 (defvar-keymap conn-recursive-edit-thing-map)
 
+(defvar-keymap conn-recursive-edit-mark-thing-map)
+
 (cl-defstruct (conn-thing-argument
                (:include conn-argument)
                ( :constructor conn-thing-argument
@@ -1381,8 +1383,10 @@ the point is within the region then the entire region is returned.")))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
   (if (conn-thing-argument-recursive-edit arg)
-      (make-composed-keymap conn-recursive-edit-thing-map
-                            (conn-thing-argument-keymap arg))
+      (make-composed-keymap
+       (list conn-recursive-edit-thing-map
+             conn-recursive-edit-mark-thing-map)
+       (conn-thing-argument-keymap arg))
     (conn-thing-argument-keymap arg)))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
