@@ -103,15 +103,24 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
+(defun conn-repeat-try-next ()
+  (error "Not repeating a command"))
+
 (defun conn-repeat (&optional arg)
   "Repeat the last conn operator."
   (interactive "P")
   (unless conn-command-history
     (user-error "No repeatable last command"))
-  (let ((cmd (if arg
-                 (conn-read-from-command-history)
-               (car conn-command-history)))
-        (conn-repeating-command t))
+  (cl-letf ((cmd (if arg
+                     (conn-read-from-command-history)
+                   (car conn-command-history)))
+            (conn-repeating-command t)
+            ((symbol-function 'conn-repeat-try-next)
+             (if arg
+                 (lambda () (error "Cannot repeat command"))
+               (lambda ()
+                 (let ((conn-command-history (cdr conn-command-history)))
+                   (conn-repeat arg))))))
     (setq this-command (car cmd))
     (apply #'funcall-interactively cmd)))
 
