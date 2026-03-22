@@ -150,7 +150,7 @@
  :bounds-op (lambda () (org-in-regexp org-link-any-re)))
 
 (conn-register-thing-commands
- '(org-link) 'conn-discrete-thing-handler
+ '(org-link) 'conn-discrete-thing-other-end-handler
  'org-next-link 'org-previous-link)
 
 (conn-register-thing-commands
@@ -180,7 +180,7 @@
                 ((:heading "Org Paragraph Targets")))))
 
 (conn-register-thing-commands
- '(org-paragraph) 'conn-continuous-thing-handler
+ '(org-paragraph) 'conn-continuous-thing-other-end-handler
  'org-forward-paragraph
  'org-backward-paragraph)
 
@@ -206,7 +206,7 @@
 (put 'org-sentence 'forward-op 'conn-org-sentence-forward)
 
 (conn-register-thing-commands
- '(org-sentence) 'conn-continuous-thing-handler
+ '(org-sentence) 'conn-continuous-thing-other-end-handler
  'conn-org-sentence-forward
  'org-forward-sentence
  'org-backward-sentence)
@@ -293,7 +293,7 @@
   "<conn-thing-map> h" 'heading)
 
 (conn-register-thing-commands
- '(org-heading) 'conn-continuous-thing-handler
+ '(org-heading) 'conn-continuous-thing-other-end-handler
  'conn-org-heading-state-up-heading
  'org-next-visible-heading
  'org-previous-visible-heading
@@ -301,7 +301,7 @@
  'org-backward-heading-same-level)
 
 (conn-register-thing-commands
- '(org-element) 'conn-discrete-thing-handler
+ '(org-element) 'conn-discrete-thing-other-end-handler
  'org-forward-element
  'org-backward-element
  'org-up-element

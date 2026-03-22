@@ -53,12 +53,12 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (defun conn-set-command-other-end-handler (command handler)
   (function-put command :conn-other-end-handler handler))
 
-(defun conn-continuous-thing-handler (thing beg)
+(defun conn-continuous-thing-other-end-handler (thing beg arg)
   "Mark the things which have been moved over."
   (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
                         when (conn-simple-thing-p th) return th)))
     (ignore-errors
-      (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
+      (cond ((= 0 (prefix-numeric-value arg)))
             ((= (point) beg)
              (pcase (bounds-of-thing-at-point thing)
                (`(,beg . ,end)
@@ -74,7 +74,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                  (forward-thing thing (- dir))
                  (point))))))))
 
-(defun conn-nestable-thing-handler (thing beg)
+(defun conn-nestable-thing-other-end-handler (thing beg _arg)
   "Mark the things which have been moved over."
   (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
                         when (conn-simple-thing-p th) return th)))
@@ -101,7 +101,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                  (point))))
             (t nil)))))
 
-(defun conn-discrete-thing-handler (thing _beg)
+(defun conn-discrete-thing-other-end-handler (thing _beg _arg)
   "Mark the thing at point."
   (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
                         when (conn-simple-thing-p th) return th)))
@@ -109,9 +109,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
       (`(,beg . ,end)
        (if (= (point) end) beg end)))))
 
-(defun conn-jump-handler (_thing beg)
-  "Place a mark where point used to be."
-  (unless (= beg (point)) beg))
+(defun conn-jump-other-end-handler (_thing beg _arg)
+  beg)
 
 ;;;; Thing Types
 
@@ -710,26 +709,34 @@ command moves over."
 (defun conn-bounds-set (bounds prop val)
   (setf (plist-get (conn-bounds--properties bounds) prop) val))
 
-(defun conn-bounds-get (bounds prop &optional transform)
+(define-inline conn-bounds-get (bounds prop &optional transform)
   (declare (gv-setter conn-bounds-set))
-  (when bounds
-    (let ((p (plist-get (conn-bounds--properties bounds) prop)))
-      (conn-transform-bounds
-       (if (conn--bounds-delayed-p p) (funcall p bounds) p)
-       transform))))
+  (inline-letevals (prop bounds)
+    (inline-quote
+     (let ((p (if (eq ,prop :whole) ,bounds
+                (plist-get (conn-bounds--properties ,bounds) ,prop))))
+       (conn-transform-bounds
+        (if (conn--bounds-delayed-p p) (funcall p ,bounds) p)
+        ,transform)))))
 
 (pcase-defmacro conn-bounds-get (property &optional transform pat)
   (static-if (< emacs-major-version 30)
       `(and (pred conn-bounds-p)
             (app (lambda (v) (conn-bounds-get ,property v ,transform))
-                 ,(or pat (if (keywordp property)
-                              (intern (substring (symbol-name property) 1))
-                            property))))
+                 ,(or pat
+                      (pcase property
+                        ((pred keywordp)
+                         (when (keywordp property)
+                           (intern (substring (symbol-name property) 1))))
+                        (`(quote ,symbol) symbol)))))
     `(and (pred conn-bounds-p)
           (app (conn-bounds-get _ ,property ,transform)
-               ,(or pat (if (keywordp property)
-                            (intern (substring (symbol-name property) 1))
-                          property))))))
+               ,(or pat
+                    (pcase property
+                      ((pred keywordp)
+                       (when (keywordp property)
+                         (intern (substring (symbol-name property) 1))))
+                      (`(quote ,symbol) symbol)))))))
 
 (pcase-defmacro conn-bounds (pattern &optional transform)
   "Pcase pattern that match the bounds of a `conn-bounds' object.
@@ -793,25 +800,23 @@ Returns a `conn-bounds' struct."
             (app conn-command-other-end-handler
                  (and handler (pred identity))))
        (deactivate-mark)
-       (pcase (prefix-numeric-value arg)
-         (n
-          (let ((current-prefix-arg n)
-                (start (point-marker)))
-            (unwind-protect
-                (condition-case _
-                    (progn
-                      (call-interactively thing)
-                      (setf (conn-bounds-get bounds :direction)
-                            (cond ((> (point) start) 1)
-                                  ((> start (point)) -1)))
-                      (let ((mk (funcall handler thing start)))
-                        (setf (conn-bounds bounds)
-                              (cons (min mk (point))
-                                    (max mk (point))))))
-                  (error
-                   (setf (conn-bounds bounds) nil
-                         (conn-bounds-get bounds :subregions) nil)))
-              (set-marker start nil)))))
+       (let ((current-prefix-arg arg)
+             (start (point-marker)))
+         (unwind-protect
+             (condition-case _
+                 (progn
+                   (call-interactively thing)
+                   (setf (conn-bounds-get bounds :direction)
+                         (cond ((> (point) start) 1)
+                               ((> start (point)) -1)))
+                   (let ((mk (funcall handler thing start arg)))
+                     (setf (conn-bounds bounds)
+                           (cons (min mk (point))
+                                 (max mk (point))))))
+               (error
+                (setf (conn-bounds bounds) nil
+                      (conn-bounds-get bounds :subregions) nil)))
+           (set-marker start nil)))
        (conn-bounds bounds))
       ((app (lambda (th)
               (seq-find #'conn-simple-thing-p
@@ -825,8 +830,8 @@ Returns a `conn-bounds' struct."
         (arg (conn-bounds-arg bounds)))
     (pcase (car (conn-thing-all-parents thing))
       ((and thing
-            (let (and handler (pred identity))
-              (conn-command-other-end-handler thing)))
+            (app conn-command-other-end-handler
+                 (and handler (pred identity))))
        (deactivate-mark)
        (pcase (prefix-numeric-value arg)
          (0
@@ -843,7 +848,7 @@ Returns a `conn-bounds' struct."
                         (set-marker start (point))
                         (let ((current-prefix-arg 1))
                           (call-interactively thing)
-                          (let ((mk (funcall handler thing start)))
+                          (let ((mk (funcall handler thing start 1)))
                             (pcase (car subregions)
                               ((or 'nil
                                    (conn-bounds
@@ -2123,7 +2128,7 @@ Only the background color is used."
 (conn-register-thing 'symbol :forward-op 'forward-symbol)
 
 (conn-register-thing-commands
- '(symbol) 'conn-continuous-thing-handler
+ '(symbol) 'conn-continuous-thing-other-end-handler
  'forward-symbol)
 
 (conn-register-thing
@@ -2132,33 +2137,33 @@ Only the background color is used."
  :properties '(:linewise t))
 
 (conn-register-thing-commands
- '(page) 'conn-discrete-thing-handler
+ '(page) 'conn-discrete-thing-other-end-handler
  'forward-page 'backward-page)
 
-(defun conn-char-other-end-handler (_thing beg)
-  (when current-prefix-arg beg))
+(defun conn-char-other-end-handler (_thing beg _arg)
+  beg)
 
 (conn-register-thing-commands
  '(char) 'conn-char-other-end-handler
  'forward-char 'backward-char)
 
 (conn-register-thing-commands
- '(word) 'conn-continuous-thing-handler
+ '(word) 'conn-continuous-thing-other-end-handler
  'forward-word 'backward-word)
 
 (conn-register-thing 'sexp :forward-op 'forward-sexp)
 
 (conn-register-thing-commands
- '(sexp) 'conn-continuous-thing-handler
+ '(sexp) 'conn-continuous-thing-other-end-handler
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing 'list :forward-op 'forward-list)
 
 (conn-register-thing-commands
- '(list) 'conn-continuous-thing-handler
+ '(list) 'conn-continuous-thing-other-end-handler
  'forward-list 'backward-list)
 
-(defun conn-up-list-other-end-handler (thing beg)
+(defun conn-up-list-other-end-handler (thing beg _arg)
   (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
                         when (conn-simple-thing-p th) return th)))
     (condition-case _err
@@ -2191,7 +2196,7 @@ Only the background color is used."
 
 (defun conn-make-inner-list-other-end-handler (up-list-fn
                                                down-list-fn)
-  (lambda (_thing _beg)
+  (lambda (_thing _beg _arg)
     (condition-case _err
         (cond ((= (point) (save-excursion
                             (funcall up-list-fn 1)
@@ -2223,13 +2228,13 @@ Only the background color is used."
 (conn-register-thing 'whitespace :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
- '(whitespace) 'conn-discrete-thing-handler
+ '(whitespace) 'conn-discrete-thing-other-end-handler
  'forward-whitespace)
 
 (conn-register-thing 'sentence :forward-op 'forward-sentence)
 
 (conn-register-thing-commands
- '(sentence) 'conn-continuous-thing-handler
+ '(sentence) 'conn-continuous-thing-other-end-handler
  'forward-sentence 'backward-sentence)
 
 (conn-register-thing
@@ -2238,15 +2243,15 @@ Only the background color is used."
  :properties '(:linewise t))
 
 (conn-register-thing-commands
- '(paragraph) 'conn-continuous-thing-handler
+ '(paragraph) 'conn-continuous-thing-other-end-handler
  'forward-paragraph 'backward-paragraph)
 
 (conn-register-thing-commands
- '(defun) 'conn-continuous-thing-handler
+ '(defun) 'conn-continuous-thing-other-end-handler
  'end-of-defun 'beginning-of-defun)
 
 (conn-register-thing-commands
- '(buffer) 'conn-discrete-thing-handler
+ '(buffer) 'conn-discrete-thing-other-end-handler
  'end-of-buffer 'beginning-of-buffer)
 
 (conn-register-thing
@@ -2254,13 +2259,13 @@ Only the background color is used."
  :properties '(:linewise t))
 
 (conn-register-thing-commands
- '(line) 'conn-continuous-thing-handler
+ '(line) 'conn-continuous-thing-other-end-handler
  'forward-line)
 
 (conn-register-thing 'line-column :forward-op 'next-line)
 
 (conn-register-thing-commands
- '(line-column) 'conn-jump-handler
+ '(line-column) 'conn-jump-other-end-handler
  'next-line 'previous-line
  'rectangle-next-line 'rectangle-previous-line)
 
@@ -2271,7 +2276,7 @@ Only the background color is used."
  :forward-op 'conn-forward-outer-line)
 
 (conn-register-thing-commands
- '(outer-line) 'conn-discrete-thing-handler
+ '(outer-line) 'conn-discrete-thing-other-end-handler
  'move-beginning-of-line 'move-end-of-line
  'org-beginning-of-line 'org-end-of-line)
 
@@ -2290,7 +2295,7 @@ Only the background color is used."
  :forward-op 'conn-forward-inner-line)
 
 (conn-register-thing-commands
- '(inner-line) 'conn-continuous-thing-handler
+ '(inner-line) 'conn-continuous-thing-other-end-handler
  'back-to-indentation
  'comment-line)
 

@@ -292,7 +292,6 @@
   "[" 'conn-backward-down-list
   "]" 'down-list
   "G" 'conn-adjust-surround
-  "C" 'conn-surround-raise
   "P" conn-backward-paragraph-remap
   "p" conn-previous-line-remap
   "B" 'conn-backward-inner-line-dwim

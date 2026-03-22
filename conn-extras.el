@@ -116,7 +116,7 @@
    :forward-op 'outline-next-visible-heading))
 
 (conn-register-thing-commands
- '(heading) 'conn-discrete-thing-handler
+ '(heading) 'conn-discrete-thing-other-end-handler
  'conn-outline-state-up-heading
  'outline-up-heading
  'outline-next-heading
@@ -612,7 +612,7 @@
  :forward-op 'markdown-forward-paragraph)
 
 (conn-register-thing-commands
- '(md-paragraph) 'conn-continuous-thing-handler
+ '(md-paragraph) 'conn-continuous-thing-other-end-handler
  'markdown-forward-paragraph
  'markdown-backward-paragraph)
 
@@ -622,7 +622,7 @@
 
 (static-if (<= 30 emacs-major-version)
     (conn-register-thing-commands
-     '(defun) 'conn-continuous-thing-handler
+     '(defun) 'conn-continuous-thing-other-end-handler
      'treesit-end-of-defun
      'treesit-beginning-of-defun))
 

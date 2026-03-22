@@ -127,7 +127,7 @@ execution."
 
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
-  (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command visual-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (let ((line-move-visual t))
     (vertical-motion 0)
@@ -135,7 +135,7 @@ execution."
 
 (defun conn-backward-visual-line (arg)
   "Move backward ARG visual lines."
-  (declare (conn-thing-command visual-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command visual-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (conn-forward-visual-line (- arg)))
 
@@ -143,7 +143,7 @@ execution."
   "Goto absolute line, 1 origin.
 
 Respects the current restriction."
-  (declare (conn-thing-command line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (> 0 line)
       (progn
@@ -182,7 +182,7 @@ Respects the current restriction."
   "Move forward by defuns.
 
 Behaves as `thingatpt' expects a \\='forward-op to behave."
-  (declare (conn-thing-command defun #'conn-continuous-thing-handler))
+  (declare (conn-thing-command defun #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (< N 0)
       (beginning-of-defun (abs N))
@@ -190,7 +190,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 (defun conn-backward-symbol (arg)
   "`forward-symbol' in reverse."
-  (declare (conn-thing-command symbol #'conn-continuous-thing-handler))
+  (declare (conn-thing-command symbol #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (forward-symbol (- arg)))
 
@@ -201,7 +201,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   "`scroll-down-command' leaving point at the same relative window position.
 
 Pulses line that was the first visible line before scrolling."
-  (declare (conn-thing-command visible #'conn-discrete-thing-handler)
+  (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
            (conn-jump #'conn--scroll-jump-predicate))
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
@@ -221,7 +221,7 @@ Pulses line that was the first visible line before scrolling."
   "`scroll-up-command' leaving point at the same relative window position.
 
 Pulses line that was the last visible line before scrolling."
-  (declare (conn-thing-command visible #'conn-discrete-thing-handler)
+  (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
            (conn-jump #'conn--scroll-jump-predicate))
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
@@ -239,13 +239,13 @@ Pulses line that was the last visible line before scrolling."
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
-  (declare (conn-thing-command line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (forward-line (- N)))
 
 (defun conn-backward-whitespace (N)
   "`forward-whitespace' by N but backward."
-  (declare (conn-thing-command whitespace #'conn-discrete-thing-handler))
+  (declare (conn-thing-command whitespace #'conn-discrete-thing-other-end-handler))
   (interactive "p")
   (forward-whitespace (- N)))
 
@@ -263,7 +263,7 @@ Pulses line that was the last visible line before scrolling."
   "Move forward by inner lines.
 
 Behaves as `thingatpt' expects a \\='forward-op to behave."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
          (let ((pt (point)))
@@ -289,12 +289,12 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 (defun conn-backward-inner-line (N)
   "Inverse of `conn-forward-inner-line'."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (conn-forward-inner-line (- N)))
 
 (defun conn-forward-inner-line-dwim (N)
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
          (let ((pt (point)))
@@ -306,7 +306,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
          (conn-backward-inner-line-dwim (abs N)))))
 
 (defun conn-backward-inner-line-dwim (N)
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
          (let ((pt (point)))
@@ -318,14 +318,14 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
          (conn-forward-inner-line-dwim (abs N)))))
 
 (defun conn-forward-outer-line (&optional N)
-  (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command outer-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (< N 0)
       (conn-backward-outer-line (abs N))
     (move-end-of-line (+ N (if (eolp) 1 0)))))
 
 (defun conn-backward-outer-line (&optional N)
-  (declare (conn-thing-command outer-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command outer-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (< N 0)
       (conn-forward-outer-line (abs N))
@@ -336,7 +336,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 Immediately repeating this command goes to the point at beginning
 of line proper."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-handler))
+  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "P")
   (if (null N)
       (let ((point (point))
