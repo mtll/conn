@@ -2718,19 +2718,20 @@ append to that place."
 (cl-defstruct (conn-transform-and-fixup-argument
                (:include conn-composite-argument)
                ( :constructor conn-transform-and-fixup-argument
-                 (&aux
+                 (&optional
+                  initial-reformat
+                  &aux
                   (transform (conn-transform-argument))
                   (reformat (when conn-kill-reformat-function
-                              (conn-reformat-argument)))
+                              (conn-reformat-argument initial-reformat)))
                   (value (list transform reformat))))
                ( :constructor conn-dispatch-transform-and-fixup-argument
                  (&optional
                   initial-reformat
                   &aux
-                  (reformat (when conn-kill-reformat-function
-                              (conn-reformat-argument
-                               initial-reformat)))
                   (transform (conn-dispatch-transform-argument))
+                  (reformat (when conn-kill-reformat-function
+                              (conn-reformat-argument initial-reformat)))
                   (value (list transform reformat)))))
   (transform nil)
   (reformat nil)
@@ -2742,14 +2743,19 @@ append to that place."
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
                        (fws (conn-transform-and-fixup-argument-reformat arg)))
     (let ((valid nil))
-      (cond ((and (conn-argument-update tform cmd (lambda () (setq valid t)))
-                  valid)
+      (cond ((progn
+               (conn-argument-update tform cmd (lambda () (setq valid t)))
+               valid)
              (unless (conn-transform-and-fixup-argument-explicit arg)
                (setf (conn-reformat-argument-value fws)
-                     (not (conn-transform-argument-value tform))))
+                     (cl-loop for tf in (conn-transform-argument-value tform)
+                              never (plist-get
+                                     (function-get tf :conn-transform-properties)
+                                     :no-reformat))))
              (funcall break))
-            ((and (conn-argument-update fws cmd (lambda () (setq valid t)))
-                  valid)
+            ((progn
+               (conn-argument-update fws cmd (lambda () (setq valid t)))
+               valid)
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
              (funcall break))))))
 
@@ -2797,15 +2803,14 @@ hook, which see."
                     :reference conn-kill-reference
                     :display-handler (conn-read-args-display-columns 5 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
-        (`(,transform ,fixup) (conn-transform-and-fixup-argument))
+        (`(,transform ,reformat) (conn-transform-and-fixup-argument))
         (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform append delete
-           register separator fixup check-bounds
+           register separator reformat check-bounds
            current-prefix-arg)))
   (cl-callf prefix-numeric-value repeat-count)
   (cl-assert (not (and delete (or register append))))
-  (cl-callf and reformat (null transform))
   (let ((last-command last-command)
         (conn-repeating-command conn-repeating-command))
     (dotimes (_ (abs repeat-count))
@@ -2823,6 +2828,11 @@ hook, which see."
             conn-repeating-command t))))
 
 (cl-defgeneric conn-kill-reformat (bounds))
+
+(cl-defmethod conn-kill-reformat :around (bounds)
+  (unless (conn-thing-get (conn-bounds-thing bounds)
+                          :no-reformat)
+    (cl-call-next-method)))
 
 (cl-defmethod conn-kill-reformat :after (_bounds
                                          &context
@@ -3335,8 +3345,8 @@ hook, which see."
          (delete-region beg end)
        (conn--kill-region beg end t append register
                           (or separator (when transform 'no))))
+     (goto-char beg)
      (when reformat
-       (goto-char beg)
        (funcall conn-kill-reformat-function bounds)))
     (_ (user-error "No thing found"))))
 

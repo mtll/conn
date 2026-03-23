@@ -936,13 +936,19 @@ Returns a `conn-bounds' struct."
      '(conn--make-transform-bounds-docstring))
 
 (eval-and-compile
-  (defun conn--set-bounds-transform-property (f _args short-name doc-string)
+  (defun conn--set-bounds-transform-property (f
+                                              _args
+                                              short-name
+                                              doc-string
+                                              &rest
+                                              transform-properties)
     `(eval-and-compile
        (setf (alist-get ',f (get 'conn-transform-bounds
                                  :known-transformations))
              ,doc-string)
        (function-put ',f :conn-bounds-transformation t)
-       (function-put ',f :conn-transform-description ,short-name)))
+       (function-put ',f :conn-transform-description ,short-name)
+       (function-put ',f :conn-transform-properties (list ,@transform-properties))))
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 
@@ -978,11 +984,11 @@ the point is within the region then the entire region is returned.")))
 (cl-defmethod conn-bounds-last (bounds)
   (conn-bounds bounds)
   (pcase (car (last (conn-bounds-get bounds :subregions)))
-    ((conn-bounds last)
+    ((and lbounds (conn-bounds last))
      (conn-make-transformed-bounds
       'conn-bounds-last
       bounds last
-      :subregions (list last)))
+      :subregions nil))
     (_ bounds)))
 
 ;;;;;; Trim Bounds
@@ -992,7 +998,8 @@ the point is within the region then the entire region is returned.")))
 (cl-defgeneric conn-bounds-trim (bounds)
   (declare (conn-bounds-transformation
             "trim"
-            "Trim `conn-bounds-trim-chars' from either end of bounds.")))
+            "Trim `conn-bounds-trim-chars' from either end of bounds."
+            :no-reformat t)))
 
 (cl-defmethod conn-bounds-trim (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
@@ -1014,7 +1021,8 @@ the point is within the region then the entire region is returned.")))
 (cl-defgeneric conn-bounds-after-point (bounds &optional exclusive)
   (declare (conn-bounds-transformation
             "after"
-            "Make bounds begin at point.")))
+            "Make bounds begin at point."
+            :no-reformat t)))
 
 (cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -1027,13 +1035,15 @@ the point is within the region then the entire region is returned.")))
 (defun conn-bounds-after-point-exclusive (bounds)
   (declare (conn-bounds-transformation
             "after exclusive"
-            "Make bounds begin at point and end at the start of bounds."))
+            "Make bounds begin at point and end at the start of bounds."
+            :no-reformat t))
   (conn-bounds-after-point bounds t))
 
 (cl-defgeneric conn-bounds-before-point (bounds &optional exclusive)
   (declare (conn-bounds-transformation
             "before"
-            "Make bounds end at point")))
+            "Make bounds end at point"
+            :no-reformat t)))
 
 (cl-defmethod conn-bounds-before-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -1046,7 +1056,8 @@ the point is within the region then the entire region is returned.")))
 (defun conn-bounds-before-point-exclusive (bounds)
   (declare (conn-bounds-transformation
             "before exclusive"
-            "Make bounds end at point and begin at end of bounds."))
+            "Make bounds end at point and begin at end of bounds."
+            :no-reformat t))
   (conn-bounds-before-point bounds t))
 
 ;;;;;; Check Bounds

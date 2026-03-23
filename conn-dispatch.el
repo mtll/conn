@@ -945,7 +945,8 @@ the end of the thing dispatched on.  Can only be used during
             "anchored"
             "Transform bounds to begin at point and end the bound most distant from
 point.  If `conn-dispatch-other-end' is non-nil then end at the bound
-nearest to point.  Can only be used during `conn-dispatch'.")))
+nearest to point.  Can only be used during `conn-dispatch'."
+            :no-reformat t)))
 
 (cl-defmethod conn-dispatch-bounds-anchored (bounds)
   (pcase bounds
