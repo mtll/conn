@@ -2827,7 +2827,8 @@ hook, which see."
             last-command 'conn-kill-thing
             conn-repeating-command t))))
 
-(cl-defgeneric conn-kill-reformat (bounds))
+(cl-defgeneric conn-kill-reformat (bounds)
+  (declare (conn-anonymous-thing-property :kill-reformat)))
 
 (cl-defmethod conn-kill-reformat :around (bounds)
   (unless (conn-thing-get (conn-bounds-thing bounds)

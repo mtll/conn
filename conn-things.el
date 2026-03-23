@@ -984,7 +984,7 @@ the point is within the region then the entire region is returned.")))
 (cl-defmethod conn-bounds-last (bounds)
   (conn-bounds bounds)
   (pcase (car (last (conn-bounds-get bounds :subregions)))
-    ((and lbounds (conn-bounds last))
+    ((conn-bounds last)
      (conn-make-transformed-bounds
       'conn-bounds-last
       bounds last

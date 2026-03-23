@@ -1755,10 +1755,11 @@ new command."
 
 The duration of the message display is controlled by
 `minibuffer-message-timeout'."
-  (let ((inhibit-message conn-read-args-inhibit-message)
-        (message-log-max nil))
-    (setq conn--read-args-message (apply #'format format-string args)
-          conn--read-args-message-timeout (time-add nil minibuffer-message-timeout))))
+  (unless executing-kbd-macro
+    (let ((inhibit-message conn-read-args-inhibit-message)
+          (message-log-max nil))
+      (setq conn--read-args-message (apply #'format format-string args)
+            conn--read-args-message-timeout (time-add nil minibuffer-message-timeout)))))
 
 (defun conn-read-args-error (format-string &rest args)
   "Print an error message of FORMAT-STRING with ARGS."
@@ -1957,6 +1958,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            arglist
                            callback
                            &key
+                           command-loop
                            history-var
                            (history-len 1)
                            command-handler
@@ -1973,23 +1975,26 @@ This skips executing the body of the `conn-read-args' form entirely."
         (prompt (or prompt (symbol-name state)))
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
-        (argument-values nil))
+        (argument-values nil)
+        (maps nil))
     (cl-labels
         ((continue-p ()
            (cl-loop for arg in arguments
                     thereis (conn-argument-required-p arg)))
          (display-message ()
-           (when (and conn--read-args-message-timeout
-                      (time-less-p conn--read-args-message-timeout nil))
-             (setq conn--read-args-message nil
-                   conn--read-args-message-timeout nil))
-           (let ((inhibit-message conn-read-args-inhibit-message)
-                 (message-log-max nil)
-                 (scroll-conservatively 100))
-             (conn->f display-state
-               (funcall display-handler
-                        prompt
-                        (cons command-handler arguments))))
+           (unless executing-kbd-macro
+             (when (and conn--read-args-message-timeout
+                        (time-less-p conn--read-args-message-timeout nil))
+               (setq conn--read-args-message nil
+                     conn--read-args-message-timeout nil))
+             (let ((inhibit-message conn-read-args-inhibit-message)
+                   (message-log-max nil)
+                   (scroll-conservatively 100))
+               (conn->f display-state
+                 (funcall display-handler
+                          prompt
+                          (cons (unless command-loop command-handler)
+                                arguments)))))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
            (catch 'conn-read-args-new-command
@@ -1998,18 +2003,10 @@ This skips executing the body of the `conn-read-args' form entirely."
              (conn-read-args-command-handler cmd)
              nil))
          (update-args (cmd)
-           (catch 'conn-read-args-handle
-             (if-let* ((newcmd (call-handlers cmd)))
-                 (progn
-                   (when post (funcall post cmd))
-                   ;; (setq conn-read-args-last-command cmd)
-                   (update-args newcmd))
-               (let ((break nil))
-                 (dolist (a arguments)
-                   (conn-argument-update a cmd (lambda () (setq break t)))
-                   (when break (throw 'conn-read-args-handle nil))))
-               (setf conn--read-args-error-message
-                     (format "Invalid Command <%s>" cmd)))))
+           (let ((break nil))
+             (dolist (a arguments)
+               (conn-argument-update a cmd (lambda () (setq break t)))
+               (when break (throw 'conn-read-args-handle nil)))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
@@ -2026,36 +2023,63 @@ This skips executing the body of the `conn-read-args' form entirely."
                       (autoload-do-load (symbol-function cmd)))))
              (when (eql (aref keyseq 0) quit-event)
                (setq cmd 'keyboard-quit))
-             (when cmd
-               (when pre (funcall pre cmd))
-               (pcase cmd
-                 ('keyboard-quit
-                  (keyboard-quit))
-                 ('reference
-                  (apply #'conn-quick-reference
-                         reference
-                         conn-read-args-reference-page
-                         (mapcar #'conn-argument-get-reference
-                                 arguments)))
-                 ('previous-args
-                  (if-let* ((_ (and history-var (symbolp history-var)))
-                            (prev (car-safe (get history-var :conn-read-args-history))))
-                      (throw 'conn-read-args-return
-                             (cons callback prev))
-                    (conn-read-args-error "No previous arguments")))
-                 ((or 'execute-extended-command 'help)
-                  (when-let* ((cmd (conn--read-args-completing-read
-                                    (if command-handler
-                                        `(,command-handler
-                                          conn-read-args-command-handler
-                                          ,@arguments)
-                                      `(conn-read-args-command-handler
-                                        ,@arguments))
-                                    partial-keymap)))
-                    (update-args cmd)))
-                 (_ (update-args cmd)))
-               (when post (funcall post cmd))
-               (setq conn-read-args-last-command cmd))))
+             (cl-loop
+              (pcase cmd
+                ('keyboard-quit
+                 (keyboard-quit))
+                ((or 'execute-extended-command 'help)
+                 (setq cmd (conn--read-args-completing-read
+                            (if (and command-handler
+                                     (null command-loop))
+                                `(,command-handler
+                                  conn-read-args-command-handler
+                                  ,@arguments)
+                              `(conn-read-args-command-handler
+                                ,@arguments))
+                            partial-keymap)))
+                (_ (cl-return cmd))))))
+         (set-error-message (cstr &rest args)
+           (setf conn--read-args-error-message
+                 (apply #'format cstr args)))
+         (execute-command (cmd)
+           (when pre (funcall pre cmd))
+           (pcase cmd
+             ('reference
+              (apply #'conn-quick-reference
+                     reference
+                     conn-read-args-reference-page
+                     (mapcar #'conn-argument-get-reference
+                             arguments)))
+             ('previous-args
+              (if-let* ((_ (and history-var (symbolp history-var)))
+                        (prev (car-safe (get history-var :conn-read-args-history))))
+                  (throw 'conn-read-args-return
+                         (cons callback prev))
+                (conn-read-args-error "No previous arguments")))
+             (_
+              (catch 'conn-read-args-handle
+                (while t
+                  (if-let* ((newcmd (call-handlers cmd)))
+                      (progn
+                        (when post (funcall post cmd))
+                        (setq conn-read-args-last-command cmd
+                              cmd newcmd)
+                        (when pre (funcall pre cmd)))
+                    (update-args cmd)
+                    (set-error-message "Invalid Command <%s>" cmd)
+                    (throw 'conn-read-args-handle nil))))))
+           (when post (funcall post cmd))
+           (setq conn-read-args-last-command cmd))
+         (setup-keymaps ()
+           (setf (cdar maps)
+                 (thread-last
+                   (mapcar #'conn-argument-compose-keymap arglist)
+                   (cons overriding-map)
+                   (delq nil)
+                   (make-composed-keymap)))
+           (conn->f emulation-mode-map-alists
+             (delq maps)
+             (cons maps)))
          (cont ()
            (conn-with-recursive-stack state
              (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
@@ -2067,25 +2091,24 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn-reading-args t)
                    (conn-wincontrol-mode nil)
                    (conn-wincontrol-one-command-mode nil)
-                   (maps `((,state . nil)
-                           ,@(when history-var
-                               `((,state . ,conn-read-args-previous-map)))))
                    (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
-               (while (continue-p)
-                 (setf (cdar maps)
-                       (thread-last
-                         (mapcar #'conn-argument-compose-keymap arglist)
-                         (cons overriding-map)
-                         (delq nil)
-                         (make-composed-keymap)))
-                 (conn->f emulation-mode-map-alists
-                   (delq maps)
-                   (cons maps))
-                 (unless executing-kbd-macro
-                   (display-message))
-                 (read-command))
+               (setq maps `((,state . nil)
+                            ,@(when history-var
+                                `((,state . ,conn-read-args-previous-map)))))
+               (if command-loop
+                   (funcall command-loop
+                            #'setup-keymaps
+                            #'continue-p
+                            #'read-command
+                            #'update-args
+                            #'display-message
+                            #'set-error-message)
+                 (while (continue-p)
+                   (setup-keymaps)
+                   (display-message)
+                   (execute-command (read-command))))
                (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
        (catch 'conn-read-args-return
@@ -2166,11 +2189,20 @@ echo area help message.
            (debug (([sexp &rest keywordp form])
                    ([&rest sexp form])
                    def-body)))
-  (pcase-let (((or `(,state . ,keys) state) state-and-keys))
-    `(conn--read-args ',state
-                      (list ,@(mapcar #'cadr varlist))
-                      (pcase-lambda ,(mapcar #'car varlist) ,@body)
-                      ,@keys)))
+  (pcase-let* (((or `(,state . ,keys) state) state-and-keys)
+               (form `(conn--read-args
+                       ',state
+                       (list ,@(mapcar #'cadr varlist))
+                       (pcase-lambda ,(mapcar #'car varlist) ,@body)
+                       ,@keys)))
+    (if (and (plist-get keys :command-loop)
+             (or (plist-get keys :pre)
+                 (plist-get keys :post)
+                 (plist-get keys :around)))
+        (macroexp-warn-and-return
+         ":pre, :post and :command-handler are ignored when :command-loop present"
+         form nil nil state)
+      form)))
 
 ;;;;; Argument Types
 
