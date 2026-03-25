@@ -554,7 +554,7 @@ themselves once the selection process has concluded."
   :mode-line-face 'conn-dispatch-mode-line-face)
 
 (cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state))
-                                        _signal)
+                                        _transition)
   (if (or defining-kbd-macro executing-kbd-macro)
       (error "Dispatch not available in keyboard macros")
     (cl-call-next-method)))

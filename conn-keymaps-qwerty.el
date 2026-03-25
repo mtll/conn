@@ -865,8 +865,8 @@
   :repeat t
   "n" 'conn-wincontrol-scroll-down
   "m" 'conn-wincontrol-scroll-up
-  "N" 'conn-wincontrol-other-window-scroll-up
-  "M" 'conn-wincontrol-other-window-scroll-down)
+  "N" 'conn-wincontrol-other-window-scroll-down
+  "M" 'conn-wincontrol-other-window-scroll-up)
 
 (defvar-keymap conn-wincontrol-text-scale-repeat-map
   :repeat t
