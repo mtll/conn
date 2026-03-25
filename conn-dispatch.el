@@ -550,6 +550,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
+  :cursor 'hollow
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face)
 
@@ -2266,7 +2267,8 @@ the meaning of depth."
                                (funcall cont))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
-    (conn-get-target-finder thing arg)
+    (conn-setup-target-finder
+     (conn-get-target-finder thing arg))
     (setq conn--dispatch-current-thing (list thing arg transform))
     (conn-dispatch-handle-and-redisplay)))
 
@@ -2688,34 +2690,33 @@ updated.")
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
 
-(cl-defmethod conn-get-target-finder :around (_cmd _arg)
+(defun conn-setup-target-finder (tf)
   (unless conn-dispatch-in-progress
     (error "No dispatch in progress"))
-  (when-let* ((tf (cl-call-next-method)))
-    (when conn-dispatch-target-finder
-      (conn-target-finder-cleanup conn-dispatch-target-finder))
-    (if-let* ((predicate (oref tf window-predicate)))
-        (add-function :after-while conn-target-window-predicate predicate
-                      '((name . target-finder)))
-      (remove-function conn-target-window-predicate 'target))
-    (if-let* ((label-function (oref tf label-function)))
-        (add-function :override conn-dispatch-label-function
-                      label-function
-                      '((name . target-finder)))
-      (remove-function conn-dispatch-label-function 'target-finder))
-    (pcase (conn-target-finder-other-end tf)
-      (:no-other-end
-       (push :target conn-dispatch-no-other-end)
-       (remove-function conn-dispatch-other-end 'target-finder))
-      (_
-       (cl-callf2 delq :target conn-dispatch-no-other-end)
-       (add-function :around conn-dispatch-other-end
-                     (lambda (fn)
-                       (xor (funcall fn)
-                            (conn-target-finder-other-end
-                             conn-dispatch-target-finder)))
-                     '((name . target-finder)))))
-    (setf conn-dispatch-target-finder tf)))
+  (when conn-dispatch-target-finder
+    (conn-target-finder-cleanup conn-dispatch-target-finder))
+  (if-let* ((predicate (oref tf window-predicate)))
+      (add-function :after-while conn-target-window-predicate predicate
+                    '((name . target-finder)))
+    (remove-function conn-target-window-predicate 'target-finder))
+  (if-let* ((label-function (oref tf label-function)))
+      (add-function :override conn-dispatch-label-function
+                    label-function
+                    '((name . target-finder)))
+    (remove-function conn-dispatch-label-function 'target-finder))
+  (pcase (conn-target-finder-other-end tf)
+    (:no-other-end
+     (push :target conn-dispatch-no-other-end)
+     (remove-function conn-dispatch-other-end 'target-finder))
+    (_
+     (cl-callf2 delq :target conn-dispatch-no-other-end)
+     (add-function :around conn-dispatch-other-end
+                   (lambda (fn)
+                     (xor (funcall fn)
+                          (conn-target-finder-other-end
+                           conn-dispatch-target-finder)))
+                   '((name . target-finder)))))
+  (setf conn-dispatch-target-finder tf))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
@@ -3060,6 +3061,8 @@ to the key binding for that target."
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
+
+(defvar-keymap conn-dispatch-toggle-focus-map)
 
 (cl-defmethod conn-target-finder-prompt-p ((_state conn-dispatch-focus-mixin))
   t)
@@ -3834,7 +3837,7 @@ contain targets."
            (important-return-value t))
   (conn-read-args (conn-copy-state
                    :prompt "Copy Thing")
-      ((`(,fthing ,farg) (conn-thing-argument))
+      ((`(,fthing ,farg) (conn-thing-argument-dwim))
        (ftransform (conn-transform-argument)))
     (let ((str (pcase (conn-bounds-of fthing farg)
                  ((conn-bounds `(,beg . ,end) ftransform)
@@ -4009,7 +4012,7 @@ the string after the region selected by dispatch."))
            (important-return-value t))
   (conn-read-args (conn-kill-state
                    :prompt "Send Thing")
-      ((`(,thing ,arg) (conn-thing-argument))
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
        (transform (conn-transform-argument))
        (fixup (when conn-kill-reformat-function
                 (conn-reformat-argument)))
@@ -4093,7 +4096,7 @@ the string after the region selected by dispatch."))
                                                     t)))
                          (save-excursion
                            (conn-kill-thing thing arg transform
-                                            nil nil nil
+                                            nil nil nil nil
                                             fixup check-bounds)
                            (current-kill 0))))
                       (action-window-predicate
@@ -4917,7 +4920,8 @@ it."))
       (let ((conn-disable-input-method-hooks t))
         (conn--unwind-protect-all
           (let ((conn-dispatch-in-progress t))
-            (conn-get-target-finder thing arg)
+            (conn-setup-target-finder
+             (conn-get-target-finder thing arg))
             (add-function :before-while conn-dispatch-other-end
                           (lambda () (not conn-dispatch-no-other-end))
                           '((depth . -100)

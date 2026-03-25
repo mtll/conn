@@ -365,6 +365,11 @@
   "n" conn-backward-sexp-remap)
 
 (define-keymap
+  :keymap conn-dispatch-toggle-focus-map
+  "RET" 'toggle-focus
+  "<return>" 'toggle-focus)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
   "O" (conn-anonymous-thing
         '(forward-word)

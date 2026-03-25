@@ -2029,13 +2029,14 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (keyboard-quit))
                 ((or 'execute-extended-command 'help)
                  (setq cmd (conn--read-args-completing-read
-                            (if (and command-handler
-                                     (null command-loop))
-                                `(,command-handler
-                                  conn-read-args-command-handler
-                                  ,@arguments)
-                              `(conn-read-args-command-handler
+                            (cond
+                             ((null command-loop) arguments)
+                             (command-handler
+                              `(,command-handler
+                                conn-read-args-command-handler
                                 ,@arguments))
+                             (t `(conn-read-args-command-handler
+                                  ,@arguments)))
                             partial-keymap)))
                 (_ (cl-return cmd))))))
          (set-error-message (cstr &rest args)
