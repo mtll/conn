@@ -523,7 +523,7 @@
   "w" 'copy
   "/" 'buffer-filename
   "P" 'project-filename
-  ">" 'kill-matching-lines
+  "_" 'kill-matching-lines
   "%" 'keep-lines
   "j" 'move-end-of-line)
 
@@ -574,6 +574,11 @@
   "." 'register)
 
 (define-keymap
+  :keymap conn-clipboard-argument-map
+  ">" 'toggle-clipboard
+  "M->" 'set-clipboard)
+
+(define-keymap
   :keymap conn-swap-argument-map
   "~" 'swap)
 
@@ -621,7 +626,7 @@
   :keymap conn-copy-thing-argument-map
   "/" 'buffer-filename
   "p" 'project-filename
-  ">" 'copy-matching-lines)
+  "_" 'copy-matching-lines)
 
 (define-keymap
   :keymap conn-sort-reverse-argument-map

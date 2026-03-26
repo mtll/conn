@@ -2608,6 +2608,26 @@ append to that place."
 
 (defvar-keymap conn-delete-argument-map)
 
+(defvar-keymap conn-clipboard-argument-map)
+
+(cl-defstruct (conn-clipboard-argument
+               (:include conn-boolean-argument)
+               ( :constructor conn-clipboard-argument
+                 (&optional
+                  (value select-enable-clipboard)
+                  &aux
+                  (name "clipboard")
+                  (toggle-command (list 'toggle-clipboard 'set-clipboard))
+                  (keymap conn-clipboard-argument-map)
+                  (reference conn-check-bounds-argument-reference)))))
+
+(cl-defmethod conn-argument-update ((_arg conn-clipboard-argument)
+                                    cmd
+                                    _break)
+  (cl-call-next-method)
+  (when (eq cmd 'set-clipboard)
+    (setopt select-enable-clipboard (not select-enable-clipboard))))
+
 (cl-defstruct (conn-kill-how-argument
                (:include conn-composite-argument)
                ( :constructor conn--kill-how-argument
@@ -2615,17 +2635,24 @@ append to that place."
                   append
                   register
                   separator
+                  system-clipboard
                   &aux
-                  (value (list delete append register separator)))))
+                  (value (list delete
+                               append
+                               register
+                               separator
+                               system-clipboard)))))
   (delete nil)
   (append nil)
   (register nil)
-  (separator nil))
+  (separator nil)
+  (system-clipboard nil))
 
 (cl-defsubst conn-kill-how-argument (&key delete
                                           append
                                           register
-                                          separator)
+                                          separator
+                                          (system-clipboard select-enable-clipboard))
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq append '(nil append prepend repeat)))
@@ -2642,7 +2669,8 @@ append to that place."
                        (lambda (_) (register-read-with-preview "Register:"))
                        :formatter #'conn-argument-format-register
                        :value register)
-   (conn-separator-argument separator)))
+   (conn-separator-argument separator)
+   (conn-clipboard-argument system-clipboard)))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
                                     cmd
@@ -2671,21 +2699,24 @@ append to that place."
        (cl-call-next-method)
        (when register
          (setf delete nil)))
-      ('separator
-       (cl-call-next-method)))))
+      (_ (cl-call-next-method)))))
 
 (cl-defmethod conn-argument-display ((arg conn-kill-how-argument))
   (cl-symbol-macrolet ((delete (conn-kill-how-argument-delete arg))
                        (register (conn-kill-how-argument-register arg))
                        (append (conn-kill-how-argument-append arg))
-                       (separator (conn-kill-how-argument-separator arg)))
+                       (separator (conn-kill-how-argument-separator arg))
+                       (clipboard (conn-kill-how-argument-system-clipboard arg)))
     (mapcar #'conn-argument-display
             (list append
                   (when (or (conn-argument-value append)
                             (conn-argument-value separator))
                     separator)
                   register
-                  delete))))
+                  delete
+                  (unless (or (conn-argument-value delete)
+                              (conn-argument-value register))
+                    clipboard)))))
 
 (cl-defstruct (conn-kill-thing-argument
                (:include conn-thing-argument)
@@ -2769,7 +2800,8 @@ append to that place."
                         separator
                         reformat
                         check-bounds
-                        repeat-count)
+                        repeat-count
+                        system-clipboard)
   "Kill a region defined by THING, ARG, and TRANSFORM.
 
 For how the region is determined using THING, ARG, and TRANSFORM see
@@ -2801,14 +2833,16 @@ hook, which see."
                     :prompt "Thing"
                     :history-var 'conn-kill-thing
                     :reference conn-kill-reference
-                    :display-handler (conn-read-args-display-columns 5 3))
+                    :display-handler (conn-read-args-display-columns 4 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,reformat) (conn-transform-and-fixup-argument))
-        (`(,delete ,append ,register ,separator) (conn-kill-how-argument))
+        (`(,delete ,append ,register ,separator ,system-clipboard)
+         (conn-kill-how-argument))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform append delete
            register separator reformat check-bounds
-           current-prefix-arg)))
+           current-prefix-arg
+           system-clipboard)))
   (cl-callf prefix-numeric-value repeat-count)
   (cl-assert (not (and delete (or register append))))
   (let ((last-command last-command)
@@ -2822,7 +2856,8 @@ hook, which see."
                           register
                           separator
                           reformat
-                          check-bounds)
+                          check-bounds
+                          system-clipboard)
       (setq this-command 'conn-kill-thing
             last-command 'conn-kill-thing
             conn-repeating-command t))))
@@ -2915,66 +2950,69 @@ hook, which see."
                           delete-flag
                           append
                           register
-                          separator)
-  (pcase append
-    ('repeat
-     (setq append (and conn-repeating-command 'append)))
-    ((and 'nil
-          (guard (and conn-repeating-command
-                      (eq last-command this-command))))
-     (setq append 'append
-           separator (or separator t))))
-  (if register
-      (pcase append
-        ('nil
-         (copy-to-register register beg end delete-flag))
-        ('prepend
-         (prepend-to-register register beg end delete-flag))
-        (_
-         (append-to-register register beg end delete-flag)))
-    (when (or (and (eq append 'append)
-                   (< end beg))
-              (and (eq append 'prepend)
-                   (< beg end)))
-      (cl-rotatef beg end))
-    (let ((last-command (if append 'kill-region last-command)))
-      (when (and append separator)
-        (kill-append (conn-kill-separator-for-region beg end separator)
-                     (eq append 'prepend)))
-      (if delete-flag
-          (kill-region beg end)
-        (copy-region-as-kill beg end)))))
+                          separator
+                          system-clipboard)
+  (let ((select-enable-clipboard system-clipboard))
+    (pcase append
+      ('repeat
+       (setq append (and conn-repeating-command 'append)))
+      ((and 'nil
+            (guard (and conn-repeating-command
+                        (eq last-command this-command))))
+       (setq append 'append
+             separator (or separator t))))
+    (if register
+        (pcase append
+          ('nil
+           (copy-to-register register beg end delete-flag))
+          ('prepend
+           (prepend-to-register register beg end delete-flag))
+          (_
+           (append-to-register register beg end delete-flag)))
+      (when (or (and (eq append 'append)
+                     (< end beg))
+                (and (eq append 'prepend)
+                     (< beg end)))
+        (cl-rotatef beg end))
+      (let ((last-command (if append 'kill-region last-command)))
+        (when (and append separator)
+          (kill-append (conn-kill-separator-for-region beg end separator)
+                       (eq append 'prepend)))
+        (if delete-flag
+            (kill-region beg end)
+          (copy-region-as-kill beg end))))))
 
-(defun conn--kill-string (string &optional append register separator)
-  (pcase append
-    ('repeat
-     (setq append (and conn-repeating-command 'append)))
-    ((and 'nil
-          (guard (and conn-repeating-command
-                      (eq last-command this-command))))
-     (setq append 'append
-           separator (or separator t))))
-  (if register
+(defun conn--kill-string (string &optional append register separator system-clipboard)
+  (let ((select-enable-clipboard system-clipboard))
+    (pcase append
+      ('repeat
+       (setq append (and conn-repeating-command 'append)))
+      ((and 'nil
+            (guard (and conn-repeating-command
+                        (eq last-command this-command))))
+       (setq append 'append
+             separator (or separator t))))
+    (if register
+        (if append
+            (let ((reg (get-register register))
+                  (sep (conn-kill-separator-for-strings
+                        (list string) separator)))
+              (set-register
+               register
+               (cond ((not reg) string)
+                     ((stringp reg)
+                      (if (eq append 'prepend)
+                          (concat string sep reg)
+                        (concat reg sep string)))
+                     (t (user-error "Register does not contain text")))))
+          (set-register register string))
       (if append
-          (let ((reg (get-register register))
-                (sep (conn-kill-separator-for-strings
+          (let ((sep (conn-kill-separator-for-strings
                       (list string) separator)))
-            (set-register
-             register
-             (cond ((not reg) string)
-                   ((stringp reg)
-                    (if (eq append 'prepend)
-                        (concat string sep reg)
-                      (concat reg sep string)))
-                   (t (user-error "Register does not contain text")))))
-        (set-register register string))
-    (if append
-        (let ((sep (conn-kill-separator-for-strings
-                    (list string) separator)))
-          (when sep
-            (kill-append sep (eq append 'prepend)))
-          (kill-append string (eq append 'prepend)))
-      (kill-new string))))
+            (when sep
+              (kill-append sep (eq append 'prepend)))
+            (kill-append string (eq append 'prepend)))
+        (kill-new string)))))
 
 (cl-defgeneric conn-kill-thing-do (thing
                                    arg
@@ -2985,7 +3023,8 @@ hook, which see."
                                    register
                                    separator
                                    reformat
-                                   check-bounds)
+                                   check-bounds
+                                   system-clipboard)
   (declare (conn-anonymous-thing-property :kill-op)))
 
 (cl-defmethod conn-kill-thing-do :around (&rest args)
@@ -3003,7 +3042,8 @@ hook, which see."
                                   register
                                   separator
                                   reformat
-                                  check-bounds)
+                                  check-bounds
+                                  system-clipboard)
   (pcase (conn-bounds-of thing arg)
     ((and (conn-bounds-get :subregions
                            `(,@transform
@@ -3022,7 +3062,8 @@ hook, which see."
                         (or separator 'default)))
           append
           register
-          separator)))
+          separator
+          system-clipboard)))
      (delete-region beg end)
      (when reformat
        (goto-char beg)
@@ -3038,7 +3079,8 @@ hook, which see."
                                   register
                                   separator
                                   _reformat
-                                  _check-bounds)
+                                  _check-bounds
+                                  system-clipboard)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
@@ -3051,7 +3093,7 @@ hook, which see."
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register separator)
+        (conn--kill-string str append register separator system-clipboard)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
 
@@ -3064,7 +3106,8 @@ hook, which see."
                                   register
                                   separator
                                   _reformat
-                                  _check-bounds)
+                                  _check-bounds
+                                  system-clipboard)
   (if-let* ((_ (fboundp 'project-root))
             (fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
@@ -3072,7 +3115,7 @@ hook, which see."
                       (current-buffer))))
             (str (expand-file-name (project-root (project-current)))))
       (progn
-        (conn--kill-string str append register separator)
+        (conn--kill-string str append register separator system-clipboard)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
@@ -3085,7 +3128,8 @@ hook, which see."
                                   _register
                                   _separator
                                   _reformat
-                                  _check-bounds)
+                                  _check-bounds
+                                  _system-clipboard)
   (conn-read-args (conn-read-thing-state
                    :history-var 'kill-matching-lines
                    :prompt (if delete
@@ -3114,7 +3158,8 @@ hook, which see."
                                   _register
                                   _separator
                                   _reformat
-                                  _check-bounds)
+                                  _check-bounds
+                                  _system-clipboard)
   (conn-read-args (conn-read-thing-state
                    :history-var 'keep-lines
                    :prompt "Keep Matching Lines In"
@@ -3139,7 +3184,8 @@ hook, which see."
                                   register
                                   separator
                                   reformat
-                                  check-bounds)
+                                  check-bounds
+                                  system-clipboard)
   (let ((conn-dispatch-amalgamate-undo t)
         (result nil)
         (strings nil))
@@ -3154,12 +3200,13 @@ hook, which see."
           (conn-boolean-argument "repeat"
                                  'repeat-dispatch
                                  conn-dispatch-repeat-argument-map))
-         (`(,delete ,append ,register ,separator)
+         (`(,delete ,append ,register ,separator ,system-clipboard)
           (conn-kill-how-argument
            :append (if (eq append 'repeat) nil append)
            :delete delete
            :register register
-           :separator separator))
+           :separator separator
+           :system-clipboard system-clipboard))
          (other-end
           (conn-boolean-argument "other-end"
                                  'other-end
@@ -3262,7 +3309,7 @@ hook, which see."
                   (if append
                       (concat result (and result sep) string)
                     (concat string (and result sep) result))))
-          (conn--kill-string result append register sep)))
+          (conn--kill-string result append register sep system-clipboard)))
       (conn-push-command-history 'conn-dispatch-setup-previous
                                  (conn-ring-head conn-dispatch-ring)))))
 
@@ -3275,7 +3322,8 @@ hook, which see."
                                   register
                                   separator
                                   reformat
-                                  check-bounds)
+                                  check-bounds
+                                  system-clipboard)
   (conn-with-dispatch-event-handlers
     ( :handler (thing)
       (when (eq thing 'append)
@@ -3318,7 +3366,7 @@ hook, which see."
             (conn-dispatch-goto-char beg)
             (if delete
                 (delete-region beg end)
-              (conn--kill-region beg end t append register separator))
+              (conn--kill-region beg end t append register separator system-clipboard))
             (when reformat
               (funcall conn-kill-reformat-function bounds)))
            (_ (user-error "No %s found" thing)))))
@@ -3335,7 +3383,8 @@ hook, which see."
                                   register
                                   separator
                                   reformat
-                                  check-bounds)
+                                  check-bounds
+                                  system-clipboard)
   (pcase (conn-bounds-of thing arg)
     ((and (conn-bounds `(,beg . ,end)
                        `(,@transform
@@ -3345,7 +3394,8 @@ hook, which see."
      (if delete
          (delete-region beg end)
        (conn--kill-region beg end t append register
-                          (or separator (when transform 'no))))
+                          (or separator (when transform 'no))
+                          system-clipboard))
      (goto-char beg)
      (when reformat
        (funcall conn-kill-reformat-function bounds)))
@@ -3366,7 +3416,8 @@ hook, which see."
                                   register
                                   separator
                                   _reformat
-                                  _check-bounds)
+                                  _check-bounds
+                                  _system-clipboard)
   (conn-read-args (conn-copy-state
                    :history-var 'conn-copy-thing
                    :prefix arg
@@ -3394,7 +3445,8 @@ hook, which see."
                                                register
                                                _separator
                                                _reformat
-                                               _check-bounds)
+                                               _check-bounds
+                                               _system-clipboard)
   (if (bound-and-true-p rectangle-mark-mode)
       (let ((beg (region-beginning))
             (end (region-end)))
@@ -3433,15 +3485,21 @@ append to that place."
                  (append
                   register
                   separator
+                  system-clipboard
                   &aux
-                  (value (list append register separator)))))
-  (append nil :type symbol)
-  (register nil :type (or char nil))
-  (separator nil :type (or string nil)))
+                  (value (list append
+                               register
+                               separator
+                               system-clipboard)))))
+  (append nil)
+  (register nil)
+  (separator nil)
+  (system-clipboard nil))
 
 (cl-defsubst conn-copy-how-argument (&key append
                                           register
-                                          separator)
+                                          separator
+                                          (system-clipboard select-enable-clipboard))
   (declare (important-return-value t)
            (side-effect-free t))
   (cl-assert (memq append '(nil append prepend)))
@@ -3453,17 +3511,21 @@ append to that place."
                        (lambda (_) (register-read-with-preview "Register:"))
                        :formatter #'conn-argument-format-register
                        :value register)
-   (conn-separator-argument separator)))
+   (conn-separator-argument separator)
+   (conn-clipboard-argument system-clipboard)))
 
 (cl-defmethod conn-argument-display ((arg conn-copy-how-argument))
   (cl-symbol-macrolet ((separator (conn-copy-how-argument-separator arg))
                        (register (conn-copy-how-argument-register arg))
-                       (append (conn-copy-how-argument-append arg)))
+                       (append (conn-copy-how-argument-append arg))
+                       (clipboard (conn-copy-how-argument-system-clipboard arg)))
     (list (conn-argument-display append)
           (when (or (conn-argument-value append)
                     (conn-argument-value separator))
             (conn-argument-display separator))
-          (conn-argument-display register))))
+          (conn-argument-display register)
+          (unless (conn-argument-value register)
+            (conn-argument-display clipboard)))))
 
 (defvar-keymap conn-copy-thing-argument-map)
 
@@ -3498,7 +3560,8 @@ append to that place."
                         transform
                         append
                         register
-                        separator)
+                        separator
+                        system-clipboard)
   "Copy a region defined by CMD, ARG, and TRANSFORM.
 
 For how the region is determined using CMD, ARG, and TRANSFORM see
@@ -3520,14 +3583,16 @@ that place."
                     :reference conn-copy-reference)
        ((`(,thing ,arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
-        (`(,append ,register ,separator) (conn-copy-how-argument)))
-     (list thing arg transform append register separator)))
+        (`(,append ,register ,separator ,system-clipboard)
+         (conn-copy-how-argument)))
+     (list thing arg transform append register separator system-clipboard)))
   (conn-copy-thing-do thing
                       arg
                       transform
                       append
                       register
-                      separator))
+                      separator
+                      system-clipboard))
 
 (cl-defgeneric conn-copy-thing-do (thing
                                    arg
@@ -3550,10 +3615,11 @@ that place."
                                   transform
                                   append
                                   register
-                                  separator)
+                                  separator
+                                  system-clipboard)
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (conn--kill-region beg end nil append register separator)
+     (conn--kill-region beg end nil append register separator system-clipboard)
      (unless executing-kbd-macro
        (pulse-momentary-highlight-region beg end)))
     (_ (user-error "No thing found"))))
@@ -3564,7 +3630,8 @@ that place."
                                   transform
                                   append
                                   register
-                                  separator)
+                                  separator
+                                  system-clipboard)
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds-get :subregions transform)
      (let ((strings nil))
@@ -3577,7 +3644,8 @@ that place."
                       (or separator 'default)))
         append
         register
-        separator)))
+        separator
+        system-clipboard)))
     (_ (user-error "No thing found"))))
 
 (cl-defmethod conn-copy-thing-do ((_thing (eql copy-matching-lines))
@@ -3586,7 +3654,8 @@ that place."
                                   transform
                                   append
                                   _register
-                                  _separator)
+                                  _separator
+                                  _system-clipboard)
   (conn-read-args (conn-read-thing-state
                    :history-var 'copy-matching-lines
                    :prompt "Copy Matching Lines In"
@@ -3607,7 +3676,8 @@ that place."
                                   transform
                                   append
                                   register
-                                  separator)
+                                  separator
+                                  system-clipboard)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
@@ -3620,7 +3690,7 @@ that place."
       (progn
         (when (memq 'conn-bounds-trim transform)
           (setq str (file-name-sans-extension str)))
-        (conn--kill-string str append register separator)
+        (conn--kill-string str append register separator system-clipboard)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
 
@@ -3630,14 +3700,15 @@ that place."
                                   _transform
                                   append
                                   register
-                                  separator)
+                                  separator
+                                  system-clipboard)
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
                       (current-buffer))))
             (str (expand-file-name (project-root (project-current)))))
       (progn
-        (conn--kill-string str append register separator)
+        (conn--kill-string str append register separator system-clipboard)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
@@ -3647,7 +3718,8 @@ that place."
                                   transform
                                   append
                                   register
-                                  separator)
+                                  separator
+                                  system-clipboard)
   (conn-read-args (conn-dispatch-bounds-state
                    :history-var 'conn-copy-thing-dispatch
                    :prefix arg
@@ -3729,7 +3801,7 @@ that place."
                     (if prepend
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
-            (conn--kill-string result append register sep)))
+            (conn--kill-string result append register sep system-clipboard)))
         (conn-push-command-history 'conn-dispatch-setup-previous
                                    (conn-ring-head conn-dispatch-ring))))))
 
