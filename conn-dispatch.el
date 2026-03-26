@@ -777,12 +777,13 @@ themselves once the selection process has concluded."
          (setf action-command cmd
                action new-action
                set-flag t)
-         (cl-loop for slot in (oclosure--class-slots
+         (cl-loop for desc in (oclosure--class-slots
                                (cl--find-class
                                 (oclosure-type new-action)))
                   for val = (slot-value new-action
-                                        (cl--slot-descriptor-name slot))
-                  when (conn-read-argument-p val)
+                                        (cl--slot-descriptor-name desc))
+                  when (and (oclosure--slot-mutable-p desc)
+                            (conn-argument-p val))
                   do (push val arguments))
          (setf conn--dispatch-thing-predicate
                (or (conn-action--action-thing-predicate new-action)
@@ -814,7 +815,8 @@ themselves once the selection process has concluded."
                           (cl--find-class
                            (oclosure-type action)))
              for slot = (cl--slot-descriptor-name desc)
-             when (conn-read-argument-p (slot-value action slot))
+             when (and (oclosure--slot-mutable-p desc)
+                       (conn-argument-p (slot-value action slot)))
              do (cl-callf conn-argument-extract-value
                     (slot-value action slot))))
   (list (conn-dispatch-action-argument-value arg)
@@ -4272,7 +4274,8 @@ it."))
        (rtransform (conn-transform-argument)))
     (pcase (conn-bounds-of rthing rarg)
       ((conn-bounds `(,rbeg . ,rend) rtransform)
-       (let ((cg (conn--action-buffer-change-group)))
+       (let ((cg (conn--action-buffer-change-group))
+             str)
          (delete-region rbeg rend)
          (oclosure-lambda (conn-dispatch-copy-from-replace
                            (action-description "Copy From and Replace")
@@ -4287,13 +4290,13 @@ it."))
                (pcase (conn-bounds-of-dispatch thing arg pt)
                  ((conn-bounds `(,beg . ,end) transform)
                   (conn-dispatch-action-pulse beg end)
-                  (copy-region-as-kill beg end))
+                  (setq str (filter-buffer-substring beg end)))
                  (_ (user-error "Cannot find thing at point"))))
              (with-current-buffer (marker-buffer action-opoint)
                (save-excursion
                  (conn-dispatch-change-group)
                  (goto-char action-opoint)
-                 (yank)))))))
+                 (insert-for-yank str)))))))
       (_ (error "No region to replace")))))
 
 (cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from-replace))
