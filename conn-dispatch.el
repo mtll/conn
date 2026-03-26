@@ -611,6 +611,36 @@ themselves once the selection process has concluded."
          (if (equal s "") 'default s))))
    :value initial-value))
 
+(cl-defstruct (conn-dispatch-to-how-argument
+               (:include conn-composite-argument)
+               ( :constructor conn--dispatch-to-how-argument
+                 (replace
+                  separator
+                  &aux
+                  (value (list replace separator)))))
+  (replace nil)
+  (separator nil))
+
+(cl-defsubst conn-dispatch-to-how-argument (&key (replace t)
+                                                 (separator 'default))
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (conn--dispatch-to-how-argument
+   (conn-boolean-argument "replace"
+                          'dispatch-replace
+                          conn-dispatch-replace-argument-map
+                          replace)
+   (conn-separator-argument separator)))
+
+(cl-defmethod conn-argument-display ((arg conn-dispatch-to-how-argument))
+  (cl-symbol-macrolet ((replace (conn-dispatch-to-how-argument-replace arg))
+                       (separator (conn-dispatch-to-how-argument-separator arg)))
+    (mapcar #'conn-argument-display
+            (list replace
+                  (when (and (conn-argument-value separator)
+                             (not (conn-argument-value replace)))
+                    separator)))))
+
 ;;;;;; Dispatch Quick Ref
 
 (defvar conn-dispatch-thing-reference-list
@@ -641,27 +671,17 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-action-ref-list
   (conn-reference-quote
-    (("copy from/replace"
-      conn-dispatch-copy-from
-      conn-dispatch-copy-from-replace)
-     ("send/replace"
-      conn-dispatch-send
-      conn-dispatch-send-replace)
+    (("copy from" conn-dispatch-copy-from)
+     ("send" conn-dispatch-send)
      ("kapply" conn-dispatch-kapply)
      ("yank to/read"
       conn-dispatch-yank-to
       conn-dispatch-reading-yank-to)
-     ("copy to/replace"
-      conn-dispatch-copy-to
-      conn-dispatch-copy-to-replace)
+     ("copy to" conn-dispatch-copy-to)
      ("transpose" conn-dispatch-transpose)
-     ("register load/replace"
-      conn-dispatch-register-load
-      conn-dispatch-register-load-replace)
+     ("register load" conn-dispatch-register-load)
      ("repeat command at" conn-dispatch-repeat-command)
-     ("take/replace"
-      conn-dispatch-take
-      conn-dispatch-take-replace))))
+     ("take" conn-dispatch-take))))
 
 (defvar conn-dispatch-command-reference
   (conn-reference-page
@@ -3687,6 +3707,45 @@ contain targets."
 
 ;;;;; Dispatch Actions
 
+(defvar-keymap conn-dispatch-replace-argument-map)
+
+(cl-defstruct (conn-dispatch-replace-argument
+               (:include conn-argument)
+               (:constructor
+                conn-dispatch-replace-argument
+                (&aux
+                 (keymap conn-dispatch-replace-argument-map)))))
+
+(cl-defmethod conn-argument-update ((arg conn-dispatch-replace-argument)
+                                    (_cmd (eql dispatch-replace))
+                                    break)
+  (cl-symbol-macrolet ((cg (conn-argument-value arg)))
+    (if cg (conn--action-cancel-change-group (cl-shiftf cg nil))
+      (setf cg (conn--action-buffer-change-group))
+      (conn-read-args (conn-copy-state
+                       :prompt "Replace Thing")
+          ((`(,rthing ,rarg) (conn-thing-argument-dwim))
+           (rtransform (conn-transform-argument)))
+        (pcase (conn-bounds-of rthing rarg)
+          ((conn-bounds `(,beg . ,end) rtransform)
+           (delete-region beg end))
+          (_ (error "No region to replace")))))
+    (funcall break)))
+
+(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-replace-argument)
+                                       (_sym (eql dispatch-replace)))
+  t)
+
+(cl-defmethod conn-argument-display ((arg conn-dispatch-replace-argument))
+  (concat (substitute-command-keys "\\[dispatch-replace]")
+          " "
+          (propertize "replace"
+                      'face (when (conn-argument-value arg)
+                              'conn-argument-active-face))))
+
+(cl-defmethod conn-argument-cancel ((arg conn-dispatch-replace-argument))
+  (conn--action-cancel-change-group (conn-argument-value arg)))
+
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
@@ -3832,7 +3891,7 @@ contain targets."
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
   (str :type string)
-  (separator :type string :mutable t))
+  (replace-and-separator :mutable t))
 
 (defun conn-dispatch-copy-to ()
   (declare (conn-dispatch-action)
@@ -3849,7 +3908,8 @@ contain targets."
       (oclosure-lambda (conn-dispatch-copy-to
                         (action-description "Copy To")
                         (str str)
-                        (separator (conn-separator-argument 'default))
+                        (replace-and-separator
+                         (conn-dispatch-to-how-argument))
                         (action-window-predicate
                          (lambda (win)
                            (not
@@ -3861,7 +3921,8 @@ this action copies the current region before the region selected by
 dispatch but if OTHER-END is non-nil then it copies the current region
 after the region selected by dispatch."))
           ()
-        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+        (pcase-let* ((`(,replace ,separator) replace-and-separator)
+                     (`(,pt ,window ,thing ,arg ,transform)
                       (conn-select-target)))
           (with-selected-window window
             (conn-dispatch-change-group)
@@ -3869,59 +3930,22 @@ after the region selected by dispatch."))
               (pcase (conn-bounds-of-dispatch thing arg pt)
                 ((conn-dispatch-bounds `(,beg . ,end) transform)
                  (goto-char beg)
-                 (when (and separator (< end beg))
-                   (insert (conn-kill-separator-for-strings str separator)))
+                 (cond (replace
+                        (delete-region beg end))
+                       ((and separator (< end beg))
+                        (insert (conn-kill-separator-for-strings str separator))))
                  (insert-for-yank str)
                  (conn-dispatch-action-pulse
                   (- (point) (length str))
                   (point))
-                 (when (and separator (not (< end beg)))
+                 (when (and separator (not replace) (not (< end beg)))
                    (insert (conn-kill-separator-for-strings str separator))))
                 (_ (user-error "Cannot find thing at point"))))))))))
 
-(defun conn-dispatch-copy-to-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (conn-read-args (conn-copy-state
-                   :prompt "Copy Thing")
-      ((`(,fthing ,farg) (conn-thing-argument-dwim))
-       (ftransform (conn-transform-argument)))
-    (let ((str (pcase (conn-bounds-of fthing farg)
-                 ((conn-bounds `(,beg . ,end) ftransform)
-                  (conn-dispatch-action-pulse beg end)
-                  (filter-buffer-substring beg end))
-                 (_ (user-error "Cannot find %s at point"
-                                (conn-thing-pretty-print fthing))))))
-      (oclosure-lambda (conn-action
-                        (action-description "Copy and Replace To")
-                        (action-window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win)))))
-                        (action-reference
-                         "Copy the current region to the region selected, replacing it."))
-          ()
-        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                      (conn-select-target)))
-          (with-selected-window window
-            (conn-dispatch-change-group)
-            (save-mark-and-excursion
-              (pcase (conn-bounds-of-dispatch thing arg pt)
-                ((conn-bounds `(,beg . ,end) transform)
-                 (goto-char beg)
-                 (delete-region beg end)
-                 (insert-for-yank str)
-                 (conn-dispatch-action-pulse
-                  (- (point) (length str))
-                  (point)))
-                (_ (user-error "Cannot find %s"
-                               (conn-thing-pretty-print thing)))))))))))
-
 (oclosure-define (conn-dispatch-yank-to
-                  (:parent conn-action))
+                  (:parent conn-change-group-action))
   (str :type string)
-  (separator :type string :mutable t))
+  (replace-and-separator :mutable t))
 
 (defun conn-dispatch-yank-to ()
   (declare (conn-dispatch-action)
@@ -3929,7 +3953,7 @@ after the region selected by dispatch."))
   (oclosure-lambda (conn-dispatch-yank-to
                     (action-description "Yank To")
                     (str (current-kill 0))
-                    (separator (conn-separator-argument 'default))
+                    (replace-and-separator (conn-dispatch-to-how-argument))
                     (action-window-predicate
                      (lambda (win)
                        (not
@@ -3941,7 +3965,8 @@ default this action inserts the text before the region selected by
 dispatch but if OTHER-END is non-nil then it inserts the text after the
 region selected by dispatch."))
       ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+    (pcase-let* ((`(,replace ,separator) replace-and-separator)
+                 (`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
       (with-selected-window window
         (conn-dispatch-change-group)
@@ -3949,20 +3974,22 @@ region selected by dispatch."))
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,end) transform)
              (goto-char beg)
-             (when (and separator (< end beg))
-               (insert (conn-kill-separator-for-strings str separator)))
+             (cond (replace
+                    (delete-region beg end))
+                   ((and separator (< end beg))
+                    (insert (conn-kill-separator-for-strings str separator))))
              (insert-for-yank str)
              (conn-dispatch-action-pulse
               (- (point) (length str))
               (point))
-             (when (and separator (not (< end beg)))
+             (when (and separator (not replace) (not (< end beg)))
                (insert (conn-kill-separator-for-strings str separator))))
             (_ (user-error "Cannot find thing at point"))))))))
 
 (oclosure-define (conn-dispatch-reading-yank-to
                   (:parent conn-action))
   (str :type string)
-  (separator :type string :mutable t))
+  (replace-and-separator :mutable t))
 
 (defun conn-dispatch-reading-yank-to ()
   (declare (conn-dispatch-action)
@@ -3970,8 +3997,8 @@ region selected by dispatch."))
   (let ((str (read-from-kill-ring "Yank To: ")))
     (oclosure-lambda (conn-dispatch-reading-yank-to
                       (action-description "Yank To")
+                      (replace-and-separator (conn-dispatch-to-how-argument))
                       (str str)
-                      (separator (conn-separator-argument 'default))
                       (action-window-predicate
                        (lambda (win)
                          (not
@@ -3983,7 +4010,8 @@ by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
 the string after the region selected by dispatch."))
         ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+      (pcase-let* ((`(,replace ,separator) replace-and-separator)
+                   (`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
@@ -3991,98 +4019,31 @@ the string after the region selected by dispatch."))
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-dispatch-bounds `(,beg . ,end) transform)
                (goto-char beg)
-               (when (and separator (< end beg))
-                 (insert (conn-kill-separator-for-strings str separator)))
+               (cond (replace
+                      (delete-region beg end))
+                     ((and separator (< end beg))
+                      (insert (conn-kill-separator-for-strings str separator))))
                (insert-for-yank str)
                (conn-dispatch-action-pulse
                 (- (point) (length str))
                 (point))
-               (when (and separator (not (< end beg)))
+               (when (and separator (not replace) (not (< end beg)))
                  (insert (conn-kill-separator-for-strings str separator))))
-              (_ (user-error "Cannot find thing at point")))
-            (conn-dispatch-action-pulse
-             (- (point) (length str))
-             (point))))))))
+              (_ (user-error "Cannot find thing at point")))))))))
 
 (oclosure-define (conn-dispatch-send
                   (:parent conn-change-group-action))
   (str :type string)
-  (separator :type string :mutable t))
+  (replace-and-separator :mutable t))
 
 (defun conn-dispatch-send ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (conn-read-args (conn-kill-state
-                   :prompt "Send Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim))
-       (transform (conn-transform-argument))
-       (fixup (when conn-kill-reformat-function
-                (conn-reformat-argument)))
-       (check-bounds
-        (conn-boolean-argument "check bounds"
-                               'check-bounds
-                               conn-check-bounds-argument-map
-                               t)))
-    (let* ((cg (conn--action-buffer-change-group))
-           (str (save-excursion
-                  (conn-kill-thing thing arg transform
-                                   nil nil nil nil
-                                   fixup check-bounds)
-                  (current-kill 0))))
-      (oclosure-lambda (conn-dispatch-send
-                        (action-description "Send")
-                        (action-change-group cg)
-                        (str str)
-                        (separator (conn-separator-argument 'default))
-                        (action-window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win)))))
-                        (action-reference
-                         "Delete a thing at point and insert it at the region selected
-by dispatch.  By default this action inserts the string before the
-region selected by dispatch but if OTHER-END is non-nil then it inserts
-the string after the region selected by dispatch."))
-          ()
-        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                      (conn-select-target)))
-          (with-selected-window window
-            (conn-dispatch-change-group)
-            (save-excursion
-              (pcase (conn-bounds-of-dispatch thing arg pt)
-                ((conn-dispatch-bounds `(,beg . ,end) transform)
-                 (goto-char beg)
-                 (when (< end beg)
-                   (insert (conn-kill-separator-for-strings str separator)))
-                 (insert-for-yank str)
-                 (conn-dispatch-action-pulse
-                  (- (point) (length str))
-                  (point))
-                 (when (not (< end beg))
-                   (insert (conn-kill-separator-for-strings str separator))))
-                (_ (user-error "Cannot find thing at point"))))))))))
-
-(cl-defmethod conn-action-accept ((action conn-dispatch-send))
-  (conn--action-accept-change-group
-   (conn-dispatch-send--action-change-group action))
-  (cl-call-next-method))
-
-(cl-defmethod conn-action-cancel ((action conn-dispatch-send))
-  (conn--action-cancel-change-group
-   (conn-dispatch-send--action-change-group action)))
-
-(oclosure-define (conn-dispatch-send-replace
-                  (:parent conn-change-group-action))
-  (str :type string))
-
-(defun conn-dispatch-send-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
   (let ((cg (conn--action-buffer-change-group)))
-    (oclosure-lambda (conn-dispatch-send-replace
+    (oclosure-lambda (conn-dispatch-send
                       (action-description "Send and Replace")
                       (action-change-group cg)
+                      (replace-and-separator (conn-dispatch-to-how-argument))
                       (str
                        (conn-read-args (conn-kill-state
                                         :prompt "Send Thing")
@@ -4110,7 +4071,8 @@ the string after the region selected by dispatch."))
                        "Delete a thing at point and replace a region selected by dispatch with
 it."))
         ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+      (pcase-let* ((`(,replace ,separator) replace-and-separator)
+                   (`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
@@ -4118,59 +4080,41 @@ it."))
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-bounds `(,beg . ,end) transform)
                (goto-char beg)
+               (cond (replace
+                      (delete-region beg end))
+                     ((and separator (< end beg))
+                      (insert (conn-kill-separator-for-strings str separator))))
                (delete-region beg end)
                (insert-for-yank str)
                (conn-dispatch-action-pulse
-                (- (point) (length str)) (point)))
+                (- (point) (length str)) (point))
+               (when (and separator (not replace) (not (< end beg)))
+                 (insert (conn-kill-separator-for-strings str separator))))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-action-accept ((action conn-dispatch-send-replace))
+(cl-defmethod conn-action-accept ((action conn-dispatch-send))
   (conn--action-accept-change-group
-   (conn-dispatch-send-replace--action-change-group action))
+   (conn-dispatch-send--action-change-group action))
   (cl-call-next-method))
 
-(cl-defmethod conn-action-cancel ((action conn-dispatch-send-replace))
+(cl-defmethod conn-action-cancel ((action conn-dispatch-send))
   (conn--action-cancel-change-group
-   (conn-dispatch-send-replace--action-change-group action)))
+   (conn-dispatch-send--action-change-group action)))
 
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
-  (register :type integer))
+  (register :type integer)
+  (replace :mutable t))
 
 (defun conn-dispatch-register-load ()
   (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: "))
-                    (action-reference
-                     "Load register at point selected by dispatch."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (with-selected-window window
-        (conn-dispatch-change-group)
-        (save-excursion
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-dispatch-bounds `(,beg . ,_end) transform)
-             (goto-char beg)
-             (conn-register-load register))
-            (_ (user-error "Cannot find thing at point"))))))))
-
-(cl-defmethod conn-action-display ((action conn-dispatch-register-load)
-                                   &optional
-                                   short)
-  (if short "Register"
-    (format "Register <%c>" (conn-dispatch-register-load--register action))))
-
-(oclosure-define (conn-dispatch-register-load-replace
-                  (:parent conn-action))
-  (register :type integer))
-
-(defun conn-dispatch-register-load-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (oclosure-lambda (conn-dispatch-register-load-replace
-                    (register (register-read-with-preview "Register: "))
+                    (replace
+                     (conn-boolean-argument "replace"
+                                            'dispatch-replace
+                                            conn-dispatch-replace-argument-map))
                     (action-reference
                      "Replace region selected by dispatch with contents of register."))
       ()
@@ -4181,144 +4125,97 @@ it."))
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
-             (delete-region beg end)
+             (when replace
+               (delete-region beg end))
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-action-display ((action conn-dispatch-register-load-replace)
+(cl-defmethod conn-action-display ((action conn-dispatch-register-load)
                                    &optional
                                    short)
-  (if short "Register Replace"
-    (format "Register Replace <%c>"
-            (conn-dispatch-register-load-replace--register action))))
+  (if short "Register"
+    (format "Register <%c>"
+            (conn-dispatch-register-load--register action))))
 
 (oclosure-define (conn-dispatch-copy-from
-                  (:parent conn-action)
-                  (:copier conn-dispatch-copy-from-copy (action-opoint)))
-  (action-opoint :type marker))
+                  (:parent conn-change-group-action)
+                  ( :copier
+                    conn-dispatch-copy-from-copy
+                    (action-opoint)))
+  (action-opoint :type marker)
+  (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
-  (thread-first
-    (conn-dispatch-copy-from--action-opoint action)
-    marker-buffer
-    buffer-live-p
-    not))
+  (when-let* ((mk (conn-dispatch-copy-from--action-opoint action)))
+    (thread-first mk marker-buffer buffer-live-p not)))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
-  (conn-dispatch-copy-from-copy
-   action
-   (copy-marker (conn-dispatch-copy-from--action-opoint action) t)))
-
-(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from))
-  (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
+  (conn-<
+    (conn-dispatch-copy-from--action-opoint action)
+    (copy-marker t)
+    (:> (conn-dispatch-copy-from-copy action))))
 
 (defun conn-dispatch-copy-from ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-copy-from
-                    (action-description "Copy From")
-                    (action-opoint (copy-marker (point) t))
-                    (action-reference
-                     "Copy text in region selected by dispatch to point."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (let (str)
+  (let ((str nil)
+        (init nil))
+    (oclosure-lambda (conn-dispatch-copy-from
+                      (separator (conn-separator-argument))
+                      (action-change-group (conn-dispatch-replace-argument))
+                      (action-description "Copy From")
+                      (action-opoint (copy-marker (point) t))
+                      (action-reference
+                       "Replace current region with text in region selected by dispatch."))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target)))
         (with-selected-window window
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
              (conn-dispatch-action-pulse beg end)
              (setq str (filter-buffer-substring beg end)))
             (_ (user-error "Cannot find thing at point"))))
-        (with-current-buffer (marker-buffer action-opoint)
-          (conn-dispatch-change-group)
-          (cond ((null str)
-                 (user-error "Cannot find thing at point"))
-                ((/= (point) action-opoint)
-                 (save-excursion
-                   (goto-char action-opoint)
-                   (insert-for-yank str)))
-                (t
-                 (goto-char action-opoint)
-                 (insert-for-yank str))))))))
+        (cl-flet ((do ()
+                    (conn-dispatch-change-group)
+                    (goto-char action-opoint)
+                    (when separator
+                      (cond ((or (null action-change-group) init)
+                             (insert (conn-kill-separator-for-strings str separator)))
+                            ((and action-change-group (null init))
+                             (setq init t)
+                             (conn-dispatch-undo-case
+                               (:undo (setq init nil))))))
+                    (insert-for-yank str)))
+          (with-current-buffer (marker-buffer action-opoint)
+            (if (= (point) action-opoint)
+                (do)
+              (save-excursion (do)))))))))
 
-(oclosure-define (conn-dispatch-copy-from-replace
-                  (:parent conn-change-group-action)
-                  ( :copier
-                    conn-dispatch-copy-from-replace-copy
-                    (action-opoint)))
-  (action-opoint :type marker))
-
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from-replace))
-  (when-let* ((mk (conn-dispatch-copy-from-replace--action-opoint action)))
-    (thread-first mk marker-buffer buffer-live-p not)))
-
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from-replace))
-  (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil))
-
-(cl-defmethod conn-action-copy ((action conn-dispatch-copy-from-replace))
-  (conn-<
-    (conn-dispatch-copy-from-replace--action-opoint action)
-    (copy-marker t)
-    (:> (conn-dispatch-copy-from-replace-copy action))))
-
-(defun conn-dispatch-copy-from-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (conn-read-args (conn-copy-state
-                   :prompt "Replace Thing")
-      ((`(,rthing ,rarg) (conn-thing-argument-dwim))
-       (rtransform (conn-transform-argument)))
-    (pcase (conn-bounds-of rthing rarg)
-      ((conn-bounds `(,rbeg . ,rend) rtransform)
-       (let ((cg (conn--action-buffer-change-group))
-             str)
-         (delete-region rbeg rend)
-         (oclosure-lambda (conn-dispatch-copy-from-replace
-                           (action-description "Copy From and Replace")
-                           (action-opoint (copy-marker (point) t))
-                           (action-change-group cg)
-                           (action-reference
-                            "Replace current region with text in region selected by dispatch."))
-             ()
-           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                         (conn-select-target)))
-             (with-selected-window window
-               (pcase (conn-bounds-of-dispatch thing arg pt)
-                 ((conn-bounds `(,beg . ,end) transform)
-                  (conn-dispatch-action-pulse beg end)
-                  (setq str (filter-buffer-substring beg end)))
-                 (_ (user-error "Cannot find thing at point"))))
-             (with-current-buffer (marker-buffer action-opoint)
-               (save-excursion
-                 (conn-dispatch-change-group)
-                 (goto-char action-opoint)
-                 (insert-for-yank str)))))))
-      (_ (error "No region to replace")))))
-
-(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from-replace))
-  (set-marker (conn-dispatch-copy-from-replace--action-opoint action) nil)
+(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from))
+  (set-marker (conn-dispatch-copy-from--action-opoint action) nil)
   (conn--action-cancel-change-group
-   (conn-dispatch-copy-from-replace--action-change-group action)))
+   (conn-dispatch-copy-from--action-change-group action)))
 
-(cl-defmethod conn-action-accept ((action conn-dispatch-copy-from-replace))
+(cl-defmethod conn-action-accept ((action conn-dispatch-copy-from))
   (conn--action-accept-change-group
-   (conn-dispatch-copy-from-replace--action-change-group action))
+   (conn-dispatch-copy-from--action-change-group action))
   (cl-call-next-method))
 
 (oclosure-define (conn-dispatch-take
-                  (:parent conn-action)
-                  (:copier conn-dispatch-take-copy (action-opoint)))
-  (action-opoint :type marker))
+                  (:parent conn-change-group-action)
+                  ( :copier
+                    conn-dispatch-take-copy
+                    (action-opoint)))
+  (action-opoint :type marker)
+  (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
-  (not (thread-first
-         (conn-dispatch-take--action-opoint action)
-         marker-buffer
-         buffer-live-p)))
+  (when-let* ((mk (conn-dispatch-take--action-opoint action)))
+    (thread-first mk marker-buffer buffer-live-p not)))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
   (set-marker (conn-dispatch-take--action-opoint action) nil))
@@ -4332,94 +4229,43 @@ it."))
 (defun conn-dispatch-take ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (oclosure-lambda (conn-dispatch-take
-                    (action-description "Take From")
-                    (action-opoint (copy-marker (point) t))
-                    (action-window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win)))))
-                    (action-reference
-                     "Kill the thing selected by dispatch and yank it at point."))
-      ()
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
-      (conn-dispatch-change-group (current-buffer) (window-buffer window))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (pcase (conn-bounds-of thing arg)
-            ((and bounds (conn-bounds `(,beg . ,end) transform))
-             (kill-region beg end)
-             (when conn-kill-reformat-function
-               (funcall conn-kill-reformat-function bounds)))
-            (_ (user-error "Cannot find thing at point")))))
-      (with-current-buffer (marker-buffer action-opoint)
-        (yank)))))
-
-(cl-defmethod conn-action-cancel ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--action-opoint action) nil))
-
-(oclosure-define (conn-dispatch-take-replace
-                  (:parent conn-change-group-action)
-                  ( :copier
-                    conn-dispatch-take-replace-copy
-                    (action-opoint)))
-  (action-opoint :type marker))
-
-(cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
-  (when-let* ((mk (conn-dispatch-take-replace--action-opoint action)))
-    (thread-first mk marker-buffer buffer-live-p not)))
-
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
-  (set-marker (conn-dispatch-take-replace--action-opoint action) nil))
-
-(cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
-  (conn-<
-    (conn-dispatch-take-replace--action-opoint action)
-    (copy-marker t)
-    (:> (conn-dispatch-take-replace-copy action))))
-
-(defun conn-dispatch-take-replace ()
-  (declare (conn-dispatch-action)
-           (important-return-value t))
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Replace Thing")
-      ((`(,rthing ,rarg) (conn-thing-argument-dwim))
-       (rtransform (conn-transform-argument)))
-    (let (cg)
-      (pcase (conn-bounds-of rthing rarg)
-        ((conn-bounds `(,rbeg . ,rend) rtransform)
-         (setq cg (conn--action-buffer-change-group))
-         (delete-region rbeg rend))
-        (_ (user-error "No thing found at point")))
-      (oclosure-lambda (conn-dispatch-take-replace
-                        (action-opoint (copy-marker (point) t))
-                        (action-change-group cg)
-                        (action-description "Take From and Replace")
-                        (action-window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win)))))
-                        (action-reference
-                         "Kill the thing selected by dispatch and yank it at point."))
-          ()
-        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                      (conn-select-target)))
-          (conn-dispatch-change-group (current-buffer) (window-buffer window))
-          (with-selected-window window
-            (save-excursion
-              (goto-char pt)
-              (pcase (conn-bounds-of thing arg)
-                ((and bounds (conn-bounds `(,beg . ,end) transform))
-                 (kill-region beg end)
-                 (when conn-kill-reformat-function
-                   (funcall conn-kill-reformat-function bounds)))
-                (_ (user-error "Cannot find thing at point")))))
-          (with-current-buffer (marker-buffer action-opoint)
-            (yank)))))))
+  (let ((init nil))
+    (oclosure-lambda (conn-dispatch-take
+                      (separator (conn-separator-argument))
+                      (action-opoint (copy-marker (point) t))
+                      (action-change-group (conn-dispatch-replace-argument))
+                      (action-description "Take From")
+                      (action-window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win)))))
+                      (action-reference
+                       "Kill the thing selected by dispatch and yank it at point."))
+        ()
+      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                    (conn-select-target))
+                   (str nil))
+        (conn-dispatch-change-group (current-buffer) (window-buffer window))
+        (with-selected-window window
+          (save-excursion
+            (goto-char pt)
+            (pcase (conn-bounds-of thing arg)
+              ((and bounds (conn-bounds `(,beg . ,end) transform))
+               (setq str (filter-buffer-substring beg end 'delete))
+               (kill-region beg end)
+               (when conn-kill-reformat-function
+                 (funcall conn-kill-reformat-function bounds)))
+              (_ (user-error "Cannot find thing at point")))))
+        (with-current-buffer (marker-buffer action-opoint)
+          (when separator
+            (cond ((or (null action-change-group) init)
+                   (insert (conn-kill-separator-for-strings str separator)))
+                  ((and action-change-group (null init))
+                   (setq init t)
+                   (conn-dispatch-undo-case
+                     (:undo (setq init nil))))))
+          (insert-for-yank str))))))
 
 (defun conn-dispatch-jump ()
   (declare (conn-dispatch-action)

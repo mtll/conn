@@ -450,19 +450,13 @@
         :default-action (:method (_self) (conn-dispatch-highlight-symbol)))
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
-  "W" 'conn-dispatch-copy-to-replace
-  "r" 'conn-dispatch-copy-from-replace
-  "F" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "f" 'conn-dispatch-copy-from
   "x" 'conn-dispatch-take
-  "X" 'conn-dispatch-take-replace
   "d" 'conn-dispatch-send
-  "D" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-load-replace
   "b" 'conn-dispatch-repeat-command
   "=" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
@@ -782,6 +776,10 @@
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-butlast
   "G" 'conn-bounds-last)
+
+(define-keymap
+  :keymap conn-dispatch-replace-argument-map
+  "r" 'dispatch-replace)
 
 ;;;; Things
 

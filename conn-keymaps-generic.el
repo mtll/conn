@@ -424,18 +424,13 @@
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "'" 'conn-dispatch-kapply
   "w" 'conn-dispatch-copy-to
-  "r" 'conn-dispatch-copy-to-replace
-  "D" 'conn-dispatch-copy-from-replace
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "d" 'conn-dispatch-copy-from
   "x" 'conn-dispatch-take
-  "X" 'conn-dispatch-take-replace
   "h" 'conn-dispatch-send
-  "H" 'conn-dispatch-send-replace
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
-  ">" 'conn-dispatch-register-load-replace
   "l" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch
