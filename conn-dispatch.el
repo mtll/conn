@@ -1674,14 +1674,14 @@ Target overlays may override this default by setting the
        (setf (gethash window conn--dispatch-window-lines-cache))
        (drop 3)))))
 
-(defun conn-dispatch-display-line (&optional point)
+(defun conn-dispatch-get-display-line (&optional point)
   (cl-loop for line from 0
            for (beg . end) in (conn--dispatch-window-lines)
            when (<= beg (or point (point)) end)
            return line))
 
-(defun conn-dispatch-recenter-on-line (line)
-  (conn-target-finder-recenter-on-line
+(defun conn-dispatch-recenter-on-line (&optional line)
+  (conn-target-finder-recenter
    conn-dispatch-target-finder
    line))
 
@@ -1955,7 +1955,7 @@ depths will be sorted before greater depths.
 (defun conn-dispatch-goto-char (position &optional nopush)
   (goto-char position)
   (conn-dispatch-recenter-on-line
-   (conn-dispatch-display-line))
+   (conn-dispatch-get-display-line))
   (when-let* ((mk (and (not nopush)
                        (gethash (current-buffer)
                                 conn--current-dispatch-buffers))))
@@ -2080,10 +2080,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
-        (cl-loop for i from 0
-                 for (beg . end) in (conn--dispatch-window-lines)
-                 when (<= beg (point) end)
-                 return (recenter i))))))
+        (conn-target-finder-recenter conn-dispatch-target-finder)))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -2672,8 +2669,8 @@ updated.")
                                                          'conn-target-overlay
                                                          (selected-window))))))))
 
-(cl-defgeneric conn-target-finder-recenter-on-line (target-finder line)
-  (:method (_ line) (recenter line)))
+(cl-defgeneric conn-target-finder-recenter (target-finder &optional line)
+  (:method (_ _) nil))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
@@ -3148,6 +3145,7 @@ contain targets."
     (or (car recenter-positions)))
   (unless executing-kbd-macro
     (pulse-momentary-highlight-one-line))
+  (conn-dispatch-recenter-on-line)
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-focus-mixin))
@@ -3165,10 +3163,6 @@ contain targets."
   (pcase-dolist (`(,win . ,targets) conn-targets)
     (pcase-let* ((`(,tick . ,old-hidden)
                   (alist-get win (oref state hidden)))
-                 (recenter-pos
-                  (or (alist-get win (oref state cursor-location))
-                      (oref state cursor-default-location)
-                      (1- (count-screen-lines (window-start) (point) t win))))
                  (context-lines (oref state context-lines))
                  (regions (list (cons (pos-bol) (pos-bol 2))))
                  (fringe-indicator (oref state fringe-indicator)))
@@ -3216,29 +3210,28 @@ contain targets."
                        (overlay-put ov 'window win)
                        (overlay-put ov 'invisible 'conn-dispatch-invisible)))
             (setf (alist-get win (oref state hidden))
-                  (cons (buffer-chars-modified-tick) hidden)))
-          (let ((this-scroll-margin
-                 (min (max 0 scroll-margin)
-                      (truncate (/ (window-body-height) 4.0)))))
-            (pcase recenter-pos
-              ('middle (recenter nil))
-              ('top (recenter this-scroll-margin))
-              ('bottom (recenter (- -1 this-scroll-margin)))
-              (`(,loc . ,size)
-               (if (= size (window-pixel-height))
-                   (recenter loc)
-                 (setf (alist-get win (oref state cursor-location))
-                       (cons (1- (count-screen-lines (window-start) (point) t win))
-                             (window-pixel-height)))))
-              ((and loc (pred integerp))
-               (recenter loc))))))))
+                  (cons (buffer-chars-modified-tick) hidden)))))))
   (redisplay))
 
-(cl-defmethod conn-target-finder-recenter-on-line ((tf conn-dispatch-focus-mixin)
-                                                   line)
-  (when line
-    (setf (oref tf cursor-location) (cons line (window-pixel-height))))
-  (cl-call-next-method))
+(cl-defmethod conn-target-finder-recenter ((tf conn-dispatch-focus-mixin)
+                                           &optional line)
+  (let ((this-scroll-margin
+         (min (max 0 scroll-margin)
+              (truncate (/ (window-body-height) 4.0)))))
+    (pcase (if line
+               (setf (oref tf cursor-location)
+                     (cons line (window-pixel-height)))
+             (or (alist-get (selected-window) (oref tf cursor-location))
+                 (oref tf cursor-default-location)))
+      ('middle (recenter nil))
+      ('top (recenter this-scroll-margin))
+      ('bottom (recenter (- -1 this-scroll-margin)))
+      (`(,loc . ,size)
+       (if (= size (window-pixel-height))
+           (recenter loc)
+         (setf (alist-get (selected-window) (oref tf cursor-location))
+               (cons (1- (count-screen-lines (window-start) (point) t))
+                     (window-pixel-height))))))))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
@@ -4455,9 +4448,9 @@ it."))
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
         (pcase-let* ((line (cond ((= pt1 (point))
-                                  (conn-dispatch-display-line pt2))
+                                  (conn-dispatch-get-display-line pt2))
                                  ((= pt2 (point))
-                                  (conn-dispatch-display-line pt1))))
+                                  (conn-dispatch-get-display-line pt1))))
                      ((and bounds1
                            (conn-bounds `(,beg1 . ,end1) transform1))
                       (save-excursion
