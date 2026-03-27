@@ -494,6 +494,10 @@ themselves once the selection process has concluded."
 (defvar conn-dispatch-other-end nil)
 (defvar conn-dispatch-no-other-end nil)
 
+(defun conn-dispatch-other-end-p ()
+  (when conn-dispatch-other-end
+    (funcall conn-dispatch-other-end)))
+
 (defvar conn-dispatch-quit-flag nil)
 
 (defvar conn-dispatch-read-char-map
@@ -986,11 +990,11 @@ nearest to point.  Can only be used during `conn-dispatch'."
       'conn-dispatch-bounds-anchored
       bounds
       (if (< beg origin)
-          (if (funcall conn-dispatch-other-end)
+          (if (conn-dispatch-other-end-p)
               (cons beg origin)
             (cons (min origin end)
                   (max origin end)))
-        (if (funcall conn-dispatch-other-end)
+        (if (conn-dispatch-other-end-p)
             (cons origin end)
           (cons origin beg)))))
     (_ bounds)))
@@ -1008,7 +1012,7 @@ thing.  Can only be used during `conn-dispatch'.")))
 (define-inline conn-dispatch-bounds (bounds &optional transforms)
   (inline-quote
    (pcase (conn-transform-bounds ,bounds ,transforms)
-     ((and (guard (funcall conn-dispatch-other-end))
+     ((and (guard (conn-dispatch-other-end-p))
            (conn-bounds `(,',beg . ,',end)))
       (cons end beg))
      ((conn-bounds bd)
@@ -1670,13 +1674,16 @@ Target overlays may override this default by setting the
        (setf (gethash window conn--dispatch-window-lines-cache))
        (drop 3)))))
 
-(defun conn-dispatch-recenter-on-line ()
+(defun conn-dispatch-display-line (&optional point)
   (cl-loop for line from 0
            for (beg . end) in (conn--dispatch-window-lines)
-           when (<= beg (point) end)
-           return (conn-target-finder-recenter-on-line
-                   conn-dispatch-target-finder
-                   line)))
+           when (<= beg (or point (point)) end)
+           return line))
+
+(defun conn-dispatch-recenter-on-line (line)
+  (conn-target-finder-recenter-on-line
+   conn-dispatch-target-finder
+   line))
 
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
@@ -1947,7 +1954,8 @@ depths will be sorted before greater depths.
 
 (defun conn-dispatch-goto-char (position &optional nopush)
   (goto-char position)
-  (conn-dispatch-recenter-on-line)
+  (conn-dispatch-recenter-on-line
+   (conn-dispatch-display-line))
   (when-let* ((mk (and (not nopush)
                        (gethash (current-buffer)
                                 conn--current-dispatch-buffers))))
@@ -3964,9 +3972,7 @@ after the region selected by dispatch."))
               (pcase (conn-bounds-of-dispatch thing arg pt)
                 ((conn-dispatch-bounds `(,beg . ,end) transform)
                  (if (and replace (<= beg (point) end))
-                     (progn
-                       (goto-char beg)
-                       (conn-dispatch-recenter-on-line))
+                     (conn-dispatch-goto-char beg 'nopush)
                    (goto-char beg))
                  (cond (replace
                         (delete-region beg end))
@@ -4012,9 +4018,7 @@ region selected by dispatch."))
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,end) transform)
              (if (and replace (<= beg (point) end))
-                 (progn
-                   (goto-char beg)
-                   (conn-dispatch-recenter-on-line))
+                 (conn-dispatch-goto-char beg 'nopush)
                (goto-char beg))
              (cond (replace
                     (delete-region beg end))
@@ -4061,9 +4065,7 @@ the string after the region selected by dispatch."))
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-dispatch-bounds `(,beg . ,end) transform)
                (if (and replace (<= beg (point) end))
-                   (progn
-                     (goto-char beg)
-                     (conn-dispatch-recenter-on-line))
+                   (conn-dispatch-goto-char beg 'nopush)
                  (goto-char beg))
                (cond (replace
                       (delete-region beg end))
@@ -4126,9 +4128,7 @@ it."))
             (pcase (conn-bounds-of-dispatch thing arg pt)
               ((conn-bounds `(,beg . ,end) transform)
                (if (and replace (<= beg (point) end))
-                   (progn
-                     (goto-char beg)
-                     (conn-dispatch-recenter-on-line))
+                   (conn-dispatch-goto-char beg 'nopush)
                  (goto-char beg))
                (cond (replace
                       (delete-region beg end))
@@ -4326,7 +4326,7 @@ it."))
                   (conn-select-target)))
       (conn-dispatch-select-window window)
       (conn-dispatch-change-group)
-      (if (or (funcall conn-dispatch-other-end)
+      (if (or (conn-dispatch-other-end-p)
               transform)
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-dispatch-bounds `(,beg . ,_end) transform)
@@ -4454,26 +4454,31 @@ it."))
                                        buffer2 pt2 thing2 arg2 transform2)
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
-        (save-excursion
-          (pcase-let* (((and bounds1
-                             (conn-bounds `(,beg1 . ,end1) transform1))
-                        (progn
-                          (goto-char pt1)
-                          (or (conn-bounds-of thing1 arg1)
-                              (user-error "Cannot find thing at point"))))
-                       ((conn-bounds `(,beg2 . ,end2) transform2)
-                        (progn
-                          (goto-char pt2)
-                          (or (conn-bounds-of (or thing2 bounds1) arg2)
-                              (user-error "Cannot find thing at point")))))
-            (if (and (or (<= beg1 end1 beg2 end2)
-                         (<= beg2 end2 beg1 end1))
-                     (/= beg1 end1)
-                     (/= beg2 end2)
-                     (<= (point-min) (min beg2 end2 beg1 end1))
-                     (> (point-max) (max beg2 end2 beg1 end1)))
-                (transpose-regions beg1 end1 beg2 end2)
-              (user-error "Invalid regions")))))
+        (pcase-let* ((line (cond ((= pt1 (point))
+                                  (conn-dispatch-display-line pt2))
+                                 ((= pt2 (point))
+                                  (conn-dispatch-display-line pt1))))
+                     ((and bounds1
+                           (conn-bounds `(,beg1 . ,end1) transform1))
+                      (save-excursion
+                        (goto-char pt1)
+                        (or (conn-bounds-of thing1 arg1)
+                            (user-error "Cannot find thing at point"))))
+                     ((conn-bounds `(,beg2 . ,end2) transform2)
+                      (save-excursion
+                        (goto-char pt2)
+                        (or (conn-bounds-of (or thing2 bounds1) arg2)
+                            (user-error "Cannot find thing at point")))))
+          (if (and (or (<= beg1 end1 beg2 end2)
+                       (<= beg2 end2 beg1 end1))
+                   (/= beg1 end1)
+                   (/= beg2 end2)
+                   (<= (point-min) (min beg2 end2 beg1 end1))
+                   (> (point-max) (max beg2 end2 beg1 end1)))
+              (transpose-regions beg1 end1 beg2 end2)
+            (user-error "Invalid regions"))
+          (when line
+            (conn-dispatch-recenter-on-line line))))
     (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
                                      (prepare-change-group buffer2))
                               (cancel-change-group cg))
@@ -4517,7 +4522,7 @@ it."))
                                      conn-target-window-predicate))
                   (other-end (if (memq t conn-dispatch-no-other-end)
                                  :no-other-end
-                               (funcall conn-dispatch-other-end)))
+                               (conn-dispatch-other-end-p)))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup-function
                    (let ((fns (conn-target-finder-save-state
@@ -4770,7 +4775,7 @@ it."))
          conn-dispatch-target-finder))
       ( :message 10 (keymap)
         (unless conn-dispatch-no-other-end
-          (when-let* ((_ (funcall conn-dispatch-other-end))
+          (when-let* ((_ (conn-dispatch-other-end-p))
                       (binding
                        (where-is-internal 'other-end keymap t)))
             (concat

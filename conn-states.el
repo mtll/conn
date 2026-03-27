@@ -1444,12 +1444,6 @@ command was a prefix command.")
                     (min (point) conn-insertion-recording-other-end)
                     (max (point) conn-insertion-recording-other-end)))))
 
-(defun conn-record-exhange ()
-  (interactive)
-  (goto-char
-   (prog1 conn-insertion-recording-other-end
-     (setf conn-insertion-recording-other-end (point)))))
-
 (defun conn-record-insertion (&optional state kbd-macro-query)
   (require 'diff-mode)
   (when conn-insertion-recording-mode

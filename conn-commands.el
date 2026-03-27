@@ -743,9 +743,6 @@ for the meaning of prefix ARG."
 
 ;;;;; Misc Commands
 
-(conn-define-state conn-record-set-region-state (conn-read-thing-state)
-  :lighter "SETREC")
-
 (defun conn-outline-insert-heading ()
   (interactive)
   (conn-with-recursive-stack 'conn-emacs-state
@@ -1374,8 +1371,10 @@ selected by dispatch with it."))
                                `(,@transform
                                  ,@(when check-bounds
                                      (list 'conn-check-bounds))))
-                  (unless stay
-                    (conn-dispatch-goto-char beg))
+                  (cond ((not stay)
+                         (conn-dispatch-goto-char beg))
+                        ((<= beg (point) end)
+                         (conn-dispatch-goto-char beg 'nopush)))
                   (if swap
                       (let ((newstr (filter-buffer-substring beg end)))
                         (delete-region beg end)
@@ -1426,7 +1425,7 @@ selected by dispatch with it."))
            ((conn-bounds `(,b . ,e) `(,@transform
                                       ,@(when check-bounds
                                           (list 'conn-check-bounds))))
-            (conn-dispatch-goto-char b)
+            (conn-dispatch-goto-char b 'nopush)
             (setq beg b
                   end e))
            (_ (user-error "Cannot find thing at point")))))
@@ -1971,6 +1970,34 @@ For more information about how the replacement is carried out see
                    from
                    to))
 
+(conn-define-state conn-record-set-region-state (conn-read-thing-state)
+  :lighter "SETREC")
+
+(defun conn-record-set-region ()
+  (interactive)
+  (unless conn-insertion-recording-mode
+    (user-error "Not replacing"))
+  (conn-read-args (conn-record-set-region-state
+                   :prompt "Thing")
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument)))
+    (pcase (conn-bounds-of thing arg)
+      ((conn-bounds `(,beg . ,end) transform)
+       (goto-char
+        (if (> (point) conn-insertion-recording-other-end) end beg))
+       (setq conn-insertion-recording-other-end
+             (if (> (point) conn-insertion-recording-other-end) beg end))
+       (pulse-momentary-highlight-region beg end 'diff-added)
+       (exit-recursive-edit)))))
+
+(defun conn-record-exhange ()
+  (interactive)
+  (unless conn-insertion-recording-mode
+    (user-error "Not replacing"))
+  (goto-char
+   (prog1 conn-insertion-recording-other-end
+     (setf conn-insertion-recording-other-end (point)))))
+
 ;;;;; Isearch
 
 (defvar conn-isearch-special-ref
@@ -2472,8 +2499,8 @@ Exiting the recursive edit will resume the isearch."
          (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
                        (conn-select-target)))
            (conn--dispatch-transpose-subr
-            (window-buffer window2) pt2 thing2 arg2 nil
-            buf1 pt1 thing1 arg2 nil)))
+            buf1 pt1 thing1 arg2 nil
+            (window-buffer window2) pt2 thing2 arg2 nil)))
        thing arg nil
        :other-end :no-other-end
        :restrict-windows restrict-windows))))
@@ -3231,9 +3258,11 @@ hook, which see."
                                                ,@transform
                                                ,@(when check-bounds
                                                    (list 'conn-check-bounds)))))
-                  (unless stay
-                    (push-mark (conn-bounds-get bounds :origin))
-                    (conn-dispatch-goto-char beg))
+                  (cond ((not stay)
+                         (push-mark (conn-bounds-get bounds :origin))
+                         (conn-dispatch-goto-char beg))
+                        ((<= beg (point) end)
+                         (conn-dispatch-goto-char beg 'nopush)))
                   (unless delete
                     (push (cons append (filter-buffer-substring beg end))
                           strings))
@@ -3315,7 +3344,7 @@ hook, which see."
                                        `(,@transform
                                          ,@(when check-bounds
                                              (list 'conn-check-bounds)))))
-            (conn-dispatch-goto-char beg)
+            (conn-dispatch-goto-char beg 'nopush)
             (if delete
                 (delete-region beg end)
               (conn--kill-region beg end t append register separator))

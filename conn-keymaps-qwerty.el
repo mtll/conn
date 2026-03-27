@@ -397,7 +397,13 @@
         ( :method (_) "expansion-at")
         :bounds-op
         ( :method (_self arg)
-          (conn-bounds-of 'conn-expand arg))
+          (conn-bounds-of
+           (conn-anonymous-thing
+             '(expansion)
+             :pretty-print ( :method (_) "expansion")
+             :target-finder ( :method (_self _arg)
+                              (conn-expansion-targets)))
+           arg))
         :default-action
         ( :method (_self)
           (oclosure-lambda (conn-action
@@ -498,7 +504,8 @@
 
 (define-keymap
   :keymap conn-insertion-recording-mode-map
-  "C-." 'conn-record-exhange)
+  "C-." 'conn-record-exhange
+  "C-M-." 'conn-record-set-region)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-state)
