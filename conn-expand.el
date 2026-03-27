@@ -190,7 +190,19 @@ Expansions and contractions are provided by functions in
       (pcase-dolist ((and cons `(,beg . ,end)) expansions)
         (push (conn-make-bounds 'region nil cons)
               (alist-get beg bounds))
-        (conn-make-target-overlay beg 0 :thing thing)))))
+        (conn-make-target-overlay beg 0 :thing thing))))
+  ( :update-method (state)
+    (conn-dispatch-call-update-handlers state)
+    (unless (cl-loop for tar in (alist-get (selected-window) conn-targets)
+                     thereis (or (< (window-start)
+                                    (overlay-start tar)
+                                    (pos-bol))
+                                 (> (window-end)
+                                    (overlay-start tar)
+                                    (pos-eol))))
+      (conn-setup-target-finder
+       (conn-expansion-focus-targets))
+      (conn-dispatch-handle-and-redisplay))))
 
 (conn-define-target-finder conn-expansion-focus-targets
     (conn-expansion-targets
@@ -200,7 +212,9 @@ Expansions and contractions are provided by functions in
       :initform 1
       :initarg :context-lines)
      (window-predicate
-      :initform (lambda (win) (eq win (selected-window))))))
+      :initform (lambda (win) (eq win (selected-window)))))
+  ( :update-method (state)
+    (conn-dispatch-call-update-handlers state)))
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-event-handlers
@@ -221,6 +235,7 @@ Expansions and contractions are provided by functions in
          (propertize "focus"
                      'face (when (cl-typep target-finder 'conn-dispatch-focus-mixin)
                              'eldoc-highlight-function-argument)))))
-    (cl-call-next-method)))
+    (let ((conn--dispatch-action-always-prompt t))
+      (cl-call-next-method))))
 
 (provide 'conn-expand)

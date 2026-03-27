@@ -641,6 +641,13 @@ themselves once the selection process has concluded."
                              (not (conn-argument-value replace)))
                     separator)))))
 
+(cl-defstruct (conn-dispatch-point-argument
+               (:include conn-argument)
+               (:constructor conn-dispatch-point-argument ())))
+
+(cl-defmethod conn-argument-extract-value ((_arg conn-dispatch-point-argument))
+  (copy-marker (point) t))
+
 ;;;;;; Dispatch Quick Ref
 
 (defvar conn-dispatch-thing-reference-list
@@ -1052,7 +1059,7 @@ with `conn-dispatch-thing-ignored-modes'."
   "Alist of (WINDOW . TARGETS).")
 
 (defvar conn-target-count nil
-  "Alist of (WINODW . TARGET-COUNT).")
+  "Alist of (WINDOW . TARGET-COUNT).")
 
 (defvar conn-target-sort-function 'conn-target-sort-adjacent-then-nearest
   "Sort function for targets in each window.
@@ -3728,6 +3735,7 @@ contain targets."
            (rtransform (conn-transform-argument)))
         (pcase (conn-bounds-of rthing rarg)
           ((conn-bounds `(,beg . ,end) rtransform)
+           (goto-char beg)
            (delete-region beg end))
           (_ (error "No region to replace")))))
     (funcall break)))
@@ -4041,7 +4049,7 @@ the string after the region selected by dispatch."))
            (important-return-value t))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send
-                      (action-description "Send and Replace")
+                      (action-description "Send")
                       (action-change-group cg)
                       (replace-and-separator (conn-dispatch-to-how-argument))
                       (str
@@ -4084,7 +4092,6 @@ it."))
                       (delete-region beg end))
                      ((and separator (< end beg))
                       (insert (conn-kill-separator-for-strings str separator))))
-               (delete-region beg end)
                (insert-for-yank str)
                (conn-dispatch-action-pulse
                 (- (point) (length str)) (point))
@@ -4142,14 +4149,14 @@ it."))
                   ( :copier
                     conn-dispatch-copy-from-copy
                     (action-opoint)))
-  (action-opoint :type marker)
+  (action-opoint :mutable t)
   (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
   (when-let* ((mk (conn-dispatch-copy-from--action-opoint action)))
     (thread-first mk marker-buffer buffer-live-p not)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-copy-from))
+(cl-defmethod conn-action-cleanup ((action conn-dispatch-copy-from))
   (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
@@ -4167,7 +4174,7 @@ it."))
                       (separator (conn-separator-argument))
                       (action-change-group (conn-dispatch-replace-argument))
                       (action-description "Copy From")
-                      (action-opoint (copy-marker (point) t))
+                      (action-opoint (conn-dispatch-point-argument))
                       (action-reference
                        "Replace current region with text in region selected by dispatch."))
         ()
@@ -4210,14 +4217,14 @@ it."))
                   ( :copier
                     conn-dispatch-take-copy
                     (action-opoint)))
-  (action-opoint :type marker)
+  (action-opoint :mutable t)
   (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
   (when-let* ((mk (conn-dispatch-take--action-opoint action)))
     (thread-first mk marker-buffer buffer-live-p not)))
 
-(cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
+(cl-defmethod conn-action-cleanup ((action conn-dispatch-take))
   (set-marker (conn-dispatch-take--action-opoint action) nil))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
@@ -4232,7 +4239,7 @@ it."))
   (let ((init nil))
     (oclosure-lambda (conn-dispatch-take
                       (separator (conn-separator-argument))
-                      (action-opoint (copy-marker (point) t))
+                      (action-opoint (conn-dispatch-point-argument))
                       (action-change-group (conn-dispatch-replace-argument))
                       (action-description "Take From")
                       (action-window-predicate
@@ -4566,6 +4573,9 @@ it."))
               (conn-ring-head conn-dispatch-ring)))))
 
 (defun conn-dispatch-setup-previous (prev-dispatch &rest override-keys)
+  (when (conn-action-stale-p
+         (conn-previous-dispatch-action prev-dispatch))
+    (error "Action stale"))
   (pcase-let (((cl-struct conn-previous-dispatch
                           (thing-state
                            `(,thing ,arg ,thing-transform))

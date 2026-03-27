@@ -155,7 +155,6 @@
   "O" 'conn-push-jump-ring
   "o" 'conn-pop-mark-ring
   "i" 'conn-unpop-mark-ring
-  ;; "n" 'pop-global-mark
   "m" 'imenu
   "r" 'xref-find-references
   "d" 'xref-find-definitions
