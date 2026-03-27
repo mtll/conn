@@ -1154,7 +1154,8 @@ Currently selected window remains selected afterwards."
      :pretty-print ( :method (_) "expansion")
      :target-finder (:method (_self _arg) (conn-expansion-targets)))
    arg nil
-   :other-end :no-other-end))
+   :other-end :no-other-end)
+  (conn-push-state 'conn-mark-state))
 
 (defun conn-mark-thing (thing arg transform)
   "Mark the region defined by THING, ARG, and TRANSFORM"
