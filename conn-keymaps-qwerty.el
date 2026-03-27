@@ -242,7 +242,10 @@
   "<conn-thing-map> (" 'list
   "<conn-thing-map> )" 'forward-list
   "<conn-inner-thing-map> (" 'inner-list
-  "e" 'conn-expand
+  "e" (conn-anonymous-thing
+        '(expansion)
+        :pretty-print ( :method (_) "expansion")
+        :target-finder (:method (_self _arg) (conn-expansion-targets)))
   "k" 'forward-line
   "i" 'conn-backward-line
   "L" 'conn-forward-inner-line
