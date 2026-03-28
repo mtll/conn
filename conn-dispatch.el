@@ -615,6 +615,8 @@ themselves once the selection process has concluded."
          (if (equal s "") 'default s))))
    :value initial-value))
 
+(defvar-keymap conn-dispatch-replace-argument-map)
+
 (cl-defstruct (conn-dispatch-to-how-argument
                (:include conn-composite-argument)
                ( :constructor conn--dispatch-to-how-argument
@@ -2670,7 +2672,7 @@ updated.")
                                                          (selected-window))))))))
 
 (cl-defgeneric conn-target-finder-recenter (target-finder &optional line)
-  (:method (_ _) nil))
+  (:method (_ &optional line) (recenter line)))
 
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
@@ -3211,6 +3213,7 @@ contain targets."
                        (overlay-put ov 'invisible 'conn-dispatch-invisible)))
             (setf (alist-get win (oref state hidden))
                   (cons (buffer-chars-modified-tick) hidden)))))))
+  (conn-target-finder-recenter state)
   (redisplay))
 
 (cl-defmethod conn-target-finder-recenter ((tf conn-dispatch-focus-mixin)
@@ -3218,20 +3221,29 @@ contain targets."
   (let ((this-scroll-margin
          (min (max 0 scroll-margin)
               (truncate (/ (window-body-height) 4.0)))))
-    (pcase (if line
-               (setf (oref tf cursor-location)
-                     (cons line (window-pixel-height)))
-             (or (alist-get (selected-window) (oref tf cursor-location))
-                 (oref tf cursor-default-location)))
+    (pcase (or (if line
+                   (setf (alist-get (selected-window)
+                                    (oref tf cursor-location))
+                         line)
+                 (alist-get (selected-window) (oref tf cursor-location)))
+               (oref tf cursor-default-location))
       ('middle (recenter nil))
       ('top (recenter this-scroll-margin))
       ('bottom (recenter (- -1 this-scroll-margin)))
-      (`(,loc . ,size)
-       (if (= size (window-pixel-height))
+      ((and loc (pred integerp))
+       (if (>= (window-screen-lines) loc)
            (recenter loc)
          (setf (alist-get (selected-window) (oref tf cursor-location))
-               (cons (1- (count-screen-lines (window-start) (point) t))
-                     (window-pixel-height))))))))
+               (1- (count-screen-lines (window-start) (point) t))))))))
+
+(cl-defmethod conn-handle-dispatch-select-command :before (cmd
+                                                           &context (conn-dispatch-target-finder
+                                                                     conn-dispatch-focus-mixin))
+  (pcase cmd
+    ((or 'mwheel-scroll 'scroll-up-command 'scroll-down-command)
+     (setf (alist-get (selected-window)
+                      (oref conn-dispatch-target-finder cursor-location))
+           nil))))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
@@ -3740,8 +3752,6 @@ contain targets."
        (vertical-motion 1)))))
 
 ;;;;; Dispatch Actions
-
-(defvar-keymap conn-dispatch-replace-argument-map)
 
 (cl-defstruct (conn-dispatch-replace-argument
                (:include conn-argument)
