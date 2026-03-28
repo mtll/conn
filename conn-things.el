@@ -82,8 +82,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
       (cond ((< beg (point))
              (let ((obeg (save-excursion
                            (goto-char beg)
-                           (forward-thing thing 1)
-                           (forward-thing thing -1)
+                           (ignore-errors (forward-thing thing 1))
+                           (ignore-errors (forward-thing thing -1))
                            (point))))
                (save-excursion
                  (while (< obeg (point))
@@ -92,8 +92,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
             ((> beg (point))
              (let ((obeg (save-excursion
                            (goto-char beg)
-                           (forward-thing thing -1)
-                           (forward-thing thing 1)
+                           (ignore-errors (forward-thing thing -1))
+                           (ignore-errors (forward-thing thing 1))
                            (point))))
                (save-excursion
                  (while (< (point) obeg)
