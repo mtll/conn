@@ -200,10 +200,8 @@ Expansions and contractions are provided by functions in
                                  (> (window-end)
                                     (overlay-start tar)
                                     (pos-eol))))
-      (let ((line (conn-dispatch-get-display-line)))
-        (conn-setup-target-finder
-         (conn-expansion-focus-targets))
-        (conn-dispatch-recenter-on-line line))
+      (conn-target-finder-setup
+       (conn-expansion-focus-targets))
       (conn-dispatch-handle-and-redisplay))))
 
 (conn-define-target-finder conn-expansion-focus-targets
@@ -223,12 +221,10 @@ Expansions and contractions are provided by functions in
     ( :keymap conn-dispatch-toggle-focus-map)
     ( :handler (cmd)
       (when (eq cmd 'toggle-focus)
-        (let ((line (conn-dispatch-get-display-line)))
-          (conn-setup-target-finder
-           (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
-               (conn-expansion-targets)
-             (conn-expansion-focus-targets)))
-          (conn-dispatch-recenter-on-line line))
+        (conn-target-finder-setup
+         (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
+             (conn-expansion-targets)
+           (conn-expansion-focus-targets)))
         (conn-dispatch-handle-and-redisplay)))
     ( :message 0 (keymap)
       (when-let* ((binding (where-is-internal 'toggle-focus keymap t)))

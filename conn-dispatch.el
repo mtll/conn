@@ -1257,7 +1257,7 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-eovl (pt window)
   (declare (important-return-value t))
-  (or (cl-loop for (beg . end) in (conn--dispatch-window-lines window)
+  (or (cl-loop for (beg _ . end) in (conn--dispatch-window-lines window)
                when (<= beg pt end) return end)
       (with-selected-window window
         (save-excursion
@@ -1648,44 +1648,31 @@ Target overlays may override this default by setting the
 (defun conn--dispatch-window-lines (&optional window)
   (declare (important-return-value t))
   (unless window (setq window (selected-window)))
-  (pcase (gethash window conn--dispatch-window-lines-cache)
-    ((and `(,height ,width ,tick . ,cache)
-          (guard (and (= height (window-pixel-height window))
-                      (= width (window-pixel-width window))
-                      (= tick (buffer-chars-modified-tick
-                               (window-buffer window))))))
-     cache)
-    (_
-     (thread-last
-       (let (lines prev)
-         (with-selected-window window
-           (save-excursion
-             (goto-char (window-start window))
-             (setq prev (point))
-             (while (and (<= prev (window-end window))
-                         (not (eobp)))
-               (vertical-motion (cons (window-width) 0))
-               (push (cons prev (point)) lines)
-               (unless (eobp)
-                 (forward-char)
-                 (setq prev (point)))))
-           `(,(window-pixel-height)
-             ,(window-pixel-width)
-             ,(buffer-chars-modified-tick)
-             . ,(nreverse lines))))
-       (setf (gethash window conn--dispatch-window-lines-cache))
-       (drop 3)))))
+  (with-memoization (gethash window conn--dispatch-window-lines-cache)
+    (let (lines prev)
+      (with-selected-window window
+        (save-excursion
+          (goto-char (window-start window))
+          (setq prev (point))
+          (while (and (<= prev (window-end window))
+                      (not (eobp)))
+            (let ((eovl (save-excursion
+                          (vertical-motion (cons (window-width) 0))
+                          (point))))
+              (vertical-motion 1)
+              (if (= (point) eovl)
+                  (push (cons prev (cons (1- eovl) eovl))
+                        lines)
+                (push (cons prev (cons eovl eovl))
+                      lines))
+              (setq prev (point))))))
+      (nreverse lines))))
 
 (defun conn-dispatch-get-display-line (&optional point)
   (cl-loop for line from 0
-           for (beg . end) in (conn--dispatch-window-lines)
+           for (beg end . _) in (conn--dispatch-window-lines)
            when (<= beg (or point (point)) end)
            return line))
-
-(defun conn-dispatch-recenter-on-line (&optional line)
-  (conn-target-finder-recenter
-   conn-dispatch-target-finder
-   line))
 
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
@@ -1848,6 +1835,8 @@ Target overlays may override this default by setting the
                          (setq conn--previous-labels-cleanup nil)
                          (remove-hook 'pre-redisplay-functions fn))))
             (setq conn--previous-labels-cleanup fn))
+          ;; ensure the cache gets populated
+          (ignore (conn--dispatch-window-lines))
           (funcall body labels))
       (clrhash conn--pixelwise-window-cache)
       (when conn--previous-labels-cleanup
@@ -1956,8 +1945,7 @@ depths will be sorted before greater depths.
 
 (defun conn-dispatch-goto-char (position &optional nopush)
   (goto-char position)
-  (conn-dispatch-recenter-on-line
-   (conn-dispatch-get-display-line))
+  (recenter (conn-dispatch-get-display-line))
   (when-let* ((mk (and (not nopush)
                        (gethash (current-buffer)
                                 conn--current-dispatch-buffers))))
@@ -2059,7 +2047,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
       (progn
         (dolist (win (conn--get-target-windows))
           (with-selected-window win
-            (add-to-invisibility-spec '(conn-dispatch-invisible . t))))
+            (add-to-invisibility-spec 'conn-dispatch-invisible)))
         (cl-loop
          (catch 'dispatch-redisplay
            (pcase-let* ((emulation-mode-map-alists
@@ -2081,8 +2069,9 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
                     transform))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
-        (remove-from-invisibility-spec '(conn-dispatch-invisible . t))
-        (conn-target-finder-recenter conn-dispatch-target-finder)))))
+        (remove-from-invisibility-spec 'conn-dispatch-invisible)
+        (when-let* ((line (conn-dispatch-get-display-line)))
+          (recenter line))))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -2320,7 +2309,7 @@ the meaning of depth."
                                (funcall cont))))
       ((`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument)))
-    (conn-setup-target-finder
+    (conn-target-finder-setup
      (conn-get-target-finder thing arg))
     (setq conn--dispatch-current-thing (list thing arg transform))
     (conn-dispatch-handle-and-redisplay)))
@@ -2746,7 +2735,9 @@ updated.")
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
 
-(defun conn-setup-target-finder (tf)
+(cl-defgeneric conn-target-finder-setup (target-finder))
+
+(cl-defmethod conn-target-finder-setup (tf)
   (unless conn-dispatch-in-progress
     (error "No dispatch in progress"))
   (when conn-dispatch-target-finder
@@ -3107,7 +3098,6 @@ to the key binding for that target."
   ((hidden :initform nil)
    (context-lines :initform 0 :initarg :context-lines)
    (cursor-location :initform nil)
-   (cursor-default-location :initform nil)
    (separator-p :initarg :separator)
    (fringe-indicator
     :initform (propertize " " 'display (list 'left-fringe
@@ -3137,19 +3127,6 @@ contain targets."
       (overlay-put ov 'before-string nil)))
   (cl-call-next-method))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom))
-                                                   &context (conn-dispatch-target-finder
-                                                             conn-dispatch-focus-mixin))
-  (conn-<f (alist-get (selected-window)
-                      (oref conn-dispatch-target-finder cursor-location))
-    (memq recenter-positions)
-    (cadr)
-    (or (car recenter-positions)))
-  (unless executing-kbd-macro
-    (pulse-momentary-highlight-one-line))
-  (conn-dispatch-recenter-on-line)
-  (conn-dispatch-handle-and-redisplay))
-
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
     (mapc #'delete-overlay ovs))
@@ -3167,12 +3144,14 @@ contain targets."
                   (alist-get win (oref state hidden)))
                  (context-lines (oref state context-lines))
                  (regions (list (cons (pos-bol) (pos-bol 2))))
-                 (fringe-indicator (oref state fringe-indicator)))
+                 (fringe-indicator (oref state fringe-indicator))
+                 (line nil))
       (with-selected-window win
         (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
           (if (eql tick (buffer-chars-modified-tick (window-buffer win)))
               (dolist (ov old-hidden)
                 (overlay-put ov 'before-string fringe-indicator))
+            (setf line (1- (count-screen-lines (window-start) (point) t)))
             (mapc #'delete old-hidden)
             (save-excursion
               (dolist (tar targets)
@@ -3212,38 +3191,9 @@ contain targets."
                        (overlay-put ov 'window win)
                        (overlay-put ov 'invisible 'conn-dispatch-invisible)))
             (setf (alist-get win (oref state hidden))
-                  (cons (buffer-chars-modified-tick) hidden)))))))
-  (conn-target-finder-recenter state)
+                  (cons (buffer-chars-modified-tick) hidden))
+            (recenter line))))))
   (redisplay))
-
-(cl-defmethod conn-target-finder-recenter ((tf conn-dispatch-focus-mixin)
-                                           &optional line)
-  (let ((this-scroll-margin
-         (min (max 0 scroll-margin)
-              (truncate (/ (window-body-height) 4.0)))))
-    (pcase (or (if line
-                   (setf (alist-get (selected-window)
-                                    (oref tf cursor-location))
-                         line)
-                 (alist-get (selected-window) (oref tf cursor-location)))
-               (oref tf cursor-default-location))
-      ('middle (recenter nil))
-      ('top (recenter this-scroll-margin))
-      ('bottom (recenter (- -1 this-scroll-margin)))
-      ((and loc (pred integerp))
-       (if (>= (window-screen-lines) loc)
-           (recenter loc)
-         (setf (alist-get (selected-window) (oref tf cursor-location))
-               (1- (count-screen-lines (window-start) (point) t))))))))
-
-(cl-defmethod conn-handle-dispatch-select-command :before (cmd
-                                                           &context (conn-dispatch-target-finder
-                                                                     conn-dispatch-focus-mixin))
-  (pcase cmd
-    ((or 'mwheel-scroll 'scroll-up-command 'scroll-down-command)
-     (setf (alist-get (selected-window)
-                      (oref conn-dispatch-target-finder cursor-location))
-           nil))))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
@@ -3434,9 +3384,7 @@ contain targets."
                           (push (point) pts)))
                       pts))))
       (dolist (pt (cdr (alist-get (current-buffer) cache)))
-        (conn-make-target-overlay
-         pt 0
-         :properties '(no-hide t))))))
+        (conn-make-target-overlay pt 0)))))
 
 (conn-define-target-finder conn-all-things-targets
     ()
@@ -4480,8 +4428,7 @@ it."))
                    (> (point-max) (max beg2 end2 beg1 end1)))
               (transpose-regions beg1 end1 beg2 end2)
             (user-error "Invalid regions"))
-          (when line
-            (conn-dispatch-recenter-on-line line))))
+          (when line (recenter line))))
     (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
                                      (prepare-change-group buffer2))
                               (cancel-change-group cg))
@@ -4829,7 +4776,7 @@ it."))
       (let ((conn-disable-input-method-hooks t))
         (conn--unwind-protect-all
           (let ((conn-dispatch-in-progress t))
-            (conn-setup-target-finder
+            (conn-target-finder-setup
              (conn-get-target-finder thing arg))
             (add-function :before-while conn-dispatch-other-end
                           (lambda () (not conn-dispatch-no-other-end))
