@@ -72,18 +72,16 @@
 
 (defconst conn-kapply-kbd-query-prompt
   (concat
-   "Proceed with macro?\\<conn-kapply-query-map> "
-   "("
-   "\\[act] act, "
-   "\\[exit-current] skip buffer, "
-   "\\[exit-all] skip all, "
-   "\\[exit] exit, "
-   "\\[recenter] recenter, "
-   "\\[edit] edit, "
-   "\\[automatic] auto buffer, "
-   "\\[automatic-all] auto all, "
-   "\\[skip] skip"
-   ")"))
+   "Proceed with macro?\\<conn-kapply-query-map>\n"
+   "\\[act] act 		"
+   "\\[skip] skip		"
+   "\\[exit] exit 	"
+   "\\[edit] edit 	"
+   "\\[recenter] recenter\n"
+   "\\[automatic] auto buffer 	"
+   "\\[exit-current] skip buffer 	"
+   "\\[automatic-all] auto all 	"
+   "\\[exit-all] skip all"))
 
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
@@ -575,17 +573,15 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
 
 (defconst conn-kapply-query-prompt
   (concat
-   "Proceed with macro?\\<multi-query-replace-map>"
-   "("
-   "\\[act] act, "
-   "\\[skip] skip, "
-   "\\[exit-current] skip buffer, "
-   "\\[exit] exit, "
-   "\\[recenter] recenter, "
-   "\\[edit] edit, "
-   "\\[automatic] auto buffer, "
-   "\\[automatic-all] auto all"
-   ")"))
+   "Proceed with macro?\\<multi-query-replace-map>\n"
+   "\\[act] act 		"
+   "\\[skip] skip		"
+   "\\[exit] exit	"
+   "\\[recenter] recenter\n"
+   "\\[automatic] auto buffer 	"
+   "\\[exit-current] skip buffer 	"
+   "\\[automatic-all] auto all	"
+   "\\[edit] edit"))
 
 (defconst conn-kapply-query-help
   "Specify how to proceed with keyboard macro execution.
