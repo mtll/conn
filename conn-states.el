@@ -1428,6 +1428,7 @@ command was a prefix command.")
 
 (defvar conn-insertion-recording-overlay nil)
 (defvar conn-insertion-recording-other-end nil)
+(defvar conn-insertion-recording-last-insertion nil)
 
 (define-minor-mode conn-insertion-recording-mode
   "Minor mode active during insertion recording"
@@ -1449,33 +1450,42 @@ command was a prefix command.")
   (when conn-insertion-recording-mode
     (error "Already recording"))
   (let ((conn-insertion-recording-overlay (make-overlay (point) (point)))
-        (conn-insertion-recording-other-end (point)))
-    (unwind-protect
-        (conn-with-recursive-stack (or state 'conn-record-emacs-state)
-          (conn-insertion-recording-mode 1)
-          (set-transient-map
-           (define-keymap
-             "<remap> <keyboard-quit>" 'abort-recursive-edit))
-          (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
-          (add-hook 'pre-redisplay-functions
-                    #'conn---update-record-insertion-region
-                    nil 'local)
-          (atomic-change-group
-            (with-undo-amalgamate
-              (save-current-buffer
-                (if kbd-macro-query
-                    (let (executing-kbd-macro
-                          defining-kbd-macro)
-                      (recursive-edit))
-                  (recursive-edit)))))
-          (filter-buffer-substring
-           (min (point) conn-insertion-recording-other-end)
-           (max (point) conn-insertion-recording-other-end)))
-      (remove-hook 'pre-redisplay-functions
-                   #'conn---update-record-insertion-region
-                   'local)
-      (delete-overlay conn-insertion-recording-overlay)
-      (conn-insertion-recording-mode -1))))
+        (conn-insertion-recording-other-end (point))
+        (use-prev nil))
+    (cl-flet ((insert-prev ()
+                (interactive)
+                (insert conn-insertion-recording-last-insertion)
+                (setq use-prev t)
+                (exit-recursive-edit)))
+      (unwind-protect
+          (conn-with-recursive-stack (or state 'conn-record-emacs-state)
+            (conn-insertion-recording-mode 1)
+            (set-transient-map
+             (define-keymap
+               "<remap> <keyboard-quit>" 'abort-recursive-edit
+               "<remap> <exit-recursive-edit>" #'insert-prev))
+            (overlay-put conn-insertion-recording-overlay 'face 'diff-added)
+            (add-hook 'pre-redisplay-functions
+                      #'conn---update-record-insertion-region
+                      nil 'local)
+            (atomic-change-group
+              (with-undo-amalgamate
+                (save-current-buffer
+                  (if kbd-macro-query
+                      (let (executing-kbd-macro
+                            defining-kbd-macro)
+                        (recursive-edit))
+                    (recursive-edit)))))
+            (unless use-prev
+              (setq conn-insertion-recording-last-insertion
+                    (filter-buffer-substring
+                     (min (point) conn-insertion-recording-other-end)
+                     (max (point) conn-insertion-recording-other-end)))))
+        (remove-hook 'pre-redisplay-functions
+                     #'conn---update-record-insertion-region
+                     'local)
+        (delete-overlay conn-insertion-recording-overlay)
+        (conn-insertion-recording-mode -1)))))
 
 (conn-define-state conn-record-one-emacs-state (conn-record-emacs-state
                                                 conn-autopop-state)

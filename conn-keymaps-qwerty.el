@@ -513,6 +513,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "x" 'conn-record-emacs-state
   "q" 'conn-kapply-kbd-macro-query
   "y" 'yank
   "Y" 'yank-from-kill-ring
@@ -724,16 +725,16 @@
 (define-keymap
   :keymap conn-duplicate-repeat-map
   "?" 'conn-duplicate-repeat-help
-  "DEL" 'conn-duplicate-delete-repeat
-  "<backspace>" 'conn-duplicate-delete-repeat
+  "DEL" 'conn-duplicate-repeat-delete
+  "<backspace>" 'conn-duplicate-repeat-delete
   "q" 'conn-duplicate-repeat
   "'" 'conn-duplicate-repeat-kapply)
 
 (define-keymap
   :keymap conn-duplicate-repeat-padding-map
   :parent conn-duplicate-repeat-map
-  "TAB" 'conn-duplicate-indent-repeat
-  "<tab>" 'conn-duplicate-indent-repeat
+  "TAB" 'conn-duplicate-repeat-indent
+  "<tab>" 'conn-duplicate-repeat-indent
   "RET" 'conn-duplicate-repeat-toggle-padding
   "<return>" 'conn-duplicate-repeat-toggle-padding
   "c" 'conn-duplicate-repeat-comment)

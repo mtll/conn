@@ -1391,15 +1391,11 @@ Target overlays may override this default by setting the
             (overlay-put overlay 'display full-string))
            (t
             (overlay-put overlay 'display full-string)
-            (if padding-function
-                (funcall padding-function
-                         overlay
-                         padding-width
-                         (get-text-property 0 'face full-string))
-              (funcall conn-default-label-padding-function
-                       overlay
-                       padding-width
-                       (get-text-property 0 'face full-string))))))
+            (funcall (or padding-function
+                         conn-default-label-padding-function)
+                     overlay
+                     padding-width
+                     (get-text-property 0 'face full-string)))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-pixelwise-before (label)
@@ -4405,11 +4401,7 @@ it."))
                                        buffer2 pt2 thing2 arg2 transform2)
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
-        (pcase-let* ((line (cond ((= pt1 (point))
-                                  (conn-dispatch-get-display-line pt2))
-                                 ((= pt2 (point))
-                                  (conn-dispatch-get-display-line pt1))))
-                     ((and bounds1
+        (pcase-let* (((and bounds1
                            (conn-bounds `(,beg1 . ,end1) transform1))
                       (save-excursion
                         (goto-char pt1)
@@ -4427,8 +4419,7 @@ it."))
                    (<= (point-min) (min beg2 end2 beg1 end1))
                    (> (point-max) (max beg2 end2 beg1 end1)))
               (transpose-regions beg1 end1 beg2 end2)
-            (user-error "Invalid regions"))
-          (when line (recenter line))))
+            (user-error "Invalid regions"))))
     (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
                                      (prepare-change-group buffer2))
                               (cancel-change-group cg))

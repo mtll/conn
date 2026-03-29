@@ -2488,23 +2488,24 @@ Exiting the recursive edit will resume the isearch."
                                  'restrict-windows
                                  conn-restrict-windows-argument-map)))
       (deactivate-mark)
-      (conn-dispatch-setup
-       (oclosure-lambda (conn-action
-                         (action-description "Transpose")
-                         (action-no-history t)
-                         (action-window-predicate
-                          (lambda (win)
-                            (not (buffer-local-value 'buffer-read-only
-                                                     (window-buffer win))))))
-           ()
-         (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
-                       (conn-select-target)))
-           (conn--dispatch-transpose-subr
-            buf1 pt1 thing1 arg2 nil
-            (window-buffer window2) pt2 thing2 arg2 nil)))
-       thing arg nil
-       :other-end :no-other-end
-       :restrict-windows restrict-windows))))
+      (save-excursion
+        (conn-dispatch-setup
+         (oclosure-lambda (conn-action
+                           (action-description "Transpose")
+                           (action-no-history t)
+                           (action-window-predicate
+                            (lambda (win)
+                              (not (buffer-local-value 'buffer-read-only
+                                                       (window-buffer win))))))
+             ()
+           (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
+                         (conn-select-target)))
+             (conn--dispatch-transpose-subr
+              (window-buffer window2) pt2 thing2 arg2 nil
+              buf1 pt1 thing1 arg2 nil)))
+         thing arg nil
+         :other-end :no-other-end
+         :restrict-windows restrict-windows)))))
 
 ;; Coming in emacs 31
 (defun conn--query-replace-read-transpose-from-to ()
@@ -3914,8 +3915,8 @@ For how they are used to define the region see `conn-bounds-of' and
 (defvar conn-duplicate-repeat-commands-ref
   (conn-reference-quote
     (("Repeat duplicate" conn-duplicate-repeat)
-     ("Delete previous duplicate" conn-duplicate-delete-repeat)
-     ("Indent each duplicate" conn-duplicate-indent-repeat)
+     ("Delete previous duplicate" conn-duplicate-repeat-delete)
+     ("Indent each duplicate" conn-duplicate-repeat-indent)
      ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
      ("Comment or uncomment each duplicate" conn-duplicate-repeat-comment)
      ("Apply a keyboard macro at each duplicate.
@@ -3961,7 +3962,7 @@ Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
-(defun conn-duplicate-delete-repeat (arg)
+(defun conn-duplicate-repeat-delete (arg)
   "Delete the previous ARG duplicates.
 
 Only available during repeating duplicate."
@@ -3969,7 +3970,7 @@ Only available during repeating duplicate."
   (ignore arg)
   (user-error "Not repeating duplicate"))
 
-(defun conn-duplicate-indent-repeat ()
+(defun conn-duplicate-repeat-indent ()
   "Indent each duplicate.
 
 Only available during repeating duplicate."
@@ -4063,10 +4064,10 @@ Only available during repeating duplicate."
            (set-marker m2 nil)
            (mapc #'delete-overlay regions)
            (undo-amalgamate-change-group cg)
-           (conn--remove-all-advice 'conn-duplicate-indent-repeat
+           (conn--remove-all-advice 'conn-duplicate-repeat-indent
                                     'conn-duplicate-repeat-kapply
                                     'conn-duplicate-repeat
-                                    'conn-duplicate-delete-repeat
+                                    'conn-duplicate-repeat-delete
                                     'conn-duplicate-repeat-comment
                                     'conn-duplicate-repeat-toggle-padding))
          (indent ()
@@ -4168,10 +4169,10 @@ Only available during repeating duplicate."
                conn-dispatch-repeating)
           (cleanup)
         (advice-add 'conn-duplicate-repeat :override #'repeat)
-        (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+        (advice-add 'conn-duplicate-repeat-delete :override #'delete)
         (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
         (unless no-padding
-          (advice-add 'conn-duplicate-indent-repeat :override #'indent)
+          (advice-add 'conn-duplicate-repeat-indent :override #'indent)
           (advice-add 'conn-duplicate-repeat-comment :override #'comment)
           (advice-add 'conn-duplicate-repeat-toggle-padding :override
                       (if block #'block-padding #'non-block-padding)))
@@ -4184,15 +4185,15 @@ Only available during repeating duplicate."
                    (conn--duplicate-message-string
                     keymap
                     "repeat" 'conn-duplicate-repeat
-                    "indent" 'conn-duplicate-delete-repeat
+                    "delete" 'conn-duplicate-repeat-delete
                     "kapply" 'conn-duplicate-repeat-kapply)
                  (conn--duplicate-message-string
                   keymap
                   "repeat" 'conn-duplicate-repeat
-                  "delete" 'conn-duplicate-repeat-toggle-padding
-                  "newline" 'conn-duplicate-indent-repeat
+                  "indent" 'conn-duplicate-repeat-indent
+                  "newline" 'conn-duplicate-repeat-toggle-padding
                   "comment" 'conn-duplicate-repeat-comment
-                  "indent" 'conn-duplicate-delete-repeat
+                  "delete" 'conn-duplicate-repeat-delete
                   "kapply" 'conn-duplicate-repeat-kapply))))))))
 
 (cl-defgeneric conn-duplicate-thing-do (thing
@@ -4263,10 +4264,10 @@ Only available during repeating duplicate."
                  (accept-change-group cg))
                (undo-amalgamate-change-group (car (last cgs)))
                (conn--remove-all-advice 'conn-duplicate-repeat
-                                        'conn-duplicate-delete-repeat
+                                        'conn-duplicate-repeat-delete
                                         'conn-duplicate-repeat-kapply)))
           (advice-add 'conn-duplicate-repeat :override #'dup)
-          (advice-add 'conn-duplicate-delete-repeat :override #'delete)
+          (advice-add 'conn-duplicate-repeat-delete :override #'delete)
           (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
           (undo-boundary)
           (rectangle--duplicate-right repeat 1)
@@ -4278,7 +4279,7 @@ Only available during repeating duplicate."
                  (conn--duplicate-message-string
                   conn-duplicate-repeat-map
                   "repeat" 'conn-duplicate-repeat
-                  "indent" 'conn-duplicate-delete-repeat
+                  "indent" 'conn-duplicate-repeat-delete
                   "kapply" 'conn-duplicate-repeat-kapply)))))
     (cl-call-next-method)))
 
