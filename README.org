@@ -1,0 +1,110 @@
+#+title: Conn.el - A modal system
+#+author: David Feller
+
+Conn is a modal keybinding system and collection of other related functionality which I have written for myself.
+Some of the most significant features include:
+
+- *Things* (in the sense of thingatpt.el, text objects in vim terms). Things may inherit from (possibly multiple) other things and many commands and functions are implemented as generic functions specializing on subthings.
+  There are anonymous things which may contain arbitrary properties and instance allocated methods for thing generic functions.
+
+- *States* are easy to define and may inherit from (possibly multiple) other states.
+  The state transition function is a generic function specializing on substates.
+  States are contained in a stack and the current state is changed either by pushing a new state to the stack or by popping the current state off the stack.
+
+- [[id:b950a5a0-1879-4cf7-a2f8-d3fa8839decd][Thing Commands]] operate similar to vim: the user calls a command and then the user must inputs a thing for the command to operator.
+  Unlike vim (and the reason for choosing the =action->object= interface) each command has its own state for reading arguments and can have any number of optional infix arguments that may be input between the action and the object.
+
+  This makes for an interface somewhere between vim's operator pending mode and transient.
+  For example in addition to a count =conn-kill-thing= has optional arguments for:
+  - =d= Delete the thing instead of killing it
+  - =.= Kill the thing to a register
+  - =x= Append or prepend the kill to the place it is being killed
+  - =+= A separator to use if the thing is being appended or prepended
+  - =:= Whether to attempt to fix up the formatting in the buffer after killing the thing
+  - =!= Whether to check that the region is a valid kill (e.g. with =paredit-check-region=)
+  The key bindings for these optional arguments are shared with other commands that have the same or conceptually similar arguments.
+
+- [[id:3bdfa481-34af-4644-800f-a014a4d4af57][Dispatch]] provides [[https://github.com/abo-abo/avy][avy-like]] labels for things.
+  Dispatch tries not to disturb line width or height with labels even when labeling variable pitch fonts, text compositions (e.g. =prettify-symbols-mode=), sub and superscripts, or when word or whitespace wrap modes are enabled.
+
+  Dispatch is designed around "action at a disance" usage.
+  The general pattern is:
+  - Begin dispatch
+  - Action (optional, defaults to goto)
+  - Thing
+  - Selection begins.
+    The target finder associated with Thing controls how selection is carried out.
+
+  Between beginning dispatch and selected a thing there are other optional arguments besides the action and actions may themselves have several optional arguments that can be given after selecting the action.
+  One important optional argument is =repeat=, which causes the selection process to repeat until the user stops it.
+  This is useful for actions like kapply which apply a keyboard macro to the selected target.
+  Dispatch is also a valid thing argument for thing commands allowing for remote text objects.
+
+- [[id:78fe4432-7109-46aa-b4b9-33c2c366c019][Kapply]] provides a way of recording and executing a keyboard macro at a series of locations.
+  Locations may be across multiple buffers and generated incrementally.
+
+  Some sources for kapply include:
+  - Count number of things or all things within a region.
+  - Isearch matches.
+  - Matches for a regexp input with a =query-replace= like interface.
+    Matches may be restricted to a thing, multiple files, multiple buffers, or a project.
+  - =consult-location= and =consult-grep= matches via [[https://github.com/oantolin/embark][Embark]].
+  - Things selected with dispatch.
+  - =hl-lock-mode= highlights.
+  - =occur-mode= and =compilation-mode= (including derived modes like =grep-mode=) locations.
+
+- *Wincontrol* is a global minor mode for managing and navigation windows and tabs similar to hyperbole's HyControl.
+  =conn-wincontrol-one-command= allows for single wincontrol bindings to be accessed without have to manually enter and then exit wincontrol mode.
+
+# - *Quick References*
+
+* Thing Commands
+:PROPERTIES:
+:ID:       b950a5a0-1879-4cf7-a2f8-d3fa8839decd
+:END:
+
+#+caption: conn-duplicate-thing
+[[https://github.com/mtll/conn/blob/demos/dup.gif]]
+Duplicating a thing multiple times and applying a keyboard to each
+duplicate with a transient keymap.
+
+* Dispatch
+:PROPERTIES:
+:ID:       3bdfa481-34af-4644-800f-a014a4d4af57
+:END:
+
+#+caption: treesit dispatch
+[[https://github.com/mtll/conn/blob/demos/tsdispatch.gif]]
+Transpose two [[https://github.com/nvim-treesitter/nvim-treesitter-textobjects][nvim-treesitter-textobjects]] query matches using
+dispatch. Blue labels indicate that multiple matches start at the
+location and the user will be prompted to disambiguate them after
+selecting the label.
+
+#+caption: dispatch on expansion
+[[https://github.com/mtll/conn/blob/demos/expandchange.gif]]
+=conn-change-thing= with dispatch providing labels for the expansions. Expansions are
+generated by [[https://github.com/casouri/expreg][expreg]] but are configurable.
+
+#+caption: kapply dispatch
+[[https://github.com/mtll/conn/blob/demos/kapplydispatch.gif]]
+Applying a keyboard to symbols with labels provided by dispatch.
+
+#+caption: variable pitch
+[[https://github.com/mtll/conn/blob/demos/variablepitch.gif]]
+Dispatch labels with a variable pitch font.
+
+* Kapply
+:PROPERTIES:
+:ID:       78fe4432-7109-46aa-b4b9-33c2c366c019
+:END:
+
+#+caption: kapply consult-ripgrep
+[[https://github.com/mtll/conn/blob/demos/kapplygrep.gif]]
+Applying a keyboard to a set of [[https://github.com/minad/consult][consult-ripgrep]] matches using [[https://github.com/oantolin/embark][Embark]].
+When multiple buffers are visited during =kapply= an ibuffer window is
+displayed after =kapply= finishes showing each buffer.
+
+# ** Wincontrol
+# :PROPERTIES:
+# :ID:       bc57e195-5f9b-46d5-a1e0-778fa944fb19
+# :END:
