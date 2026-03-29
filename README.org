@@ -11,7 +11,7 @@ Some of the most significant features include:
   The state transition function is a generic function specializing on substates.
   States are contained in a stack and the current state is changed either by pushing a new state to the stack or by popping the current state off the stack.
 
-- [[id:b950a5a0-1879-4cf7-a2f8-d3fa8839decd][Thing Commands]] operate similar to vim: the user calls a command and then the user must inputs a thing for the command to operator.
+- [[#thing-commands][Thing Commands]] operate similar to vim: the user calls a command and then the user must inputs a thing for the command to operator.
   Unlike vim (and the reason for choosing the =action->object= interface) each command has its own state for reading arguments and can have any number of optional infix arguments that may be input between the action and the object.
 
   This makes for an interface somewhere between vim's operator pending mode and transient.
@@ -24,7 +24,7 @@ Some of the most significant features include:
   - =!= Whether to check that the region is a valid kill (e.g. with =paredit-check-region=)
   The key bindings for these optional arguments are shared with other commands that have the same or conceptually similar arguments.
 
-- [[id:3bdfa481-34af-4644-800f-a014a4d4af57][Dispatch]] provides [[https://github.com/abo-abo/avy][avy-like]] labels for things.
+- [[#dispatch][Dispatch]] provides [[https://github.com/abo-abo/avy][avy-like]] labels for things.
   Dispatch tries not to disturb line width or height with labels even when labeling variable pitch fonts, text compositions (e.g. =prettify-symbols-mode=), sub and superscripts, or when word or whitespace wrap modes are enabled.
 
   Dispatch is designed around "action at a disance" usage.
@@ -40,7 +40,7 @@ Some of the most significant features include:
   This is useful for actions like kapply which apply a keyboard macro to the selected target.
   Dispatch is also a valid thing argument for thing commands allowing for remote text objects.
 
-- [[id:78fe4432-7109-46aa-b4b9-33c2c366c019][Kapply]] provides a way of recording and executing a keyboard macro at a series of locations.
+- [[#kapply][Kapply]] provides a way of recording and executing a keyboard macro at a series of locations.
   Locations may be across multiple buffers and generated incrementally.
 
   Some sources for kapply include:
@@ -60,7 +60,7 @@ Some of the most significant features include:
 
 * Thing Commands
 :PROPERTIES:
-:ID:       b950a5a0-1879-4cf7-a2f8-d3fa8839decd
+:CUSTOM_ID: thing-commands
 :END:
 
 #+caption: conn-duplicate-thing
@@ -70,7 +70,7 @@ duplicate with a transient keymap.
 
 * Dispatch
 :PROPERTIES:
-:ID:       3bdfa481-34af-4644-800f-a014a4d4af57
+:CUSTOM_ID: dispatch
 :END:
 
 #+caption: treesit dispatch
@@ -95,7 +95,7 @@ Dispatch labels with a variable pitch font.
 
 * Kapply
 :PROPERTIES:
-:ID:       78fe4432-7109-46aa-b4b9-33c2c366c019
+:CUSTOM_ID: kapply
 :END:
 
 #+caption: kapply consult-ripgrep
