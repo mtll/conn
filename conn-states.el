@@ -1408,60 +1408,48 @@ command was a prefix command.")
                     (min (point) conn-insertion-recording-other-end)
                     (max (point) conn-insertion-recording-other-end)))))
 
-(define-minor-mode conn-insertion-recording-mode
-  "Minor mode active during insertion recording"
-  :keymap (make-sparse-keymap)
-  (if conn-insertion-recording-mode
-      (unless conn--insertion-recording-overlay
-        (require 'diff-mode)
-        (setq conn--insertion-recording-overlay (make-overlay (point) (point))
-              conn-insertion-recording-other-end (point))
-        (unless conn--insertion-recording-change-group
-          (setq conn--insertion-recording-change-group (prepare-change-group)))
-        (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
-        (add-hook 'pre-redisplay-functions
-                  #'conn---update-record-insertion-region
-                  nil 'local)
-        (setf (alist-get 'conn-insertion-recording-mode
-                         minor-mode-overriding-map-alist)
-              conn-insertion-recording-mode-map))
-    (remove-hook 'pre-redisplay-functions
-                 #'conn---update-record-insertion-region
-                 'local)
-    (when conn--insertion-recording-change-group
-      (accept-change-group conn--insertion-recording-change-group)
-      (undo-amalgamate-change-group conn--insertion-recording-change-group))
-    (setq conn--insertion-recording-change-group nil)
-    (when conn-insertion-recording-other-end
-      (setq conn-insertion-recording-last-insertion
-            (filter-buffer-substring
-             (min (point) conn-insertion-recording-other-end)
-             (max (point) conn-insertion-recording-other-end))))
-    (ignore-errors
-      (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil)))))
+(defun conn-insertion-recording-p ()
+  (and conn--insertion-recording-overlay t))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-record-emacs-state))
                                 _transition)
   (cl-call-next-method)
-  (conn-insertion-recording-mode 1)
-  (conn-state-unwind-protect
-    (conn-insertion-recording-mode -1))
-  (conn-state-on-exit transition
-    (pcase transition
-      ((cl-type conn-stack-enter-recursive))
-      ((cl-type conn-stack-push)
-       (conn--pop-state-1)))))
+  (unless (conn-insertion-recording-p)
+    (require 'diff-mode)
+    (setq conn--insertion-recording-overlay (make-overlay (point) (point))
+          conn-insertion-recording-other-end (point))
+    (unless conn--insertion-recording-change-group
+      (setq conn--insertion-recording-change-group (prepare-change-group)))
+    (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
+    (add-hook 'pre-redisplay-functions
+              #'conn---update-record-insertion-region
+              nil 'local)
+    (conn-state-unwind-protect
+      (remove-hook 'pre-redisplay-functions
+                   #'conn---update-record-insertion-region
+                   'local)
+      (when conn--insertion-recording-change-group
+        (accept-change-group conn--insertion-recording-change-group)
+        (undo-amalgamate-change-group conn--insertion-recording-change-group))
+      (setq conn--insertion-recording-change-group nil)
+      (when conn-insertion-recording-other-end
+        (setq conn-insertion-recording-last-insertion
+              (filter-buffer-substring
+               (min (point) conn-insertion-recording-other-end)
+               (max (point) conn-insertion-recording-other-end))))
+      (ignore-errors
+        (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil))))))
 
 (defun conn-insertion-end-recording ()
   (interactive)
-  (unless conn-insertion-recording-mode
+  (unless (conn-insertion-recording-p)
     (user-error "Not recording"))
   (setq conn-insertion-recording-other-end nil)
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-insertion-insert-previous ()
   (interactive)
-  (unless conn-insertion-recording-mode
+  (unless (conn-insertion-recording-p)
     (user-error "Not recording"))
   (insert conn-insertion-recording-last-insertion)
   (setq conn-insertion-recording-other-end nil)
@@ -1469,7 +1457,7 @@ command was a prefix command.")
 
 (defun conn-record-insertion (&optional recursive-edit change-group)
   (require 'diff-mode)
-  (when conn-insertion-recording-mode
+  (when (conn-insertion-recording-p)
     (error "Already recording"))
   (when change-group
     (setq conn--insertion-recording-change-group change-group))
@@ -1500,7 +1488,7 @@ command was a prefix command.")
 
 (defun conn-record-one-insertion (&optional kbd-macro-query)
   (require 'diff-mode)
-  (when conn-insertion-recording-mode
+  (when (conn-insertion-recording-p)
     (error "Already recording"))
   (let ((conn-insertion-recording-other-end (point))
         (pre (make-symbol "post-hook")))
@@ -1513,7 +1501,6 @@ command was a prefix command.")
                            (remove-hook 'conn-state-entry-hook hook t)
                            (exit-recursive-edit)))
               (add-hook 'conn-state-entry-hook hook 100 t)))
-          (conn-insertion-recording-mode 1)
           (set-transient-map
            (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
           (fset pre (lambda ()
@@ -1532,21 +1519,19 @@ command was a prefix command.")
           (filter-buffer-substring
            (min (point) conn-insertion-recording-other-end)
            (max (point) conn-insertion-recording-other-end)))
-      (remove-hook 'pre-command-hook pre t)
-      (conn-insertion-recording-mode -1))))
+      (remove-hook 'pre-command-hook pre t))))
 
 (defun conn-emacs-state-record-insert (&optional with)
   (interactive)
   (if with (insert with)
     (conn-record-insertion)
-    (letrec ((record
-              (lambda ()
-                (remove-hook 'conn-insertion-recording-mode-hook record 'local)
-                (when conn-insertion-recording-other-end
-                  (conn-push-command-history
-                   'conn-emacs-state-record-insert
-                   conn-insertion-recording-last-insertion)))))
-      (add-hook 'conn-insertion-recording-mode-hook record nil 'local))))
+    (conn-state-unwind-protect
+      (when conn-insertion-recording-other-end
+        (conn-push-command-history
+         'conn-emacs-state-record-insert
+         (filter-buffer-substring
+          (min (point) conn-insertion-recording-other-end)
+          (max (point) conn-insertion-recording-other-end)))))))
 
 ;;;;; Mark State
 

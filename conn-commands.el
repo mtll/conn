@@ -1982,7 +1982,7 @@ For more information about how the replacement is carried out see
 
 (defun conn-record-set-region ()
   (interactive)
-  (unless conn-insertion-recording-mode
+  (unless (conn-insertion-recording-p)
     (user-error "Not replacing"))
   (conn-read-args (conn-record-set-region-state
                    :prompt "Thing")
@@ -1999,7 +1999,7 @@ For more information about how the replacement is carried out see
 
 (defun conn-record-exhange ()
   (interactive)
-  (unless conn-insertion-recording-mode
+  (unless (conn-insertion-recording-p)
     (user-error "Not replacing"))
   (goto-char
    (prog1 conn-insertion-recording-other-end

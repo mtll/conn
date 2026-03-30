@@ -503,16 +503,13 @@
   "/" 'multi-file)
 
 (define-keymap
-  :keymap conn-insertion-recording-mode-map
-  "C-." 'conn-record-exhange
-  "C-M-." 'conn-record-set-region)
-
-(define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)
   "<escape>" 'exit-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-state)
+  "C-." 'conn-record-exhange
+  "C-M-." 'conn-record-set-region
   "C-<escape>" 'conn-insertion-end-recording)
 
 (define-keymap
