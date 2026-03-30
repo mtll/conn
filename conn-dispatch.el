@@ -1278,7 +1278,8 @@ Target overlays may override this default by setting the
                (window (overlay-get overlay 'window))
                (display-width nil)
                (padding-width 0)
-               (ov nil))
+               (ov nil)
+               (pixelwise t))
     (unwind-protect
         (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
@@ -1343,13 +1344,13 @@ Target overlays may override this default by setting the
                       (overlay-put overlay 'after-string str))))
                  ((and (/= pt (point-min))
                        (or (and (/= pt beg)
-                                (get-char-property pt 'before-string)
-                                (= pt (next-single-property-change
-                                       (1- pt) 'before-string nil (1+ pt))))
+                                (get-char-property (1+ pt) 'before-string)
+                                (not (eq (get-char-property (1+ pt) 'before-string)
+                                         (get-char-property pt 'before-string))))
                            (and (/= pt beg)
-                                (get-char-property (1- pt) 'after-string)
-                                (= pt (next-single-property-change
-                                       (- pt 1) 'after-string nil (1+ pt))))
+                                (get-char-property pt 'after-string)
+                                (not (eq (get-char-property pt 'after-string)
+                                         (get-char-property (1+ pt) 'after-string))))
                            (and (pcase (get-text-property pt 'display)
                                   ('nil)
                                   ((pred stringp) t)
@@ -1358,7 +1359,13 @@ Target overlays may override this default by setting the
                                    t))
                                 (= pt (next-single-property-change
                                        (1- pt) 'display nil (1+ pt))))))
-                  (setq end pt))
+                  (setq end (1+ pt)
+                        pixelwise nil))
+                 ((and (get-char-property pt 'after-string)
+                       (not (eq (get-char-property pt 'after-string)
+                                (get-char-property (1+ pt) 'after-string))))
+                  (setq end (1+ pt)
+                        pixelwise nil))
                  ;; If the label overlay is wider than the label
                  ;; string we are done.
                  ((let ((width
@@ -1391,11 +1398,12 @@ Target overlays may override this default by setting the
             (overlay-put overlay 'display full-string))
            (t
             (overlay-put overlay 'display full-string)
-            (funcall (or padding-function
-                         conn-default-label-padding-function)
-                     overlay
-                     padding-width
-                     (get-text-property 0 'face full-string)))))
+            (when pixelwise
+              (funcall (or padding-function
+                           conn-default-label-padding-function)
+                       overlay
+                       padding-width
+                       (get-text-property 0 'face full-string))))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-pixelwise-before (label)
@@ -1411,6 +1419,7 @@ Target overlays may override this default by setting the
                (window (overlay-get overlay 'window))
                (display-width nil)
                (padding-width 0)
+               (pixelwise t)
                (ov nil))
     (unwind-protect
         (progn
@@ -1514,12 +1523,9 @@ Target overlays may override this default by setting the
             (overlay-put overlay 'display full-string))
            (t
             (overlay-put overlay 'display full-string)
-            (if padding-function
-                (funcall padding-function
-                         overlay
-                         padding-width
-                         (get-text-property 0 'face full-string))
-              (funcall conn-default-label-padding-function
+            (when pixelwise
+              (funcall (or padding-function
+                           conn-default-label-padding-function)
                        overlay
                        padding-width
                        (get-text-property 0 'face full-string))))))
@@ -2629,7 +2635,7 @@ updated.")
          args)))
     (setf (oref target-finder current-update-handlers) ufns)))
 
-(defun conn-target-nearest-op (targets)
+(defun conn-target-sort-nearest (targets)
   (declare (side-effect-free t)
            (important-return-value t))
   (compat-call
@@ -2642,7 +2648,7 @@ updated.")
   (declare (side-effect-free t)
            (important-return-value t))
   (compat-call
-   sort (conn-target-nearest-op targets)
+   sort (conn-target-sort-nearest targets)
    :lessp (lambda (a b)
             (and (save-excursion
                    (goto-char (overlay-end a))
