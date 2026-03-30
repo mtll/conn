@@ -1078,23 +1078,15 @@ When kapply finishes restore the restrictions in each buffer."
        (let ((ret (funcall iterator state)))
          (pcase state
            (:cleanup
-            (pcase-dolist (`(,buf . ,stack) buffer-stacks)
-              (with-current-buffer buf
-                (setq conn-lighter nil)
-                (conn-enter-state
-                 (car stack)
-                 (conn-stack-transition conn-stack-exit-recursive
-                   (setq conn--state-stack stack)
-                   (conn-call-re-entry-fns)))
-                (conn-update-lighter))))
+            (pcase-dolist (`(,_buf . ,handle) buffer-stacks)
+              (conn-exit-recursive-stack handle)))
            ((and (or :record :next)
                  (guard ret))
             (when conn-local-mode
-              (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
-                  (setf conn--state-stack stack)
-                (setf (alist-get (current-buffer) buffer-stacks)
-                      conn--state-stack))
-              (ignore (conn-enter-recursive-stack conn-state)))))
+              (when-let* ((handle (alist-get (current-buffer) buffer-stacks)))
+                (conn-exit-recursive-stack handle))
+              (setf (alist-get (current-buffer) buffer-stacks)
+                    (conn-enter-recursive-stack conn-state)))))
          ret)))
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))

@@ -76,10 +76,6 @@ function may setup any other necessary state as well.")
   "Non-nil during `conn-enter-state' when entering a recursive stack.")
 
 (defvar-local conn--state-stack nil
-  ;; Be careful when modifying this variable.
-  ;; `conn--state-re-entry-functions' is keyed on the conses of the
-  ;; stack so copying the stack will result in re-entry functions not
-  ;; being run.
   "Previous conn states in buffer.")
 
 (defvar conn--minor-mode-maps-sort-tick 0)
@@ -797,25 +793,9 @@ that has just been exited.")
 (oclosure-define (conn-stack-clone
                   (:parent conn-stack-exit)))
 
-(defmacro conn-call-re-entry-fns ()
-  "Call re-entry functions for the current stack state.
-Can only be used within the body of `conn-stack-transition'."
-  (error "conn-call-re-entry-fns only allowed inside conn-stack-transition"))
-
 (defmacro conn-stack-transition (name &rest body)
   (declare (indent 1))
-  (cl-with-gensyms (self)
-    (let ((run-re-entry
-           ``(when-let* ((fns (cdr (gethash conn--state-stack
-                                            conn--state-re-entry-functions))))
-               (funcall (car fns) ,',self (cdr fns)))))
-      `(letrec ((,self
-                 (oclosure-lambda (,name)
-                     ()
-                   (cl-macrolet ((conn-call-re-entry-fns ()
-                                   ,run-re-entry))
-                     ,@body))))
-         ,self))))
+  `(oclosure-lambda (,name) () ,@body))
 
 (defun conn--state-exit-default (_type _)
   (when conn-current-state
@@ -863,28 +843,25 @@ is being entered after the current state has exited or nil if
                  (funcall (car ,rest) ,transition (cdr ,rest))))
              conn--state-exit-functions))))
 
-(defconst conn--state-re-entry-functions
+(defconst conn--stack-unwind-functions
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-on-re-entry (name transition &rest body)
-  "Defer evaluation of BODY until the current state is re-entered.
+(defmacro conn-state-unwind-protect (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (rest)
+    `(push (lambda (,rest)
+             (unwind-protect
+                 ,(macroexp-progn body)
+               (when ,rest (funcall (car ,rest) (cdr ,rest)))))
+           (gethash conn--state-stack
+                    conn--stack-unwind-functions))))
 
-BODY will never be evaluated if the state is not re-entered."
-  (declare (indent 2))
-  (when (eql ?_ (string-to-char (symbol-name transition)))
-    (setq transition (gensym)))
-  (cl-with-gensyms (rest fns)
-    `(let ((,fns (with-memoization (gethash conn--state-stack
-                                            conn--state-re-entry-functions)
-                   (cons nil nil))))
-       (unless (memq ',name (car ,fns))
-         (push ',name (car ,fns))
-         (push (lambda (,transition ,rest)
-                 (unwind-protect
-                     ,(macroexp-progn body)
-                   (when ,rest (funcall (car ,rest) ,transition (cdr ,rest)))))
-               (cdr ,fns))))))
+(defun conn--run-unwind-functions ()
+  (let ((fns (gethash conn--state-stack
+                      conn--stack-unwind-functions)))
+    (remhash conn--state-stack conn--stack-unwind-functions)
+    (when fns (funcall (car fns) (cdr fns)))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
@@ -954,8 +931,10 @@ this function.  The (conn-substate STATE) specializer is provided so
 that code can be run for every state inheriting from some parent state.
 
 To execute code when a state is exiting use `conn-state-on-exit'."
-  ( :method ((_state (conn-substate t)) _transition)
-    "Noop" nil)
+  ( :method ((state (conn-substate t)) transition)
+    (set state t)
+    (funcall transition)
+    (conn-update-lighter))
   ( :method (state _transition)
     (error "Attempting to enter unknown state: %s" state)))
 
@@ -975,10 +954,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
             (conn--activate-input-method)
             (unless (conn--mode-maps-sorted-p state)
               (conn--sort-mode-maps state)))
-          (cl-call-next-method)
-          (conn-update-lighter)
-          (set state t)
-          (funcall transition))
+          (cl-call-next-method))
       (unless (symbol-value state)
         (conn-local-mode -1)
         (message "Error entering state %s." state)))
@@ -999,6 +975,10 @@ To execute code when a state is exiting use `conn-state-on-exit'."
      (conn-stack-transition conn-stack-push
        (push state conn--state-stack)))))
 
+(defun conn--pop-state-1 ()
+  (conn--run-unwind-functions)
+  (pop conn--state-stack))
+
 (defun conn-pop-state ()
   "Pop to the previous state in the state stack.
 
@@ -1011,8 +991,7 @@ current state does not have a :pop-alternate property then push
       (conn-enter-state
        state
        (conn-stack-transition conn-stack-pop
-         (pop conn--state-stack)
-         (conn-call-re-entry-fns)))
+         (conn--pop-state-1)))
     (conn-push-state
      (conn-state-get conn-current-state :pop-alternate
                      t conn-pop-alternate-default))))
@@ -1046,18 +1025,6 @@ current state does not have a :pop-alternate property then push
        (push nil conn--state-stack)
        (push state conn--state-stack)))))
 
-(defun conn-restore-recursive-stack (handle)
-  (pcase handle
-    (`(,buffer . ,stack)
-     (with-current-buffer buffer
-       (unless (eq stack conn--state-stack)
-         (conn-enter-state
-          (car stack)
-          (conn-stack-transition conn-stack-enter-recursive
-            (setq conn--state-stack stack)
-            (conn-call-re-entry-fns))))))
-    (_ (error "Invalid recursive stack handle"))))
-
 (defun conn-exit-recursive-stack (handle)
   "Exit the recursive state stack associated with HANDLE.
 
@@ -1065,15 +1032,16 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
   (pcase handle
     (`(,buffer . ,stack)
      (with-current-buffer buffer
-       (if (cl-loop for cons on conn--state-stack
-                    thereis (eq cons stack))
-           (prog1 (conn--state-stack-handle)
-             (conn-enter-state
-              (car stack)
-              (conn-stack-transition conn-stack-exit-recursive
-                (setq conn--state-stack stack)
-                (conn-call-re-entry-fns))))
-         (error "Invalid recursive stack handle"))))
+       (unless (eq conn--state-stack stack)
+         (if (cl-loop for cons on conn--state-stack
+                      thereis (eq cons stack))
+             (prog1 (conn--state-stack-handle)
+               (conn-enter-state
+                (car stack)
+                (conn-stack-transition conn-stack-exit-recursive
+                  (while (not (eq conn--state-stack stack))
+                    (conn--pop-state-1)))))
+           (error "Invalid recursive stack handle")))))
     (_ (error "Invalid recursive stack handle"))))
 
 ;;;;; Definitions
@@ -1375,13 +1343,12 @@ command was a prefix command.")
                        (conn-enter-state
                         (conn-peek-state)
                         (conn-stack-transition conn-stack-autopop
-                          (pop conn--state-stack)
-                          (conn-call-re-entry-fns))))))))
+                          (conn--pop-state-1))))))))
     (conn-state-on-exit transition
       (pcase transition
         ((cl-type conn-stack-enter-recursive))
         ((cl-type conn-stack-push)
-         (pop conn--state-stack)))
+         (conn--pop-state-1)))
       (remove-hook 'pre-command-hook pre t))
     (add-hook 'pre-command-hook pre 99 t)
     (cl-call-next-method)))
@@ -1429,7 +1396,7 @@ command was a prefix command.")
 (conn-define-state conn-record-emacs-recursive-state (conn-record-emacs-state))
 
 (defvar-local conn-insertion-recording-other-end nil)
-(defvar-local conn-insertion-recording-last-insertion nil)
+(defvar conn-insertion-recording-last-insertion nil)
 (defvar-local conn--insertion-recording-overlay nil)
 (defvar-local conn--insertion-recording-change-group nil)
 
@@ -1445,8 +1412,7 @@ command was a prefix command.")
   "Minor mode active during insertion recording"
   :keymap (make-sparse-keymap)
   (if conn-insertion-recording-mode
-      (progn
-        (cl-assert (not conn--insertion-recording-overlay))
+      (unless conn--insertion-recording-overlay
         (require 'diff-mode)
         (setq conn--insertion-recording-overlay (make-overlay (point) (point))
               conn-insertion-recording-other-end (point))
@@ -1471,22 +1437,20 @@ command was a prefix command.")
             (filter-buffer-substring
              (min (point) conn-insertion-recording-other-end)
              (max (point) conn-insertion-recording-other-end))))
-    (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil))))
+    (ignore-errors
+      (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil)))))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-record-emacs-state))
                                 _transition)
-  (when conn-insertion-recording-mode
-    (error "Already recording"))
+  (cl-call-next-method)
   (conn-insertion-recording-mode 1)
+  (conn-state-unwind-protect
+    (conn-insertion-recording-mode -1))
   (conn-state-on-exit transition
     (pcase transition
       ((cl-type conn-stack-enter-recursive))
       ((cl-type conn-stack-push)
-       (pop conn--state-stack)
-       (conn-insertion-recording-mode -1))
-      ((cl-type conn-stack-pop)
-       (conn-insertion-recording-mode -1))))
-  (cl-call-next-method))
+       (conn--pop-state-1)))))
 
 (defun conn-insertion-end-recording ()
   (interactive)
@@ -1495,15 +1459,29 @@ command was a prefix command.")
   (setq conn-insertion-recording-other-end nil)
   (conn-push-state 'conn-emacs-state))
 
+(defun conn-insertion-insert-previous ()
+  (interactive)
+  (unless conn-insertion-recording-mode
+    (user-error "Not recording"))
+  (insert conn-insertion-recording-last-insertion)
+  (setq conn-insertion-recording-other-end nil)
+  (conn-pop-state))
+
 (defun conn-record-insertion (&optional recursive-edit change-group)
   (require 'diff-mode)
   (when conn-insertion-recording-mode
     (error "Already recording"))
   (when change-group
     (setq conn--insertion-recording-change-group change-group))
-  ;; (set-transient-map (define-keymap "<escape>" #'insert-prev))
   (if (not recursive-edit)
-      (conn-push-state 'conn-record-emacs-state)
+      (progn
+        (set-transient-map
+         (define-keymap
+           "<remap> <conn-pop-state>" #'conn-insertion-insert-previous))
+        (conn-push-state 'conn-record-emacs-state))
+    (set-transient-map
+     (define-keymap
+       "<remap> <exit-recursive-edit>" #'conn-insertion-insert-previous))
     (conn-with-recursive-stack 'conn-record-emacs-recursive-state
       (atomic-change-group
         (save-current-buffer
@@ -1527,15 +1505,15 @@ command was a prefix command.")
   (let ((conn-insertion-recording-other-end (point))
         (pre (make-symbol "post-hook")))
     (unwind-protect
-        (conn-with-recursive-stack 'conn-command-state
-          (conn-insertion-recording-mode 1)
-          (conn-state-on-re-entry conn-record-insert _
+        (progn
+          (conn-push-state 'conn-record-one-emacs-state)
+          (conn-state-unwind-protect
             (cl-with-gensyms (hook)
               (fset hook (lambda ()
                            (remove-hook 'conn-state-entry-hook hook t)
                            (exit-recursive-edit)))
               (add-hook 'conn-state-entry-hook hook 100 t)))
-          (conn-push-state 'conn-record-one-emacs-state)
+          (conn-insertion-recording-mode 1)
           (set-transient-map
            (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
           (fset pre (lambda ()
@@ -1625,26 +1603,19 @@ entering mark state.")
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
                                 _transition)
+  (cl-call-next-method)
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
         conn-record-mark-state t)
-  (conn-state-on-exit transition
-    (when (bound-and-true-p rectangle-mark-mode)
-      (conn-state-on-re-entry conn-mark-rmm _transition
-        (unless (region-active-p)
-          (activate-mark))
-        (unless (bound-and-true-p rectangle-mark-mode)
-          (rectangle-mark-mode 1))))
-    (unless (conn-mark-state-keep-mark-active-p transition)
-      (deactivate-mark)
-      (setq conn-record-mark-state nil))
+  (conn-state-unwind-protect
+    (deactivate-mark)
+    (setq conn-record-mark-state nil)
     (unless (or (null conn-record-mark-state)
                 (eq this-command 'keyboard-quit)
                 (= (point) (mark t)))
       (conn-push-mark-state-ring
        (list (point-marker)
              (copy-marker (mark-marker))
-             conn--mark-state-rmm))))
-  (cl-call-next-method))
+             conn--mark-state-rmm)))))
 
 ;;;;; Buffer State Setup
 

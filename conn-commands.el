@@ -1396,8 +1396,11 @@ selected by dispatch with it."))
          :repeat repeat
          :other-end other-end
          :restrict-windows restrict-windows))))
-  (conn-push-command-history #'conn-dispatch-setup-previous
-                             (conn-ring-head conn-dispatch-ring)))
+  (conn-push-command-history
+   (let ((prev (conn-ring-head conn-dispatch-ring)))
+     (lambda ()
+       (conn-dispatch-setup-previous prev)
+       (setq prev (conn-ring-head conn-dispatch-ring))))))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing expansion))
                                     arg
@@ -1439,8 +1442,11 @@ selected by dispatch with it."))
       (conn-yank-replace-subr beg end))
     (conn-dispatch-action-pulse
      beg (point)))
-  (conn-push-command-history #'conn-dispatch-setup-previous
-                             (conn-ring-head conn-dispatch-ring)))
+  (conn-push-command-history
+   (let ((prev (conn-ring-head conn-dispatch-ring)))
+     (lambda ()
+       (conn-dispatch-setup-previous prev)
+       (setq prev (conn-ring-head conn-dispatch-ring))))))
 
 (defun conn-yank-replace (thing
                           arg
@@ -3294,8 +3300,11 @@ hook, which see."
                       (concat result (and result sep) string)
                     (concat string (and result sep) result))))
           (conn--kill-string result append register sep)))
-      (conn-push-command-history 'conn-dispatch-setup-previous
-                                 (conn-ring-head conn-dispatch-ring)))))
+      (conn-push-command-history
+       (let ((prev (conn-ring-head conn-dispatch-ring)))
+         (lambda ()
+           (conn-dispatch-setup-previous prev)
+           (setq prev (conn-ring-head conn-dispatch-ring))))))))
 
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing expansion))
                                   arg
@@ -3354,8 +3363,11 @@ hook, which see."
               (funcall conn-kill-reformat-function bounds)))
            (_ (user-error "No %s found" thing)))))
      thing arg nil)
-    (conn-push-command-history 'conn-dispatch-setup-previous
-                               (conn-ring-head conn-dispatch-ring))))
+    (conn-push-command-history
+     (let ((prev (conn-ring-head conn-dispatch-ring)))
+       (lambda ()
+         (conn-dispatch-setup-previous prev)
+         (setq prev (conn-ring-head conn-dispatch-ring)))))))
 
 (cl-defmethod conn-kill-thing-do (thing
                                   arg
@@ -3761,8 +3773,11 @@ that place."
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))
-        (conn-push-command-history 'conn-dispatch-setup-previous
-                                   (conn-ring-head conn-dispatch-ring))))))
+        (conn-push-command-history
+         (let ((prev (conn-ring-head conn-dispatch-ring)))
+           (lambda ()
+             (conn-dispatch-setup-previous prev)
+             (setq prev (conn-ring-head conn-dispatch-ring)))))))))
 
 ;;;;; How Many
 
@@ -4423,18 +4438,17 @@ Interactively REPEAT is given by the prefix argument."
                     (conn-record-one-insertion)
                   (conn-record-insertion nil cg))))))
      (unless kbd-macro-query
-       (letrec ((record
-                 (lambda ()
-                   (remove-hook 'conn-insertion-recording-mode-hook record 'local)
-                   (when conn-insertion-recording-other-end
-                     (conn-push-command-history
-                      'conn-change-thing-do
-                      thing
-                      arg
-                      transform
-                      check-bounds
-                      conn-insertion-recording-last-insertion)))))
-         (add-hook 'conn-insertion-recording-mode-hook record nil 'local))))
+       (conn-state-unwind-protect
+         (when conn-insertion-recording-other-end
+           (conn-push-command-history
+            'conn-change-thing-do
+            thing
+            arg
+            transform
+            check-bounds
+            (filter-buffer-substring
+             (min (point) conn-insertion-recording-other-end)
+             (max (point) conn-insertion-recording-other-end)))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
@@ -4568,8 +4582,11 @@ Interactively REPEAT is given by the prefix argument."
        dthing darg dtform
        :other-end other-end
        :repeat repeat))
-    (conn-push-command-history 'conn-dispatch-setup-previous
-                               (conn-ring-head conn-dispatch-ring))))
+    (conn-push-command-history
+     (let ((prev (conn-ring-head conn-dispatch-ring)))
+       (lambda ()
+         (conn-dispatch-setup-previous prev)
+         (setq prev (conn-ring-head conn-dispatch-ring)))))))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing expansion))
                                     arg
@@ -4604,8 +4621,11 @@ Interactively REPEAT is given by the prefix argument."
                     (conn-record-insertion t))))))))
    thing arg nil
    :other-end :no-other-end)
-  (conn-push-command-history #'conn-dispatch-setup-previous
-                             (conn-ring-head conn-dispatch-ring)))
+  (conn-push-command-history
+   (let ((prev (conn-ring-head conn-dispatch-ring)))
+     (lambda ()
+       (conn-dispatch-setup-previous prev)
+       (setq prev (conn-ring-head conn-dispatch-ring))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg

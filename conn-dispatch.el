@@ -2249,17 +2249,15 @@ the meaning of depth."
 (defmacro conn-with-dispatch-suspended (&rest body)
   "Execute BODY with dispatch suspended."
   (declare (indent 0))
-  (cl-with-gensyms (select-mode stack-handle)
+  (cl-with-gensyms (select-mode)
     `(let ((conn-dispatch-in-progress nil)
-           (,select-mode conn-dispatch-select-mode)
-           (,stack-handle nil))
+           (,select-mode conn-dispatch-select-mode))
        (unless (conn-substate-p conn-current-state
                                 'conn-dispatch-targets-state)
          (error "Trying to suspend dispatch when state not active"))
        (conn-target-finder-suspend conn-dispatch-target-finder)
        (conn-cleanup-labels)
-       (setq ,stack-handle (conn-exit-recursive-stack
-                            conn--dispatch-stack-handle))
+       (conn-exit-recursive-stack conn--dispatch-stack-handle)
        (unwind-protect
            (pcase-let ((`(,conn-target-window-predicate
                           ,conn-target-predicate
@@ -2295,7 +2293,8 @@ the meaning of depth."
              (let ((conn-dispatch-input-buffer nil))
                ,@body))
          (conn-dispatch-save-state)
-         (conn-restore-recursive-stack ,stack-handle)
+         (setq conn--dispatch-stack-handle
+               (conn-enter-recursive-stack 'conn-dispatch-state))
          (if ,select-mode (conn-dispatch-select-mode 1))))))
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
@@ -4149,11 +4148,15 @@ it."))
   (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-copy-from))
-  (when-let* ((mk (conn-dispatch-copy-from--action-opoint action)))
-    (thread-first mk marker-buffer buffer-live-p not)))
+  (not (ignore-errors
+         (thread-first
+           (conn-dispatch-copy-from--action-opoint action)
+           marker-buffer
+           buffer-live-p))))
 
 (cl-defmethod conn-action-cleanup ((action conn-dispatch-copy-from))
-  (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
+  (ignore-errors
+    (set-marker (conn-dispatch-copy-from--action-opoint action) nil)))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
   (conn-<
@@ -4199,7 +4202,8 @@ it."))
               (save-excursion (do)))))))))
 
 (cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from))
-  (set-marker (conn-dispatch-copy-from--action-opoint action) nil)
+  (ignore-errors
+    (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
   (conn--action-cancel-change-group
    (conn-dispatch-copy-from--action-change-group action)))
 
@@ -4217,11 +4221,15 @@ it."))
   (separator :mutable t))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
-  (when-let* ((mk (conn-dispatch-take--action-opoint action)))
-    (thread-first mk marker-buffer buffer-live-p not)))
+  (not (ignore-errors
+         (thread-first
+           (conn-dispatch-take--action-opoint action)
+           marker-buffer
+           buffer-live-p))))
 
 (cl-defmethod conn-action-cleanup ((action conn-dispatch-take))
-  (set-marker (conn-dispatch-take--action-opoint action) nil))
+  (ignore-errors
+    (set-marker (conn-dispatch-take--action-opoint action) nil)))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
   (conn-<
