@@ -1421,6 +1421,7 @@ command was a prefix command.")
     (unless conn--insertion-recording-change-group
       (setq conn--insertion-recording-change-group (prepare-change-group)))
     (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
+    (overlay-put conn--insertion-recording-overlay 'category 'conn-recording-region)
     (add-hook 'pre-redisplay-functions
               #'conn---update-record-insertion-region
               nil 'local)

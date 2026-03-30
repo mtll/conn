@@ -51,9 +51,14 @@
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
         conn-mark-state-ring (conn-copy-ring conn-mark-state-ring)
         conn-insertion-recording-other-end nil
-        conn--insertion-recording-overlay nil
         conn--insertion-recording-change-group nil
         conn--state-stack nil)
+  (when (overlayp conn--insertion-recording-overlay)
+    (setq conn--insertion-recording-overlay nil)
+    (without-restriction
+      (mapc #'delete-overlay
+            (conn--overlays-in-of-type (point-min) (point-max)
+                                       'conn-recording-region))))
   (let (conn-next-state)
     (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
   (or (run-hook-with-args-until-success 'conn-setup-state-hook)
