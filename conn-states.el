@@ -843,7 +843,7 @@ is being entered after the current state has exited or nil if
                  (funcall (car ,rest) ,transition (cdr ,rest))))
              conn--state-exit-functions))))
 
-(defconst conn--stack-unwind-functions
+(defconst conn--state-unwind-functions
   (make-hash-table :test 'eq
                    :weakness 'key))
 
@@ -855,12 +855,12 @@ is being entered after the current state has exited or nil if
                  ,(macroexp-progn body)
                (when ,rest (funcall (car ,rest) (cdr ,rest)))))
            (gethash conn--state-stack
-                    conn--stack-unwind-functions))))
+                    conn--state-unwind-functions))))
 
-(defun conn--run-unwind-functions ()
+(defun conn--run-state-unwind-functions ()
   (let ((fns (gethash conn--state-stack
-                      conn--stack-unwind-functions)))
-    (remhash conn--state-stack conn--stack-unwind-functions)
+                      conn--state-unwind-functions)))
+    (remhash conn--state-stack conn--state-unwind-functions)
     (when fns (funcall (car fns) (cdr fns)))))
 
 (defvar conn-state-lighter-separator
@@ -976,7 +976,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
        (push state conn--state-stack)))))
 
 (defun conn--pop-state-1 ()
-  (conn--run-unwind-functions)
+  (conn--run-state-unwind-functions)
   (pop conn--state-stack))
 
 (defun conn-pop-state ()
