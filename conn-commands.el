@@ -4389,12 +4389,6 @@ Interactively REPEAT is given by the prefix argument."
                                      kbd-macro-query)
   (declare (conn-anonymous-thing-property :change-op)))
 
-(cl-defmethod conn-change-thing-do :around (&rest args)
-  (let ((hist conn-command-history))
-    (cl-call-next-method)
-    (when (eq hist conn-command-history)
-      (apply #'conn-push-command-history 'conn-change-thing-do args))))
-
 (cl-defmethod conn-change-thing-do ((thing (conn-thing t))
                                     arg
                                     transform
@@ -4408,25 +4402,39 @@ Interactively REPEAT is given by the prefix argument."
                       (append transform
                               (list 'conn-check-bounds))
                     transform))
-     (conn-protected-let* ((opoint (point) (goto-char opoint)))
+     (let ((cg (prepare-change-group)))
        (atomic-change-group
          (goto-char beg)
          (delete-region beg end)
-         (if (stringp with)
-             (insert with)
-           (setq with
-                 (if (and (= (abs (- end beg)) 1)
-                          (or (conn-subthing-p thing 'char)
-                              (conn-subthing-p thing 'point)))
-                     (conn-record-one-insertion kbd-macro-query)
-                   (conn-record-insertion nil kbd-macro-query))))))
+         (cond ((stringp with)
+                (insert with))
+               (kbd-macro-query
+                (let (executing-kbd-macro
+                      defining-kbd-macro)
+                  (if (and (= (abs (- end beg)) 1)
+                           (or (conn-subthing-p thing 'char)
+                               (conn-subthing-p thing 'point)))
+                      (conn-record-one-insertion)
+                    (conn-record-insertion t cg))))
+               (t
+                (if (and (= (abs (- end beg)) 1)
+                         (or (conn-subthing-p thing 'char)
+                             (conn-subthing-p thing 'point)))
+                    (conn-record-one-insertion)
+                  (conn-record-insertion nil cg))))))
      (unless kbd-macro-query
-       (conn-push-command-history 'conn-change-thing-do
-                                  thing
-                                  arg
-                                  transform
-                                  check-bounds
-                                  with)))
+       (letrec ((record
+                 (lambda ()
+                   (remove-hook 'conn-insertion-recording-mode-hook record 'local)
+                   (when conn-insertion-recording-other-end
+                     (conn-push-command-history
+                      'conn-change-thing-do
+                      thing
+                      arg
+                      transform
+                      check-bounds
+                      conn-insertion-recording-last-insertion)))))
+         (add-hook 'conn-insertion-recording-mode-hook record nil 'local))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
@@ -4442,7 +4450,7 @@ Interactively REPEAT is given by the prefix argument."
           defining-kbd-macro)
       (recursive-edit))))
 
-(cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite))
+(cl-defmethod conn-change-thing-do ((thing (eql conn-emacs-state-overwrite))
                                     _arg
                                     _transform
                                     &optional
@@ -4453,7 +4461,10 @@ Interactively REPEAT is given by the prefix argument."
   (when kbd-macro-query
     (let (executing-kbd-macro
           defining-kbd-macro)
-      (recursive-edit))))
+      (recursive-edit)))
+  (conn-push-command-history
+   'conn-change-thing-do
+   thing nil nil nil nil kbd-macro-query))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-overwrite-binary))
                                     _arg
@@ -4461,9 +4472,10 @@ Interactively REPEAT is given by the prefix argument."
                                     &optional
                                     _check-bounds
                                     _with)
-  (conn-emacs-state-overwrite-binary))
+  (conn-emacs-state-overwrite-binary)
+  (conn-push-command-history 'conn-emacs-state-overwrite-binary))
 
-(cl-defmethod conn-change-thing-do :extra "rectangle" ((_thing (conn-thing region))
+(cl-defmethod conn-change-thing-do :extra "rectangle" ((thing (conn-thing region))
                                                        _arg
                                                        _transform
                                                        &optional
@@ -4471,11 +4483,15 @@ Interactively REPEAT is given by the prefix argument."
                                                        _with
                                                        kbd-macro-query)
   (if (bound-and-true-p rectangle-mark-mode)
-      (if kbd-macro-query
-          (let (executing-kbd-macro
-                defining-kbd-macro)
-            (call-interactively #'string-rectangle))
-        (call-interactively #'string-rectangle))
+      (progn
+        (if kbd-macro-query
+            (let (executing-kbd-macro
+                  defining-kbd-macro)
+              (call-interactively #'string-rectangle))
+          (call-interactively #'string-rectangle))
+        (conn-push-command-history
+         'conn-change-thing-do
+         thing nil nil nil nil kbd-macro-query))
     (cl-call-next-method)))
 
 (cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
@@ -4545,7 +4561,7 @@ Interactively REPEAT is given by the prefix argument."
                                  (or (conn-subthing-p thing 'char)
                                      (conn-subthing-p thing 'point)))
                             (conn-record-one-insertion)
-                          (conn-record-insertion))))
+                          (conn-record-insertion t))))
                 (setq end-pt (point)))
               (unless stay
                 (conn-dispatch-goto-char end-pt))))))
@@ -4585,7 +4601,7 @@ Interactively REPEAT is given by the prefix argument."
                            (or (conn-subthing-p thing 'char)
                                (conn-subthing-p thing 'point)))
                       (conn-record-one-insertion)
-                    (conn-record-insertion))))))))
+                    (conn-record-insertion t))))))))
    thing arg nil
    :other-end :no-other-end)
   (conn-push-command-history #'conn-dispatch-setup-previous

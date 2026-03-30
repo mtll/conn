@@ -508,8 +508,12 @@
   "C-M-." 'conn-record-set-region)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-record-emacs-state)
+  :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)
   "<escape>" 'exit-recursive-edit)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-record-emacs-state)
+  "C-<escape>" 'conn-insertion-end-recording)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
