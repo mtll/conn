@@ -3542,16 +3542,17 @@ contain targets."
               (setq x-pos (- (window-body-width nil t) 1 x-pos)))
           (setq col-width (/ (float x-pos)
                              (frame-char-width))))))
-      (conn-for-each-visible (window-start) (window-end)
-        (goto-char (point-min))
-        (while (/= (point) (point-max))
-          (vertical-motion (cons col-width 0))
-          (unless (and (eolp) (= (point) (point-min)))
-            (conn-make-target-overlay
-             (point) 0
-             :thing 'point
-             :padding-function #'conn--flush-left-padding))
-          (forward-line 1))))))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (while (/= (point) (point-max))
+            (vertical-motion (cons col-width 0))
+            (unless (and (eolp) (= (point) (point-min)))
+              (conn-make-target-overlay
+               (point) 0
+               :thing 'point
+               :padding-function #'conn--flush-left-padding))
+            (vertical-motion 1)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-column-targets))
   nil)
