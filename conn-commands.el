@@ -1977,34 +1977,6 @@ For more information about how the replacement is carried out see
                    from
                    to))
 
-(conn-define-state conn-record-set-region-state (conn-read-thing-state)
-  :lighter "SETREC")
-
-(defun conn-record-set-region ()
-  (interactive)
-  (unless (conn-insertion-recording-p)
-    (user-error "Not replacing"))
-  (conn-read-args (conn-record-set-region-state
-                   :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim))
-       (transform (conn-transform-argument)))
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds `(,beg . ,end) transform)
-       (goto-char
-        (if (> (point) conn-insertion-recording-other-end) end beg))
-       (setq conn-insertion-recording-other-end
-             (if (> (point) conn-insertion-recording-other-end) beg end))
-       (pulse-momentary-highlight-region beg end 'diff-added)
-       (exit-recursive-edit)))))
-
-(defun conn-record-exhange ()
-  (interactive)
-  (unless (conn-insertion-recording-p)
-    (user-error "Not replacing"))
-  (goto-char
-   (prog1 conn-insertion-recording-other-end
-     (set-marker conn-insertion-recording-other-end (point)))))
-
 ;;;;; Isearch
 
 (defvar conn-isearch-special-ref
@@ -4732,6 +4704,60 @@ For how the region is determined using THING, ARG, and TRANSFORM see
                         check-bounds
                         nil
                         kbd-macro-query))
+
+;;;;;; Record Insertion
+
+(conn-define-state conn-record-set-region-state (conn-read-thing-state)
+  :lighter "SETREC")
+
+(defun conn-record-set-region ()
+  (interactive)
+  (unless (conn-insertion-recording-p)
+    (user-error "Not replacing"))
+  (conn-read-args (conn-record-set-region-state
+                   :prompt "Thing")
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument)))
+    (pcase (conn-bounds-of thing arg)
+      ((conn-bounds `(,beg . ,end) transform)
+       (goto-char
+        (if (> (point) conn-insertion-recording-other-end) end beg))
+       (set-marker
+        conn-insertion-recording-other-end
+        (if (> (point) conn-insertion-recording-other-end) beg end))
+       (pulse-momentary-highlight-region beg end 'diff-added)
+       (exit-recursive-edit)))))
+
+(defun conn-record-exhange ()
+  (interactive)
+  (unless (conn-insertion-recording-p)
+    (user-error "Not replacing"))
+  (goto-char
+   (prog1 conn-insertion-recording-other-end
+     (set-marker conn-insertion-recording-other-end (point)))))
+
+(defun conn-insertion-end-recording ()
+  (interactive)
+  (when conn-record-emacs-state
+    (conn-pop-state)
+    (unless conn-emacs-state
+      (conn-push-state 'conn-emacs-state))))
+
+(defun conn-insertion-abort-recording ()
+  (interactive)
+  (when conn-record-emacs-state
+    (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
+    (when (markerp conn-insertion-recording-other-end)
+      (set-marker (cl-shiftf conn-insertion-recording-other-end nil) nil))
+    (conn-pop-state)))
+
+(defun conn-insertion-insert-previous ()
+  (interactive)
+  (when conn-record-emacs-state
+    (when (markerp conn-insertion-recording-other-end)
+      (set-marker (point) nil))
+    (insert conn-insertion-recording-last-insertion)
+    (conn-pop-state)))
 
 ;;;;; Indent
 

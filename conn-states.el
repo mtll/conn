@@ -1446,29 +1446,6 @@ command was a prefix command.")
    (min (point) conn-insertion-recording-other-end)
    (max (point) conn-insertion-recording-other-end)))
 
-(defun conn-insertion-end-recording ()
-  (interactive)
-  (when conn-record-emacs-state
-    (conn-pop-state)
-    (unless conn-emacs-state
-      (conn-push-state 'conn-emacs-state))))
-
-(defun conn-insertion-abort-recording ()
-  (interactive)
-  (when conn-record-emacs-state
-    (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
-    (when (markerp conn-insertion-recording-other-end)
-      (set-marker (cl-shiftf conn-insertion-recording-other-end nil) nil))
-    (conn-pop-state)))
-
-(defun conn-insertion-insert-previous ()
-  (interactive)
-  (when conn-record-emacs-state
-    (when (markerp conn-insertion-recording-other-end)
-      (set-marker (point) nil))
-    (insert conn-insertion-recording-last-insertion)
-    (conn-pop-state)))
-
 (defun conn-record-insertion (&optional recursive-edit change-group)
   (require 'diff-mode)
   (when (conn-insertion-recording-p)
