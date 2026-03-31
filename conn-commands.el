@@ -63,8 +63,7 @@
 (defun conn-toggle-highlight-at-point ()
   (interactive)
   (if (use-region-p)
-      (let* ((hi-lock-auto-select-face t)
-             (face (hi-lock-read-face-name)))
+      (let ((hi-lock-auto-select-face t))
         (hi-lock-face-buffer
          (read-regexp "Regexp"
                       (regexp-quote
@@ -72,7 +71,7 @@
                         (region-beginning)
                         (region-end)))
                       'conn-highlight-region-history)
-         face)
+         (hi-lock-read-face-name))
         (deactivate-mark))
     (let ((regexp (hi-lock-regexp-okay
 		   (find-tag-default-as-symbol-regexp))))
@@ -80,9 +79,8 @@
                 (setq regexp (cadr (assoc regexp hi-lock-interactive-lighters))))
               (assoc regexp hi-lock-interactive-patterns))
           (hi-lock-unface-buffer regexp)
-        (let* ((hi-lock-auto-select-face t)
-               (face (hi-lock-read-face-name)))
-          (hi-lock-face-buffer regexp face))))))
+        (let* ((hi-lock-auto-select-face t))
+          (hi-lock-face-buffer regexp (hi-lock-read-face-name)))))))
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
@@ -2267,8 +2265,7 @@ Exiting the recursive edit will resume the isearch."
 (defvar conn-transpose-special-ref
   (conn-reference-quote
     (("line" conn-backward-line forward-line)
-     ("symbol" forward-symbol)
-     ("recursive-edit" recursive-edit))))
+     ("symbol" forward-symbol))))
 
 (defvar conn-transpose-reference
   (list (conn-reference-page
@@ -2558,7 +2555,6 @@ region after a `recursive-edit'."
     (("copy filename" buffer-filename)
      ("kill matching lines" kill-matching-lines)
      ("keep matching lines" keep-lines)
-     ("surround" conn-surround)
      ("outer line" move-end-of-line))))
 
 (defvar conn-kill-reference
@@ -3423,8 +3419,7 @@ hook, which see."
 (defvar conn-copy-special-ref
   (conn-reference-quote
     (("copy filename" buffer-filename)
-     ("kill matching lines" copy-matching-lines)
-     ("surround" conn-surround))))
+     ("kill matching lines" copy-matching-lines))))
 
 (defvar conn-copy-reference
   (list (conn-reference-page
@@ -4313,8 +4308,7 @@ Interactively REPEAT is given by the prefix argument."
   (conn-reference-quote
     (("quoted-insert" quoted-insert)
      ("emacs-state-overwrite" conn-emacs-state-overwrite)
-     ("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary)
-     ("surround" conn-surround))))
+     ("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary))))
 
 (defvar conn-change-reference
   (list (conn-reference-page

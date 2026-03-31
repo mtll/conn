@@ -969,7 +969,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
           (cl-call-next-method))
       (unless (symbol-value state)
         (conn-local-mode -1)
-        (message "Error entering state %s." state)))
+        (error "State not active after conn-enter-state %s." state)))
     (run-hook-wrapped
      'conn-state-entry-hook
      (lambda (fn)
@@ -1319,12 +1319,17 @@ popped and nil otherwise.  The default value is `always'.  Note that the
 function is not called and the state stays active if the previous
 command was a prefix command.")
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
-                                transition)
+(cl-defmethod conn-enter-state :around ((state (conn-substate conn-autopop-state))
+                                        transition)
   (when (or (eq 'conn-stack-enter-recursive
                 (oclosure-type transition))
             (null conn--state-stack))
     (error "%s cannot be the base state" state))
+  (cl-check-type (conn-state-get state :pop-predicate) function)
+  (cl-call-next-method))
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
+                                _transition)
   (let ((prefix-command nil)
         (msg-fn (make-symbol "msg"))
         (preserve-state (make-symbol "preserve-state"))
@@ -1343,7 +1348,6 @@ command was a prefix command.")
                 (when (symbol-function msg-fn)
                   (add-hook 'post-command-hook msg-fn 91 t))))
     (fset post (let ((pred (conn-state-get state :pop-predicate)))
-                 (cl-check-type pred function)
                  (lambda ()
                    (remove-hook 'post-command-hook post t)
                    (when (eq conn-current-state state)
@@ -1356,13 +1360,13 @@ command was a prefix command.")
                         (conn-peek-state)
                         (conn-stack-transition conn-stack-autopop
                           (conn--pop-state-1))))))))
+    (add-hook 'pre-command-hook pre 99 t)
     (conn-state-on-exit transition
+      (remove-hook 'pre-command-hook pre t)
       (pcase transition
         ((cl-type conn-stack-enter-recursive))
         ((cl-type conn-stack-push)
-         (conn--pop-state-1)))
-      (remove-hook 'pre-command-hook pre t))
-    (add-hook 'pre-command-hook pre 99 t)
+         (conn--pop-state-1))))
     (cl-call-next-method)))
 
 (conn-define-state conn-one-command-state (conn-command-state
@@ -1519,13 +1523,6 @@ command was a prefix command.")
 
 (defvar conn--mark-state-rmm nil)
 
-(defvar-local conn-record-mark-state t
-  "Record the region in mark state history when mark state exits.
-
-`conn-mark-state' sets this to `t' when entering.  To prevent the region
-in the current mark state from being recorded set this to nil after
-entering mark state.")
-
 (conn-define-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
   :lighter "M"
@@ -1567,18 +1564,16 @@ entering mark state.")
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
                                 _transition)
   (cl-call-next-method)
-  (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
-        conn-record-mark-state t)
+  (unless (region-active-p)
+    (activate-mark))
+  (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
   (conn-state-unwind
-    (deactivate-mark)
-    (setq conn-record-mark-state nil)
-    (unless (or (null conn-record-mark-state)
-                (eq this-command 'keyboard-quit)
-                (= (point) (mark t)))
+    (when (use-region-p)
       (conn-push-mark-state-ring
        (list (point-marker)
              (copy-marker (mark-marker))
-             conn--mark-state-rmm)))))
+             conn--mark-state-rmm)))
+    (deactivate-mark)))
 
 ;;;;; Buffer State Setup
 
