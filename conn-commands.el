@@ -4392,7 +4392,7 @@ Interactively REPEAT is given by the prefix argument."
   t)
 
 (cl-defmethod conn-argument-predicate ((_arg conn-change-thing-argument)
-                                       (_cmd (eql conn-record-emacs-state)))
+                                       (_cmd (eql conn-emacs-state-record-insert)))
   t)
 
 (cl-defgeneric conn-change-thing-do (thing
@@ -4462,7 +4462,7 @@ Interactively REPEAT is given by the prefix argument."
                         (max (point) conn-insertion-recording-other-end)))))))))))
     (_ (error "No thing at point"))))
 
-(cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
+(cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-record-insert))
                                     _arg
                                     _transform
                                     &optional
@@ -4606,37 +4606,45 @@ Interactively REPEAT is given by the prefix argument."
                                     check-bounds
                                     with
                                     _kbd-macro-query)
-  (conn-dispatch-setup
-   (oclosure-lambda (conn-action
-                     (action-description "Change")
-                     (action-not-repeatable t))
-       ()
-     (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
-                  (conn-select-target)))
-       (conn-dispatch-change-group)
-       (pcase (conn-bounds-of-dispatch thing arg pt)
-         ((conn-bounds `(,beg . ,end)
-                       (if check-bounds
-                           (append transform
-                                   (list 'conn-check-bounds))
-                         transform))
-          (conn-dispatch-goto-char beg 'nopush)
-          (delete-region beg end)
-          (if (stringp with)
-              (insert with)
-            (setq with
-                  (if (and (= (abs (- end beg)) 1)
-                           (or (conn-subthing-p thing 'char)
-                               (conn-subthing-p thing 'point)))
-                      (conn-record-one-insertion)
-                    (conn-record-insertion t))))))))
-   thing arg nil
-   :other-end :no-other-end)
+  (with-undo-amalgamate
+    (conn-dispatch-setup
+     (oclosure-lambda (conn-action
+                       (action-description "Change")
+                       (action-not-repeatable t))
+         ()
+       (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
+                    (conn-select-target)))
+         (conn-dispatch-change-group)
+         (pcase (conn-bounds-of-dispatch thing arg pt)
+           ((conn-bounds `(,beg . ,end)
+                         (if check-bounds
+                             (append transform
+                                     (list 'conn-check-bounds))
+                           transform))
+            (conn-dispatch-goto-char beg 'nopush)
+            (delete-region beg end)))))
+     thing arg nil
+     :other-end :no-other-end)
+    (if with (insert with)
+      (conn-record-insertion)
+      (conn-state-unwind-protect
+        (setq with
+              (filter-buffer-substring
+               (min (point) conn-insertion-recording-other-end)
+               (max (point) conn-insertion-recording-other-end))))))
   (conn-push-command-history
    (let ((prev (conn-ring-head conn-dispatch-ring)))
      (lambda ()
-       (conn-dispatch-setup-previous prev)
-       (setq prev (conn-ring-head conn-dispatch-ring))))))
+       (with-undo-amalgamate
+         (conn-dispatch-setup-previous prev)
+         (setq prev (conn-ring-head conn-dispatch-ring))
+         (if with (insert with)
+           (conn-record-insertion nil)
+           (conn-state-unwind-protect
+             (setq with
+                   (filter-buffer-substring
+                    (min (point) conn-insertion-recording-other-end)
+                    (max (point) conn-insertion-recording-other-end))))))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg

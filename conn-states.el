@@ -1433,20 +1433,19 @@ command was a prefix command.")
                    'local)
       (when conn--insertion-recording-change-group
         (accept-change-group conn--insertion-recording-change-group)
-        (undo-amalgamate-change-group conn--insertion-recording-change-group))
-      (setq conn--insertion-recording-change-group nil)
+        (undo-amalgamate-change-group conn--insertion-recording-change-group)
+        (setq conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
         (setq conn-insertion-recording-last-insertion
               (filter-buffer-substring
                (min (point) conn-insertion-recording-other-end)
                (max (point) conn-insertion-recording-other-end))))
-      (ignore-errors
+      (when (overlayp conn--insertion-recording-overlay)
         (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil))))))
 
 (defun conn-insertion-end-recording ()
   (interactive)
   (when conn-record-emacs-state
-    (setq conn-insertion-recording-other-end nil)
     (conn-pop-state)
     (unless conn-emacs-state
       (conn-push-state 'conn-emacs-state))))
@@ -1461,8 +1460,8 @@ command was a prefix command.")
 (defun conn-insertion-insert-previous ()
   (interactive)
   (when conn-record-emacs-state
+    (setq conn-insertion-recording-other-end (point))
     (insert conn-insertion-recording-last-insertion)
-    (setq conn-insertion-recording-other-end nil)
     (conn-pop-state)))
 
 (defun conn-record-insertion (&optional recursive-edit change-group)

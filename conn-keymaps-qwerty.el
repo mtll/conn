@@ -516,6 +516,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
   "x" 'conn-record-emacs-state
+  "d" 'conn-emacs-state-record-insert
   "q" 'conn-kapply-kbd-macro-query
   "y" 'yank
   "Y" 'yank-from-kill-ring
