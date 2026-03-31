@@ -1457,14 +1457,15 @@ command was a prefix command.")
   (interactive)
   (when conn-record-emacs-state
     (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
-    (when conn-insertion-recording-other-end
+    (when (markerp conn-insertion-recording-other-end)
       (set-marker (cl-shiftf conn-insertion-recording-other-end nil) nil))
     (conn-pop-state)))
 
 (defun conn-insertion-insert-previous ()
   (interactive)
   (when conn-record-emacs-state
-    (setq conn-insertion-recording-other-end (point-marker))
+    (when (markerp conn-insertion-recording-other-end)
+      (set-marker (point) nil))
     (insert conn-insertion-recording-last-insertion)
     (conn-pop-state)))
 
