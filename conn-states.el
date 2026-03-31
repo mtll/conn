@@ -1468,7 +1468,7 @@ command was a prefix command.")
                              "\\[conn-insertion-abort-recording] abort, "
                              "\\[conn-insertion-insert-previous] insert previous")))
         (conn-push-state 'conn-record-emacs-state))
-    (set-transient-map conn-record-insertion-transient-recursive-map
+    (set-transient-map conn-record-insertion-recursive-transient-map
                        nil nil
                        (substitute-command-keys
                         (concat
@@ -1483,7 +1483,7 @@ command was a prefix command.")
           (recursive-edit))))
     conn-insertion-recording-last-insertion))
 
-(defun conn-record-one-insertion (&optional kbd-macro-query)
+(defun conn-record-one-insertion ()
   (conn-with-recursive-stack 'conn-emacs-state
     (let ((char (char-to-string (read-char "Char:" t))))
       (insert char)

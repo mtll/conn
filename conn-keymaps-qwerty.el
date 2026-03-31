@@ -523,10 +523,6 @@
   "M-p" #'conn-insertion-insert-previous)
 
 (define-keymap
-  :keymap conn-record-one-insertion-transient-map
-  "<escape>" #'abort-recursive-edit)
-
-(define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
   "x" 'conn-record-emacs-state
   "d" 'conn-emacs-state-record-insert

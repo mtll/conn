@@ -4393,43 +4393,34 @@ Interactively REPEAT is given by the prefix argument."
        (atomic-change-group
          (goto-char beg)
          (delete-region beg end)
-         (cond ((stringp with)
-                (insert with))
-               (kbd-macro-query
-                (let (executing-kbd-macro
-                      defining-kbd-macro)
-                  (conn-push-command-history
-                   'conn-change-thing-do
-                   thing
-                   arg
-                   transform
-                   check-bounds
-                   (if (and (= (abs (- end beg)) 1)
-                            (or (conn-subthing-p thing 'char)
-                                (conn-subthing-p thing 'point)))
-                       (conn-record-one-insertion)
-                     (conn-record-insertion t cg)))))
-               (t
-                (if (and (= (abs (- end beg)) 1)
-                         (or (conn-subthing-p thing 'char)
-                             (conn-subthing-p thing 'point)))
-                    (conn-push-command-history
-                     'conn-change-thing-do
-                     thing
-                     arg
-                     transform
-                     check-bounds
-                     (conn-record-one-insertion))
-                  (conn-record-insertion nil cg)
-                  (conn-state-unwind
-                    (when conn-insertion-recording-other-end
-                      (conn-push-command-history
-                       'conn-change-thing-do
-                       thing
-                       arg
-                       transform
-                       check-bounds
-                       (conn-insertion-recording-text))))))))))
+         (cl-macrolet ((push-hist (item)
+                         `(conn-push-command-history
+                           'conn-change-thing-do
+                           thing
+                           arg
+                           transform
+                           check-bounds
+                           ,item)))
+           (cond ((stringp with)
+                  (insert with))
+                 (kbd-macro-query
+                  (let (executing-kbd-macro
+                        defining-kbd-macro)
+                    (push-hist
+                     (if (and (= (abs (- end beg)) 1)
+                              (or (conn-subthing-p thing 'char)
+                                  (conn-subthing-p thing 'point)))
+                         (conn-record-one-insertion)
+                       (conn-record-insertion t cg)))))
+                 (t
+                  (if (and (= (abs (- end beg)) 1)
+                           (or (conn-subthing-p thing 'char)
+                               (conn-subthing-p thing 'point)))
+                      (push-hist (conn-record-one-insertion))
+                    (conn-record-insertion nil cg)
+                    (conn-state-unwind
+                      (when conn-insertion-recording-other-end
+                        (push-hist (conn-insertion-recording-text)))))))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-record-insert))
