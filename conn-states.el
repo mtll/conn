@@ -781,21 +781,33 @@ that has just been exited.")
 
 (defvar-local conn--state-exit-functions-ids nil)
 
-(oclosure-define (conn-stack-pop))
+(oclosure-define (conn-transition))
+
+(oclosure-define (conn-stack-pop
+                  (:parent conn-transition)))
 (oclosure-define (conn-stack-exit-recursive
                   (:parent conn-stack-pop)))
 
-(oclosure-define (conn-stack-push))
+(oclosure-define (conn-stack-push
+                  (:parent conn-transition)))
 (oclosure-define (conn-stack-enter-recursive
                   (:parent conn-stack-push)))
 
-(oclosure-define (conn-stack-exit))
+(oclosure-define (conn-stack-exit
+                  (:parent conn-transition)))
 (oclosure-define (conn-stack-clone
                   (:parent conn-stack-exit)))
 
 (defmacro conn-stack-transition (name &rest body)
   (declare (indent 1))
-  `(oclosure-lambda (,name) () ,@body))
+  (let ((exp `(oclosure-lambda (,name) () ,@body)))
+    (if (ignore-errors
+          (memq 'conn-transition
+                (oclosure--class-allparents (cl--find-class name))))
+        exp
+      (macroexp-warn-and-return
+       (format "Unknown state transition type %s" name)
+       exp))))
 
 (defun conn--state-exit-default (_type _)
   (when conn-current-state
