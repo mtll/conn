@@ -19,7 +19,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
-  :suppress t
+  :suppress 'nodigits
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-one-command

@@ -1443,10 +1443,11 @@ command was a prefix command.")
 
 (defun conn-insertion-end-recording ()
   (interactive)
-  (unless (conn-insertion-recording-p)
-    (user-error "Not recording"))
-  (setq conn-insertion-recording-other-end nil)
-  (conn-push-state 'conn-emacs-state))
+  (when conn-record-emacs-state
+    (setq conn-insertion-recording-other-end nil)
+    (conn-pop-state)
+    (unless conn-emacs-state
+      (conn-push-state 'conn-emacs-state))))
 
 (defun conn-insertion-insert-previous ()
   (interactive)

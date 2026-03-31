@@ -4426,29 +4426,40 @@ Interactively REPEAT is given by the prefix argument."
                (kbd-macro-query
                 (let (executing-kbd-macro
                       defining-kbd-macro)
-                  (if (and (= (abs (- end beg)) 1)
-                           (or (conn-subthing-p thing 'char)
-                               (conn-subthing-p thing 'point)))
-                      (conn-record-one-insertion)
-                    (conn-record-insertion t cg))))
+                  (conn-push-command-history
+                   'conn-change-thing-do
+                   thing
+                   arg
+                   transform
+                   check-bounds
+                   (if (and (= (abs (- end beg)) 1)
+                            (or (conn-subthing-p thing 'char)
+                                (conn-subthing-p thing 'point)))
+                       (conn-record-one-insertion)
+                     (conn-record-insertion t cg)))))
                (t
                 (if (and (= (abs (- end beg)) 1)
                          (or (conn-subthing-p thing 'char)
                              (conn-subthing-p thing 'point)))
-                    (conn-record-one-insertion)
-                  (conn-record-insertion nil cg))))))
-     (unless kbd-macro-query
-       (conn-state-unwind-protect
-         (when conn-insertion-recording-other-end
-           (conn-push-command-history
-            'conn-change-thing-do
-            thing
-            arg
-            transform
-            check-bounds
-            (filter-buffer-substring
-             (min (point) conn-insertion-recording-other-end)
-             (max (point) conn-insertion-recording-other-end)))))))
+                    (conn-push-command-history
+                     'conn-change-thing-do
+                     thing
+                     arg
+                     transform
+                     check-bounds
+                     (conn-record-one-insertion))
+                  (conn-record-insertion nil cg)
+                  (conn-state-unwind-protect
+                    (when conn-insertion-recording-other-end
+                      (conn-push-command-history
+                       'conn-change-thing-do
+                       thing
+                       arg
+                       transform
+                       check-bounds
+                       (filter-buffer-substring
+                        (min (point) conn-insertion-recording-other-end)
+                        (max (point) conn-insertion-recording-other-end)))))))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-record-emacs-state))
