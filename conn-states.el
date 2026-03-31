@@ -847,7 +847,7 @@ is being entered after the current state has exited or nil if
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-unwind-protect (&rest body)
+(defmacro conn-state-unwind (&rest body)
   (declare (indent 0))
   (cl-with-gensyms (rest)
     `(push (lambda (,rest)
@@ -1419,7 +1419,7 @@ command was a prefix command.")
   (unless (conn-insertion-recording-p)
     (require 'diff-mode)
     (setq conn--insertion-recording-overlay (make-overlay (point) (point))
-          conn-insertion-recording-other-end (point))
+          conn-insertion-recording-other-end (point-marker))
     (unless conn--insertion-recording-change-group
       (setq conn--insertion-recording-change-group (prepare-change-group)))
     (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
@@ -1427,7 +1427,7 @@ command was a prefix command.")
     (add-hook 'pre-redisplay-functions
               #'conn--update-record-insertion-region
               nil 'local)
-    (conn-state-unwind-protect
+    (conn-state-unwind
       (remove-hook 'pre-redisplay-functions
                    #'conn--update-record-insertion-region
                    'local)
@@ -1437,11 +1437,14 @@ command was a prefix command.")
         (setq conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
         (setq conn-insertion-recording-last-insertion
-              (filter-buffer-substring
-               (min (point) conn-insertion-recording-other-end)
-               (max (point) conn-insertion-recording-other-end))))
+              (conn-insertion-recording-text)))
       (when (overlayp conn--insertion-recording-overlay)
         (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil))))))
+
+(defun conn-insertion-recording-text ()
+  (filter-buffer-substring
+   (min (point) conn-insertion-recording-other-end)
+   (max (point) conn-insertion-recording-other-end)))
 
 (defun conn-insertion-end-recording ()
   (interactive)
@@ -1454,13 +1457,14 @@ command was a prefix command.")
   (interactive)
   (when conn-record-emacs-state
     (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
-    (setq conn-insertion-recording-other-end nil)
+    (when conn-insertion-recording-other-end
+      (set-marker (cl-shiftf conn-insertion-recording-other-end nil) nil))
     (conn-pop-state)))
 
 (defun conn-insertion-insert-previous ()
   (interactive)
   (when conn-record-emacs-state
-    (setq conn-insertion-recording-other-end (point))
+    (setq conn-insertion-recording-other-end (point-marker))
     (insert conn-insertion-recording-last-insertion)
     (conn-pop-state)))
 
@@ -1500,12 +1504,12 @@ command was a prefix command.")
   (require 'diff-mode)
   (when (conn-insertion-recording-p)
     (error "Already recording"))
-  (let ((conn-insertion-recording-other-end (point))
+  (let ((conn-insertion-recording-other-end (point-marker))
         (pre (make-symbol "post-hook")))
     (unwind-protect
         (progn
           (conn-push-state 'conn-record-one-emacs-state)
-          (conn-state-unwind-protect
+          (conn-state-unwind
             (letrec ((hook
                       (lambda ()
                         (remove-hook 'conn-state-entry-hook hook t)
@@ -1526,22 +1530,19 @@ command was a prefix command.")
                           defining-kbd-macro)
                       (recursive-edit))
                   (recursive-edit)))))
-          (filter-buffer-substring
-           (min (point) conn-insertion-recording-other-end)
-           (max (point) conn-insertion-recording-other-end)))
-      (remove-hook 'pre-command-hook pre t))))
+          (conn-insertion-recording-text))
+      (remove-hook 'pre-command-hook pre t)
+      (set-marker conn-insertion-recording-other-end nil))))
 
 (defun conn-emacs-state-record-insert (&optional with)
   (interactive)
   (if with (insert with)
     (conn-record-insertion)
-    (conn-state-unwind-protect
+    (conn-state-unwind
       (when conn-insertion-recording-other-end
         (conn-push-command-history
          'conn-emacs-state-record-insert
-         (filter-buffer-substring
-          (min (point) conn-insertion-recording-other-end)
-          (max (point) conn-insertion-recording-other-end)))))))
+         (conn-insertion-recording-text))))))
 
 ;;;;; Mark State
 
@@ -1601,7 +1602,7 @@ entering mark state.")
   (cl-call-next-method)
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode)
         conn-record-mark-state t)
-  (conn-state-unwind-protect
+  (conn-state-unwind
     (deactivate-mark)
     (setq conn-record-mark-state nil)
     (unless (or (null conn-record-mark-state)
