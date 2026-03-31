@@ -510,7 +510,8 @@
   :keymap (conn-get-state-map 'conn-record-emacs-state)
   "C-." 'conn-record-exhange
   "C-M-." 'conn-record-set-region
-  "M-<escape>" 'conn-insertion-end-recording)
+  "M-<escape>" 'conn-insertion-end-recording
+  "C-M-<escape>" 'conn-insertion-abort-recording)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)

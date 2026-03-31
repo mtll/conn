@@ -1400,13 +1400,15 @@ command was a prefix command.")
 (defvar-local conn--insertion-recording-overlay nil)
 (defvar-local conn--insertion-recording-change-group nil)
 
-(defun conn---update-record-insertion-region (window)
-  (with-current-buffer (window-buffer window)
-    (when (and (overlayp conn--insertion-recording-overlay)
-               conn-insertion-recording-other-end)
-      (move-overlay conn--insertion-recording-overlay
-                    (min (point) conn-insertion-recording-other-end)
-                    (max (point) conn-insertion-recording-other-end)))))
+(defun conn--update-record-insertion-region (window)
+  (when (eq window (selected-window))
+    (with-current-buffer (window-buffer window)
+      (when (and (overlayp conn--insertion-recording-overlay)
+                 conn-insertion-recording-other-end)
+        (move-overlay conn--insertion-recording-overlay
+                      (min (point) conn-insertion-recording-other-end)
+                      (max (point) conn-insertion-recording-other-end))
+        (overlay-put conn--insertion-recording-overlay 'window window)))))
 
 (defun conn-insertion-recording-p ()
   (and conn--insertion-recording-overlay t))
@@ -1423,11 +1425,11 @@ command was a prefix command.")
     (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
     (overlay-put conn--insertion-recording-overlay 'category 'conn-recording-region)
     (add-hook 'pre-redisplay-functions
-              #'conn---update-record-insertion-region
+              #'conn--update-record-insertion-region
               nil 'local)
     (conn-state-unwind-protect
       (remove-hook 'pre-redisplay-functions
-                   #'conn---update-record-insertion-region
+                   #'conn--update-record-insertion-region
                    'local)
       (when conn--insertion-recording-change-group
         (accept-change-group conn--insertion-recording-change-group)
@@ -1449,13 +1451,19 @@ command was a prefix command.")
     (unless conn-emacs-state
       (conn-push-state 'conn-emacs-state))))
 
+(defun conn-insertion-abort-recording ()
+  (interactive)
+  (when conn-record-emacs-state
+    (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
+    (setq conn-insertion-recording-other-end nil)
+    (conn-pop-state)))
+
 (defun conn-insertion-insert-previous ()
   (interactive)
-  (unless (conn-insertion-recording-p)
-    (user-error "Not recording"))
-  (insert conn-insertion-recording-last-insertion)
-  (setq conn-insertion-recording-other-end nil)
-  (conn-pop-state))
+  (when conn-record-emacs-state
+    (insert conn-insertion-recording-last-insertion)
+    (setq conn-insertion-recording-other-end nil)
+    (conn-pop-state)))
 
 (defun conn-record-insertion (&optional recursive-edit change-group)
   (require 'diff-mode)
@@ -1467,7 +1475,8 @@ command was a prefix command.")
       (progn
         (set-transient-map
          (define-keymap
-           "<remap> <conn-pop-state>" #'conn-insertion-insert-previous))
+           "<remap> <conn-pop-state>" #'conn-insertion-insert-previous
+           "<remap> <keyboard-quit>" #'conn-insertion-abort-recording))
         (conn-push-state 'conn-record-emacs-state))
     (set-transient-map
      (define-keymap
@@ -1498,10 +1507,10 @@ command was a prefix command.")
         (progn
           (conn-push-state 'conn-record-one-emacs-state)
           (conn-state-unwind-protect
-            (cl-with-gensyms (hook)
-              (fset hook (lambda ()
-                           (remove-hook 'conn-state-entry-hook hook t)
-                           (exit-recursive-edit)))
+            (letrec ((hook
+                      (lambda ()
+                        (remove-hook 'conn-state-entry-hook hook t)
+                        (exit-recursive-edit))))
               (add-hook 'conn-state-entry-hook hook 100 t)))
           (set-transient-map
            (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
