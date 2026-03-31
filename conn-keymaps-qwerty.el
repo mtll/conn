@@ -514,6 +514,19 @@
   "C-M-<escape>" 'conn-insertion-abort-recording)
 
 (define-keymap
+  :keymap conn-record-insertion-transient-map
+  "<escape>" #'conn-insertion-abort-recording
+  "M-p" #'conn-insertion-insert-previous)
+
+(define-keymap
+  :keymap conn-record-insertion-recursive-transient-map
+  "M-p" #'conn-insertion-insert-previous)
+
+(define-keymap
+  :keymap conn-record-one-insertion-transient-map
+  "<escape>" #'abort-recursive-edit)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
   "x" 'conn-record-emacs-state
   "d" 'conn-emacs-state-record-insert
@@ -583,7 +596,7 @@
 
 (define-keymap
   :keymap conn-swap-argument-map
-  "~" 'swap)
+  "w" 'swap)
 
 (define-keymap
   :keymap conn-stay-argument-map

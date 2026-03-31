@@ -1446,6 +1446,9 @@ command was a prefix command.")
    (min (point) conn-insertion-recording-other-end)
    (max (point) conn-insertion-recording-other-end)))
 
+(defvar-keymap conn-record-insertion-transient-map)
+(defvar-keymap conn-record-insertion-recursive-transient-map)
+
 (defun conn-record-insertion (&optional recursive-edit change-group)
   (require 'diff-mode)
   (when (conn-insertion-recording-p)
@@ -1454,63 +1457,37 @@ command was a prefix command.")
     (setq conn--insertion-recording-change-group change-group))
   (if (not recursive-edit)
       (progn
-        (set-transient-map
-         (define-keymap
-           "<remap> <conn-pop-state>" #'conn-insertion-insert-previous
-           "<remap> <keyboard-quit>" #'conn-insertion-abort-recording))
+        (set-transient-map conn-record-insertion-transient-map
+                           nil nil
+                           (substitute-command-keys
+                            (concat
+                             (propertize
+                              "Change Transient Map: "
+                              'face 'minibuffer-prompt)
+                             "\\<conn-record-insertion-transient-map>"
+                             "\\[conn-insertion-abort-recording] abort, "
+                             "\\[conn-insertion-insert-previous] insert previous")))
         (conn-push-state 'conn-record-emacs-state))
-    (set-transient-map
-     (define-keymap
-       "<remap> <exit-recursive-edit>" #'conn-insertion-insert-previous))
+    (set-transient-map conn-record-insertion-transient-recursive-map
+                       nil nil
+                       (substitute-command-keys
+                        (concat
+                         (propertize
+                          "Change Transient Map: "
+                          'face 'minibuffer-prompt)
+                         "\\<conn-record-insertion-transient-map>"
+                         "\\[conn-insertion-insert-previous] insert previous")))
     (conn-with-recursive-stack 'conn-record-emacs-recursive-state
       (atomic-change-group
         (save-current-buffer
           (recursive-edit))))
     conn-insertion-recording-last-insertion))
 
-(conn-define-state conn-record-one-emacs-state (conn-autopop-state)
-  :lighter "1REC"
-  :pop-predicate (lambda () (not (eq this-command 'ignore))))
-
-(defvar conn-record-one-insert-command-predicate
-  (lambda (cmd)
-    (memq cmd '(self-insert-command
-                quoted-insert
-                abort-recursive-edit))))
-
 (defun conn-record-one-insertion (&optional kbd-macro-query)
-  (require 'diff-mode)
-  (when (conn-insertion-recording-p)
-    (error "Already recording"))
-  (let ((conn-insertion-recording-other-end (point-marker))
-        (pre (make-symbol "post-hook")))
-    (unwind-protect
-        (progn
-          (conn-push-state 'conn-record-one-emacs-state)
-          (conn-state-unwind
-            (letrec ((hook
-                      (lambda ()
-                        (remove-hook 'conn-state-entry-hook hook t)
-                        (exit-recursive-edit))))
-              (add-hook 'conn-state-entry-hook hook 100 t)))
-          (set-transient-map
-           (define-keymap "<remap> <keyboard-quit>" 'abort-recursive-edit))
-          (fset pre (lambda ()
-                      (unless (funcall conn-record-one-insert-command-predicate
-                                       this-command)
-                        (setq this-command #'ignore))))
-          (add-hook 'pre-command-hook pre -99 t)
-          (atomic-change-group
-            (with-undo-amalgamate
-              (save-current-buffer
-                (if kbd-macro-query
-                    (let (executing-kbd-macro
-                          defining-kbd-macro)
-                      (recursive-edit))
-                  (recursive-edit)))))
-          (conn-insertion-recording-text))
-      (remove-hook 'pre-command-hook pre t)
-      (set-marker conn-insertion-recording-other-end nil))))
+  (conn-with-recursive-stack 'conn-emacs-state
+    (let ((char (char-to-string (read-char "Char:" t))))
+      (insert char)
+      char)))
 
 (defun conn-emacs-state-record-insert (&optional with)
   (interactive)
