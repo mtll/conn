@@ -211,6 +211,7 @@ Expansions and contractions are provided by functions in
          (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
              (conn-expansion-targets)
            (conn-expansion-focus-targets)))
+        (recenter (conn-dispatch-get-display-line))
         (conn-dispatch-handle-and-redisplay)))
     ( :message 0 (keymap)
       (when-let* ((binding (where-is-internal 'toggle-focus keymap t)))

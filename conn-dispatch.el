@@ -2661,9 +2661,6 @@ updated.")
                                                          'conn-target-overlay
                                                          (selected-window))))))))
 
-(cl-defgeneric conn-target-finder-recenter (target-finder &optional line)
-  (:method (_ &optional line) (recenter line)))
-
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
 
