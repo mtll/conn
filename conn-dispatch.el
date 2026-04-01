@@ -348,10 +348,13 @@ themselves once the selection process has concluded."
        (mapc #'conn-label-redisplay candidates))
      (setq prompt-flag nil)
      (let ((next nil)
-           (c (funcall char-reader prompt)))
-       (setq prompt-suffix (concat prompt-suffix (string c))
+           (char (catch 'return
+                   (while-let ((c (funcall char-reader prompt)))
+                     (unless conn-dispatch-hide-labels
+                       (throw 'return c))))))
+       (setq prompt-suffix (concat prompt-suffix (string char))
              current (dolist (label current next)
-                       (when-let* ((l (conn-label-narrow label c)))
+                       (when-let* ((l (conn-label-narrow label char)))
                          (push l next))))))))
 
 ;;;;; Window Header-line Labels
@@ -1809,41 +1812,40 @@ Target overlays may override this default by setting the
 (defun conn--with-dispatch-labels (labels body)
   (conn-cleanup-labels)
   (clrhash conn--dispatch-window-lines-cache)
-  (let ((conn-dispatch-hide-labels nil))
-    (unwind-protect
-        (conn-with-dispatch-event-handlers
-          ( :handler (cmd)
-            (when (eq cmd 'toggle-labels)
-              (cl-callf not conn-dispatch-hide-labels)
-              (while-no-input
-                (mapc #'conn-label-redisplay labels))
-              (conn-dispatch-handle)))
-          ( :message -50 (keymap)
-            (when-let* ((_ conn-dispatch-hide-labels)
-                        (binding
-                         (where-is-internal 'toggle-labels keymap t)))
-              (concat
-               (propertize (key-description binding)
-                           'face 'help-key-binding)
-               " "
-               (propertize
-                "hide labels"
-                'face 'eldoc-highlight-function-argument))))
-          (:keymap conn-toggle-label-argument-map)
-          (let ((fn (make-symbol "cleanup")))
-            (fset fn (lambda (&rest _)
-                       (unwind-protect
-                           (mapc #'conn-label-delete labels)
-                         (setq conn--previous-labels-cleanup nil)
-                         (remove-hook 'pre-redisplay-functions fn))))
-            (setq conn--previous-labels-cleanup fn))
-          ;; ensure the cache gets populated
-          (ignore (conn--dispatch-window-lines))
-          (funcall body labels))
-      (clrhash conn--pixelwise-window-cache)
-      (when conn--previous-labels-cleanup
-        (add-hook 'pre-redisplay-functions
-                  conn--previous-labels-cleanup)))))
+  (unwind-protect
+      (conn-with-dispatch-event-handlers
+        ( :handler (cmd)
+          (when (eq cmd 'toggle-labels)
+            (cl-callf not conn-dispatch-hide-labels)
+            (while-no-input
+              (mapc #'conn-label-redisplay labels))
+            (conn-dispatch-handle)))
+        ( :message -50 (keymap)
+          (when-let* ((_ conn-dispatch-hide-labels)
+                      (binding
+                       (where-is-internal 'toggle-labels keymap t)))
+            (concat
+             (propertize (key-description binding)
+                         'face 'help-key-binding)
+             " "
+             (propertize
+              "hide labels"
+              'face 'eldoc-highlight-function-argument))))
+        (:keymap conn-toggle-label-argument-map)
+        (let ((fn (make-symbol "cleanup")))
+          (fset fn (lambda (&rest _)
+                     (unwind-protect
+                         (mapc #'conn-label-delete labels)
+                       (setq conn--previous-labels-cleanup nil)
+                       (remove-hook 'pre-redisplay-functions fn))))
+          (setq conn--previous-labels-cleanup fn))
+        ;; ensure the cache gets populated
+        (ignore (conn--dispatch-window-lines))
+        (funcall body labels))
+    (clrhash conn--pixelwise-window-cache)
+    (when conn--previous-labels-cleanup
+      (add-hook 'pre-redisplay-functions
+                conn--previous-labels-cleanup))))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
@@ -2286,7 +2288,8 @@ the meaning of depth."
                        (conn--read-args-prefix-sign nil)
                        (conn--dispatch-read-char-handlers nil)
                        (conn--dispatch-read-char-message-prefixes nil)
-                       (conn--dispatch-always-retarget nil))
+                       (conn--dispatch-always-retarget nil)
+                       (conn-dispatch-hide-labels nil))
              (if ,select-mode (conn-dispatch-select-mode -1))
              (conn-dispatch-restore-state)
              (message nil)
@@ -4667,7 +4670,8 @@ it."))
     (error "Dispatch not available in keyboard macros"))
   (conn-dispatch-save-state)
   (conn-protected-let*
-      ((conn-wincontrol-mode nil)
+      ((conn-dispatch-hide-labels nil)
+       (conn-wincontrol-mode nil)
        (conn-wincontrol-one-command-mode nil)
        (action action (conn-action-cancel action))
        (conn-dispatch-quit-flag nil)
