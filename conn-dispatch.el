@@ -3553,7 +3553,8 @@ contain targets."
               (conn-make-target-overlay
                (point) 0
                :thing 'point
-               :padding-function #'conn--flush-left-padding))
+               :padding-function (lambda (ov width _face)
+                                   (conn--flush-left-padding ov width nil))))
             (vertical-motion 1)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-column-targets))

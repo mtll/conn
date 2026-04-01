@@ -2026,7 +2026,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                               cmd newcmd)
                         (when pre (funcall pre cmd)))
                     (update-args cmd)
-                    (set-error-message "Invalid Command <%s>" cmd)
+                    (when cmd
+                      (set-error-message "Invalid Command <%s>" cmd))
                     (throw 'conn-read-args-handle nil))))))
            (when post (funcall post cmd))
            (setq conn-read-args-last-command cmd))

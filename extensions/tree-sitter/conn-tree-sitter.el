@@ -1290,7 +1290,7 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
-  "s" (conn-anonymous-thing
+  "h" (conn-anonymous-thing
         '(conn-ts-thing)
         :pretty-print ( :method (_) "ts-all-things")
         :target-finder ( :method (_self _arg)
@@ -1305,7 +1305,7 @@
                          (lambda (bd)
                            (<= (car bd) (point) (cdr bd)))))
                       'conn-ts-thing)))
-  "S" (conn-anonymous-thing
+  "s" (conn-anonymous-thing
         '(conn-ts-thing)
         :pretty-print ( :method (_) "ts-all-parents")
         :target-finder ( :method (_self _arg)

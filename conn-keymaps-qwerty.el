@@ -346,7 +346,18 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   "TAB" 'repeat-dispatch
-  "u" 'forward-symbol
+  "o" (conn-anonymous-thing
+        '(forward-word)
+        :pretty-print (:method (_self) "all-words")
+        :target-finder ( :method (_self _arg)
+                         (conn-all-things-targets :thing 'word)))
+  "O" 'forward-word
+  "u" (conn-anonymous-thing
+        '(forward-symbol)
+        :pretty-print (:method (_self) "all-symbols")
+        :target-finder ( :method (_self _arg)
+                         (conn-all-things-targets :thing 'symbol)))
+  "U" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
   "<conn-thing-map> b" (conn-anonymous-thing
@@ -371,19 +382,6 @@
   :keymap conn-dispatch-toggle-focus-map
   "RET" 'toggle-focus
   "<return>" 'toggle-focus)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
-  "O" (conn-anonymous-thing
-        '(forward-word)
-        :pretty-print (:method (_self) "all-words")
-        :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'word)))
-  "U" (conn-anonymous-thing
-        '(forward-symbol)
-        :pretty-print (:method (_self) "all-symbols")
-        :target-finder ( :method (_self _arg)
-                         (conn-all-things-targets :thing 'symbol))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)
