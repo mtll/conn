@@ -73,7 +73,7 @@
   (when (buffer-match-p "CAPTURE-.*" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-org-setup-capture-state)
+(add-hook 'conn-setup-state-functions 'conn-org-setup-capture-state)
 
 ;;;###autoload
 (defun conn-org-heading-state ()

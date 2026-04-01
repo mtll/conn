@@ -38,8 +38,8 @@
   :global t
   :group 'conn
   (if conn-special-state-mode
-      (add-hook 'conn-setup-state-hook #'conn-setup-special-state 20)
-    (remove-hook 'conn-setup-state-hook #'conn-setup-special-state)))
+      (add-hook 'conn-setup-state-functions #'conn-setup-special-state 20)
+    (remove-hook 'conn-setup-state-functions #'conn-setup-special-state)))
 
 ;;; Load Extensions
 

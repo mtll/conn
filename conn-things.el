@@ -1923,30 +1923,30 @@ Only the background color is used."
                     "; \\[conn-expand] next; "
                     "\\[conn-contract] prev"))))))))
          (command-handler
-          (lambda (command)
+          (lambda (command break)
             (pcase command
               ('recenter-top-bottom
                (let ((this-command 'recenter-top-bottom)
                      (last-command conn-read-args-last-command))
                  (recenter-top-bottom (conn-read-args-prefix-arg)))
-               (conn-read-args-handle))
+               (funcall break))
               ('conn-exchange-mark-command
                (exchange-point-and-mark)
-               (conn-read-args-handle))
+               (funcall break))
               ('conn-contract
                (setq curr (mod (1- curr) size))
                (pcase (nth curr bounds)
                  ((conn-bounds `(,beg . ,end))
                   (goto-char (if (< (point) (mark)) beg end))
                   (push-mark (if (< (point) (mark)) end beg) t)))
-               (conn-read-args-handle))
+               (funcall break))
               ('conn-expand
                (setq curr (mod (1+ curr) size))
                (pcase (nth curr bounds)
                  ((conn-bounds `(,beg . ,end))
                   (goto-char (if (< (point) (mark)) beg end))
                   (push-mark (if (< (point) (mark)) end beg))))
-               (conn-read-args-handle))
+               (funcall break))
               ('abort
                (user-error "Aborted"))))))
     (pcase bounds

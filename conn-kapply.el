@@ -1563,8 +1563,8 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Command Handler
 
-(cl-defgeneric conn-kapply-command-handler (cmd)
-  (:method (_) nil))
+(cl-defgeneric conn-kapply-command-handler (cmd break)
+  (:method (&rest _) nil))
 
 (defun conn--kapply-display-ring (&optional timeout)
   (if (fboundp 'conn-posframe--kmacro-ring-display-subr)
@@ -1573,43 +1573,50 @@ finishing showing the buffers that were visited."))
       (conn-read-args-message
        (conn--kmacro-display last-kbd-macro 30 "Kmacro ring emtpy")))))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-next)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-next))
+                                           break)
   (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
   (conn--kapply-display-ring)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-previous)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-previous))
+                                           break)
   (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
   (conn--kapply-display-ring)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql conn-display-kmacro-ring)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql conn-display-kmacro-ring))
+                                           break)
   (conn--kapply-display-ring 30)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-delete-ring-head)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-delete-ring-head))
+                                           break)
   (kmacro-delete-ring-head (conn-read-args-consume-prefix-arg))
   (conn--kapply-display-ring)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-swap-ring)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-swap-ring))
+                                           break)
   (kmacro-swap-ring)
   (conn--kapply-display-ring)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter))
+                                           break)
   (condition-case _
       (kmacro-set-counter
        (or (conn-read-args-consume-prefix-arg)
            0))
     (quit nil))
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-format)))
+(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-format))
+                                           break)
   (condition-case _
       (kmacro-set-format (read-string "Macro Counter Format: "))
     (quit nil))
-  (conn-read-args-handle))
+  (funcall break))
 
 (cl-defmethod conn-argument-display ((_cmd (eql conn-kapply-command-handler)))
   (list (concat (substitute-command-keys

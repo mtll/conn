@@ -61,7 +61,7 @@
                                        'conn-recording-region))))
   (let (conn-next-state)
     (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
-  (or (run-hook-with-args-until-success 'conn-setup-state-hook)
+  (or (run-hook-with-args-until-success 'conn-setup-state-functions)
       (conn-push-state 'conn-emacs-state)))
 
 (defun conn--setup-keymaps ()

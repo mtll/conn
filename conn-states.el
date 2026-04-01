@@ -54,7 +54,7 @@
   :group 'conn
   :type '(list symbol))
 
-(defvar conn-setup-state-hook nil
+(defvar conn-setup-state-functions nil
   "Hook responsible for setting up the base state in a buffer.
 
 The hook is run when `conn-local-mode' is turned on in a buffer or when
@@ -1585,7 +1585,7 @@ command was a prefix command.")
   (unless no-major-mode-maps
     (setq conn--active-major-mode-maps
           (conn--derived-mode-all-parents major-mode)))
-  (or (run-hook-with-args-until-success 'conn-setup-state-hook)
+  (or (run-hook-with-args-until-success 'conn-setup-state-functions)
       (conn-push-state 'conn-emacs-state)))
 
 (defun conn-setup-commit-state ()
@@ -1593,35 +1593,35 @@ command was a prefix command.")
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state)
+(add-hook 'conn-setup-state-functions 'conn-setup-commit-state)
 
 (defun conn-setup-edmacro-state ()
   "Set the base state to `conn-command-state' in edit macro buffers."
   (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state)
+(add-hook 'conn-setup-state-functions 'conn-setup-edmacro-state)
 
 (defun conn-setup-null-state ()
   "Set the base state to `conn-null-state' in `conn-null-state-modes' buffers."
   (when (derived-mode-p conn-null-state-modes)
     (conn-push-state 'conn-null-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-null-state -90)
+(add-hook 'conn-setup-state-functions 'conn-setup-null-state -90)
 
 (defun conn-setup-command-state ()
   "Set base state to `conn-command-state' in `conn-command-state-modes' buffers."
   (when (derived-mode-p conn-command-state-modes)
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-command-state 50)
+(add-hook 'conn-setup-state-functions 'conn-setup-command-state 50)
 
 (defun conn-setup-minibuffer-state ()
   "Setup `minibuffer-mode' buffer state."
   (when (eq major-mode 'minibuffer-mode)
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -80)
+(add-hook 'conn-setup-state-functions 'conn-setup-minibuffer-state -80)
 
 ;;;; Read Args
 
@@ -1695,20 +1695,6 @@ Resets the current prefix argument."
     (setf conn--read-args-prefix-mag nil
           conn--read-args-prefix-sign nil)))
 
-(defun conn-read-args-handle (&optional new-command)
-  "Handle the current command.
-
-This function should be called from any function passed as the
-:command-handler argument to `conn-read-args' when the function
-chooses to handle a command.
-
-If NEW-COMMAND is non-nil it will replace the current command and
-command handlers and argument update functions will be called with the
-new command."
-  (if new-command
-      (throw 'conn-read-args-new-command new-command)
-    (throw 'conn-read-args-handle nil)))
-
 (defun conn-read-args-message (format-string &rest args)
   "Print FORMAT-STRING with ARGS during `conn-read-args'.
 
@@ -1724,7 +1710,7 @@ The duration of the message display is controlled by
   "Print an error message of FORMAT-STRING with ARGS."
   (setq conn--read-args-error-message (apply #'format format-string args)
         conn--read-args-error-flag t)
-  (throw 'conn-read-args-handle nil))
+  (throw 'conn-read-args-error nil))
 
 (defun conn--read-args-get-message ()
   (let ((msg (concat
@@ -1877,16 +1863,18 @@ This skips executing the body of the `conn-read-args' form entirely."
   `(throw 'conn-read-args-return
           (list (lambda () ,@body))))
 
-(cl-defgeneric conn-read-args-command-handler (cmd)
-  (:method (_) "Noop" nil))
+(cl-defgeneric conn-read-args-command-handler (cmd break)
+  (:method (&rest _) "Noop" nil))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql recenter-top-bottom)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql recenter-top-bottom))
+                                              break)
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-read-args-last-command))
     (recenter-top-bottom (conn-read-args-consume-prefix-arg))
-    (conn-read-args-handle)))
+    (funcall break)))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql digit-argument)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql digit-argument))
+                                              break)
   (let* ((char (if (integerp last-input-event)
                    last-input-event
                  (get last-input-event 'ascii-character)))
@@ -1895,22 +1883,26 @@ This skips executing the body of the `conn-read-args' form entirely."
           (if (integerp conn--read-args-prefix-mag)
               (+ (* 10 conn--read-args-prefix-mag) digit)
             digit)))
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql backward-delete-arg)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql backward-delete-arg))
+                                              break)
   (when conn--read-args-prefix-mag
     (cl-callf floor conn--read-args-prefix-mag 10))
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql reset-arg)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql reset-arg))
+                                              break)
   (setf conn--read-args-prefix-mag nil)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql negative-argument)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql negative-argument))
+                                              break)
   (cl-callf not conn--read-args-prefix-sign)
-  (conn-read-args-handle))
+  (funcall break))
 
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql keyboard-quit)))
+(cl-defmethod conn-read-args-command-handler ((_cmd (eql keyboard-quit))
+                                              _break)
   (keyboard-quit))
 
 (cl-defun conn--read-args (state
@@ -1956,16 +1948,19 @@ This skips executing the body of the `conn-read-args' form entirely."
                                 arguments)))))
            (setf conn--read-args-error-message ""))
          (call-handlers (cmd)
-           (catch 'conn-read-args-new-command
+           (let* ((handled nil)
+                  (handle (lambda () (setq handled t))))
              (when command-handler
-               (funcall command-handler cmd))
-             (conn-read-args-command-handler cmd)
-             nil))
+               (funcall command-handler cmd handle))
+             (unless handled
+               (conn-read-args-command-handler cmd handle))
+             handled))
          (update-args (cmd)
-           (let ((break nil))
-             (dolist (a arguments)
-               (conn-argument-update a cmd (lambda () (setq break t)))
-               (when break (throw 'conn-read-args-handle nil)))))
+           (catch 'break
+             (let ((break nil))
+               (dolist (a arguments)
+                 (conn-argument-update a cmd (lambda () (setq break t)))
+                 (when break (throw 'break t))))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
@@ -2016,19 +2011,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (throw 'conn-read-args-return
                          (cons callback prev))
                 (conn-read-args-error "No previous arguments")))
-             (_
-              (catch 'conn-read-args-handle
-                (while t
-                  (if-let* ((newcmd (call-handlers cmd)))
-                      (progn
-                        (when post (funcall post cmd))
-                        (setq conn-read-args-last-command cmd
-                              cmd newcmd)
-                        (when pre (funcall pre cmd)))
-                    (update-args cmd)
-                    (when cmd
-                      (set-error-message "Invalid Command <%s>" cmd))
-                    (throw 'conn-read-args-handle nil))))))
+             ((pred identity)
+              (or (call-handlers cmd)
+                  (update-args cmd)
+                  (set-error-message "Invalid Command <%s>" cmd))))
            (when post (funcall post cmd))
            (setq conn-read-args-last-command cmd))
          (setup-keymaps ()
@@ -2067,9 +2053,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                             #'display-message
                             #'set-error-message)
                  (while (continue-p)
-                   (setup-keymaps)
-                   (display-message)
-                   (execute-command (read-command))))
+                   (catch 'conn-read-args-error
+                     (setup-keymaps)
+                     (display-message)
+                     (execute-command (read-command)))))
                (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
        (catch 'conn-read-args-return

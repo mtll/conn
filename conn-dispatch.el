@@ -898,10 +898,11 @@ themselves once the selection process has concluded."
 
 ;;;;;; Command Handler
 
-(cl-defgeneric conn-dispatch-command-handler (cmd)
-  ( :method (_)))
+(cl-defgeneric conn-dispatch-command-handler (cmd break)
+  ( :method (&rest _) nil))
 
-(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-next)))
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-next))
+                                             break)
   (condition-case err
       (progn
         (conn-dispatch-cycle-ring-next)
@@ -909,11 +910,12 @@ themselves once the selection process has concluded."
             (conn-posframe--dispatch-ring-display-subr)
           (conn-read-args-message "%s" (conn-describe-dispatch
                                         (conn-ring-head conn-dispatch-ring))))
-        (conn-read-args-handle))
+        (funcall break))
     (user-error
      (conn-read-args-error (error-message-string err)))))
 
-(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous)))
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-cycle-ring-previous))
+                                             break)
   (condition-case err
       (progn
         (conn-dispatch-cycle-ring-previous)
@@ -921,11 +923,12 @@ themselves once the selection process has concluded."
             (conn-posframe--dispatch-ring-display-subr)
           (conn-read-args-message "%s" (conn-describe-dispatch
                                         (conn-ring-head conn-dispatch-ring))))
-        (conn-read-args-handle))
+        (funcall break))
     (user-error
      (conn-read-args-error (error-message-string err)))))
 
-(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head)))
+(cl-defmethod conn-dispatch-command-handler ((_ (eql conn-dispatch-ring-describe-head))
+                                             break)
   (condition-case err
       (progn
         (conn-dispatch-ring-remove-stale)
@@ -934,7 +937,7 @@ themselves once the selection process has concluded."
               (if (bound-and-true-p conn-posframe-mode)
                   (conn-posframe--dispatch-ring-display-subr)
                 (conn-read-args-message "%s" (conn-describe-dispatch head)))
-              (conn-read-args-handle))
+              (funcall break))
           (conn-read-args-error "Dispatch ring empty")))
     (user-error
      (conn-read-args-error (error-message-string err)))))
@@ -3525,7 +3528,9 @@ contain targets."
         (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
 
 (conn-define-target-finder conn-dispatch-column-targets
-    () ()
+    ()
+    ((window-predicate
+      :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (_state)
     (let ((col-width nil))
       ;; From `line-move-visual'
@@ -4502,7 +4507,8 @@ it."))
   (conn-make-ring conn-dispatch-ring-max
                   :cleanup 'conn-dispatch--cleanup))
 
-(cl-defmethod conn-dispatch-command-handler ((_cmd (eql conn-repeat-last-dispatch)))
+(cl-defmethod conn-dispatch-command-handler ((_cmd (eql conn-repeat-last-dispatch))
+                                             _break)
   (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))
       (if (conn-action-stale-p (conn-previous-dispatch-action prev))
           (progn
