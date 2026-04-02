@@ -3733,9 +3733,9 @@ contain targets."
           (_ (error "No region to replace")))))
     (funcall break)))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-dispatch-replace-argument)
-                                       (_sym (eql dispatch-replace)))
-  t)
+(conn-define-argument-command conn-dispatch-replace-argument
+    (eql dispatch-replace)
+  "Read and replace a thing at point.")
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-replace-argument))
   (concat (substitute-command-keys "\\[dispatch-replace]")

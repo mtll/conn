@@ -58,13 +58,21 @@
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-sort-things-argument)
-                                       cmd)
-  (or (memq cmd '(sort-numeric-fields
-                  sort-fields
-                  sort-regexp-fields
-                  sort-columns))
-      (cl-call-next-method)))
+(conn-define-argument-command conn-sort-things-argument
+    (eql sort-numeric-fields)
+  "Sort by numeric fields.")
+
+(conn-define-argument-command conn-sort-things-argument
+    (eql sort-fields)
+  "Sort by fields.")
+
+(conn-define-argument-command conn-sort-things-argument
+    (eql sort-columns)
+  "Sort columns.")
+
+(conn-define-argument-command conn-sort-things-argument
+    (eql sort-regexp-fields)
+  "Sort regexp fields.")
 
 (defun conn--sort-in-bounds (bounds
                              transform

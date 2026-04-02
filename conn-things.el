@@ -1347,8 +1347,7 @@ the point is within the region then the entire region is returned.")))
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "?" 'reference
-  "M-?" 'reference
-  "C-h" 'help)
+  "M-?" 'reference)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
@@ -1403,78 +1402,85 @@ the point is within the region then the entire region is returned.")))
 (cl-defmethod conn-argument-update ((arg conn-thing-argument)
                                     cmd
                                     break)
-  (pcase cmd
-    ('conn-things-in-region
-     (cl-callf not (conn-thing-argument-in-region arg))
-     (funcall break))
-    ((guard (conn-argument-predicate arg cmd))
-     (setf (conn-argument-set-flag arg) t
-           (conn-argument-value arg)
-           (list cmd (conn-read-args-consume-prefix-arg)))
-     (funcall break))))
+  (when (conn-argument-predicate arg cmd)
+    (setf (conn-argument-set-flag arg) t
+          (conn-argument-value arg)
+          (list cmd (conn-read-args-consume-prefix-arg)))
+    (funcall break)))
+
+(conn-define-argument-command conn-thing-argument
+    (conn-thing t)
+  "Operate on thing.")
+
+(conn-define-argument-command conn-thing-argument
+    (conn-thing dispatch)
+  "Operate on a thing selected with dispatch."
+  ( :predicate (_) (not (or defining-kbd-macro executing-kbd-macro))))
+
+(conn-define-argument-command conn-thing-argument
+    (eql recursive-edit)
+  "Operate on a region selected in a recursive edit."
+  (:predicate (arg) (conn-thing-argument-recursive-edit arg)))
+
+(conn-define-argument-command conn-thing-argument
+    (eql recursive-edit-mark)
+  "Operate on a region selected in a recursive edit."
+  (:predicate (arg) (conn-thing-argument-recursive-edit arg)))
+
+(conn-define-argument-command conn-thing-argument
+    (eql conn-things-in-region)
+  "Operatate on the things in the region."
+  ( :update (arg break)
+    (cl-callf not (conn-thing-argument-in-region arg))
+    (funcall break)))
 
 (defvar conn--last-thing-kbd-macro nil)
 
-(cl-defmethod conn-argument-update ((arg conn-thing-argument)
-                                    (cmd (conn-thing kbd-macro))
-                                    break)
-  (if (and conn--last-thing-kbd-macro
-           (memq cmd '(kmacro-call-macro
-                       call-last-kbd-macro
-                       kmacro-end-and-call-macro)))
+(conn-define-argument-command conn-thing-argument
+    (conn-thing kbd-macro)
+  "Operatate on the things in the region."
+  ( :update (arg cmd break)
+    (if (and conn--last-thing-kbd-macro
+             (memq cmd '(kmacro-call-macro
+                         call-last-kbd-macro
+                         kmacro-end-and-call-macro)))
+        (setf (conn-argument-set-flag arg) t
+              (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
       (setf (conn-argument-set-flag arg) t
-            (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
-    (setf (conn-argument-set-flag arg) t
-          (conn-argument-value arg)
-          (list
-           (conn-anonymous-thing
-             (list 'kbd-macro)
-             :bounds-op
-             ( :method (self _arg)
-               (prog1
-                   (save-mark-and-excursion
-                     (save-current-buffer
-                       (let ((buffer-read-only t)
-                             (buf (current-buffer))
-                             (conn-command-history conn-command-history))
-                         (if-let* ((macro (conn-thing-get self :kmacro)))
-                             (conn-with-recursive-stack 'conn-command-state
-                               (execute-kbd-macro macro))
-                           (let ((last-kbd-macro nil))
-                             (conn-with-recursive-stack 'conn-command-state
-                               (start-kbd-macro nil)
-                               (recursive-edit))
-                             (if defining-kbd-macro
-                                 (end-kbd-macro)
-                               (error "Not defining kbd macro"))
-                             (setf (conn-thing-get self :kmacro) last-kbd-macro)))
-                         (if (eq buf (current-buffer))
-                             (conn-make-bounds
-                              self nil
-                              (cons (region-beginning) (region-end))
-                              :subregions
-                              (cl-loop for r in (region-bounds)
-                                       collect (conn-make-bounds cmd nil r)))
-                           (error "Buffer change during keyboard macro")))))
-                 (setf conn--last-thing-kbd-macro self))))
-           nil)))
-  (funcall break))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
-                                       (_sym (conn-thing t)))
-  t)
-
-(cl-defmethod conn-argument-predicate ((_arg conn-thing-argument)
-                                       (_sym (conn-thing dispatch)))
-  (not (or defining-kbd-macro executing-kbd-macro)))
-
-(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
-                                       (_sym (eql recursive-edit)))
-  (conn-thing-argument-recursive-edit arg))
-
-(cl-defmethod conn-argument-predicate ((arg conn-thing-argument)
-                                       (_sym (eql recursive-edit-mark)))
-  (conn-thing-argument-recursive-edit arg))
+            (conn-argument-value arg)
+            (list
+             (conn-anonymous-thing
+               (list 'kbd-macro)
+               :bounds-op
+               ( :method (self _arg)
+                 (prog1
+                     (save-mark-and-excursion
+                       (save-current-buffer
+                         (let ((buffer-read-only t)
+                               (buf (current-buffer))
+                               (conn-command-history conn-command-history))
+                           (if-let* ((macro (conn-thing-get self :kmacro)))
+                               (conn-with-recursive-stack 'conn-command-state
+                                 (execute-kbd-macro macro))
+                             (let ((last-kbd-macro nil))
+                               (conn-with-recursive-stack 'conn-command-state
+                                 (start-kbd-macro nil)
+                                 (recursive-edit))
+                               (if defining-kbd-macro
+                                   (end-kbd-macro)
+                                 (error "Not defining kbd macro"))
+                               (setf (conn-thing-get self :kmacro) last-kbd-macro)))
+                           (if (eq buf (current-buffer))
+                               (conn-make-bounds
+                                self nil
+                                (cons (region-beginning) (region-end))
+                                :subregions
+                                (cl-loop for r in (region-bounds)
+                                         collect (conn-make-bounds cmd nil r)))
+                             (error "Buffer change during keyboard macro")))))
+                   (setf conn--last-thing-kbd-macro self))))
+             nil)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-argument))
   (when (conn-thing-argument-in-region arg)
@@ -1620,9 +1626,9 @@ words."))
                      (conn-subregions-argument-default (car (conn-argument-value arg)))))
              (funcall break))))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-thing-with-subregions-argument)
-                                       (_sym (eql toggle-subregions)))
-  t)
+(conn-define-argument-command conn-thing-with-subregions-argument
+    (eql toggle-subregions)
+  "Whether to act on the subregions of the thing.")
 
 (cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
   (cons (concat
@@ -1669,25 +1675,21 @@ current buffer.
             (and conn-kill-reformat-function
                  conn-reformat-default)))))))
 
-(cl-defmethod conn-argument-update ((arg conn-reformat-argument)
-                                    cmd
-                                    break)
-  (pcase cmd
-    ('reformat
-     (cl-callf null (conn-argument-value arg))
-     (funcall break))
-    ('set-reformat
-     (cl-callf null (conn-argument-value arg))
-     (setq-local conn-reformat-default (conn-argument-value arg))
-     (funcall break))))
+(conn-define-argument-command conn-reformat-argument
+    (eql reformat)
+  "Toggle whether the buffer is reformated around the kill."
+  ( :update (arg break)
+    (cl-callf null (conn-argument-value arg))
+    (funcall break)))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
-                                       (_sym (eql reformat)))
-  t)
-
-(cl-defmethod conn-argument-predicate ((_arg conn-reformat-argument)
-                                       (_sym (eql set-reformat)))
-  t)
+(conn-define-argument-command conn-reformat-argument
+    (eql set-reformat)
+  "Toggle whether the buffer is reformated around the kill.
+Also sets the buffer local default value of the reformat argument."
+  ( :update (arg break)
+    (cl-callf null (conn-argument-value arg))
+    (setq-local conn-reformat-default (conn-argument-value arg))
+    (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-reformat-argument))
   (substitute-command-keys

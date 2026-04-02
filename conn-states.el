@@ -1658,7 +1658,8 @@ command was a prefix command.")
   "9" 'digit-argument
   "?" 'reference
   "M-?" 'reference
-  "C-h" 'help
+  "C-h k" 'conn-describe-key
+  "C-h o" 'conn-describe-symbol
   "<escape>" 'keyboard-quit
   "C-g" 'keyboard-quit
   "DEL" 'backward-delete-arg
@@ -1735,7 +1736,6 @@ The duration of the message display is controlled by
            (t "[1]"))
      'face 'read-multiple-choice-face)
     "; \\[reference] reference"
-    "; \\[help] help"
     ")"
     (when-let* ((msg (conn--read-args-get-message)))
       (concat ": " msg)))))
@@ -1961,6 +1961,37 @@ This skips executing the body of the `conn-read-args' form entirely."
                (dolist (a arguments)
                  (conn-argument-update a cmd (lambda () (setq break t)))
                  (when break (throw 'break t))))))
+         (args-describe-key ()
+           (conn-with-overriding-map conn-read-args-map
+             (let ((inhibit-message nil))
+               (message "Key Sequence:"))
+             (let ((cmd (key-binding (read-key-sequence-vector nil) t)))
+               (while (arrayp cmd) ; keyboard macro
+                 (setq cmd (key-binding cmd t)))
+               (catch 'break
+                 (dolist (a arguments)
+                   (ignore
+                    (conn-argument-command-documentation
+                     a cmd (lambda (&rest pages)
+                             (apply #'conn-quick-reference pages)
+                             (throw 'break nil)))))))))
+         (args-describe-symbol ()
+           (let ((cmd (conn--read-args-completing-read
+                       (cond
+                        ((null command-loop) arguments)
+                        (command-handler
+                         `(,command-handler
+                           conn-read-args-command-handler
+                           ,@arguments))
+                        (t `(conn-read-args-command-handler
+                             ,@arguments))))))
+             (catch 'break
+               (dolist (a arguments)
+                 (ignore
+                  (conn-argument-command-documentation
+                   a cmd (lambda (&rest pages)
+                           (apply #'conn-quick-reference pages)
+                           (throw 'break nil))))))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
@@ -1981,7 +2012,7 @@ This skips executing the body of the `conn-read-args' form entirely."
               (pcase cmd
                 ('keyboard-quit
                  (keyboard-quit))
-                ((or 'execute-extended-command 'help)
+                ('execute-extended-command
                  (setq cmd (conn--read-args-completing-read
                             (cond
                              ((null command-loop) arguments)
@@ -2011,6 +2042,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                   (throw 'conn-read-args-return
                          (cons callback prev))
                 (conn-read-args-error "No previous arguments")))
+             ((or 'describe-key 'conn-describe-key)
+              (args-describe-key))
+             ((or 'describe-symbol 'conn-describe-symbol)
+              (args-describe-symbol))
              ((pred identity)
               (or (call-handlers cmd)
                   (update-args cmd)
@@ -2239,6 +2274,67 @@ be displayed in the echo area during `conn-read-args'."
   (:method (_arg) nil)
   ( :method ((arg conn-argument))
     (conn-argument-reference arg)))
+
+(cl-defgeneric conn-argument-command-documentation (arg command break)
+  (declare (side-effect-free t))
+  (:method (_arg _cmd _break) nil))
+
+(defmacro conn-define-argument-command (argument-specializer
+                                        command-specializer
+                                        docstring
+                                        &rest
+                                        body)
+  (declare (indent 2))
+  (unless (alist-get :predicate body)
+    (setf (alist-get :predicate body)
+          `((_arg) t)))
+  (cond ((stringp docstring)
+         (setf (alist-get :documentation body)
+               `((_arg break)
+                 (funcall break (conn-reference-page
+                                  (:eval (substitute-command-keys ,docstring)))))))
+        ((eq :documentation (car-safe docstring))
+         (push docstring body)))
+  (cl-macrolet ((cmd-arg (var)
+                  `(if (and command-specializer
+                            (not (eq '_ command-specializer)))
+                       `(list ,',var ',,'command-specializer)
+                     ',var)))
+    `(cl-macrolet ((:update (arglist &rest body)
+                     (pcase arglist
+                       ((or `(,argument-var ,cmd-var ,break-var)
+                            `(,argument-var ,break-var))
+                        `(cl-defmethod conn-argument-update
+                           ((,argument-var ,',argument-specializer)
+                            ,,(cmd-arg (or cmd-var '_))
+                            ,break-var)
+                           ,@body))))
+                   (:annotation (arglist &rest body)
+                     (pcase arglist
+                       ((or `(,argument-var)
+                            `(,argument-var ,cmd-var))
+                        `(cl-defmethod conn-argument-completion-annotation
+                           ((,argument-var ,',argument-specializer)
+                            ,,(cmd-arg (or cmd-var _)))
+                           ,@body))))
+                   (:predicate (arglist &rest body)
+                     (pcase arglist
+                       ((or `(,argument-var)
+                            `(,argument-var ,cmd-var))
+                        `(cl-defmethod conn-argument-predicate
+                           ((,argument-var ,',argument-specializer)
+                            ,,(cmd-arg (or cmd-var '_)))
+                           ,@body))))
+                   (:documentation (arglist &rest body)
+                     (pcase arglist
+                       ((or `(,argument-var ,cmd-var ,break-var)
+                            `(,argument-var ,break-var))
+                        `(cl-defmethod conn-argument-command-documentation
+                           ((,argument-var ,',argument-specializer)
+                            ,,(cmd-arg (or cmd-var '_))
+                            ,break-var)
+                           ,@body)))))
+       (progn ,@body))))
 
 ;;;;;; Read Args Command Handler
 

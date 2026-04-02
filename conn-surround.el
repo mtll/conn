@@ -118,19 +118,22 @@
                   &aux
                   (keymap conn-surround-property-argument-map)))))
 
+(conn-define-argument-command conn-surround-property-argument
+    (eql :whole)
+  "The whole region.")
+
+(conn-define-argument-command conn-surround-property-argument
+    (eql :inner)
+  "The inner region.")
+
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd
                                     break)
-  (when (memq cmd '(:whole :inner))
+  (when (conn-argument-predicate arg cmd)
     (setf (conn-argument-value arg)
           (unless (eq cmd (conn-argument-value arg))
             cmd))
     (funcall break)))
-
-(cl-defmethod conn-argument-predicate ((_arg conn-surround-property-argument)
-                                       sym)
-  (or (eq sym :whole)
-      (eq sym :inner)))
 
 (cl-defmethod conn-argument-display ((arg conn-surround-property-argument))
   (when-let* ((val (conn-argument-value arg)))

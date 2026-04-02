@@ -1271,41 +1271,73 @@ The iterator must be the first argument in ARGLIST.
             (propertize (format "<%c>" reg)
                         'face 'conn-argument-active-face))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-kapply-macro-argument)
-                                       cmd)
-  (memq cmd '(apply
-              record
-              append
-              append-skip-exec
-              step-edit
-              register)))
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql record)
+  "Record a new keyboard macro."
+  ( :update (arg break)
+    (setf (conn-argument-value arg) 'record
+          (conn-argument-set-flag arg) t)
+    (funcall break)))
 
-(cl-defmethod conn-argument-update ((arg conn-kapply-macro-argument)
-                                    cmd
-                                    break)
-  (cond ((memq cmd '(apply append append-skip-exec step-edit))
-         (if (and (kmacro-ring-empty-p)
-                  (not (conn-kapply-macro-argument-register arg)))
-             (conn-read-args-error "Kmacro ring empty")
-           (setf (conn-argument-value arg) cmd
-                 (conn-argument-set-flag arg) t)
-           (funcall break)))
-        ((eq cmd 'register)
-         (if (conn-kapply-macro-argument-register arg)
-             (setf (conn-kapply-macro-argument-register arg) nil)
-           (when-let* ((reg (condition-case err
-                                (register-read-with-preview
-                                 "Kmacro Register:"
-                                 #'kmacro-p)
-                              (quit nil)
-                              (error (conn-read-args-error
-                                      (error-message-string err))))))
-             (setf (conn-kapply-macro-argument-register arg) reg)))
-         (funcall break))
-        ((conn-argument-predicate arg cmd)
-         (setf (conn-argument-value arg) cmd
-               (conn-argument-set-flag arg) t)
-         (funcall break))))
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql apply)
+  "Apply the last keyboard macro."
+  ( :update (arg cmd break)
+    (if (and (kmacro-ring-empty-p t)
+             (not (conn-kapply-macro-argument-register arg)))
+        (conn-read-args-error "Kmacro ring empty")
+      (setf (conn-argument-value arg) cmd
+            (conn-argument-set-flag arg) t)
+      (funcall break))))
+
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql append)
+  "Apply the last keyboard macro and then append to it."
+  ( :update (arg cmd break)
+    (if (and (kmacro-ring-empty-p t)
+             (not (conn-kapply-macro-argument-register arg)))
+        (conn-read-args-error "Kmacro ring empty")
+      (setf (conn-argument-value arg) cmd
+            (conn-argument-set-flag arg) t)
+      (funcall break))))
+
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql append-skip-exec)
+  "Append to the last keyboard macro."
+  ( :update (arg cmd break)
+    (if (and (kmacro-ring-empty-p t)
+             (not (conn-kapply-macro-argument-register arg)))
+        (conn-read-args-error "Kmacro ring empty")
+      (setf (conn-argument-value arg) cmd
+            (conn-argument-set-flag arg) t)
+      (funcall break))))
+
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql step-edit)
+  "Step edit the last keyboard macro."
+  ( :update (arg cmd break)
+    (if (and (kmacro-ring-empty-p t)
+             (not (conn-kapply-macro-argument-register arg)))
+        (conn-read-args-error "Kmacro ring empty")
+      (setf (conn-argument-value arg) cmd
+            (conn-argument-set-flag arg) t)
+      (funcall break))))
+
+(conn-define-argument-command conn-kapply-macro-argument
+    (eql register)
+  "Step edit the last keyboard macro."
+  ( :update (arg break)
+    (if (conn-kapply-macro-argument-register arg)
+        (setf (conn-kapply-macro-argument-register arg) nil)
+      (when-let* ((reg (condition-case err
+                           (register-read-with-preview
+                            "Kmacro Register:"
+                            #'kmacro-p)
+                         (quit nil)
+                         (error (conn-read-args-error
+                                 (error-message-string err))))))
+        (setf (conn-kapply-macro-argument-register arg) reg)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-kapply-macro-argument))
   (let ((register (conn-kapply-macro-argument-register arg)))
@@ -1715,13 +1747,13 @@ finishing showing the buffers that were visited."))
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-kapply-matches-thing-argument)
-                                       (_cmd (eql project)))
-  t)
+(conn-define-argument-command conn-kapply-matches-thing-argument
+    (eql project)
+  "Kapply on matches in the current project.")
 
-(cl-defmethod conn-argument-predicate ((_arg conn-kapply-matches-thing-argument)
-                                       (_cmd (eql multi-file)))
-  t)
+(conn-define-argument-command conn-kapply-matches-thing-argument
+    (eql multi-file)
+  "Kapply on matches in multiple files.")
 
 (cl-defmethod conn-replace-do ((_thing (eql kapply))
                                _arg
