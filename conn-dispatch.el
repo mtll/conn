@@ -565,12 +565,6 @@ themselves once the selection process has concluded."
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face)
 
-(cl-defmethod conn-enter-state :around ((_state (conn-substate conn-dispatch-targets-state))
-                                        _transition)
-  (if (or defining-kbd-macro executing-kbd-macro)
-      (error "Dispatch not available in keyboard macros")
-    (cl-call-next-method)))
-
 (conn-define-state conn-dispatch-bounds-state (conn-dispatch-targets-state)
   :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face)
@@ -4693,8 +4687,6 @@ it."))
                                setup-function)
   (when (null action)
     (setq action (conn-make-default-action thing)))
-  (when (or defining-kbd-macro executing-kbd-macro)
-    (error "Dispatch not available in keyboard macros"))
   (conn-dispatch-save-state)
   (conn-protected-let*
       ((conn-dispatch-hide-labels nil)
@@ -4826,7 +4818,9 @@ it."))
                             'conn--dispatch-restrict-windows))
             (activate-input-method conn--input-method)
             (when setup-function (funcall setup-function))
-            (conn-dispatch-perform-action action repeat)
+            (let ((executing-kbd-macro nil)
+                  (defining-kbd-macro nil))
+              (conn-dispatch-perform-action action repeat))
             (conn-dispatch-push-history (conn-make-dispatch action)))
           (conn-exit-recursive-stack conn--dispatch-stack-handle)
           (conn-cleanup-targets)
