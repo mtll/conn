@@ -2223,93 +2223,60 @@ be displayed in the echo area during `conn-read-args'."
   (declare (side-effect-free t))
   (:method (_arg _cmd _break) nil))
 
-(defmacro conn-define-argument-command (argument-specializer
-                                        command-specializer
+(eval-and-compile
+  (defun conn--argument-expand-method (method fixed-args body)
+    (when body
+      (let ((qualifiers nil)
+            (arglist nil))
+        (while (cl-generic--method-qualifier-p (car body))
+          (push (pop body) qualifiers))
+        (setf arglist (pop body))
+        `(cl-defmethod ,method
+           ,@(nreverse qualifiers)
+           ,(append fixed-args arglist)
+           (ignore ,@(cdr (cl--generic-split-args fixed-args)))
+           ,@body)))))
+
+(defmacro conn-define-argument-command (argument-and-command
                                         docstring
                                         &rest
                                         body)
-  (declare (indent 2))
-  (unless (alist-get :predicate body)
+  (declare (indent 1))
+  (unless (assq :predicate body)
     (setf (alist-get :predicate body)
-          `((_arg) t)))
+          `(() t)))
   (cond ((stringp docstring)
          (setf (alist-get :documentation body)
-               `((_arg break)
+               `((break)
                  (funcall break (conn-reference-page
                                   (:eval (substitute-command-keys ,docstring)))))))
         ((eq :documentation (car-safe docstring))
          (push docstring body)))
-  (cl-macrolet ((cmd-arg (var)
-                  `(if (and command-specializer
-                            (not (eq '_ command-specializer)))
-                       `(list ,',var ',,'command-specializer)
-                     ',var)))
-    `(cl-macrolet ((:update (&rest body)
-                     (let ((qualifiers nil)
-                           (arglist nil))
-                       (while (cl-generic--method-qualifier-p (car body))
-                         (push (pop body) qualifiers))
-                       (setf arglist (pop body))
-                       (pcase arglist
-                         ((or `(,argument-var ,cmd-var ,break-var)
-                              `(,argument-var ,break-var)
-                              `(,break-var))
-                          (unless argument-var (setq argument-var '_))
-                          `(cl-defmethod conn-argument-update
-                             ,@(nreverse qualifiers)
-                             ((,argument-var ,',argument-specializer)
-                              ,,(cmd-arg (or cmd-var '_))
-                              ,break-var)
-                             ,@body)))))
-                   (:annotation (&rest body)
-                     (let ((qualifiers nil)
-                           (arglist nil))
-                       (while (cl-generic--method-qualifier-p (car body))
-                         (push (pop body) qualifiers))
-                       (setf arglist (pop body))
-                       (pcase arglist
-                         ((or `(,argument-var)
-                              `(,argument-var ,cmd-var))
-                          `(cl-defmethod conn-argument-completion-annotation
-                             ,@(nreverse qualifiers)
-                             ((,argument-var ,',argument-specializer)
-                              ,,(cmd-arg (or cmd-var '_)))
-                             ,@body)))))
-                   (:predicate (&rest body)
-                     (let ((qualifiers nil)
-                           (arglist nil))
-                       (while (cl-generic--method-qualifier-p (car body))
-                         (push (pop body) qualifiers))
-                       (setf arglist (pop body))
-                       (pcase arglist
-                         ((or `(,argument-var)
-                              `(,argument-var ,cmd-var))
-                          `(cl-defmethod conn-argument-predicate
-                             ,@(nreverse qualifiers)
-                             ((,argument-var ,',argument-specializer)
-                              ,,(cmd-arg (or cmd-var '_)))
-                             ,@body)))))
-                   (:documentation (&rest body)
-                     (let ((qualifiers nil)
-                           (arglist nil))
-                       (while (cl-generic--method-qualifier-p (car body))
-                         (push (pop body) qualifiers))
-                       (setf arglist (pop body))
-                       (pcase arglist
-                         ((or `(,argument-var ,cmd-var ,break-var)
-                              `(,argument-var ,break-var))
-                          `(cl-defmethod conn-argument-command-documentation
-                             ,@(nreverse qualifiers)
-                             ((,argument-var ,',argument-specializer)
-                              ,,(cmd-arg (or cmd-var '_))
-                              ,break-var)
-                             ,@body))))))
-       ,@(cl-loop for key in '(:documentation
-                               :predicate
-                               :update
-                               :annotation)
-                  for def = (assq key body)
-                  when def collect def))))
+  (pcase argument-and-command
+    (`(,argument ,command)
+     (macroexpand-all
+      `(progn ,@body)
+      `((:update . ,(lambda (&rest body)
+                      (conn--argument-expand-method
+                       'conn-argument-update
+                       (list argument command)
+                       body)))
+        (:documentation . ,(lambda (&rest body)
+                             (conn--argument-expand-method
+                              'conn-argument-command-documentation
+                              (list argument command)
+                              body)))
+        (:annotation . ,(lambda (&rest body)
+                          (conn--argument-expand-method
+                           'conn-argument-annotation
+                           (list argument command)
+                           body)))
+        (:predicate . ,(lambda (&rest body)
+                         (conn--argument-expand-method
+                          'conn-argument-predicate
+                          (list argument command)
+                          body))))))
+    (_ (macroexp-warn-and-return "Malformed argument command args" nil))))
 
 ;;;;;; Anonymous Argument
 
@@ -2660,8 +2627,8 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-compose-keymap ((_arg conn-read-args-command-handler))
   conn-read-args-map)
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql recenter-top-bottom)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql recenter-top-bottom)))
   "Recenter the screen."
   ( :update (break)
     (let ((this-command 'recenter-top-bottom)
@@ -2669,8 +2636,8 @@ be displayed in the echo area during `conn-read-args'."
       (recenter-top-bottom (conn-read-args-consume-prefix-arg))
       (funcall break))))
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql digit-argument)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql digit-argument)))
   "Add a digit to the next prefix argument."
   ( :update (break)
     (let* ((char (if (integerp last-input-event)
@@ -2683,30 +2650,30 @@ be displayed in the echo area during `conn-read-args'."
               digit)))
     (funcall break)))
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql backward-delete-arg)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql backward-delete-arg)))
   "Delete the most recent prefix argument digit."
   ( :update (break)
     (when conn--read-args-prefix-mag
       (cl-callf floor conn--read-args-prefix-mag 10))
     (funcall break)))
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql reset-arg)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql reset-arg)))
   "Reset the prefix arguemnt."
   ( :update (break)
     (setf conn--read-args-prefix-mag nil)
     (funcall break)))
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql negative-argument)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql negative-argument)))
   "Invert the sign of the current prefix argument."
   ( :update (break)
     (cl-callf not conn--read-args-prefix-sign)
     (funcall break)))
 
-(conn-define-argument-command conn-read-args-command-handler
-    (eql keyboard-quit)
+(conn-define-argument-command ((arg conn-read-args-command-handler)
+                               (cmd (eql keyboard-quit)))
   "Call `keyboard-quit'."
   ( :update (_break) (keyboard-quit)))
 

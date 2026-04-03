@@ -1049,8 +1049,8 @@ Currently selected window remains selected afterwards."
                ( :constructor conn-mark-thing-argument
                  (&aux (required t)))))
 
-(conn-define-argument-command conn-mark-thing-argument
-    (eql conn-exchange-mark-command)
+(conn-define-argument-command ((arg conn-mark-thing-argument)
+                               (cmd (eql conn-exchange-mark-command)))
   "Activate the mark and exhange the point and mark.")
 
 (cl-defgeneric conn-mark-thing-do (thing arg transform)
@@ -1528,8 +1528,8 @@ selected by dispatch with it."))
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command conn-replace-thing-argument
-    (eql kapply)
+(conn-define-argument-command ((arg conn-replace-thing-argument)
+                               (cmd (eql kapply)))
   "Kapply on matches.")
 
 (defvar-keymap conn-replace-from-map)
@@ -1687,8 +1687,8 @@ selected by dispatch with it."))
                              from
                              to))
 
-(conn-define-argument-command conn-replace-thing-argument
-    (eql project)
+(conn-define-argument-command ((arg conn-replace-thing-argument)
+                               (cmd (eql project)))
   "Replace matches within the current project.")
 
 (cl-defmethod conn-replace-do ((thing (eql project))
@@ -1730,8 +1730,8 @@ selected by dispatch with it."))
                              from
                              to))
 
-(conn-define-argument-command conn-replace-thing-argument
-    (eql multi-file)
+(conn-define-argument-command ((arg conn-replace-thing-argument)
+                               (cmd (eql multi-file)))
   "Replace matches within multiple files.")
 
 (cl-defmethod conn-replace-do ((thing (eql multi-file))
@@ -1786,8 +1786,8 @@ selected by dispatch with it."))
 
 (defvar conn-change-reference)
 
-(conn-define-argument-command conn-replace-thing-argument
-    (eql conn-emacs-state)
+(conn-define-argument-command ((arg conn-replace-thing-argument)
+                               (cmd (eql conn-emacs-state)))
   "Call `conn-change-thing'.")
 
 (cl-defmethod conn-replace-do ((_thing (eql conn-emacs-state))
@@ -1836,8 +1836,8 @@ selected by dispatch with it."))
                                    from
                                    to))
 
-      (conn-define-argument-command conn-replace-thing-argument
-          (eql as-diff-in-project)
+      (conn-define-argument-command ((arg conn-replace-thing-argument)
+                                     (cmd (eql as-diff-in-project)))
         "Replaces matches as a diff in the current project.")
 
       (cl-defmethod conn-replace-do ((thing (eql as-diff))
@@ -1870,8 +1870,8 @@ selected by dispatch with it."))
                                    from
                                    to))
 
-      (conn-define-argument-command conn-replace-thing-argument
-          (eql as-diff)
+      (conn-define-argument-command ((arg conn-replace-thing-argument)
+                                     (cmd (eql as-diff)))
         "Replace matches as a diff.")
 
       (cl-defmethod conn-replace-do ((thing (eql multi-file-as-diff))
@@ -1908,8 +1908,8 @@ selected by dispatch with it."))
                                      from
                                      to)))
 
-      (conn-define-argument-command conn-replace-thing-argument
-          (eql multi-file-as-diff)
+      (conn-define-argument-command ((arg conn-replace-thing-argument)
+                                     (cmd (eql multi-file-as-diff)))
         "Replace matches in multiple files as a diff.")))
 
 (defun conn-replace (thing
@@ -2606,8 +2606,8 @@ append to that place."
      (funcall break))
     (_ (cl-call-next-method))))
 
-(conn-define-argument-command conn-kill-append-argument
-    (eql append-on-repeat)
+(conn-define-argument-command ((arg conn-kill-append-argument)
+                               (cmd (eql append-on-repeat)))
   "Append each kill after the first.")
 
 (defvar-keymap conn-delete-argument-map)
@@ -2699,24 +2699,24 @@ append to that place."
                   &aux
                   (required t)))))
 
-(conn-define-argument-command conn-kill-thing-argument
-    (eql buffer-filename)
+(conn-define-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql buffer-filename)))
   "Copy buffer filename.")
 
-(conn-define-argument-command conn-kill-thing-argument
-    (eql project-filename)
+(conn-define-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql project-filename)))
   "Copy project filename.")
 
-(conn-define-argument-command conn-kill-thing-argument
-    (eql keep-lines)
+(conn-define-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql keep-lines)))
   "Call `keep-lines'.")
 
-(conn-define-argument-command conn-kill-thing-argument
-    (eql kill-matching-lines)
+(conn-define-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql kill-matching-lines)))
   "Kill matching lines.")
 
-(conn-define-argument-command conn-kill-thing-argument
-    (eql copy)
+(conn-define-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql copy)))
   "Call `conn-copy-thing'.")
 
 (cl-defstruct (conn-transform-and-fixup-argument
@@ -3491,16 +3491,16 @@ append to that place."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
-(conn-define-argument-command conn-copy-thing-argument
-    (eql buffer-filename)
+(conn-define-argument-command ((arg conn-copy-thing-argument)
+                               (cmd (eql buffer-filename)))
   "Copy buffer filename.")
 
-(conn-define-argument-command conn-copy-thing-argument
-    (eql project-filename)
+(conn-define-argument-command ((arg conn-copy-thing-argument)
+                               (cmd (eql project-filename)))
   "Copy project filename.")
 
-(conn-define-argument-command conn-copy-thing-argument
-    (eql copy-matching-lines)
+(conn-define-argument-command ((arg conn-copy-thing-argument)
+                               (cmd (eql copy-matching-lines)))
   "Copy matching lines.")
 
 (defun conn-copy-thing (thing
@@ -4280,8 +4280,8 @@ Only available during repeating duplicate."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
-(conn-define-argument-command conn-duplicate-thing-argument
-    (eql copy-from-above-command)
+(conn-define-argument-command ((arg conn-duplicate-thing-argument)
+                               (cmd (eql copy-from-above-command)))
   "Call `copy-from-above-command'.")
 
 (defun conn-duplicate-thing (thing arg transform &optional repeat)
@@ -4342,24 +4342,24 @@ Interactively REPEAT is given by the prefix argument."
                                  (not (or defining-kbd-macro
                                           executing-kbd-macro))))))))
 
-(conn-define-argument-command conn-change-thing-argument
-    (eql conn-emacs-state-overwrite-binary)
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql conn-emacs-state-overwrite-binary)))
   "Enter emacs state and `overwrite-mode-binary'.")
 
-(conn-define-argument-command conn-change-thing-argument
-    (eql conn-emacs-state-overwrite)
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql conn-emacs-state-overwrite)))
   "Enter emacs state and `overwrite-mode'.")
 
-(conn-define-argument-command conn-change-thing-argument
-    (eql conn-replace)
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql conn-replace)))
   "Call `conn-replace-thing'.")
 
-(conn-define-argument-command conn-change-thing-argument
-    (eql yank-replace)
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql yank-replace)))
   "Call `conn-yank-replace'.")
 
-(conn-define-argument-command conn-change-thing-argument
-    (eql conn-emacs-state-record-insert)
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql conn-emacs-state-record-insert)))
   "Enter emacs state with a record region.")
 
 (cl-defgeneric conn-change-thing-do (thing

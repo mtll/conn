@@ -1408,38 +1408,38 @@ the point is within the region then the entire region is returned.")))
           (list cmd (conn-read-args-consume-prefix-arg)))
     (funcall break)))
 
-(conn-define-argument-command conn-thing-argument
-    (conn-thing t)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (conn-thing t)))
   "Operate on thing.")
 
-(conn-define-argument-command conn-thing-argument
-    (conn-thing dispatch)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (conn-thing dispatch)))
   "Operate on a thing selected with dispatch."
-  ( :predicate (_) (not (or defining-kbd-macro executing-kbd-macro))))
+  ( :predicate () (not (or defining-kbd-macro executing-kbd-macro))))
 
-(conn-define-argument-command conn-thing-argument
-    (eql recursive-edit)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (eql recursive-edit)))
   "Operate on a region selected in a recursive edit."
-  (:predicate (arg) (conn-thing-argument-recursive-edit arg)))
+  (:predicate () (conn-thing-argument-recursive-edit arg)))
 
-(conn-define-argument-command conn-thing-argument
-    (eql recursive-edit-mark)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (eql recursive-edit-mark)))
   "Operate on a region selected in a recursive edit."
-  (:predicate (arg) (conn-thing-argument-recursive-edit arg)))
+  (:predicate () (conn-thing-argument-recursive-edit arg)))
 
-(conn-define-argument-command conn-thing-argument
-    (eql conn-things-in-region)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (eql conn-things-in-region)))
   "Operatate on the things in the region."
-  ( :update (arg break)
+  ( :update (break)
     (cl-callf not (conn-thing-argument-in-region arg))
     (funcall break)))
 
 (defvar conn--last-thing-kbd-macro nil)
 
-(conn-define-argument-command conn-thing-argument
-    (conn-thing kbd-macro)
+(conn-define-argument-command ((arg conn-thing-argument)
+                               (cmd (conn-thing kbd-macro)))
   "Operatate on the things in the region."
-  ( :update (arg cmd break)
+  ( :update (break)
     (if (and conn--last-thing-kbd-macro
              (memq cmd '(kmacro-call-macro
                          call-last-kbd-macro
@@ -1626,8 +1626,8 @@ words."))
                      (conn-subregions-argument-default (car (conn-argument-value arg)))))
              (funcall break))))))
 
-(conn-define-argument-command conn-thing-with-subregions-argument
-    (eql toggle-subregions)
+(conn-define-argument-command ((arg conn-thing-with-subregions-argument)
+                               (cmd (eql toggle-subregions)))
   "Whether to act on the subregions of the thing.")
 
 (cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
@@ -1675,18 +1675,18 @@ current buffer.
             (and conn-kill-reformat-function
                  conn-reformat-default)))))))
 
-(conn-define-argument-command conn-reformat-argument
-    (eql reformat)
+(conn-define-argument-command ((arg conn-reformat-argument)
+                               (cmd (eql reformat)))
   "Toggle whether the buffer is reformated around the kill."
-  ( :update (arg break)
+  ( :update (break)
     (cl-callf null (conn-argument-value arg))
     (funcall break)))
 
-(conn-define-argument-command conn-reformat-argument
-    (eql set-reformat)
+(conn-define-argument-command ((arg conn-reformat-argument)
+                               (cmd (eql set-reformat)))
   "Toggle whether the buffer is reformated around the kill.
 Also sets the buffer local default value of the reformat argument."
-  ( :update (arg break)
+  ( :update (break)
     (cl-callf null (conn-argument-value arg))
     (setq-local conn-reformat-default (conn-argument-value arg))
     (funcall break)))
@@ -1928,10 +1928,10 @@ Only the background color is used."
          "; \\[conn-expand] next; "
          "\\[conn-contract] prev"))))))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql conn-expand)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql conn-expand)))
   "Expand the region to the next candidate thing."
-  ( :update (arg break)
+  ( :update (break)
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg))
                          (size (conn-multi-thing-argument-size arg)))
@@ -1942,10 +1942,10 @@ Only the background color is used."
          (push-mark (if (< (point) (mark)) end beg)))))
     (funcall break)))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql conn-contract)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql conn-contract)))
   "Contract the region to the previous candidate thing."
-  ( :update (arg break)
+  ( :update (break)
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg))
                          (size (conn-multi-thing-argument-size arg)))
@@ -1956,22 +1956,22 @@ Only the background color is used."
          (push-mark (if (< (point) (mark)) end beg) t))))
     (funcall break)))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql abort)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql abort)))
   "Abort selecting from the current set of candidates."
   (:update (_break) (user-error "Aborted")))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql conn-exchange-mark-command)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql conn-exchange-mark-command)))
   "Exchange the point and mark."
   ( :update (break)
     (exchange-point-and-mark)
     (funcall break)))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql select)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql select)))
   "Exchange the point and mark."
-  ( :update (arg break)
+  ( :update (break)
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg)))
       (let ((bound (nth curr bounds)))
@@ -1980,10 +1980,10 @@ Only the background color is used."
               (conn-argument-set-flag arg) t)))
     (funcall break)))
 
-(conn-define-argument-command conn-multi-thing-argument
-    (eql select-other-end)
+(conn-define-argument-command ((arg conn-multi-thing-argument)
+                               (cmd (eql select-other-end)))
   "Exchange the point and mark."
-  ( :update (arg break)
+  ( :update (break)
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg)))
       (let ((bound (nth curr bounds)))

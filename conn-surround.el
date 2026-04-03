@@ -118,12 +118,12 @@
                   &aux
                   (keymap conn-surround-property-argument-map)))))
 
-(conn-define-argument-command conn-surround-property-argument
-    (eql :whole)
+(conn-define-argument-command ((arg conn-surround-property-argument)
+                               (cmd (eql :whole)))
   "The whole region.")
 
-(conn-define-argument-command conn-surround-property-argument
-    (eql :inner)
+(conn-define-argument-command ((arg conn-surround-property-argument)
+                               (cmd (eql :inner)))
   "The inner region.")
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)

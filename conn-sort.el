@@ -58,20 +58,20 @@
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command conn-sort-things-argument
-    (eql sort-numeric-fields)
+(conn-define-argument-command ((arg conn-sort-things-argument)
+                               (cmd (eql sort-numeric-fields)))
   "Sort by numeric fields.")
 
-(conn-define-argument-command conn-sort-things-argument
-    (eql sort-fields)
+(conn-define-argument-command ((arg conn-sort-things-argument)
+                               (cmd (eql sort-fields)))
   "Sort by fields.")
 
-(conn-define-argument-command conn-sort-things-argument
-    (eql sort-columns)
+(conn-define-argument-command ((arg conn-sort-things-argument)
+                               (cmd (eql sort-columns)))
   "Sort columns.")
 
-(conn-define-argument-command conn-sort-things-argument
-    (eql sort-regexp-fields)
+(conn-define-argument-command ((arg conn-sort-things-argument)
+                               (cmd (eql sort-regexp-fields)))
   "Sort regexp fields.")
 
 (defun conn--sort-in-bounds (bounds

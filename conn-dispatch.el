@@ -904,8 +904,8 @@ themselves once the selection process has concluded."
   (list conn-dispatch-command-reference
         (cl-call-next-method)))
 
-(conn-define-argument-command conn-dispatch-command-handler
-    (eql conn-dispatch-cycle-ring-next)
+(conn-define-argument-command ((arg conn-dispatch-command-handler)
+                               (cmd (eql conn-dispatch-cycle-ring-next)))
   "Cycle the dispatch ring to the next most recent dispatch."
   ( :update (break)
     (condition-case err
@@ -919,8 +919,8 @@ themselves once the selection process has concluded."
       (user-error
        (conn-read-args-error (error-message-string err))))))
 
-(conn-define-argument-command conn-dispatch-command-handler
-    (eql conn-dispatch-cycle-ring-previous)
+(conn-define-argument-command ((arg conn-dispatch-command-handler)
+                               (cmd (eql conn-dispatch-cycle-ring-previous)))
   "Cycle the dispatch ring to the least recent dispatch."
   ( :update (break)
     (condition-case err
@@ -934,8 +934,8 @@ themselves once the selection process has concluded."
       (user-error
        (conn-read-args-error (error-message-string err))))))
 
-(conn-define-argument-command conn-dispatch-command-handler
-    (eql conn-dispatch-ring-describe-head)
+(conn-define-argument-command ((arg conn-dispatch-command-handler)
+                               (cmd (eql conn-dispatch-ring-describe-head)))
   "Print a description of the dispatch at the head of the dispatch ring."
   ( :update (break)
     (condition-case err
@@ -3744,8 +3744,8 @@ contain targets."
           (_ (error "No region to replace")))))
     (funcall break)))
 
-(conn-define-argument-command conn-dispatch-replace-argument
-    (eql dispatch-replace)
+(conn-define-argument-command ((arg conn-dispatch-replace-argument)
+                               (cmd (eql dispatch-replace)))
   "Read and replace a thing at point.")
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-replace-argument))
@@ -4520,8 +4520,8 @@ it."))
   (conn-make-ring conn-dispatch-ring-max
                   :cleanup 'conn-dispatch--cleanup))
 
-(conn-define-argument-command conn-dispatch-command-handler
-    (eql conn-repeat-last-dispatch)
+(conn-define-argument-command ((arg conn-dispatch-command-handler)
+                               (cmd (eql conn-repeat-last-dispatch)))
   "Cycle the dispatch ring to the next most recent dispatch."
   ( :update (_break)
     (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))

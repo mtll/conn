@@ -332,9 +332,9 @@
   "E" 'org-export
   "e" 'org-example)
 
-(conn-define-argument-command conn-surround-with-argument
-    nil
-  ( :documentation :extra "conn-org" (_arg cmd)
+(conn-define-argument-command ((arg conn-surround-with-argument)
+                               cmd)
+  ( :documentation :extra "conn-org" (break)
     (when (memq cmd '(org-quote
                       org-center
                       org-comment
@@ -345,9 +345,10 @@
                       org-export-latex
                       org-export
                       org-example))
-      (conn-reference-page
-        (:eval (format "Operate on a %s" cmd)))))
-  ( :predicate :extra "conn-org" (_arg cmd)
+      (funcall break
+               (conn-reference-page
+                 (:eval (format "Operate on a %s" cmd))))))
+  ( :predicate :extra "conn-org" ()
     (or (memq cmd '(org-quote
                     org-center
                     org-comment
