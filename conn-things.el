@@ -1882,75 +1882,131 @@ Only the background color is used."
          (unselected (if asciip "." "◯")))
     (cons selected unselected)))
 
+(cl-defstruct (conn-multi-thing-argument
+               (:include conn-argument)
+               ( :constructor conn-multi-thing-argument
+                 (bounds &optional
+                         (index 0)
+                         &aux
+                         (size (length bounds))
+                         (pips (conn--multi-thing-pip-strings))
+                         (required t))))
+  (bounds nil :type list :read-only t)
+  (pips nil :read-only t)
+  (index -1 :type integer)
+  (size -1 :type integer :read-only t))
+
+(cl-defmethod conn-argument-display ((arg conn-multi-thing-argument))
+  (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                       (bounds (conn-multi-thing-argument-bounds arg))
+                       (size (conn-multi-thing-argument-size arg))
+                       (pips (conn-multi-thing-argument-pips arg)))
+    (substitute-command-keys
+     (concat
+      (if (> size 4)
+          (propertize (format " [%s/%s]" (1+ curr) size)
+                      'face 'minibuffer-prompt)
+        (cl-loop for i below size
+                 concat " "
+                 if (= i curr) concat (car pips)
+                 else concat (cdr pips)))
+      " ("
+      (let* ((desc (conn-thing-pretty-print
+                    (conn-bounds-thing (nth curr bounds)))))
+        (propertize (if (length> desc 40)
+                        (truncate-string-to-width desc 40 nil nil t)
+                      desc)
+                    'face 'eldoc-highlight-function-argument))
+      ")"
+      (when-let* ((msg (conn--read-args-get-message)))
+        (concat ": " msg))
+      "\n\\[select] select; "
+      "\\[select-other-end] select other end; "
+      "\\[abort] abort"
+      (when (> size 1)
+        (concat
+         "; \\[conn-expand] next; "
+         "\\[conn-contract] prev"))))))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql conn-expand)
+  "Expand the region to the next candidate thing."
+  ( :update (arg break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg))
+                         (size (conn-multi-thing-argument-size arg)))
+      (setq curr (mod (1+ curr) size))
+      (pcase (nth curr bounds)
+        ((conn-bounds `(,beg . ,end))
+         (goto-char (if (< (point) (mark)) beg end))
+         (push-mark (if (< (point) (mark)) end beg)))))
+    (funcall break)))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql conn-contract)
+  "Contract the region to the previous candidate thing."
+  ( :update (arg break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg))
+                         (size (conn-multi-thing-argument-size arg)))
+      (setq curr (mod (1- curr) size))
+      (pcase (nth curr bounds)
+        ((conn-bounds `(,beg . ,end))
+         (goto-char (if (< (point) (mark)) beg end))
+         (push-mark (if (< (point) (mark)) end beg) t))))
+    (funcall break)))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql abort)
+  "Abort selecting from the current set of candidates."
+  (:update (_break) (user-error "Aborted")))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql conn-exchange-mark-command)
+  "Exchange the point and mark."
+  ( :update (break)
+    (exchange-point-and-mark)
+    (funcall break)))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql select)
+  "Exchange the point and mark."
+  ( :update (arg break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg)))
+      (let ((bound (nth curr bounds)))
+        (setf (conn-bounds-get bound :direction) -1
+              (conn-argument-value arg) bound
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
+
+(conn-define-argument-command conn-multi-thing-argument
+    (eql select-other-end)
+  "Exchange the point and mark."
+  ( :update (arg break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg)))
+      (let ((bound (nth curr bounds)))
+        (setf (conn-bounds-get bound :direction) 1
+              (conn-argument-value arg) bound
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
+
 (defun conn-multi-thing-select (things &optional always-prompt)
-  (let* ((bounds (compat-call sort things
-                              :key #'conn-bounds--whole
-                              :lessp (lambda (a b)
-                                       (if (= (car a) (car b))
-                                           (< (cdr a) (cdr b))
-                                         (> (car a) (car b))))))
-         (curr 0)
-         (size (length bounds))
-         (pips (conn--multi-thing-pip-strings))
-         (display-handler
-          (lambda (prompt _args &optional _state teardown)
-            (if teardown
-                (message nil)
-              (message
-               (substitute-command-keys
-                (concat
-                 (propertize prompt 'face 'minibuffer-prompt)
-                 (if (> size 4)
-                     (propertize (format " [%s/%s]" (1+ curr) size)
-                                 'face 'minibuffer-prompt)
-                   (cl-loop for i below size
-                            concat " "
-                            if (= i curr) concat (car pips)
-                            else concat (cdr pips)))
-                 " ("
-                 (let* ((desc (conn-thing-pretty-print
-                               (conn-bounds-thing (nth curr bounds)))))
-                   (propertize (if (length> desc 40)
-                                   (truncate-string-to-width desc 40 nil nil t)
-                                 desc)
-                               'face 'eldoc-highlight-function-argument))
-                 ")"
-                 (when-let* ((msg (conn--read-args-get-message)))
-                   (concat ": " msg))
-                 "\n\\[select] select; "
-                 "\\[select-other-end] select other end; "
-                 "\\[abort] abort"
-                 (when (> size 1)
-                   (concat
-                    "; \\[conn-expand] next; "
-                    "\\[conn-contract] prev"))))))))
-         (command-handler
-          (lambda (command break)
-            (pcase command
-              ('recenter-top-bottom
-               (let ((this-command 'recenter-top-bottom)
-                     (last-command conn-read-args-last-command))
-                 (recenter-top-bottom (conn-read-args-prefix-arg)))
-               (funcall break))
-              ('conn-exchange-mark-command
-               (exchange-point-and-mark)
-               (funcall break))
-              ('conn-contract
-               (setq curr (mod (1- curr) size))
-               (pcase (nth curr bounds)
-                 ((conn-bounds `(,beg . ,end))
-                  (goto-char (if (< (point) (mark)) beg end))
-                  (push-mark (if (< (point) (mark)) end beg) t)))
-               (funcall break))
-              ('conn-expand
-               (setq curr (mod (1+ curr) size))
-               (pcase (nth curr bounds)
-                 ((conn-bounds `(,beg . ,end))
-                  (goto-char (if (< (point) (mark)) beg end))
-                  (push-mark (if (< (point) (mark)) end beg))))
-               (funcall break))
-              ('abort
-               (user-error "Aborted"))))))
+  (let ((bounds (compat-call sort things
+                             :key #'conn-bounds--whole
+                             :lessp (lambda (a b)
+                                      (if (= (car a) (car b))
+                                          (< (cdr a) (cdr b))
+                                        (> (car a) (car b))))))
+        (display-handler
+         (lambda (prompt args &optional _state teardown)
+           (if teardown
+               (message nil)
+             (message
+              (concat
+               (propertize prompt 'face 'minibuffer-prompt)
+               (mapconcat #'conn-argument-display args)))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
       ((and `(,bound . nil)
@@ -1964,23 +2020,8 @@ Only the background color is used."
          (conn-read-args (conn-multi-thing-select-state
                           :prompt "Thing"
                           :display-handler display-handler
-                          :command-handler command-handler)
-             ((bound
-               (oclosure-lambda (conn-anonymous-argument
-                                 (required t))
-                   (command break)
-                 (let ((bound (nth curr bounds)))
-                   (pcase command
-                     ('select
-                      (setf (conn-bounds-get bound :direction) -1
-                            value bound
-                            set-flag t)
-                      (funcall break))
-                     ('select-other-end
-                      (setf (conn-bounds-get bound :direction) 1
-                            value bound
-                            set-flag t)
-                      (funcall break)))))))
+                          :command-handler nil)
+             ((bound (conn-multi-thing-argument bounds)))
            bound))))))
 
 ;;;; Read Thing Regions

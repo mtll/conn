@@ -1595,8 +1595,9 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Command Handler
 
-(cl-defgeneric conn-kapply-command-handler (cmd break)
-  (:method (&rest _) nil))
+(cl-defstruct (conn-kapply-command-handler
+               (:include conn-read-args-command-handler)
+               ( :constructor conn-kapply-command-handler)))
 
 (defun conn--kapply-display-ring (&optional timeout)
   (if (fboundp 'conn-posframe--kmacro-ring-display-subr)
@@ -1605,50 +1606,64 @@ finishing showing the buffers that were visited."))
       (conn-read-args-message
        (conn--kmacro-display last-kbd-macro 30 "Kmacro ring emtpy")))))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-next))
-                                           break)
-  (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
-  (conn--kapply-display-ring)
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-cycle-ring-next)
+  "Cycle the kapply ring to the next most recently used kapply."
+  ( :update (break)
+    (kmacro-cycle-ring-next (conn-read-args-consume-prefix-arg))
+    (conn--kapply-display-ring)
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-cycle-ring-previous))
-                                           break)
-  (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
-  (conn--kapply-display-ring)
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-cycle-ring-previous)
+  "Cycle the kapply ring to the next least recently used kapply."
+  ( :update (break)
+    (kmacro-cycle-ring-previous (conn-read-args-consume-prefix-arg))
+    (conn--kapply-display-ring)
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql conn-display-kmacro-ring))
-                                           break)
-  (conn--kapply-display-ring 30)
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql conn-display-kmacro-ring)
+  "Display the kapply ring."
+  ( :update (break)
+    (conn--kapply-display-ring)
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-delete-ring-head))
-                                           break)
-  (kmacro-delete-ring-head (conn-read-args-consume-prefix-arg))
-  (conn--kapply-display-ring)
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-delete-ring-head)
+  "Delete the macro at the head of the kmacro ring."
+  ( :update (break)
+    (kmacro-delete-ring-head (conn-read-args-consume-prefix-arg))
+    (conn--kapply-display-ring)
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-swap-ring))
-                                           break)
-  (kmacro-swap-ring)
-  (conn--kapply-display-ring)
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-swap-ring)
+  "Swap the current keyboard macro and the head of the kmacro ring."
+  ( :update (break)
+    (kmacro-swap-ring)
+    (conn--kapply-display-ring)
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-counter))
-                                           break)
-  (condition-case _
-      (kmacro-set-counter
-       (or (conn-read-args-consume-prefix-arg)
-           0))
-    (quit nil))
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-set-counter)
+  "Set the kmacro counter."
+  ( :update (break)
+    (condition-case _
+        (kmacro-set-counter
+         (or (conn-read-args-consume-prefix-arg)
+             0))
+      (quit nil))
+    (funcall break)))
 
-(cl-defmethod conn-kapply-command-handler ((_cmd (eql kmacro-set-format))
-                                           break)
-  (condition-case _
-      (kmacro-set-format (read-string "Macro Counter Format: "))
-    (quit nil))
-  (funcall break))
+(conn-define-argument-command conn-kapply-command-handler
+    (eql kmacro-set-format)
+  "Set the kmacro format string."
+  ( :update (break)
+    (condition-case _
+        (kmacro-set-format (read-string "Macro Counter Format: "))
+      (quit nil))
+    (funcall break)))
 
 (cl-defmethod conn-argument-display ((_cmd (eql conn-kapply-command-handler)))
   (list (concat (substitute-command-keys
@@ -1677,12 +1692,8 @@ finishing showing the buffers that were visited."))
                                    (windows t))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
-                   :command-handler #'conn-kapply-command-handler
-                   :display-handler (conn-read-args-display-columns 3 3)
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                   :command-handler (conn-kapply-command-handler)
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
@@ -1819,7 +1830,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply with Count"
                    :prefix count
-                   :command-handler #'conn-kapply-command-handler
+                   :command-handler (conn-kapply-command-handler)
                    :display-handler (conn-read-args-display-columns 3 3)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
@@ -1903,7 +1914,7 @@ finishing showing the buffers that were visited."))
           (with-isearch-suspended
            (conn-read-args (conn-kapply-state
                             :prompt "Kapply on Regions"
-                            :command-handler #'conn-kapply-command-handler
+                            :command-handler (conn-kapply-command-handler)
                             :display-handler (conn-read-args-display-columns 3 3)
                             :pre (lambda (_)
                                    (when (and (bound-and-true-p conn-posframe-mode)
@@ -2047,7 +2058,7 @@ finishing showing the buffers that were visited."))
   (declare (conn-dispatch-action))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
-                   :command-handler #'conn-kapply-command-handler
+                   :command-handler (conn-kapply-command-handler)
                    :display-handler (conn-read-args-display-columns 3 3)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)

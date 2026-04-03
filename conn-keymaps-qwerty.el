@@ -540,9 +540,7 @@
   "P" 'project-filename
   ">" 'kill-matching-lines
   "%" 'keep-lines
-  "j" 'move-end-of-line
-  "<backspace>" 'backward-char
-  "DEL" 'backward-char)
+  "j" 'move-end-of-line)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-copy-state)

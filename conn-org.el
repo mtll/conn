@@ -335,7 +335,7 @@
 (conn-define-argument-command conn-surround-with-argument
     nil
   ( :documentation :extra "conn-org" (_arg cmd)
-    (when (memq sym '(org-quote
+    (when (memq cmd '(org-quote
                       org-center
                       org-comment
                       org-src
@@ -348,17 +348,17 @@
       (conn-reference-page
         (:eval (format "Operate on a %s" cmd)))))
   ( :predicate :extra "conn-org" (_arg cmd)
-    (memq sym '(org-quote
-                org-center
-                org-comment
-                org-src
-                org-verse
-                org-export-ascii
-                org-export-html
-                org-export-latex
-                org-export
-                org-example))
-    (cl-call-next-method)))
+    (or (memq cmd '(org-quote
+                    org-center
+                    org-comment
+                    org-src
+                    org-verse
+                    org-export-ascii
+                    org-export-html
+                    org-export-latex
+                    org-export
+                    org-example))
+        (cl-call-next-method))))
 
 (cl-defmethod conn-surround-do ((_cmd (eql org-quote))
                                 _arg

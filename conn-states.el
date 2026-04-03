@@ -743,11 +743,12 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (handle)
-    `(let ((,handle (conn-enter-recursive-stack ,state)))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (conn-exit-recursive-stack ,handle)))))
+  (if (or (null state) (eq state '_)) body
+    (cl-with-gensyms (handle)
+      `(let ((,handle (conn-enter-recursive-stack ,state)))
+         (unwind-protect
+             ,(macroexp-progn body)
+           (conn-exit-recursive-stack ,handle))))))
 
 ;;;;; Cl-Generic Specializers
 
@@ -1047,12 +1048,11 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
        (unless (eq conn--state-stack stack)
          (if (cl-loop for cons on conn--state-stack
                       thereis (eq cons stack))
-             (prog1 (conn--state-stack-handle)
-               (conn-enter-state
-                (car stack)
-                (conn-stack-transition conn-stack-exit-recursive
-                  (while (not (eq conn--state-stack stack))
-                    (conn--pop-state-1)))))
+             (conn-enter-state
+              (car stack)
+              (conn-stack-transition conn-stack-exit-recursive
+                (while (not (eq conn--state-stack stack))
+                  (conn--pop-state-1))))
            (error "Invalid recursive stack handle")))))
     (_ (error "Invalid recursive stack handle"))))
 
@@ -1659,10 +1659,12 @@ command was a prefix command.")
   "?" 'reference
   "M-?" 'reference
   "C-h k" 'conn-describe-key
+  "C-h c" 'conn-describe-key
   "C-h o" 'conn-describe-symbol
   "<escape>" 'keyboard-quit
   "C-g" 'keyboard-quit
   "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
 
@@ -1711,6 +1713,8 @@ The duration of the message display is controlled by
   "Print an error message of FORMAT-STRING with ARGS."
   (setq conn--read-args-error-message (apply #'format format-string args)
         conn--read-args-error-flag t)
+  (let ((message-log-max 1000))
+    (apply #'message format-string args))
   (throw 'conn-read-args-error nil))
 
 (defun conn--read-args-get-message ()
@@ -1854,6 +1858,29 @@ The duration of the message display is controlled by
                      table nil nil #'equal)
         (quit nil)))))
 
+(defun conn--read-args-describe-key (arguments message-function)
+  (funcall message-function "Key Sequence...")
+  (let ((cmd (key-binding (read-key-sequence-vector nil) t)))
+    (while (arrayp cmd) ; keyboard macro
+      (setq cmd (key-binding cmd t)))
+    (catch 'break
+      (dolist (a arguments)
+        (ignore
+         (conn-argument-command-documentation
+          a cmd (lambda (&rest pages)
+                  (apply #'conn-quick-reference pages)
+                  (throw 'break nil))))))))
+
+(defun conn--read-args-describe-symbol (arguments)
+  (let ((cmd (conn--read-args-completing-read arguments)))
+    (catch 'break
+      (dolist (a arguments)
+        (ignore
+         (conn-argument-command-documentation
+          a cmd (lambda (&rest pages)
+                  (apply #'conn-quick-reference pages)
+                  (throw 'break nil))))))))
+
 (defmacro conn-read-args-return (&rest body)
   "Evaluate body and return the result from the current `conn-read-args'.
 
@@ -1863,48 +1890,6 @@ This skips executing the body of the `conn-read-args' form entirely."
   `(throw 'conn-read-args-return
           (list (lambda () ,@body))))
 
-(cl-defgeneric conn-read-args-command-handler (cmd break)
-  (:method (&rest _) "Noop" nil))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql recenter-top-bottom))
-                                              break)
-  (let ((this-command 'recenter-top-bottom)
-        (last-command conn-read-args-last-command))
-    (recenter-top-bottom (conn-read-args-consume-prefix-arg))
-    (funcall break)))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql digit-argument))
-                                              break)
-  (let* ((char (if (integerp last-input-event)
-                   last-input-event
-                 (get last-input-event 'ascii-character)))
-         (digit (- (logand char ?\177) ?0)))
-    (setf conn--read-args-prefix-mag
-          (if (integerp conn--read-args-prefix-mag)
-              (+ (* 10 conn--read-args-prefix-mag) digit)
-            digit)))
-  (funcall break))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql backward-delete-arg))
-                                              break)
-  (when conn--read-args-prefix-mag
-    (cl-callf floor conn--read-args-prefix-mag 10))
-  (funcall break))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql reset-arg))
-                                              break)
-  (setf conn--read-args-prefix-mag nil)
-  (funcall break))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql negative-argument))
-                                              break)
-  (cl-callf not conn--read-args-prefix-sign)
-  (funcall break))
-
-(cl-defmethod conn-read-args-command-handler ((_cmd (eql keyboard-quit))
-                                              _break)
-  (keyboard-quit))
-
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -1912,7 +1897,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            command-loop
                            history-var
                            (history-len 1)
-                           command-handler
+                           (command-handler (conn-read-args-command-handler))
                            (display-handler #'conn--read-args-display-prompt)
                            around
                            overriding-map
@@ -1921,7 +1906,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                            pre
                            post
                            reference)
-  (let ((arguments arglist)
+  (let ((arguments (if command-handler
+                       (cons command-handler arglist)
+                     arglist))
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt (symbol-name state)))
         (display-state nil)
@@ -1947,51 +1934,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                           (cons (unless command-loop command-handler)
                                 arguments)))))
            (setf conn--read-args-error-message ""))
-         (call-handlers (cmd)
-           (let* ((handled nil)
-                  (handle (lambda () (setq handled t))))
-             (when command-handler
-               (funcall command-handler cmd handle))
-             (unless handled
-               (conn-read-args-command-handler cmd handle))
-             handled))
          (update-args (cmd)
            (catch 'break
              (let ((break nil))
                (dolist (a arguments)
                  (conn-argument-update a cmd (lambda () (setq break t)))
                  (when break (throw 'break t))))))
-         (args-describe-key ()
-           (conn-with-overriding-map conn-read-args-map
-             (let ((inhibit-message nil))
-               (message "Key Sequence:"))
-             (let ((cmd (key-binding (read-key-sequence-vector nil) t)))
-               (while (arrayp cmd) ; keyboard macro
-                 (setq cmd (key-binding cmd t)))
-               (catch 'break
-                 (dolist (a arguments)
-                   (ignore
-                    (conn-argument-command-documentation
-                     a cmd (lambda (&rest pages)
-                             (apply #'conn-quick-reference pages)
-                             (throw 'break nil)))))))))
-         (args-describe-symbol ()
-           (let ((cmd (conn--read-args-completing-read
-                       (cond
-                        ((null command-loop) arguments)
-                        (command-handler
-                         `(,command-handler
-                           conn-read-args-command-handler
-                           ,@arguments))
-                        (t `(conn-read-args-command-handler
-                             ,@arguments))))))
-             (catch 'break
-               (dolist (a arguments)
-                 (ignore
-                  (conn-argument-command-documentation
-                   a cmd (lambda (&rest pages)
-                           (apply #'conn-quick-reference pages)
-                           (throw 'break nil))))))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
              (conn-with-overriding-map conn-read-args-map
@@ -2010,19 +1958,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                (setq cmd 'keyboard-quit))
              (cl-loop
               (pcase cmd
-                ('keyboard-quit
-                 (keyboard-quit))
                 ('execute-extended-command
-                 (setq cmd (conn--read-args-completing-read
-                            (cond
-                             ((null command-loop) arguments)
-                             (command-handler
-                              `(,command-handler
-                                conn-read-args-command-handler
-                                ,@arguments))
-                             (t `(conn-read-args-command-handler
-                                  ,@arguments)))
-                            partial-keymap)))
+                 (setq cmd (conn--read-args-completing-read arguments
+                                                            partial-keymap)))
                 (_ (cl-return cmd))))))
          (set-error-message (cstr &rest args)
            (setf conn--read-args-error-message
@@ -2030,6 +1968,8 @@ This skips executing the body of the `conn-read-args' form entirely."
          (execute-command (cmd)
            (when pre (funcall pre cmd))
            (pcase cmd
+             ('keyboard-quit
+              (keyboard-quit))
              ('reference
               (apply #'conn-quick-reference
                      reference
@@ -2043,12 +1983,16 @@ This skips executing the body of the `conn-read-args' form entirely."
                          (cons callback prev))
                 (conn-read-args-error "No previous arguments")))
              ((or 'describe-key 'conn-describe-key)
-              (args-describe-key))
+              (conn-with-overriding-map conn-read-args-map
+                (conn--read-args-describe-key
+                 arguments
+                 (lambda (str)
+                   (let ((conn--read-args-error-message str))
+                     (display-message))))))
              ((or 'describe-symbol 'conn-describe-symbol)
-              (args-describe-symbol))
+              (conn--read-args-describe-symbol arguments))
              ((pred identity)
-              (or (call-handlers cmd)
-                  (update-args cmd)
+              (or (update-args cmd)
                   (set-error-message "Invalid Command <%s>" cmd))))
            (when post (funcall post cmd))
            (setq conn-read-args-last-command cmd))
@@ -2099,7 +2043,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let ((conn-read-args-last-prefix nil))
              (if around (funcall around #'cont) (cont))
              (setq argument-values (mapcar #'conn-argument-extract-value
-                                           arguments))
+                                           arglist))
              (when (and history-var (symbolp history-var))
                (conn->f
                    (get history-var :conn-read-args-history)
@@ -2300,57 +2244,72 @@ be displayed in the echo area during `conn-read-args'."
                             (not (eq '_ command-specializer)))
                        `(list ,',var ',,'command-specializer)
                      ',var)))
-    `(cl-macrolet ((:update (arglist &rest body)
-                     (pcase arglist
-                       ((or `(,argument-var ,cmd-var ,break-var)
-                            `(,argument-var ,break-var))
-                        `(cl-defmethod conn-argument-update
-                           ((,argument-var ,',argument-specializer)
-                            ,,(cmd-arg (or cmd-var '_))
-                            ,break-var)
-                           ,@body))))
-                   (:annotation (arglist &rest body)
-                     (pcase arglist
-                       ((or `(,argument-var)
-                            `(,argument-var ,cmd-var))
-                        `(cl-defmethod conn-argument-completion-annotation
-                           ((,argument-var ,',argument-specializer)
-                            ,,(cmd-arg (or cmd-var _)))
-                           ,@body))))
-                   (:predicate (arglist &rest body)
-                     (pcase arglist
-                       ((or `(,argument-var)
-                            `(,argument-var ,cmd-var))
-                        `(cl-defmethod conn-argument-predicate
-                           ((,argument-var ,',argument-specializer)
-                            ,,(cmd-arg (or cmd-var '_)))
-                           ,@body))))
-                   (:documentation (arglist &rest body)
-                     (pcase arglist
-                       ((or `(,argument-var ,cmd-var ,break-var)
-                            `(,argument-var ,break-var))
-                        `(cl-defmethod conn-argument-command-documentation
-                           ((,argument-var ,',argument-specializer)
-                            ,,(cmd-arg (or cmd-var '_))
-                            ,break-var)
-                           ,@body)))))
-       (progn ,@body))))
-
-;;;;;; Read Args Command Handler
-
-(cl-defmethod conn-argument-completion-annotation ((arg (eql conn-read-args-command-handler))
-                                                   value)
-  (when (conn-argument-predicate arg value)
-    " (command)"))
-
-(cl-defmethod conn-argument-predicate ((_arg (eql conn-read-args-command-handler))
-                                       cmd)
-  (memq cmd '(backward-delete-arg
-              reset-arg
-              negative-argument
-              keyboard-quit
-              execute-extended-command
-              help)))
+    `(cl-macrolet ((:update (&rest body)
+                     (let ((qualifiers nil)
+                           (arglist nil))
+                       (while (cl-generic--method-qualifier-p (car body))
+                         (push (pop body) qualifiers))
+                       (setf arglist (pop body))
+                       (pcase arglist
+                         ((or `(,argument-var ,cmd-var ,break-var)
+                              `(,argument-var ,break-var)
+                              `(,break-var))
+                          (unless argument-var (setq argument-var '_))
+                          `(cl-defmethod conn-argument-update
+                             ,@(nreverse qualifiers)
+                             ((,argument-var ,',argument-specializer)
+                              ,,(cmd-arg (or cmd-var '_))
+                              ,break-var)
+                             ,@body)))))
+                   (:annotation (&rest body)
+                     (let ((qualifiers nil)
+                           (arglist nil))
+                       (while (cl-generic--method-qualifier-p (car body))
+                         (push (pop body) qualifiers))
+                       (setf arglist (pop body))
+                       (pcase arglist
+                         ((or `(,argument-var)
+                              `(,argument-var ,cmd-var))
+                          `(cl-defmethod conn-argument-completion-annotation
+                             ,@(nreverse qualifiers)
+                             ((,argument-var ,',argument-specializer)
+                              ,,(cmd-arg (or cmd-var '_)))
+                             ,@body)))))
+                   (:predicate (&rest body)
+                     (let ((qualifiers nil)
+                           (arglist nil))
+                       (while (cl-generic--method-qualifier-p (car body))
+                         (push (pop body) qualifiers))
+                       (setf arglist (pop body))
+                       (pcase arglist
+                         ((or `(,argument-var)
+                              `(,argument-var ,cmd-var))
+                          `(cl-defmethod conn-argument-predicate
+                             ,@(nreverse qualifiers)
+                             ((,argument-var ,',argument-specializer)
+                              ,,(cmd-arg (or cmd-var '_)))
+                             ,@body)))))
+                   (:documentation (&rest body)
+                     (let ((qualifiers nil)
+                           (arglist nil))
+                       (while (cl-generic--method-qualifier-p (car body))
+                         (push (pop body) qualifiers))
+                       (setf arglist (pop body))
+                       (pcase arglist
+                         ((or `(,argument-var ,cmd-var ,break-var)
+                              `(,argument-var ,break-var))
+                          `(cl-defmethod conn-argument-command-documentation
+                             ,@(nreverse qualifiers)
+                             ((,argument-var ,',argument-specializer)
+                              ,,(cmd-arg (or cmd-var '_))
+                              ,break-var)
+                             ,@body))))))
+       ,@(cl-loop for key in '(:documentation
+                               :predicate
+                               :update
+                               :annotation)
+                  for def = (assq key body)
+                  when def collect def))))
 
 ;;;;;; Anonymous Argument
 
@@ -2362,7 +2321,8 @@ be displayed in the echo area during `conn-read-args'."
   (name :type (or nil string function))
   (annotation :type (or nil string function))
   (keymap :type keymap)
-  (reference :type (or list conn--reference-page)))
+  (reference :type (or list conn--reference-page))
+  (documentation :type function))
 
 (defalias 'conn-anonymous-argument-name
   'conn-anonymous-argument--name)
@@ -2382,6 +2342,9 @@ be displayed in the echo area during `conn-read-args'."
 (defalias 'conn-anonymous-argument-reference
   'conn-anonymous-argument--reference)
 
+(defalias 'conn-anonymous-argument-documentation
+  'conn-anonymous-argument--documentation)
+
 (cl-defmethod conn-argument-required-p ((arg conn-anonymous-argument))
   (and (conn-anonymous-argument-required arg)
        (not (conn-anonymous-argument-set-flag arg))))
@@ -2389,7 +2352,8 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-update ((arg conn-anonymous-argument)
                                     form
                                     break)
-  (funcall arg form break))
+  (funcall arg form break)
+  (cl-call-next-method))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-anonymous-argument))
   (conn-anonymous-argument-value arg))
@@ -2414,7 +2378,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-completion-annotation ((arg conn-anonymous-argument)
                                                    value)
   (when-let* ((ann (conn-anonymous-argument--annotation arg))
-              (_ (conn-anonymous-argument--predicate arg value)))
+              (_ (funcall (conn-anonymous-argument--predicate arg) value)))
     (pcase ann
       ((and (pred stringp) str)
        (concat " (" str ")"))
@@ -2425,6 +2389,10 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-get-reference ((arg conn-anonymous-argument))
   (conn-anonymous-argument-reference arg))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-anonymous-argument)
+                                                   cmd)
+  (conn-anonymous-argument-documentation arg cmd))
 
 ;;;;;; Composite Argument
 
@@ -2674,6 +2642,73 @@ be displayed in the echo area during `conn-read-args'."
                (conn-read-argument-name arg)
                'face (when (conn-argument-value arg)
                        'conn-argument-active-face))))))
+
+;;;;;; Command Handler
+
+(cl-defstruct (conn-read-args-command-handler
+               (:include conn-argument)
+               ( :constructor conn-read-args-command-handler)))
+
+(cl-defmethod conn-argument-completion-annotation ((arg conn-read-args-command-handler)
+                                                   value)
+  (when (conn-argument-predicate arg value)
+    " (command)"))
+
+(cl-defmethod conn-argument-get-reference ((_arg conn-read-args-command-handler))
+  (list conn-read-args-reference-page))
+
+(cl-defmethod conn-argument-compose-keymap ((_arg conn-read-args-command-handler))
+  conn-read-args-map)
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql recenter-top-bottom)
+  "Recenter the screen."
+  ( :update (break)
+    (let ((this-command 'recenter-top-bottom)
+          (last-command conn-read-args-last-command))
+      (recenter-top-bottom (conn-read-args-consume-prefix-arg))
+      (funcall break))))
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql digit-argument)
+  "Add a digit to the next prefix argument."
+  ( :update (break)
+    (let* ((char (if (integerp last-input-event)
+                     last-input-event
+                   (get last-input-event 'ascii-character)))
+           (digit (- (logand char ?\177) ?0)))
+      (setf conn--read-args-prefix-mag
+            (if (integerp conn--read-args-prefix-mag)
+                (+ (* 10 conn--read-args-prefix-mag) digit)
+              digit)))
+    (funcall break)))
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql backward-delete-arg)
+  "Delete the most recent prefix argument digit."
+  ( :update (break)
+    (when conn--read-args-prefix-mag
+      (cl-callf floor conn--read-args-prefix-mag 10))
+    (funcall break)))
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql reset-arg)
+  "Reset the prefix arguemnt."
+  ( :update (break)
+    (setf conn--read-args-prefix-mag nil)
+    (funcall break)))
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql negative-argument)
+  "Invert the sign of the current prefix argument."
+  ( :update (break)
+    (cl-callf not conn--read-args-prefix-sign)
+    (funcall break)))
+
+(conn-define-argument-command conn-read-args-command-handler
+    (eql keyboard-quit)
+  "Call `keyboard-quit'."
+  ( :update (_break) (keyboard-quit)))
 
 ;;;;; Protected Argument
 
