@@ -465,22 +465,30 @@
            ""))
      'face 'bold)))
 
+(defun conn--setup-mode-line-label (&optional remove)
+  (if remove
+      (setq mode-line-format
+            (assq-delete-all
+             'conn-wincontrol-label-mode-line-local-mode
+             mode-line-format))
+    (when-let* ((_ (not (assq 'conn-wincontrol-label-mode-line-local-mode
+                              mode-line-format)))
+                (cons (memq 'mode-line-front-space mode-line-format)))
+      (setf (cdr cons)
+            `((conn-wincontrol-label-mode-line-local-mode
+               ((:eval (conn-window-label-mode-line))
+                " "))
+              ,@(cdr cons))))))
+
+(defvar conn-wincontrol-label-mode-line-set-function
+  #'conn--setup-mode-line-label)
+
 (define-minor-mode conn-wincontrol-label-mode-line-local-mode
   "Local mode for `conn-dispatch-window-mode-line-mode'."
   :lighter ""
-  (if conn-wincontrol-label-mode-line-local-mode
-      (when-let* ((cons (memq 'mode-line-front-space mode-line-format)))
-        (setf (cdr cons)
-              `((conn-wincontrol-label-mode-line-local-mode
-                 ((:eval (conn-window-label-mode-line))
-                  " "))
-                ,@(assq-delete-all
-                   'conn-wincontrol-label-mode-line-local-mode
-                   (cdr cons)))))
-    (setq mode-line-format
-          (assq-delete-all
-           'conn-wincontrol-label-mode-line-local-mode
-           mode-line-format))))
+  (funcall conn-wincontrol-label-mode-line-set-function
+           (unless conn-wincontrol-label-mode-line-local-mode
+             'remove)))
 
 (defun conn--turn-on-label-mode-line-local-mode ()
   (conn-wincontrol-label-mode-line-local-mode 1))
