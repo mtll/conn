@@ -743,11 +743,14 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
-  (if (or (null state) (eq state '_)) body
-    (cl-with-gensyms (handle)
-      `(let ((,handle (conn-enter-recursive-stack ,state)))
-         (unwind-protect
-             ,(macroexp-progn body)
+  (cl-with-gensyms (s handle)
+    `(let ((,handle nil))
+       (when-let* ((,s ,state)
+                   (_ (not (eq ,s '_))))
+         (setq ,handle (conn-enter-recursive-stack ,s)))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (when ,handle
            (conn-exit-recursive-stack ,handle))))))
 
 ;;;;; Cl-Generic Specializers
@@ -1910,7 +1913,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                        (cons command-handler arglist)
                      arglist))
         (prefix (when prefix (prefix-numeric-value prefix)))
-        (prompt (or prompt (symbol-name state)))
+        (prompt (or prompt "Read Args"))
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
@@ -2020,9 +2023,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
-               (setq maps `((,state . nil)
+               (setq maps `((,conn-current-state . nil)
                             ,@(when history-var
-                                `((,state . ,conn-read-args-previous-map)))))
+                                `((,conn-current-state
+                                   . ,conn-read-args-previous-map)))))
                (if command-loop
                    (funcall command-loop
                             #'setup-keymaps

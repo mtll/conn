@@ -204,24 +204,25 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-event-handlers
-    ( :keymap conn-dispatch-toggle-focus-map)
-    ( :handler (cmd)
-      (when (eq cmd 'toggle-focus)
-        (conn-target-finder-setup
-         (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
-             (conn-expansion-targets)
-           (conn-expansion-focus-targets)))
-        (recenter (conn-dispatch-get-display-line))
-        (conn-dispatch-handle-and-redisplay)))
-    ( :message 0 (keymap)
-      (when-let* ((binding (where-is-internal 'toggle-focus keymap t)))
-        (concat
-         (propertize (key-description binding)
-                     'face 'help-key-binding)
-         " "
-         (propertize "focus"
-                     'face (when (cl-typep target-finder 'conn-dispatch-focus-mixin)
-                             'eldoc-highlight-function-argument)))))
+    (:handler
+     (:keymap conn-dispatch-toggle-focus-map)
+     ( :predicate (cmd) (eq cmd 'toggle-focus))
+     ( :update (_cmd break)
+       (conn-target-finder-setup
+        (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
+            (conn-expansion-targets)
+          (conn-expansion-focus-targets)))
+       (recenter (conn-dispatch-get-display-line))
+       (funcall break :handle-and-redisplay))
+     ( :display ()
+       (when-let* ((binding (where-is-internal 'toggle-focus nil t)))
+         (concat
+          (propertize (key-description binding)
+                      'face 'help-key-binding)
+          " "
+          (propertize "focus"
+                      'face (when (cl-typep target-finder 'conn-dispatch-focus-mixin)
+                              'eldoc-highlight-function-argument))))))
     (let ((conn--dispatch-action-always-prompt t))
       (cl-call-next-method))))
 

@@ -183,57 +183,147 @@ strings have `conn-dispatch-label-face'."
 
 ;;;;;; Event Handlers
 
-(defvar conn--dispatch-event-handler-maps nil)
 (defvar conn--dispatch-read-char-handlers nil)
-(defvar conn--dispatch-read-char-message-prefixes nil)
+
+(cl-defgeneric conn-dispatch-handler-depth (handler))
+
+(cl-defstruct (conn-dispatch-event-argument
+               (:include conn-argument)
+               ( :constructor conn-dispatch-event-argument
+                 (event-reader
+                  &key
+                  (keymap conn-dispatch-read-char-map)
+                  (reference conn-dispatch-command-reference)
+                  (depth -99)
+                  &aux
+                  (required t))))
+  (depth 0 :read-only t)
+  (event-reader #'ignore :read-only t :type function))
+
+(conn-define-argument-command ((arg conn-dispatch-event-argument)
+                               (cmd (eql dispatch-character-event)))
+  "Narrow labels by character."
+  (:predicate)
+  ( :update (break)
+    (setq conn--read-args-error-message nil
+          conn--dispatch-must-prompt nil)
+    (conn-add-unread-events (this-single-command-raw-keys))
+    (setf (conn-argument-value arg)
+          (funcall (conn-dispatch-event-argument-event-reader arg))
+          (conn-argument-set-flag arg) t)
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-event-argument)
+                               (cmd (eql quoted-insert)))
+  "Narrow labels by character."
+  ( :update (break)
+    (let ((char (read-quoted-char
+                 (propertize "Quoted Char: "
+                             'face 'minibuffer-prompt))))
+      (unless (eq char (car (last (current-input-mode))))
+        (setf (conn-argument-value arg) char
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-event-argument)
+                               (cmd (eql restart)))
+  "Narrow labels by character."
+  ( :update (break)
+    (setf (conn-argument-value arg) 8
+          (conn-argument-set-flag arg) t)
+    (funcall break)))
+
+(cl-defmethod conn-dispatch-handler-depth ((handler conn-dispatch-event-argument))
+  (conn-dispatch-event-argument-depth handler))
+
+(oclosure-define (conn-dispatch-handler)
+  (handler-tag :type symbol)
+  (handler-depth :type integer)
+  (handler-predicate :type function)
+  (handler-annotation :type function)
+  (handler-documentation :type function)
+  (handler-display :type function)
+  (handler-keymap :type keymap)
+  (handler-reference))
+
+(cl-defmethod conn-dispatch-handler-depth ((handler conn-dispatch-handler))
+  (conn-dispatch-handler--handler-depth handler))
+
+(cl-defmethod conn-argument-update ((arg conn-dispatch-handler)
+                                    cmd
+                                    break)
+  (when (funcall (conn-dispatch-handler--handler-predicate arg) cmd)
+    (funcall arg cmd
+             (lambda (&rest how)
+               (pcase how
+                 (`(:handle)
+                  (funcall break))
+                 (`(:handle-and-redisplay)
+                  (conn-dispatch-handle-and-redisplay))
+                 (`(:handle-and-redisplay ,must-prompt)
+                  (conn-dispatch-handle-and-redisplay must-prompt))
+                 ((or `(:return ,value)
+                      `(:return))
+                  (throw (conn-dispatch-handler--handler-tag arg)
+                         value))
+                 (_ (error "Invalid break form")))))))
+
+(cl-defmethod conn-argument-display ((arg conn-dispatch-handler))
+  (funcall (conn-dispatch-handler--handler-display arg)))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-handler))
+  (conn-dispatch-handler--handler-keymap arg))
+
+(cl-defmethod conn-argument-predicate ((arg conn-dispatch-handler)
+                                       cmd)
+  (funcall (conn-dispatch-handler--handler-predicate arg) cmd))
+
+(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-handler)
+                                                   value)
+  (when-let* ((ann (conn-dispatch-handler--handler-annotation arg))
+              (_ (funcall (conn-dispatch-handler--handler-predicate arg) value)))
+    (funcall ann value)))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-handler))
+  (conn-dispatch-handler--handler-reference arg))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-handler)
+                                                   cmd)
+  (when (funcall (conn-dispatch-handler--handler-predicate arg) cmd)
+    (funcall (conn-dispatch-handler--handler-documentation arg) cmd)))
 
 (eval-and-compile
-  (defun conn--with-dispatch-event-handlers (body)
-    (let* ((tag (gensym "tag"))
-           (return-expander
-            `(:return . ,(lambda (&optional result)
-                           `(throw ',tag ,result))))
-           (handler-expander
-            `(:handler . ,(lambda (&rest rest)
-                            `(push
-                              ,(pcase rest
-                                 (`(#',fn) `#',fn)
-                                 (_ (macroexpand-all
-                                     `(lambda ,@rest)
-                                     (cons return-expander
-                                           macroexpand-all-environment))))
-                              conn--dispatch-read-char-handlers))))
-           (msg-expander
-            `(:message . ,(lambda (depth &rest rest)
-                            (cl-assert (<= -100 depth 100))
-                            `(progn
-                               (push
-                                (cons ,depth ,(pcase rest
-                                                (`(#',fn) `#',fn)
-                                                (_ `(lambda ,@rest))))
-                                conn--dispatch-read-char-message-prefixes)
-                               (conn--compat-callf sort
-                                   conn--dispatch-read-char-message-prefixes
-                                 :key #'car)))))
-           (keymap-expander
-            `(:keymap . ,(lambda (keymap)
-                           `(push ,keymap conn--dispatch-event-handler-maps))))
-           (body (macroexpand-all (macroexp-progn body)
-                                  `(,handler-expander
-                                    ,msg-expander
-                                    ,keymap-expander
-                                    ,@macroexpand-all-environment))))
-      `(let ((conn--dispatch-event-handler-maps
-              conn--dispatch-event-handler-maps)
-             (conn--dispatch-read-char-message-prefixes
-              conn--dispatch-read-char-message-prefixes)
-             (conn--dispatch-read-char-handlers
-              conn--dispatch-read-char-handlers))
-         (catch ',tag ,@(macroexp-unprogn body))))))
+  (defun conn--expand-dispatch-handler (tag body)
+    `(push (oclosure-lambda (conn-dispatch-handler
+                             (handler-tag ',tag)
+                             (handler-reference
+                              ,(car (alist-get :reference body)))
+                             (handler-depth
+                              ,(or (car (alist-get :depth body)) 0))
+                             (handler-display
+                              (lambda ,@(alist-get :display body)))
+                             (handler-predicate
+                              (lambda ,@(alist-get :predicate body)))
+                             (handler-annotation
+                              (lambda ,@(alist-get :annotation body)))
+                             (handler-documentation
+                              (lambda ,@(alist-get :documentation body)))
+                             (handler-keymap
+                              ,(car (alist-get :keymap body))))
+               ,@(alist-get :update body))
+           conn--dispatch-read-char-handlers)))
 
 (defmacro conn-with-dispatch-event-handlers (&rest body)
   (declare (indent 0))
-  (conn--with-dispatch-event-handlers body))
+  (cl-with-gensyms (tag)
+    (macroexpand-all
+     `(let ((conn--dispatch-read-char-handlers
+             conn--dispatch-read-char-handlers))
+        (catch ',tag ,@body))
+     `((:handler . ,(lambda (&rest body)
+                      (conn--expand-dispatch-handler tag body)))
+       (:literal . (lambda (exp)
+                     `(push ,exp conn--dispatch-read-char-handlers)))))))
 
 ;;;;;; Labels
 
@@ -462,15 +552,16 @@ themselves once the selection process has concluded."
      (t (conn-with-window-labels
             (labels (funcall conn-window-label-function windows))
           (conn-with-dispatch-event-handlers
-            ( :handler (cmd)
-              (when (or (and (eq cmd 'act)
-                             (mouse-event-p last-input-event))
-                        (eq 'dispatch-mouse-repeat
-                            (event-basic-type last-input-event)))
-                (let* ((posn (event-start last-input-event))
-                       (win (posn-window posn)))
-                  (when (not (posn-area posn))
-                    (:return win)))))
+            (:handler
+             ( :update (cmd break)
+               (when (or (and (eq cmd 'act)
+                              (mouse-event-p last-input-event))
+                         (eq 'dispatch-mouse-repeat
+                             (event-basic-type last-input-event)))
+                 (let* ((posn (event-start last-input-event))
+                        (win (posn-window posn)))
+                   (when (not (posn-area posn))
+                     (funcall break :return win))))))
             (conn-label-select
              labels
              (lambda (prompt)
@@ -517,6 +608,7 @@ themselves once the selection process has concluded."
     (define-key map conn-undo-keys 'undo)
     (define-keymap
       :keymap map
+      "<dispatch-mouse-repeat>" 'repeat-dispatch-at-mouse
       "C-\\" 'toggle-input-method
       "C-M-\\" 'set-input-method
       "C-z" 'other-end
@@ -1788,17 +1880,6 @@ Target overlays may override this default by setting the
                   (push (conn-dispatch-create-label tar str) labels)))
     `(:state ,(list pool size in-use) ,@labels)))
 
-(defun conn--dispatch-read-char-prefix (keymap)
-  (declare (important-return-value t))
-  (and-let* ((prefix
-              (flatten-tree
-               (cl-loop for (_ . pfx) in conn--dispatch-read-char-message-prefixes
-                        for str = (pcase pfx
-                                    ((pred functionp) (funcall pfx keymap))
-                                    ((pred stringp) pfx))
-                        if str collect str))))
-    (concat " (" (string-join prefix "; ") ")")))
-
 (defun conn-dispatch-prompt-p ()
   (or conn--dispatch-must-prompt
       conn--dispatch-action-always-prompt
@@ -1826,24 +1907,25 @@ Target overlays may override this default by setting the
   (clrhash conn--dispatch-window-lines-cache)
   (unwind-protect
       (conn-with-dispatch-event-handlers
-        ( :handler (cmd)
-          (when (eq cmd 'toggle-labels)
-            (cl-callf not conn-dispatch-hide-labels)
-            (while-no-input
-              (mapc #'conn-label-redisplay labels))
-            (conn-dispatch-handle)))
-        ( :message -50 (keymap)
-          (when-let* ((_ conn-dispatch-hide-labels)
-                      (binding
-                       (where-is-internal 'toggle-labels keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (propertize
-              "hide labels"
-              'face 'eldoc-highlight-function-argument))))
-        (:keymap conn-toggle-label-argument-map)
+        (:handler
+         (:predicate (cmd) (eq cmd 'toggle-labels))
+         (:keymap conn-toggle-label-argument-map)
+         ( :display ()
+           (when-let* ((_ conn-dispatch-hide-labels)
+                       (binding
+                        (where-is-internal 'toggle-labels nil t)))
+             (concat
+              (propertize (key-description binding)
+                          'face 'help-key-binding)
+              " "
+              (propertize
+               "hide labels"
+               'face 'eldoc-highlight-function-argument))))
+         ( :update (_cmd break)
+           (cl-callf not conn-dispatch-hide-labels)
+           (while-no-input
+             (mapc #'conn-label-redisplay labels))
+           (funcall break :handle)))
         (let ((fn (make-symbol "cleanup")))
           (fset fn (lambda (&rest _)
                      (unwind-protect
@@ -1995,22 +2077,23 @@ depths will be sorted before greater depths.
             (condition-case err
                 (conn-with-dispatch-event-handlers
                   (when (conn-action-repeatable-p action)
-                    ( :handler (obj)
-                      (when (eq obj 'repeat-dispatch)
-                        (cl-callf not repeat)
-                        (cl-callf not conn-dispatch-repeating)
-                        (conn-dispatch-handle))))
-                  ( :message -51 (keymap)
-                    (when-let* ((_ repeat)
-                                (binding
-                                 (where-is-internal 'repeat-dispatch keymap t)))
-                      (concat
-                       (propertize (key-description binding)
-                                   'face 'help-key-binding)
-                       " "
-                       (propertize
-                        "repeat"
-                        'face 'conn-argument-active-face))))
+                    (:handler
+                     ( :predicate (cmd) (eq cmd 'repeat-dispatch))
+                     ( :display ()
+                       (when-let* ((_ repeat)
+                                   (binding
+                                    (where-is-internal 'repeat-dispatch nil t)))
+                         (concat
+                          (propertize (key-description binding)
+                                      'face 'help-key-binding)
+                          " "
+                          (propertize
+                           "repeat"
+                           'face 'conn-argument-active-face))))
+                     ( :update (_cmd break)
+                       (cl-callf not repeat)
+                       (cl-callf not conn-dispatch-repeating)
+                       (funcall break :handle))))
                   (catch 'dispatch-undo
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
@@ -2158,29 +2241,36 @@ the meaning of depth."
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
 
+(defun conn--dispatch-read-char-prefix (arguments prompt suffix)
+  (declare (important-return-value t))
+  (conn-<
+    (mapcar #'conn-argument-display arguments)
+    (flatten-tree)
+    (string-join "; ")
+    (:as args
+         (concat
+          (propertize prompt 'face 'minibuffer-prompt)
+          " (arg: " args ")"
+          (when suffix (concat ": " suffix " "))
+          (when-let* ((msg (conn--read-args-get-message)))
+            (concat ": " msg))))))
+
 (defun conn-dispatch-read-char (&optional
                                 prompt
                                 inherit-input-method
                                 seconds
                                 prompt-suffix)
   (declare (important-return-value t))
-  (let* ((inhibit-message conn-read-args-inhibit-message)
-         (message-log-max nil)
-         (prompt-suffix (unless inhibit-message prompt-suffix))
-         (error-msg (when (and conn--read-args-error-message
-                               (not inhibit-message))
-                      (propertize conn--read-args-error-message
-                                  'face 'error)))
-         (keymap (make-composed-keymap conn--dispatch-event-handler-maps
-                                       conn-dispatch-read-char-map))
-         (quit-event (car (last (current-input-mode)))))
-    (cl-flet ((read-ev (prompt &optional seconds)
+  (let ((conn--dispatch-read-char-handlers
+         (sort conn--dispatch-read-char-handlers
+               :key #'conn-dispatch-handler-depth)))
+    (cl-flet ((read-ev (&optional seconds)
                 (with-current-buffer (or conn-dispatch-input-buffer
                                          (current-buffer))
                   (let ((scroll-conservatively 100))
                     (pcase inherit-input-method
                       ('nil
-                       (read-event prompt nil seconds))
+                       (read-event nil nil seconds))
                       ('label
                        (let ((pim current-input-method)
                              (default-input-method default-input-method)
@@ -2190,69 +2280,25 @@ the meaning of depth."
                              (progn
                                (activate-input-method
                                 conn-dispatch-label-input-method)
-                               (read-event prompt t seconds))
+                               (read-event nil t seconds))
                            (activate-input-method pim))))
                       (_
-                       (read-event prompt t seconds)))))))
+                       (read-event nil t seconds))))))
+              (message-fn (prompt arguments &optional _state teardown)
+                (unless teardown
+                  (message "%s" (conn--dispatch-read-char-prefix arguments
+                                                                 prompt
+                                                                 prompt-suffix)))))
       (if seconds
-          (and-let* ((ev (read-ev (unless inhibit-message
-                                    (concat prompt
-                                            ": "
-                                            prompt-suffix
-                                            (when prompt-suffix " ")
-                                            error-msg))
-                                  seconds)))
+          (and-let* ((ev (read-ev seconds)))
             (and (characterp ev) ev))
-        (cl-loop
-         (pcase (let ((scroll-conservatively 100))
-                  (conn-with-overriding-map keymap
-                    (thread-first
-                      (unless inhibit-message
-                        (concat prompt
-                                (conn--dispatch-read-char-prefix keymap)
-                                ": "
-                                prompt-suffix
-                                (when prompt-suffix " ")
-                                error-msg))
-                      (read-key-sequence-vector)
-                      (key-binding t))))
-           ((guard (eql quit-event
-                        (aref (this-command-keys-vector) 0)))
-            (keyboard-quit))
-           ('restart (cl-return 8))
-           ('ignore)
-           ('quoted-insert
-            (let ((char (read-quoted-char
-                         (propertize "Quoted Char: "
-                                     'face 'minibuffer-prompt))))
-              (unless (eq char quit-event)
-                (cl-return char))))
-           ('dispatch-character-event
-            (setq conn--read-args-error-message nil
-                  conn--dispatch-must-prompt nil)
-            (conn-add-unread-events (this-single-command-raw-keys))
-            (cl-return
-             (read-ev (unless inhibit-message
-                        (concat prompt
-                                (conn--dispatch-read-char-prefix keymap)
-                                ": "
-                                prompt-suffix)))))
-           (cmd
-            (setq conn--read-args-error-message nil)
-            (let ((unhandled nil))
-              (unwind-protect
-                  (catch 'dispatch-handle
-                    (cl-loop for handler in conn--dispatch-read-char-handlers
-                             do (funcall handler cmd))
-                    (setq unhandled t))
-                (if unhandled
-                    (setq error-msg (propertize
-                                     (format "Invalid command <%s>" cmd)
-                                     'face 'error))
-                  (setf conn-read-args-last-command cmd)
-                  (setq conn--read-args-error-message nil)))
-              (when (and unhandled (eq cmd 'keyboard-quit))
-                (keyboard-quit))))))))))
+        (conn-read-args (nil :prompt prompt
+                             :command-handler nil
+                             :display-handler #'message-fn)
+            ((char (conn-dispatch-event-argument #'read-ev))
+             (_handlers (conn-composite-argument
+                         conn--dispatch-read-char-handlers)))
+          char)))))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&optional (must-prompt t))
   (redisplay)
@@ -2301,7 +2347,6 @@ the meaning of depth."
                        (conn--read-args-prefix-mag nil)
                        (conn--read-args-prefix-sign nil)
                        (conn--dispatch-read-char-handlers nil)
-                       (conn--dispatch-read-char-message-prefixes nil)
                        (conn--dispatch-always-retarget nil)
                        (conn-dispatch-hide-labels nil))
              (if ,select-mode (conn-dispatch-select-mode -1))
@@ -2314,101 +2359,210 @@ the meaning of depth."
                (conn-enter-recursive-stack 'conn-dispatch-state))
          (if ,select-mode (conn-dispatch-select-mode 1))))))
 
-(cl-defgeneric conn-handle-dispatch-select-command (command)
-  "Command handler active during `conn-dispatch-select-mode'."
-  (:method (_cmd) nil))
+(cl-defstruct (conn-dispatch-select-handler
+               (:include conn-argument)
+               ( :constructor conn-dispatch-select-handler
+                 (action)))
+  (depth 0 :read-only t)
+  (action nil :read-only t))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
-  (conn-read-args (conn-dispatch-targets-state
-                   :prompt "New Targets"
-                   :reference (list conn-dispatch-thing-reference)
-                   :around (lambda (cont)
-                             (conn-with-dispatch-suspended
-                               (funcall cont))))
-      ((`(,thing ,arg) (conn-dispatch-target-argument))
-       (transform (conn-dispatch-transform-argument)))
-    (conn-target-finder-setup
-     (conn-get-target-finder thing arg))
-    (setq conn--dispatch-current-thing (list thing arg transform))
-    (conn-dispatch-handle-and-redisplay)))
+(cl-defmethod conn-argument-update :around ((handler conn-dispatch-select-handler)
+                                            cmd
+                                            break)
+  (cl-call-next-method
+   handler
+   cmd
+   (lambda (&rest how)
+     (pcase how
+       (`(:handle)
+        (funcall break))
+       (`(:handle-and-redisplay)
+        (conn-dispatch-handle-and-redisplay))
+       (`(:handle-and-redisplay ,must-prompt)
+        (conn-dispatch-handle-and-redisplay must-prompt))
+       ((or `(:return ,value)
+            `(:return))
+        (throw (conn-dispatch-handler--handler-tag handler)
+               value))
+       (_ (error "Invalid break form"))))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
-  (conn-with-overriding-map conn-dispatch-read-char-map
-    (conn-quick-reference
-     (conn-dispatch-select-action-reference)
-     (conn-dispatch-select-target-reference)
-     conn-dispatch-select-misc-reference))
-  (conn-dispatch-handle))
+(cl-defmethod conn-argument-display ((handler conn-dispatch-select-handler))
+  (list
+   (propertize
+    (cond (conn--read-args-prefix-mag
+           (number-to-string
+            (* (if conn--read-args-prefix-sign -1 1)
+               conn--read-args-prefix-mag)))
+          (conn--read-args-prefix-sign "[-1]")
+          (t "[1]"))
+    'face 'read-multiple-choice-face)
+   (when-let* ((im (buffer-local-value 'current-input-method-title
+                                       conn-dispatch-input-buffer)))
+     (propertize im 'face 'read-multiple-choice-face))
+   (propertize (conn-action-display
+                (conn-dispatch-select-handler-action handler)
+                t)
+               'face 'conn-argument-active-face)
+   (when-let* ((binding (where-is-internal 'help nil t)))
+     (concat
+      (propertize (key-description binding)
+                  'face 'help-key-binding)
+      " help"))
+   (when-let* ((_ (conn-dispatch-other-end-p))
+               (binding
+                (where-is-internal 'other-end nil t)))
+     (concat
+      (propertize (key-description binding)
+                  'face 'help-key-binding)
+      " "
+      (propertize
+       "other end"
+       'face 'conn-argument-active-face)))
+   (when-let* ((_ (advice-function-member-p
+                   'conn--dispatch-restrict-windows
+                   conn-target-window-predicate))
+               (binding (where-is-internal 'restrict-windows nil t)))
+     (concat
+      (propertize (key-description binding)
+                  'face 'help-key-binding)
+      " "
+      (propertize
+       "this win"
+       'face 'eldoc-highlight-function-argument)))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
-  (when (bound-and-true-p mouse-wheel-mode)
-    (mwheel-scroll last-input-event))
-  (conn-dispatch-handle-and-redisplay))
+(cl-defmethod conn-dispatch-handler-depth ((handler conn-dispatch-select-handler))
+  (conn-dispatch-select-handler-depth handler))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recursive-edit)))
-  (conn-with-dispatch-suspended
-    (conn-with-recursive-stack 'conn-command-state
-      (recursive-edit)))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql change-target-finder)))
+  ""
+  ( :update (break)
+    (conn-read-args (conn-dispatch-targets-state
+                     :prompt "New Targets"
+                     :reference (list conn-dispatch-thing-reference)
+                     :around (lambda (cont)
+                               (conn-with-dispatch-suspended
+                                 (funcall cont))))
+        ((`(,thing ,arg) (conn-dispatch-target-argument))
+         (transform (conn-dispatch-transform-argument)))
+      (conn-target-finder-setup
+       (conn-get-target-finder thing arg))
+      (setq conn--dispatch-current-thing (list thing arg transform))
+      (funcall break :handle-and-redisplay))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql recenter-top-bottom)))
-  (let ((this-command 'recenter-top-bottom)
-        (last-command conn-read-args-last-command))
-    (recenter-top-bottom (conn-read-args-prefix-arg))
-    (unless executing-kbd-macro
-      (pulse-momentary-highlight-one-line)))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql help)))
+  ""
+  ( :update (break)
+    (conn-with-overriding-map conn-dispatch-read-char-map
+      (conn-quick-reference
+       (conn-dispatch-select-action-reference)
+       (conn-dispatch-select-target-reference)
+       conn-dispatch-select-misc-reference))
+    (funcall break :handle)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
-  (with-current-buffer conn-dispatch-input-buffer
-    (let ((inhibit-message nil)
-          (message-log-max 1000))
-      (toggle-input-method (conn-read-args-consume-prefix-arg))))
-  (conn-dispatch-handle))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql mwheel-scroll)))
+  ""
+  ( :update (break)
+    (when (bound-and-true-p mouse-wheel-mode)
+      (mwheel-scroll last-input-event))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql set-input-method)))
-  (with-current-buffer conn-dispatch-input-buffer
-    (let ((inhibit-message nil)
-          (message-log-max 1000))
-      (activate-input-method
-       (read-input-method-name
-        (format-prompt "Select input method" nil)
-        nil t))))
-  (conn-dispatch-handle))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql recursive-edit)))
+  ""
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (conn-with-recursive-stack 'conn-command-state
+        (recursive-edit)))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward)))
-  (conn-with-dispatch-suspended
-    (isearch-forward))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql recenter-top-bottom)))
+  ""
+  ( :update (break)
+    (let ((this-command 'recenter-top-bottom)
+          (last-command conn-read-args-last-command))
+      (recenter-top-bottom (conn-read-args-prefix-arg))
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-one-line)))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward)))
-  (conn-with-dispatch-suspended
-    (isearch-backward))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql toggle-input-method)))
+  ""
+  ( :update (break)
+    (with-current-buffer conn-dispatch-input-buffer
+      (let ((inhibit-message nil)
+            (message-log-max 1000))
+        (toggle-input-method (conn-read-args-consume-prefix-arg))))
+    (funcall break :handle)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-forward-regexp)))
-  (conn-with-dispatch-suspended
-    (isearch-forward-regexp))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql set-input-method)))
+  ""
+  ( :update (break)
+    (with-current-buffer conn-dispatch-input-buffer
+      (let ((inhibit-message nil)
+            (message-log-max 1000))
+        (activate-input-method
+         (read-input-method-name
+          (format-prompt "Select input method" nil)
+          nil t))))
+    (funcall break :handle)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql isearch-backward-regexp)))
-  (conn-with-dispatch-suspended
-    (isearch-backward-regexp))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql isearch-forward)))
+  ""
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (isearch-forward))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up-command)))
-  (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
-                                       next-screen-context-lines)))
-    (ignore-error end-of-buffer
-      (scroll-up))
-    (conn-dispatch-handle-and-redisplay)))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql isearch-backward)))
+  ""
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (isearch-backward))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down-command)))
-  (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
-                                       next-screen-context-lines)))
-    (ignore-error beginning-of-buffer
-      (scroll-down))
-    (conn-dispatch-handle-and-redisplay)))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql isearch-forward-regexp)))
+  ""
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (isearch-forward-regexp))
+    (funcall break :handle-and-redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql isearch-backward-regexp)))
+  ""
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (isearch-backward-regexp))
+    (funcall break :handle-and-redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql scroll-up-command)))
+  ""
+  ( :update (break)
+    (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
+                                         next-screen-context-lines)))
+      (ignore-error end-of-buffer
+        (scroll-up))
+      (funcall break :handle-and-redisplay))))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql scroll-down-command)))
+  ""
+  ( :update (break)
+    (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
+                                         next-screen-context-lines)))
+      (ignore-error beginning-of-buffer
+        (scroll-down))
+      (funcall break :handle-and-redisplay))))
 
 (defun conn-dispatch-goto-window (window)
   (conn-dispatch-select-window window)
@@ -2417,50 +2571,71 @@ the meaning of depth."
      'mode-line
      (conn-state-get 'conn-dispatch-state :mode-line-face))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql conn-goto-window)))
-  (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
-      (progn
-        (conn-dispatch-goto-window (conn-prompt-for-window windows))
-        (conn-dispatch-handle-and-redisplay nil))
-    (conn-dispatch-handle)))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql conn-goto-window)))
+  ""
+  ( :update (break)
+    (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
+        (progn
+          (conn-dispatch-goto-window (conn-prompt-for-window windows))
+          (conn-dispatch-handle-and-redisplay nil))
+      (funcall break :handle))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
-  (throw 'dispatch-exit nil))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql finish)))
+  ""
+  ( :update (_break)
+    (throw 'dispatch-exit nil)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql other-end)))
-  (if (advice-function-member-p 'toggle conn-dispatch-other-end)
-      (remove-function conn-dispatch-other-end 'toggle)
-    (add-function :around conn-dispatch-other-end
-                  (lambda (fn) (not (funcall fn)))
-                  '((name . toggle)
-                    (depth . 100))))
-  (conn-dispatch-handle-and-redisplay nil))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql other-end)))
+  ""
+  ( :update (break)
+    (if (advice-function-member-p 'toggle conn-dispatch-other-end)
+        (remove-function conn-dispatch-other-end 'toggle)
+      (add-function :around conn-dispatch-other-end
+                    (lambda (fn) (not (funcall fn)))
+                    '((name . toggle)
+                      (depth . 100))))
+    (funcall break :handle-and-redisplay nil)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql retarget)))
-  (conn-target-finder-retarget conn-dispatch-target-finder)
-  (conn-dispatch-handle-and-redisplay nil))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql retarget)))
+  ""
+  ( :update (break)
+    (conn-target-finder-retarget conn-dispatch-target-finder)
+    (funcall break :handle-and-redisplay nil)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql always-retarget)))
-  (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
-  (conn-dispatch-handle-and-redisplay))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql always-retarget)))
+  ""
+  ( :update (break)
+    (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
+    (funcall break :handle-and-redisplay)))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql restrict-windows)))
-  (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
-                                   conn-target-window-predicate)
-         (remove-function conn-target-window-predicate
-                          'conn--dispatch-restrict-windows)
-         (conn-dispatch-handle-and-redisplay))
-        ((length> conn-targets 1)
-         (add-function :after-while conn-target-window-predicate
-                       'conn--dispatch-restrict-windows)
-         (conn-dispatch-handle-and-redisplay))))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql restrict-windows)))
+  ""
+  ( :update (break)
+    (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
+                                     conn-target-window-predicate)
+           (remove-function conn-target-window-predicate
+                            'conn--dispatch-restrict-windows)
+           (funcall break :handle-and-redisplay))
+          ((length> conn-targets 1)
+           (add-function :after-while conn-target-window-predicate
+                         'conn--dispatch-restrict-windows)
+           (funcall break :handle-and-redisplay)))))
 
-(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
-  (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
-                   (cl-callf2 drop 2 conn--dispatch-change-groups)))
-    (pcase-dolist (`(,_ . ,undo-fn) group)
-      (funcall undo-fn :undo)))
-  (throw 'dispatch-undo nil))
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql undo)))
+  ""
+  ( :update (_break)
+    (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
+                     (cl-callf2 drop 2 conn--dispatch-change-groups)))
+      (pcase-dolist (`(,_ . ,undo-fn) group)
+        (funcall undo-fn :undo)))
+    (throw 'dispatch-undo nil)))
 
 ;;;;; Dispatch Labels
 
@@ -2715,17 +2890,22 @@ updated.")
         (conn-target-sort-function (or (oref target-finder label-sort-function)
                                        conn-target-sort-function)))
     (conn-with-dispatch-event-handlers
-      ( :handler (cmd)
-        (when (or (and (eq cmd 'act)
-                       (mouse-event-p last-input-event))
-                  (eq 'dispatch-mouse-repeat
-                      (event-basic-type last-input-event)))
-          (let* ((posn (event-start last-input-event))
-                 (win (posn-window posn))
-                 (pt (posn-point posn)))
-            (when (and (not (posn-area posn))
-                       (funcall conn-target-window-predicate win))
-              (:return (list pt win nil))))))
+      (:handler
+       ( :predicate (cmd)
+         (or (eq cmd 'act)
+             (eq cmd 'repeat-dispatch-at-mouse)))
+       ( :update (cmd break)
+         (when (or (and (eq cmd 'act)
+                        (mouse-event-p last-input-event))
+                   (and (eq cmd 'repeat-dispatch-at-mouse)
+                        (eq 'dispatch-mouse-repeat
+                            (event-basic-type last-input-event))))
+           (let* ((posn (event-start last-input-event))
+                  (win (posn-window posn))
+                  (pt (posn-point posn)))
+             (when (and (not (posn-area posn))
+                        (funcall conn-target-window-predicate win))
+               (funcall break :return (list pt win nil)))))))
       (unwind-protect
           (progn
             (conn-dispatch-select-mode 1)
@@ -2894,22 +3074,22 @@ to the key binding for that target."
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-event-handlers
-      ( :handler (obj)
-        (when (conn-dispatch-label-p obj)
-          (:return (conn-label-payload obj))))
-      ( :keymap
-        (let ((map (make-sparse-keymap)))
-          (cl-loop for label in labels
-                   for key = (conn-dispatch-label-string label)
-                   do (keymap-set map key label))
-          (mapc #'conn-label-redisplay labels)
-          map))
+      (:handler
+       (:depth 100)
+       ( :update (obj break)
+         (if (conn-dispatch-label-p obj)
+             (funcall break :return (conn-label-payload obj))
+           (conn-read-args-error "Invalid key")))
+       ( :keymap
+         (let ((map (make-sparse-keymap)))
+           (cl-loop for label in labels
+                    for key = (conn-dispatch-label-string label)
+                    do (keymap-set map key label))
+           (mapc #'conn-label-redisplay labels)
+           map)))
       (ignore (conn-dispatch-read-char "Register"))
       (while t
-        (ignore
-         (conn-dispatch-read-char
-          "Register" nil nil
-          (propertize "Invalid key" 'face 'error)))))))
+        (ignore (conn-dispatch-read-char "Register"))))))
 
 (defclass conn-dispatch-retargetable-mixin ()
   ()
@@ -3013,18 +3193,20 @@ to the key binding for that target."
                 (conn-dispatch-call-update-handlers state)))
             (catch 'dispatch-redisplay
               (conn-with-dispatch-event-handlers
-                ( :handler (cmd)
-                  (pcase cmd
-                    ('backspace
-                     (when (length> string 0)
-                       (cl-callf substring string 0 -1))
-                     (:return))
-                    ('quote
-                     (setf quote-flag t)
-                     (:return))))
-                (:keymap (define-keymap
-                           "<backspace>" 'backspace
-                           "<remap> <quoted-insert>" 'quote))
+                (:handler
+                 (:predicate (cmd) (memq cmd '(backspace quote)))
+                 (:keymap (define-keymap
+                            "<backspace>" 'backspace
+                            "<remap> <quoted-insert>" 'quote))
+                 ( :update (cmd break)
+                   (pcase cmd
+                     ('backspace
+                      (when (length> string 0)
+                        (cl-callf substring string 0 -1))
+                      (funcall break :return))
+                     ('quote
+                      (setf quote-flag t)
+                      (funcall break :return)))))
                 (let ((char (conn-dispatch-read-char prompt t nil string)))
                   (if (and (eql char conn-dispatch-read-n-chars-any-char)
                            (not quote-flag))
@@ -3080,23 +3262,24 @@ to the key binding for that target."
       (unless string
         (let ((timeout (oref state timeout)))
           (conn-with-dispatch-event-handlers
-            (:keymap conn-dispatch-read-string-target-keymap)
-            ( :handler (cmd)
-              (when (eq cmd 'read-string)
-                (let ((newstr (conn-with-dispatch-suspended
-                                (minibuffer-with-setup-hook
-                                    (conn-dispatch-lazy-update
-                                     (lambda (str)
-                                       (setf string str)
-                                       (while-no-input
-                                         (conn-dispatch-call-update-handlers state))))
-                                  (read-string
-                                   "String: " string
-                                   'conn-read-string-target-history
-                                   nil t)))))
-                  (unless (equal newstr "")
-                    (setq string newstr)
-                    (:return)))))
+            (:handler
+             (:keymap conn-dispatch-read-string-target-keymap)
+             (:predicate (cmd) (eq cmd 'read-string))
+             ( :update (_cmd break)
+               (let ((newstr (conn-with-dispatch-suspended
+                               (minibuffer-with-setup-hook
+                                   (conn-dispatch-lazy-update
+                                    (lambda (str)
+                                      (setf string str)
+                                      (while-no-input
+                                        (conn-dispatch-call-update-handlers state))))
+                                 (read-string
+                                  "String: " string
+                                  'conn-read-string-target-history
+                                  nil t)))))
+                 (unless (equal newstr "")
+                   (setq string newstr)
+                   (funcall break :return)))))
             (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
               (setf string (char-to-string (conn-dispatch-read-char prompt t)))
               (while-no-input
@@ -4724,80 +4907,7 @@ it."))
        (conn-dispatch-target-finder nil)
        (conn--dispatch-stack-handle nil))
     (conn-with-dispatch-event-handlers
-      ( :handler #'conn-handle-dispatch-select-command)
-      ( :message -99 (_)
-        (when-let* ((im (buffer-local-value 'current-input-method-title
-                                            conn-dispatch-input-buffer)))
-          (propertize im 'face 'read-multiple-choice-face)))
-      ( :message -100 (_)
-        (propertize
-         (cond (conn--read-args-prefix-mag
-                (number-to-string
-                 (* (if conn--read-args-prefix-sign -1 1)
-                    conn--read-args-prefix-mag)))
-               (conn--read-args-prefix-sign "[-1]")
-               (t "[1]"))
-         'face 'read-multiple-choice-face))
-      ( :message -95 (_)
-        (propertize (conn-action-display action t)
-                    'face 'conn-argument-active-face))
-      ( :message -90 (keymap)
-        (when-let* ((binding (where-is-internal 'help keymap t)))
-          (concat
-           (propertize (key-description binding)
-                       'face 'help-key-binding)
-           " help")))
-      ( :message 0 (_keymap)
-        (conn-target-finder-message-prefixes
-         conn-dispatch-target-finder))
-      ( :message 10 (keymap)
-        (unless conn-dispatch-no-other-end
-          (when-let* ((_ (conn-dispatch-other-end-p))
-                      (binding
-                       (where-is-internal 'other-end keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (propertize
-              "other end"
-              'face 'conn-argument-active-face)))))
-      ( :message 15 (keymap)
-        (when-let* ((_ (advice-function-member-p
-                        'conn--dispatch-restrict-windows
-                        conn-target-window-predicate))
-                    (binding (where-is-internal 'restrict-windows keymap t)))
-          (concat
-           (propertize (key-description binding)
-                       'face 'help-key-binding)
-           " "
-           (propertize
-            "this win"
-            'face 'eldoc-highlight-function-argument))))
-      ( :handler (cmd)
-        (pcase cmd
-          ('universal-argument
-           (if conn--read-args-prefix-mag
-               (cl-callf * conn--read-args-prefix-mag 4)
-             (setq conn--read-args-prefix-mag 4))
-           (conn-dispatch-handle))
-          ('reset-arg
-           (setq conn--read-args-prefix-mag nil
-                 conn--read-args-prefix-sign nil)
-           (conn-dispatch-handle))
-          ('digit-argument
-           (let* ((char (if (integerp last-input-event)
-                            last-input-event
-                          (get last-input-event 'ascii-character)))
-                  (digit (- (logand char ?\177) ?0)))
-             (setf conn--read-args-prefix-mag
-                   (if (integerp conn--read-args-prefix-mag)
-                       (+ (* 10 conn--read-args-prefix-mag) digit)
-                     digit)))
-           (conn-dispatch-handle))
-          ('negative-argument
-           (cl-callf not conn--read-args-prefix-sign)
-           (conn-dispatch-handle))))
+      (:literal (conn-dispatch-select-handler action))
       (setq conn--dispatch-stack-handle
             (conn-enter-recursive-stack 'conn-dispatch-state))
       (let ((conn-disable-input-method-hooks t))

@@ -1334,20 +1334,21 @@ Currently selected window remains selected afterwards."
                      (current-kill 0)))))
       (cl-assert (stringp str))
       (conn-with-dispatch-event-handlers
-        ( :handler (cmd)
-          (when (eq cmd 'stay)
-            (cl-callf not stay)
-            (conn-dispatch-handle)))
-        ( :keymap conn-dispatch-stay-map)
-        ( :message 0 (keymap)
-          (when-let* ((binding (where-is-internal 'stay keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (propertize
-              "stay"
-              'face (when stay 'eldoc-highlight-function-argument)))))
+        (:handler
+         ( :keymap conn-dispatch-stay-map)
+         ( :predicate (cmd) (eq cmd 'stay))
+         ( :update (_cmd break)
+           (cl-callf not stay)
+           (funcall break :handle))
+         ( :display ()
+           (when-let* ((binding (where-is-internal 'stay nil t)))
+             (concat
+              (propertize (key-description binding)
+                          'face 'help-key-binding)
+              " "
+              (propertize
+               "stay"
+               'face (when stay 'eldoc-highlight-function-argument))))))
         (conn-dispatch-setup
          (oclosure-lambda (conn-action
                            (action-description "Yank and Replace To")
@@ -3180,44 +3181,46 @@ hook, which see."
          (`(,dtform ,reformat)
           (conn-dispatch-transform-and-fixup-argument reformat)))
       (conn-with-dispatch-event-handlers
-        ( :handler (thing)
-          (when (eq thing 'append)
-            (setq append (pcase append
-                           ('nil 'append)
-                           ('prepend nil)
-                           (_ 'prepend)))
-            (conn-dispatch-handle)))
-        ( :keymap conn-kill-dispatch-append-map)
-        ( :message 10 (keymap)
-          (when-let* ((binding (where-is-internal 'append keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (pcase append
-               ('nil "append")
-               (val
-                (concat
-                 (propertize "(" 'face 'shadow)
-                 (propertize (format "%s" val)
-                             'face 'eldoc-highlight-function-argument)
-                 (propertize "|" 'face 'shadow)
-                 (propertize (truncate-string-ellipsis) 'face 'shadow)
-                 (propertize ")" 'face 'shadow)))))))
-        ( :handler (cmd)
-          (when (eq cmd 'stay)
-            (cl-callf not stay)
-            (conn-dispatch-handle)))
-        ( :keymap conn-dispatch-stay-map)
-        ( :message 0 (keymap)
-          (when-let* ((binding (where-is-internal 'stay keymap t)))
-            (concat
-             (propertize (key-description binding)
-                         'face 'help-key-binding)
-             " "
-             (propertize
-              "stay"
-              'face (when stay 'eldoc-highlight-function-argument)))))
+        (:handler
+         (:predicate (cmd) (eq cmd 'append))
+         ( :keymap conn-kill-dispatch-append-map)
+         ( :update (_cmd break)
+           (setq append (pcase append
+                          ('nil 'append)
+                          ('prepend nil)
+                          (_ 'prepend)))
+           (funcall break :handle))
+         ( :display ()
+           (when-let* ((binding (where-is-internal 'append nil t)))
+             (concat
+              (propertize (key-description binding)
+                          'face 'help-key-binding)
+              " "
+              (pcase append
+                ('nil "append")
+                (val
+                 (concat
+                  (propertize "(" 'face 'shadow)
+                  (propertize (format "%s" val)
+                              'face 'eldoc-highlight-function-argument)
+                  (propertize "|" 'face 'shadow)
+                  (propertize (truncate-string-ellipsis) 'face 'shadow)
+                  (propertize ")" 'face 'shadow))))))))
+        (:handler
+         (:predicate (cmd) (eq cmd 'stay))
+         ( :keymap conn-dispatch-stay-map)
+         ( :display ()
+           (when-let* ((binding (where-is-internal 'stay nil t)))
+             (concat
+              (propertize (key-description binding)
+                          'face 'help-key-binding)
+              " "
+              (propertize
+               "stay"
+               'face (when stay 'eldoc-highlight-function-argument)))))
+         ( :update (_cmd break)
+           (cl-callf not stay)
+           (funcall break :handle)))
         (conn-dispatch-setup
          (oclosure-lambda (conn-action
                            (action-description "Kill"))
@@ -3286,30 +3289,31 @@ hook, which see."
                                   reformat
                                   check-bounds)
   (conn-with-dispatch-event-handlers
-    ( :handler (thing)
-      (when (eq thing 'append)
-        (setq append (pcase append
-                       ('nil 'append)
-                       ('prepend nil)
-                       (_ 'prepend)))
-        (conn-dispatch-handle)))
-    ( :keymap conn-kill-dispatch-append-map)
-    ( :message 10 (keymap)
-      (when-let* ((binding (where-is-internal 'append keymap t)))
-        (concat
-         (propertize (key-description binding)
-                     'face 'help-key-binding)
-         " "
-         (pcase append
-           ('nil "append")
-           (val
-            (concat
-             (propertize "(" 'face 'shadow)
-             (propertize (format "%s" val)
-                         'face 'eldoc-highlight-function-argument)
-             (propertize "|" 'face 'shadow)
-             (propertize (truncate-string-ellipsis) 'face 'shadow)
-             (propertize ")" 'face 'shadow)))))))
+    (:handler
+     (:predicate (cmd) (eq cmd 'append))
+     ( :keymap conn-kill-dispatch-append-map)
+     ( :update (_cmd break)
+       (setq append (pcase append
+                      ('nil 'append)
+                      ('prepend nil)
+                      (_ 'prepend)))
+       (funcall break :handle))
+     ( :display ()
+       (when-let* ((binding (where-is-internal 'append nil t)))
+         (concat
+          (propertize (key-description binding)
+                      'face 'help-key-binding)
+          " "
+          (pcase append
+            ('nil "append")
+            (val
+             (concat
+              (propertize "(" 'face 'shadow)
+              (propertize (format "%s" val)
+                          'face 'eldoc-highlight-function-argument)
+              (propertize "|" 'face 'shadow)
+              (propertize (truncate-string-ellipsis) 'face 'shadow)
+              (propertize ")" 'face 'shadow))))))))
     (conn-dispatch-setup
      (oclosure-lambda (conn-action
                        (action-description "Kill")
@@ -3680,30 +3684,31 @@ that place."
                                'restrict-windows
                                conn-restrict-windows-argument-map)))
     (conn-with-dispatch-event-handlers
-      ( :handler (cmd)
-        (when (eq cmd 'other-end)
-          (setq append (pcase append
-                         ('nil 'append)
-                         ('prepend nil)
-                         (_ 'prepend)))
-          (conn-dispatch-handle)))
-      ( :message 10 (keymap)
-        (when-let* ((binding
-                     (where-is-internal 'other-end keymap t)))
-          (concat
-           (propertize (key-description binding)
-                       'face 'help-key-binding)
-           " "
-           (pcase append
-             ('nil "append")
-             ('prepend
-              (propertize
-               "prepend"
-               'face 'eldoc-highlight-function-argument))
-             (_
-              (propertize
-               "append"
-               'face 'eldoc-highlight-function-argument))))))
+      (:handler
+       (:predicate (cmd) (eq cmd 'other-end))
+       ( :update (_cmd break)
+         (setq append (pcase append
+                        ('nil 'append)
+                        ('prepend nil)
+                        (_ 'prepend)))
+         (funcall break :handle))
+       ( :display ()
+         (when-let* ((binding
+                      (where-is-internal 'other-end nil t)))
+           (concat
+            (propertize (key-description binding)
+                        'face 'help-key-binding)
+            " "
+            (pcase append
+              ('nil "append")
+              ('prepend
+               (propertize
+                "prepend"
+                'face 'eldoc-highlight-function-argument))
+              (_
+               (propertize
+                "append"
+                'face 'eldoc-highlight-function-argument)))))))
       (let ((result nil)
             (strings nil))
         (conn-dispatch-setup
@@ -4503,20 +4508,21 @@ Interactively REPEAT is given by the prefix argument."
                                conn-stay-argument-map
                                t)))
     (conn-with-dispatch-event-handlers
-      ( :handler (cmd)
-        (when (eq cmd 'stay)
-          (cl-callf not stay)
-          (conn-dispatch-handle)))
-      ( :keymap conn-dispatch-stay-map)
-      ( :message 0 (keymap)
-        (when-let* ((binding (where-is-internal 'stay keymap t)))
-          (concat
-           (propertize (key-description binding)
-                       'face 'help-key-binding)
-           " "
-           (propertize
-            "stay"
-            'face (when stay 'eldoc-highlight-function-argument)))))
+      (:handler
+       (:predicate (cmd) (eq cmd 'stay))
+       ( :keymap conn-dispatch-stay-map)
+       ( :display ()
+         (when-let* ((binding (where-is-internal 'stay nil t)))
+           (concat
+            (propertize (key-description binding)
+                        'face 'help-key-binding)
+            " "
+            (propertize
+             "stay"
+             'face (when stay 'eldoc-highlight-function-argument)))))
+       ( :update (_cmd break)
+         (cl-callf not stay)
+         (funcall break :handle)))
       (conn-dispatch-setup
        (oclosure-lambda (conn-action
                          (action-description "Change"))
