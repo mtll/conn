@@ -469,12 +469,14 @@
   "Local mode for `conn-dispatch-window-mode-line-mode'."
   :lighter ""
   (if conn-wincontrol-label-mode-line-local-mode
-      (setq mode-line-format
-            `((conn-wincontrol-label-mode-line-local-mode
-               (:eval (conn-window-label-mode-line)))
-              ,@(assq-delete-all
-                 'conn-wincontrol-label-mode-line-local-mode
-                 mode-line-format)))
+      (when-let* ((cons (memq 'mode-line-front-space mode-line-format)))
+        (setf (cdr cons)
+              `((conn-wincontrol-label-mode-line-local-mode
+                 ((:eval (conn-window-label-mode-line))
+                  " "))
+                ,@(assq-delete-all
+                   'conn-wincontrol-label-mode-line-local-mode
+                   (cdr cons)))))
     (setq mode-line-format
           (assq-delete-all
            'conn-wincontrol-label-mode-line-local-mode
