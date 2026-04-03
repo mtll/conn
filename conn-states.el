@@ -2657,7 +2657,7 @@ be displayed in the echo area during `conn-read-args'."
 
 (conn-define-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql reset-arg)))
-  "Reset the prefix arguemnt."
+  "Reset the prefix argument."
   ( :update (break)
     (setf conn--read-args-prefix-mag nil)
     (funcall break)))

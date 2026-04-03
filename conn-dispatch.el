@@ -488,6 +488,49 @@ themselves once the selection process has concluded."
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
+(defun conn-window-label-modeline ()
+  (let ((win (selected-window)))
+    (propertize
+     (or (window-parameter win 'conn-label-string)
+         (conn--simple-window-labels)
+         (window-parameter win 'conn-label-string))
+     'face 'bold)))
+
+(define-minor-mode conn--dispatch-window-mode-line-local-mode
+  "Local mode for `conn-dispatch-window-mode-line-mode'."
+  :lighter ""
+  (if conn--dispatch-window-mode-line-local-mode
+      (setq mode-line-format
+            `((conn--dispatch-window-mode-line-local-mode
+               (:eval (conn-window-label-modeline)))
+              ,@(assq-delete-all
+                 'conn--dispatch-window-mode-line-local-mode
+                 mode-line-format)))
+    (setq mode-line-format
+          (assq-delete-all
+           'conn--dispatch-window-mode-line-local-mode
+           mode-line-format))))
+
+(defun conn--turn-on-label-mode-line ()
+  (conn--dispatch-window-mode-line-local-mode 1))
+
+;;;###autoload
+(define-globalized-minor-mode conn-dispatch-window-mode-line-mode
+  conn--dispatch-window-mode-line-local-mode
+  conn--turn-on-label-mode-line
+  :group 'conn
+  (if conn-dispatch-window-mode-line-mode
+      (setq-default mode-line-format
+                    `((conn--dispatch-window-mode-line-local-mode
+                       . (:eval (conn-window-label-modeline)))
+                      ,@(assq-delete-all
+                         'conn--dispatch-window-mode-line-local-mode
+                         (default-value 'mode-line-format))))
+    (setq-default mode-line-format
+                  (assq-delete-all
+                   'conn--dispatch-window-mode-line-local-mode
+                   (default-value 'mode-line-format)))))
+
 (defun conn--setup-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
@@ -534,7 +577,10 @@ themselves once the selection process has concluded."
     (`(,var ,val)
      `(let ((,var ,val))
         (unwind-protect
-            ,(macroexp-progn body)
+            (progn
+              (conn-dispatch-select-mode 1)
+              ,@body)
+          (conn-dispatch-select-mode -1)
           (mapc #'conn-label-delete ,var))))
     (_ (error "Unexpected binding form %s" binder))))
 
@@ -2019,11 +2065,9 @@ depths will be sorted before greater depths.
     (cl-callf2 delq
         'conn-dispatch-select-mode-map-alist
         emulation-mode-map-alists)
-    (unwind-protect
-        (conn-cleanup-labels)
-      (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
-        (with-current-buffer buf
-          (face-remap-remove-relative cookie))))))
+    (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
+      (with-current-buffer buf
+        (face-remap-remove-relative cookie)))))
 
 (defvar conn--current-dispatch-buffers)
 
@@ -2247,7 +2291,7 @@ the meaning of depth."
     (:as args
          (concat
           (propertize prompt 'face 'minibuffer-prompt)
-          " (arg: " args ")"
+          " (" args ")"
           (when suffix (concat ": " suffix " "))
           (when-let* ((msg (conn--read-args-get-message)))
             (concat ": " msg))))))
@@ -2345,7 +2389,9 @@ the meaning of depth."
                        (conn--dispatch-read-char-handlers nil)
                        (conn--dispatch-always-retarget nil)
                        (conn-dispatch-hide-labels nil))
-             (if ,select-mode (conn-dispatch-select-mode -1))
+             (when ,select-mode
+               (conn-dispatch-select-mode -1))
+             (conn-cleanup-labels)
              (conn-dispatch-restore-state)
              (message nil)
              (let ((conn-dispatch-input-buffer nil))
@@ -2420,8 +2466,46 @@ the meaning of depth."
   (conn-dispatch-select-handler-depth handler))
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql negative-argument)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (cl-callf not conn--read-args-prefix-sign)
+    (funcall break :handle)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql universal-argument)))
+  "Multiply the current prefix argument by 4."
+  ( :update (break)
+    (if conn--read-args-prefix-mag
+        (cl-callf * conn--read-args-prefix-mag 4)
+      (setq conn--read-args-prefix-mag 4))
+    (funcall break :handle)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql digit-argument)))
+  "Append a digit to the current prefix argument."
+  ( :update (break)
+    (let* ((char (if (integerp last-input-event)
+                     last-input-event
+                   (get last-input-event 'ascii-character)))
+           (digit (- (logand char ?\177) ?0)))
+      (setf conn--read-args-prefix-mag
+            (if (integerp conn--read-args-prefix-mag)
+                (+ (* 10 conn--read-args-prefix-mag) digit)
+              digit)))
+    (funcall break :handle)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql reset-arg)))
+  "Reset the current prefix argument."
+  ( :update (break)
+    (setq conn--read-args-prefix-mag nil
+          conn--read-args-prefix-sign nil)
+    (funcall break :handle)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql change-target-finder)))
-  ""
+  "Change the current target finder."
   ( :update (break)
     (conn-read-args (conn-dispatch-targets-state
                      :prompt "New Targets"
@@ -2438,7 +2522,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql help)))
-  ""
+  "Display help."
   ( :update (break)
     (conn-with-overriding-map conn-dispatch-read-char-map
       (conn-quick-reference
@@ -2449,7 +2533,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql mwheel-scroll)))
-  ""
+  "Mouse wheel scroll."
   ( :update (break)
     (when (bound-and-true-p mouse-wheel-mode)
       (mwheel-scroll last-input-event))
@@ -2457,7 +2541,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql recursive-edit)))
-  ""
+  "Enter a recursive edit with dispatch suspended."
   ( :update (break)
     (conn-with-dispatch-suspended
       (conn-with-recursive-stack 'conn-command-state
@@ -2466,7 +2550,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql recenter-top-bottom)))
-  ""
+  "Recenter the display."
   ( :update (break)
     (let ((this-command 'recenter-top-bottom)
           (last-command conn-read-args-last-command))
@@ -2477,7 +2561,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql toggle-input-method)))
-  ""
+  "Toggle the current input method."
   ( :update (break)
     (with-current-buffer conn-dispatch-input-buffer
       (let ((inhibit-message nil)
@@ -2487,7 +2571,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql set-input-method)))
-  ""
+  "Set the current input method"
   ( :update (break)
     (with-current-buffer conn-dispatch-input-buffer
       (let ((inhibit-message nil)
@@ -2500,7 +2584,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql isearch-forward)))
-  ""
+  "isearch forward with dispatch suspended."
   ( :update (break)
     (conn-with-dispatch-suspended
       (isearch-forward))
@@ -2508,7 +2592,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql isearch-backward)))
-  ""
+  "isearch backward with dispatch suspended."
   ( :update (break)
     (conn-with-dispatch-suspended
       (isearch-backward))
@@ -2516,7 +2600,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql isearch-forward-regexp)))
-  ""
+  "isearch forward regexp with dispatch suspended."
   ( :update (break)
     (conn-with-dispatch-suspended
       (isearch-forward-regexp))
@@ -2524,7 +2608,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql isearch-backward-regexp)))
-  ""
+  "isearch backward regexp with dispatch suspended."
   ( :update (break)
     (conn-with-dispatch-suspended
       (isearch-backward-regexp))
@@ -2532,7 +2616,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql scroll-up-command)))
-  ""
+  "Scroll the window up."
   ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
@@ -2542,7 +2626,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql scroll-down-command)))
-  ""
+  "Scroll the window down."
   ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
@@ -2559,7 +2643,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql conn-goto-window)))
-  ""
+  "Select a different window."
   ( :update (break)
     (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
         (progn
@@ -2569,13 +2653,13 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql finish)))
-  ""
+  "Complete the current dispatch."
   ( :update (_break)
     (throw 'dispatch-exit nil)))
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql other-end)))
-  ""
+  "Toggle other end."
   ( :update (break)
     (if (advice-function-member-p 'toggle conn-dispatch-other-end)
         (remove-function conn-dispatch-other-end 'toggle)
@@ -2587,21 +2671,22 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql retarget)))
-  ""
+  "Change the current target finder state."
   ( :update (break)
     (conn-target-finder-retarget conn-dispatch-target-finder)
     (funcall break :handle-and-redisplay nil)))
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql always-retarget)))
-  ""
+  "Change the current target finder state after every target that is
+selected."
   ( :update (break)
     (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
     (funcall break :handle-and-redisplay)))
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql restrict-windows)))
-  ""
+  "Restrict targets to the selected window."
   ( :update (break)
     (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
                                      conn-target-window-predicate)
@@ -2615,7 +2700,7 @@ the meaning of depth."
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql undo)))
-  ""
+  "Undo the most recent iteration of dispatch."
   ( :update (_break)
     (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
                      (cl-callf2 drop 2 conn--dispatch-change-groups)))
@@ -2898,6 +2983,7 @@ updated.")
             (let ((inhibit-message t))
               (cl-call-next-method)))
         (conn-dispatch-select-mode -1)
+        (conn-cleanup-labels)
         (conn-target-finder-suspend target-finder)))))
 
 (cl-defmethod conn-target-finder-select (target-finder)
