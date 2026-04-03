@@ -454,6 +454,41 @@
   (with-selected-window (other-window-for-scrolling)
     (quit-window)))
 
+(defun conn-window-label-mode-line ()
+  (let ((win (selected-window)))
+    (propertize
+     (or (window-parameter win 'conn-label-string)
+         (if (conn--dispatch-window-predicate (selected-window) t)
+             (progn
+               (conn--simple-window-labels)
+               (window-parameter win 'conn-label-string))
+           ""))
+     'face 'bold)))
+
+(define-minor-mode conn-wincontrol-label-mode-line-local-mode
+  "Local mode for `conn-dispatch-window-mode-line-mode'."
+  :lighter ""
+  (if conn-wincontrol-label-mode-line-local-mode
+      (setq mode-line-format
+            `((conn-wincontrol-label-mode-line-local-mode
+               (:eval (conn-window-label-mode-line)))
+              ,@(assq-delete-all
+                 'conn-wincontrol-label-mode-line-local-mode
+                 mode-line-format)))
+    (setq mode-line-format
+          (assq-delete-all
+           'conn-wincontrol-label-mode-line-local-mode
+           mode-line-format))))
+
+(defun conn--turn-on-label-mode-line-local-mode ()
+  (conn-wincontrol-label-mode-line-local-mode 1))
+
+;;;###autoload
+(define-globalized-minor-mode conn-wincontrol-label-mode-line-mode
+  conn-wincontrol-label-mode-line-local-mode
+  conn--turn-on-label-mode-line-local-mode
+  :group 'conn)
+
 ;;;;; Window Scroll Commands
 
 ;;;###autoload

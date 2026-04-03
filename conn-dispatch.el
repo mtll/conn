@@ -488,49 +488,6 @@ themselves once the selection process has concluded."
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
-(defun conn-window-label-modeline ()
-  (let ((win (selected-window)))
-    (propertize
-     (or (window-parameter win 'conn-label-string)
-         (conn--simple-window-labels)
-         (window-parameter win 'conn-label-string))
-     'face 'bold)))
-
-(define-minor-mode conn--dispatch-window-mode-line-local-mode
-  "Local mode for `conn-dispatch-window-mode-line-mode'."
-  :lighter ""
-  (if conn--dispatch-window-mode-line-local-mode
-      (setq mode-line-format
-            `((conn--dispatch-window-mode-line-local-mode
-               (:eval (conn-window-label-modeline)))
-              ,@(assq-delete-all
-                 'conn--dispatch-window-mode-line-local-mode
-                 mode-line-format)))
-    (setq mode-line-format
-          (assq-delete-all
-           'conn--dispatch-window-mode-line-local-mode
-           mode-line-format))))
-
-(defun conn--turn-on-label-mode-line ()
-  (conn--dispatch-window-mode-line-local-mode 1))
-
-;;;###autoload
-(define-globalized-minor-mode conn-dispatch-window-mode-line-mode
-  conn--dispatch-window-mode-line-local-mode
-  conn--turn-on-label-mode-line
-  :group 'conn
-  (if conn-dispatch-window-mode-line-mode
-      (setq-default mode-line-format
-                    `((conn--dispatch-window-mode-line-local-mode
-                       . (:eval (conn-window-label-modeline)))
-                      ,@(assq-delete-all
-                         'conn--dispatch-window-mode-line-local-mode
-                         (default-value 'mode-line-format))))
-    (setq-default mode-line-format
-                  (assq-delete-all
-                   'conn--dispatch-window-mode-line-local-mode
-                   (default-value 'mode-line-format)))))
-
 (defun conn--setup-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
@@ -551,6 +508,17 @@ themselves once the selection process has concluded."
            collect (conn--setup-header-line-label
                     win (window-parameter win 'conn-label-string))))
 
+(defun conn--dispatch-window-predicate (window &optional dedicated)
+  (not (or ;; ignore child frames
+        (and (fboundp 'frame-parent)
+             (frame-parent (window-frame window)))
+        ;; When `ignore-window-parameters' is nil, ignore
+        ;; windows whose `no-other-window’ or
+        ;; `no-delete-other-windows' parameter is non-nil.
+        (unless ignore-window-parameters
+          (window-parameter window 'no-other-window))
+        (and (null dedicated) (window-dedicated-p window)))))
+
 ;; From ace-window
 (defun conn--get-windows (&optional window
                                     minibuffer
@@ -559,16 +527,8 @@ themselves once the selection process has concluded."
                                     predicate)
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
-           unless (or ;; ignore child frames
-                   (and (fboundp 'frame-parent)
-                        (frame-parent (window-frame window)))
-                   ;; When `ignore-window-parameters' is nil, ignore
-                   ;; windows whose `no-other-window’ or
-                   ;; `no-delete-other-windows' parameter is non-nil.
-                   (unless ignore-window-parameters
-                     (window-parameter window 'no-other-window))
-                   (and (null dedicated) (window-dedicated-p win))
-                   (and predicate (not (funcall predicate win))))
+           when (or (conn--dispatch-window-predicate dedicated)
+                    (and predicate (funcall predicate win)))
            collect win))
 
 (defmacro conn-with-window-labels (binder &rest body)
