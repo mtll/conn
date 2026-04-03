@@ -1272,7 +1272,7 @@ The iterator must be the first argument in ARGLIST.
                         'face 'conn-argument-active-face))))
 
 (conn-define-argument-command ((arg conn-kapply-macro-argument)
-                               (eql record))
+                               (cmd (eql record)))
   "Record a new keyboard macro."
   ( :update (break)
     (setf (conn-argument-value arg) 'record

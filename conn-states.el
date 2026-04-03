@@ -1731,7 +1731,6 @@ The duration of the message display is controlled by
 (defun conn-read-args-prompt-line (prompt)
   (substitute-command-keys
    (concat
-    "\\<conn-read-args-map>"
     (propertize prompt 'face 'minibuffer-prompt)
     " (arg: "
     (propertize
@@ -1934,8 +1933,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                (conn->f display-state
                  (funcall display-handler
                           prompt
-                          (cons (unless command-loop command-handler)
-                                arguments)))))
+                          arguments))))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
            (catch 'break
@@ -1945,18 +1943,17 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (when break (throw 'break t))))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
-             (conn-with-overriding-map conn-read-args-map
-               (setq keyseq (read-key-sequence-vector nil)
-                     cmd (key-binding keyseq t))
-               (while (arrayp cmd) ; keyboard macro
-                 (setq cmd (key-binding cmd t)))
-               (cond ((and (null cmd)
-                           (eql help-char (aref keyseq (1- (length keyseq)))))
-                      (setq cmd 'execute-extended-command
-                            partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
-                     ((and (symbolp cmd)
-                           (autoloadp (symbol-function cmd)))
-                      (autoload-do-load (symbol-function cmd)))))
+             (setq keyseq (read-key-sequence-vector nil)
+                   cmd (key-binding keyseq t))
+             (while (arrayp cmd) ; keyboard macro
+               (setq cmd (key-binding cmd t)))
+             (cond ((and (null cmd)
+                         (eql help-char (aref keyseq (1- (length keyseq)))))
+                    (setq cmd 'execute-extended-command
+                          partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
+                   ((and (symbolp cmd)
+                         (autoloadp (symbol-function cmd)))
+                    (autoload-do-load (symbol-function cmd))))
              (when (eql (aref keyseq 0) quit-event)
                (setq cmd 'keyboard-quit))
              (cl-loop
@@ -1986,12 +1983,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                          (cons callback prev))
                 (conn-read-args-error "No previous arguments")))
              ((or 'describe-key 'conn-describe-key)
-              (conn-with-overriding-map conn-read-args-map
-                (conn--read-args-describe-key
-                 arguments
-                 (lambda (str)
-                   (let ((conn--read-args-error-message str))
-                     (display-message))))))
+              (conn--read-args-describe-key
+               arguments
+               (lambda (str)
+                 (let ((conn--read-args-error-message str))
+                   (display-message)))))
              ((or 'describe-symbol 'conn-describe-symbol)
               (conn--read-args-describe-symbol arguments))
              ((pred identity)
@@ -2002,7 +1998,7 @@ This skips executing the body of the `conn-read-args' form entirely."
          (setup-keymaps ()
            (setf (cdar maps)
                  (thread-last
-                   (mapcar #'conn-argument-compose-keymap arglist)
+                   (mapcar #'conn-argument-compose-keymap arguments)
                    (cons overriding-map)
                    (delq nil)
                    (make-composed-keymap)))
@@ -2256,31 +2252,28 @@ be displayed in the echo area during `conn-read-args'."
                                   (:eval (substitute-command-keys ,docstring)))))))
         ((eq :documentation (car-safe docstring))
          (push docstring body)))
-  (pcase argument-and-command
-    (`(,argument ,command)
-     (macroexpand-all
-      `(progn ,@body)
-      `((:update . ,(lambda (&rest body)
-                      (conn--argument-expand-method
-                       'conn-argument-update
-                       (list argument command)
-                       body)))
-        (:documentation . ,(lambda (&rest body)
-                             (conn--argument-expand-method
-                              'conn-argument-command-documentation
-                              (list argument command)
-                              body)))
-        (:annotation . ,(lambda (&rest body)
+  (macroexpand-all
+   `(progn ,@body)
+   `((:update . ,(lambda (&rest body)
+                   (conn--argument-expand-method
+                    'conn-argument-update
+                    argument-and-command
+                    body)))
+     (:documentation . ,(lambda (&rest body)
                           (conn--argument-expand-method
-                           'conn-argument-annotation
-                           (list argument command)
+                           'conn-argument-command-documentation
+                           argument-and-command
                            body)))
-        (:predicate . ,(lambda (&rest body)
-                         (conn--argument-expand-method
-                          'conn-argument-predicate
-                          (list argument command)
-                          body))))))
-    (_ (macroexp-warn-and-return "Malformed argument command args" nil))))
+     (:annotation . ,(lambda (&rest body)
+                       (conn--argument-expand-method
+                        'conn-argument-annotation
+                        argument-and-command
+                        body)))
+     (:predicate . ,(lambda (&rest body)
+                      (conn--argument-expand-method
+                       'conn-argument-predicate
+                       argument-and-command
+                       body))))))
 
 ;;;;;; Anonymous Argument
 

@@ -1341,14 +1341,11 @@ Currently selected window remains selected afterwards."
            (cl-callf not stay)
            (funcall break :handle))
          ( :display ()
-           (when-let* ((binding (where-is-internal 'stay nil t)))
-             (concat
-              (propertize (key-description binding)
-                          'face 'help-key-binding)
-              " "
-              (propertize
-               "stay"
-               'face (when stay 'eldoc-highlight-function-argument))))))
+           (concat "\\[stay] "
+                   (propertize
+                    "stay"
+                    'face (when stay
+                            'eldoc-highlight-function-argument)))))
         (conn-dispatch-setup
          (oclosure-lambda (conn-action
                            (action-description "Yank and Replace To")
@@ -3191,33 +3188,27 @@ hook, which see."
                           (_ 'prepend)))
            (funcall break :handle))
          ( :display ()
-           (when-let* ((binding (where-is-internal 'append nil t)))
-             (concat
-              (propertize (key-description binding)
-                          'face 'help-key-binding)
-              " "
-              (pcase append
-                ('nil "append")
-                (val
-                 (concat
-                  (propertize "(" 'face 'shadow)
-                  (propertize (format "%s" val)
-                              'face 'eldoc-highlight-function-argument)
-                  (propertize "|" 'face 'shadow)
-                  (propertize (truncate-string-ellipsis) 'face 'shadow)
-                  (propertize ")" 'face 'shadow))))))))
+           (concat
+            "\\[append] "
+            (pcase append
+              ('nil "append")
+              (val
+               (concat
+                (propertize "(" 'face 'shadow)
+                (propertize (format "%s" val)
+                            'face 'eldoc-highlight-function-argument)
+                (propertize "|" 'face 'shadow)
+                (propertize (truncate-string-ellipsis) 'face 'shadow)
+                (propertize ")" 'face 'shadow)))))))
         (:handler
          (:predicate (cmd) (eq cmd 'stay))
          ( :keymap conn-dispatch-stay-map)
          ( :display ()
-           (when-let* ((binding (where-is-internal 'stay nil t)))
-             (concat
-              (propertize (key-description binding)
-                          'face 'help-key-binding)
-              " "
-              (propertize
-               "stay"
-               'face (when stay 'eldoc-highlight-function-argument)))))
+           (concat
+            "\\[stay] "
+            (propertize "stay"
+                        'face (when stay
+                                'eldoc-highlight-function-argument))))
          ( :update (_cmd break)
            (cl-callf not stay)
            (funcall break :handle)))
@@ -3299,21 +3290,18 @@ hook, which see."
                       (_ 'prepend)))
        (funcall break :handle))
      ( :display ()
-       (when-let* ((binding (where-is-internal 'append nil t)))
-         (concat
-          (propertize (key-description binding)
-                      'face 'help-key-binding)
-          " "
-          (pcase append
-            ('nil "append")
-            (val
-             (concat
-              (propertize "(" 'face 'shadow)
-              (propertize (format "%s" val)
-                          'face 'eldoc-highlight-function-argument)
-              (propertize "|" 'face 'shadow)
-              (propertize (truncate-string-ellipsis) 'face 'shadow)
-              (propertize ")" 'face 'shadow))))))))
+       (concat
+        "\\[append] "
+        (pcase append
+          ('nil "append")
+          (val
+           (concat
+            (propertize "(" 'face 'shadow)
+            (propertize (format "%s" val)
+                        'face 'eldoc-highlight-function-argument)
+            (propertize "|" 'face 'shadow)
+            (propertize (truncate-string-ellipsis) 'face 'shadow)
+            (propertize ")" 'face 'shadow)))))))
     (conn-dispatch-setup
      (oclosure-lambda (conn-action
                        (action-description "Kill")
@@ -3693,22 +3681,17 @@ that place."
                         (_ 'prepend)))
          (funcall break :handle))
        ( :display ()
-         (when-let* ((binding
-                      (where-is-internal 'other-end nil t)))
-           (concat
-            (propertize (key-description binding)
-                        'face 'help-key-binding)
-            " "
-            (pcase append
-              ('nil "append")
-              ('prepend
-               (propertize
-                "prepend"
-                'face 'eldoc-highlight-function-argument))
-              (_
-               (propertize
-                "append"
-                'face 'eldoc-highlight-function-argument)))))))
+         (concat "\\[other-end] "
+                 (pcase append
+                   ('nil "append")
+                   ('prepend
+                    (propertize
+                     "prepend"
+                     'face 'eldoc-highlight-function-argument))
+                   (_
+                    (propertize
+                     "append"
+                     'face 'eldoc-highlight-function-argument))))))
       (let ((result nil)
             (strings nil))
         (conn-dispatch-setup
@@ -4512,14 +4495,11 @@ Interactively REPEAT is given by the prefix argument."
        (:predicate (cmd) (eq cmd 'stay))
        ( :keymap conn-dispatch-stay-map)
        ( :display ()
-         (when-let* ((binding (where-is-internal 'stay nil t)))
-           (concat
-            (propertize (key-description binding)
-                        'face 'help-key-binding)
-            " "
-            (propertize
-             "stay"
-             'face (when stay 'eldoc-highlight-function-argument)))))
+         (concat "\\[stay] "
+                 (propertize
+                  "stay"
+                  'face (when stay
+                          'eldoc-highlight-function-argument))))
        ( :update (_cmd break)
          (cl-callf not stay)
          (funcall break :handle)))
