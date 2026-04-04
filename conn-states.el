@@ -2678,7 +2678,7 @@ be displayed in the echo area during `conn-read-args'."
         (pulse-momentary-highlight-one-line))
       (funcall break))))
 
-(cl-defmethod conn-argument-update :before ((arg conn-read-args-command-handler)
+(cl-defmethod conn-argument-update :before ((_arg conn-read-args-command-handler)
                                             cmd
                                             _break)
   (unless (eq cmd 'recenter-top-bottom)
