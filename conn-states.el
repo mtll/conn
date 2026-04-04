@@ -1628,9 +1628,6 @@ command was a prefix command.")
 
 ;;;; Read Args
 
-(defvar conn-read-args-last-command nil
-  "Last command read by `conn-read-args'.")
-
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
@@ -1993,8 +1990,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              ((pred identity)
               (or (update-args cmd)
                   (set-error-message "Invalid Command <%s>" cmd))))
-           (when post (funcall post cmd))
-           (setq conn-read-args-last-command cmd))
+           (when post (funcall post cmd)))
          (setup-keymaps ()
            (setf (cdar maps)
                  (thread-last
@@ -2410,6 +2406,13 @@ be displayed in the echo area during `conn-read-args'."
   (mapc #'conn-argument-cancel
         (conn-composite-argument-value arg)))
 
+(cl-defmethod conn-argument-command-documentation ((arg conn-composite-argument)
+                                                   cmd
+                                                   break)
+  (dolist (arg (conn-composite-argument-value arg))
+    (ignore
+     (conn-argument-command-documentation arg cmd break))))
+
 ;;;;;; Boolean Argument
 
 (cl-defstruct (conn-boolean-argument
@@ -2418,11 +2421,13 @@ be displayed in the echo area during `conn-read-args'."
                  (name
                   toggle-command
                   keymap
-                  &optional
+                  &key
                   value
                   annotation
-                  reference)))
-  (toggle-command nil :type (or symbol list) :read-only t))
+                  reference
+                  documentation)))
+  (toggle-command nil :type (or symbol list) :read-only t)
+  (documentation nil :type (or string function nil) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
                                     cmd
@@ -2433,6 +2438,18 @@ be displayed in the echo area during `conn-read-args'."
             (eq cmd toggles))
       (cl-callf not (conn-boolean-argument-value arg))
       (funcall break))))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-boolean-argument)
+                                                   cmd
+                                                   break)
+  (let ((toggles (conn-boolean-argument-toggle-command arg))
+        (doc (conn-boolean-argument-documentation arg)))
+    (when (if (consp toggles)
+              (memq cmd toggles)
+            (eq cmd toggles))
+      (cl-typecase doc
+        (string (funcall break (conn-reference-page (:eval doc))))
+        (function (funcall doc cmd break))))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -2464,6 +2481,7 @@ be displayed in the echo area during `conn-read-args'."
                   choices
                   commands
                   &key
+                  documentation
                   keymap
                   (formatter #'conn-format-cycling-argument)
                   required
@@ -2477,7 +2495,8 @@ be displayed in the echo area during `conn-read-args'."
   (choices nil :type list :read-only t)
   (cycling-commands nil :type list :read-only t)
   (formatter #'conn-format-cycling-argument
-             :type function :read-only t))
+             :type function :read-only t)
+  (documentation nil :type (or string function nil) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
@@ -2546,6 +2565,16 @@ be displayed in the echo area during `conn-read-args'."
         (propertize ")" 'face 'shadow)))
       (t name)))))
 
+(cl-defmethod conn-argument-command-documentation ((arg conn-cycling-argument)
+                                                   cmd
+                                                   break)
+  (let ((commands (conn-cycling-argument-cycling-commands arg))
+        (doc (conn-cycling-argument-documentation arg)))
+    (when (memq cmd commands)
+      (cl-typecase doc
+        (string (funcall break (conn-reference-page (:eval doc))))
+        (function (funcall doc cmd break))))))
+
 ;;;;;; Read Argument
 
 (cl-defstruct (conn-read-argument
@@ -2560,11 +2589,25 @@ be displayed in the echo area during `conn-read-args'."
                   value
                   reference
                   annotation
-                  always-read)))
+                  always-read
+                  documentation)))
   (reader nil :type function :read-only t)
   (formatter nil :type function :read-only t)
   (toggle-command nil :type (or symbol list) :read-only t)
-  (always-read nil :type boolean :read-only t))
+  (always-read nil :type boolean :read-only t)
+  (documentation nil :type (or string function nil) :read-only t))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-read-argument)
+                                                   cmd
+                                                   break)
+  (let ((toggles (conn-read-argument-toggle-command arg))
+        (doc (conn-read-argument-documentation arg)))
+    (when (if (consp toggles)
+              (memq cmd toggles)
+            (eq cmd toggles))
+      (cl-typecase doc
+        (string (funcall break (conn-reference-page (:eval doc))))
+        (function (funcall doc cmd break))))))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd
@@ -2629,9 +2672,17 @@ be displayed in the echo area during `conn-read-args'."
   "Recenter the screen."
   ( :update (break)
     (let ((this-command 'recenter-top-bottom)
-          (last-command conn-read-args-last-command))
+          (last-command 'recenter-top-bottom))
       (recenter-top-bottom (conn-read-args-consume-prefix-arg))
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-one-line))
       (funcall break))))
+
+(cl-defmethod conn-argument-update :before ((arg conn-read-args-command-handler)
+                                            cmd
+                                            _break)
+  (unless (eq cmd 'recenter-top-bottom)
+    (setq recenter-last-op nil)))
 
 (conn-define-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql digit-argument)))

@@ -330,6 +330,7 @@
   "w" 'conn-wincontrol-one-command-mode
   "." 'conn-register-load
   "<" 'point-to-register
+  ">" 'conn-register-load-and-replace
   "t" 'conn-transpose-things
   "v" 'conn-mark-thing
   "h" conn-edit-remap

@@ -729,7 +729,7 @@ themselves once the selection process has concluded."
    (conn-boolean-argument "replace"
                           'dispatch-replace
                           conn-dispatch-replace-argument-map
-                          replace)
+                          :value replace)
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-to-how-argument))
@@ -801,6 +801,15 @@ themselves once the selection process has concluded."
       ("toggle repeat" repeat-dispatch)
       ("toggle other end" other-end)
       ("restrict matches to the selected window" restrict-windows)))))
+
+(defvar conn-dispatch-other-end-documentation
+  "Operate with point at the other end of the target.")
+
+(defvar conn-this-win-argument-documentation
+  "Restrict dispatch matches to the selected window.")
+
+(defvar conn-repeat-argument-documentation
+  "Perform the current dispatch repeatedly.")
 
 (defun conn-dispatch-reference ()
   (list conn-dispatch-command-reference
@@ -2256,6 +2265,8 @@ the meaning of depth."
           (when-let* ((msg (conn--read-args-get-message)))
             (concat ": " msg))))))
 
+(defvar conn-dispatch-read-char-pre-functions nil)
+
 (defun conn-dispatch-read-char (&optional
                                 prompt
                                 inherit-input-method
@@ -2293,7 +2304,11 @@ the meaning of depth."
           (and (characterp ev) ev))
       (conn-read-args (nil :prompt prompt
                            :command-handler nil
-                           :display-handler #'message-fn)
+                           :display-handler #'message-fn
+                           :pre (lambda (cmd)
+                                  (run-hook-with-args
+                                   'conn-dispatch-read-char-pre-functions
+                                   cmd)))
           ((char (conn-dispatch-event-argument #'read-ev))
            (_handlers (conn-composite-argument
                        (compat-call sort conn--dispatch-read-char-handlers
@@ -2343,7 +2358,6 @@ the meaning of depth."
                        (conn-dispatch-iteration-count nil)
                        (conn-dispatch-no-other-end nil)
                        (conn-dispatch-other-end nil)
-                       (conn-read-args-last-command nil)
                        (conn--read-args-prefix-mag nil)
                        (conn--read-args-prefix-sign nil)
                        (conn--dispatch-read-char-handlers nil)
@@ -2513,11 +2527,17 @@ the meaning of depth."
   "Recenter the display."
   ( :update (break)
     (let ((this-command 'recenter-top-bottom)
-          (last-command conn-read-args-last-command))
+          (last-command 'recenter-top-bottom))
       (recenter-top-bottom (conn-read-args-prefix-arg))
       (unless executing-kbd-macro
         (pulse-momentary-highlight-one-line)))
     (funcall break :handle-and-redisplay)))
+
+(defun conn--dispatch-recenter-hook (cmd)
+  (unless (eq cmd 'recenter-top-bottom)
+    (setq recenter-last-op nil)))
+(add-hook 'conn-dispatch-read-char-pre-functions
+          'conn--dispatch-recenter-hook)
 
 (conn-define-argument-command ((arg conn-dispatch-select-handler)
                                (cmd (eql toggle-input-method)))
@@ -4283,7 +4303,7 @@ the string after the region selected by dispatch."))
                              (conn-boolean-argument "check bounds"
                                                     'check-bounds
                                                     conn-check-bounds-argument-map
-                                                    t)))
+                                                    :value t)))
                          (save-excursion
                            (conn-kill-thing thing arg transform
                                             nil nil nil nil
@@ -4903,7 +4923,6 @@ it."))
        (conn-dispatch-action-reference
         (conn-action-get-reference action))
        (conn--dispatch-current-thing (list thing arg transform))
-       (conn-read-args-last-command nil)
        (conn-dispatch-repeating
         (and repeat (conn-action-repeatable-p action)))
        (conn--dispatch-prev-state
@@ -5320,7 +5339,7 @@ for the dispatch."
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               subregions-p)))
+                               :value subregions-p)))
     (let (ovs subregions)
       (unwind-protect
           (progn

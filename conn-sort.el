@@ -229,7 +229,7 @@ Interactively defaults to the current value of `sort-fold-case'."
          (conn-boolean-argument "fold case"
                                 'sort-fold-case
                                 conn-sort-fold-case-argument-map
-                                (bound-and-true-p sort-fold-case))))
+                                :value (bound-and-true-p sort-fold-case))))
      (list thing arg transform reverse fold-case)))
   (conn-sort-things-do thing arg transform reverse fold-case))
 

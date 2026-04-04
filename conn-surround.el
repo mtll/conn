@@ -306,7 +306,7 @@
           (conn-boolean-argument "delete"
                                  'delete
                                  conn-delete-argument-map
-                                 delete))
+                                 :value delete))
          (register
           (conn-read-argument "register"
                               'register
@@ -753,7 +753,7 @@
        (at-end (conn-boolean-argument "At End"
                                       'other-end
                                       conn-other-end-argument-map
-                                      t))
+                                      :value t))
        (trim (conn-read-argument
               "trim whitespace"
               'trim

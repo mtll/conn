@@ -1786,12 +1786,12 @@ finishing showing the buffers that were visited."))
         (conn-boolean-argument "regexp"
                                'regexp
                                conn-regexp-argument-map
-                               regexp-flag))
+                               :value regexp-flag))
        (delimited
         (conn-boolean-argument "word delimited"
                                'delimited
                                conn-delimited-argument-map
-                               delimited)))
+                               :value delimited)))
     (conn-kapply-on-matches thing
                             arg
                             transform
