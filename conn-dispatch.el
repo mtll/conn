@@ -73,22 +73,22 @@
   :group 'conn-faces)
 
 (defface conn-dispatch-label-face
-  '((t (:foreground "#000000" :background "#ff8bd1" :bold t)))
+  '((t (:inherit default :foreground "#000000" :background "#ff8bd1" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-alt-face
-  '((t (:foreground "#000000" :background "#ffc5e8" :bold t)))
+  '((t (:inherit default :foreground "#000000" :background "#ffc5e8" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-face
-  '((t (:foreground "#000000" :background "#8bd6ff" :bold t)))
+  '((t (:inherit default :foreground "#000000" :background "#8bd6ff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
 (defface conn-dispatch-label-multi-alt-face
-  '((t (:foreground "#000000" :background "#c5ebff" :bold t)))
+  '((t (:inherit default :foreground "#000000" :background "#c5ebff" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
@@ -1455,8 +1455,6 @@ Target overlays may override this default by setting the
                (add-display-text-property 0 (length full-string)
                                           'height (cadr h)
                                           full-string))))
-          (when-let* ((f (get-char-property (overlay-start target) 'face)))
-            (add-face-text-property 0 (length full-string) f t full-string))
           (setq display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-max))
@@ -1598,10 +1596,6 @@ Target overlays may override this default by setting the
                (add-display-text-property 0 (length full-string)
                                           'height (cadr h)
                                           full-string))))
-          (when-let* ((f (get-char-property (min (1+ (overlay-start target))
-                                                 (overlay-end target))
-                                            'face)))
-            (add-face-text-property 0 (length full-string) f t full-string))
           (setq display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-min))
