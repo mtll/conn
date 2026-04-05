@@ -431,7 +431,6 @@
          (idx 1))
     (when (> len 1)
       (let ((map (make-sparse-keymap))
-            (msg-sym (make-symbol "msg-fn"))
             (key (vector last-command-event)))
         (define-key map key (lambda ()
                               (interactive)
@@ -440,12 +439,10 @@
         (select-window (nth idx windows))
         (set-transient-map
          map t
-         (lambda ()
-           (remove-hook 'post-command-hook msg-sym)
-           (mapc #'window-bump-use-time (nreverse windows))))
-        (fset msg-sym (lambda () (funcall repeat-echo-function map)))
-        ;; Should be after `repeat-post-hook'
-        (add-hook 'post-command-hook msg-sym 10)))))
+         (lambda () (mapc #'window-bump-use-time (nreverse windows)))
+         (format "Repeat with %s"
+                 (propertize (key-description key)
+                             'face 'read-multiple-choice-face)))))))
 
 ;;;###autoload
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
