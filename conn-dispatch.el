@@ -1998,14 +1998,6 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-stack-handle nil)
 
-(defvar conn-dispatch-amalgamate-undo nil
-  "Controls undo amalgamation of multiple dispatch loop iterations.
-
-When this variable is non-nil all iterations of a dispatch loop will be
-amalgamated into a single undo that will be undone all at once. When
-this variable is nil each iteration of a dispatch loop will be undone
-separately.")
-
 (defvar conn-dispatch-input-buffer nil
   "Buffer that was current when dispatch began.
 
@@ -2266,10 +2258,7 @@ the meaning of depth."
                 for pt in saved-pos
                 do (with-current-buffer buf
                      (goto-char pt))))
-      (:accept
-       (accept-change-group cg)
-       (when conn-dispatch-amalgamate-undo
-         (undo-amalgamate-change-group cg))))))
+      (:accept (accept-change-group cg)))))
 
 (defun conn-dispatch-undo-pulse (beg end)
   "Highlight an undo between BEG and END."
@@ -2387,7 +2376,6 @@ the meaning of depth."
                        (conn--dispatch-action-always-prompt nil)
                        (conn-dispatch-label-function nil)
                        (conn-dispatch-quit-flag nil)
-                       (conn-dispatch-amalgamate-undo nil)
                        (conn-dispatch-current-action nil)
                        (conn--dispatch-current-thing nil)
                        (conn-dispatch-repeating nil)

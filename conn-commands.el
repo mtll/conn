@@ -3169,136 +3169,136 @@ hook, which see."
                                   separator
                                   reformat
                                   check-bounds)
-  (let ((conn-dispatch-amalgamate-undo t)
-        (result nil)
+  (let ((result nil)
         (strings nil))
-    (conn-read-args (conn-dispatch-bounds-state
-                     :history-var 'conn-kill-thing-dispatch
-                     :prefix arg
-                     :prompt "Kill"
-                     :reference (list conn-dispatch-thing-reference)
-                     :display-handler (conn-read-args-display-columns 3 3))
-        ((`(,thing ,arg) (conn-dispatch-thing-argument t))
-         (repeat
-          (conn-boolean-argument "repeat"
-                                 'repeat-dispatch
-                                 conn-dispatch-repeat-argument-map
-                                 :documentation conn-repeat-argument-documentation))
-         (`(,delete ,append ,register ,separator)
-          (conn-kill-how-argument
-           :append (if (eq append 'repeat) nil append)
-           :delete delete
-           :register register
-           :separator separator))
-         (other-end
-          (conn-boolean-argument "other-end"
-                                 'other-end
-                                 conn-other-end-argument-map
-                                 :documentation conn-dispatch-other-end-documentation))
-         (restrict-windows
-          (conn-boolean-argument "this-win"
-                                 'restrict-windows
-                                 conn-restrict-windows-argument-map
-                                 :documentation conn-this-win-argument-documentation))
-         (stay
-          (conn-boolean-argument "stay"
-                                 'stay
-                                 conn-stay-argument-map
-                                 :value t
-                                 :documentation conn-stay-argument-documentation))
-         (`(,dtform ,reformat)
-          (conn-dispatch-transform-and-fixup-argument reformat)))
-      (conn-with-dispatch-event-handlers
-        (:handler
-         (:predicate (cmd) (eq cmd 'append))
-         ( :keymap conn-kill-dispatch-append-map)
-         ( :update (_cmd break)
-           (setq append (pcase append
-                          ('nil 'append)
-                          ('prepend nil)
-                          (_ 'prepend)))
-           (funcall break))
-         ( :display ()
-           (concat
-            "\\[append] "
-            (pcase append
-              ('nil "append")
-              (val
-               (concat
-                (propertize "(" 'face 'shadow)
-                (propertize (format "%s" val)
-                            'face 'eldoc-highlight-function-argument)
-                (propertize "|" 'face 'shadow)
-                (propertize (truncate-string-ellipsis) 'face 'shadow)
-                (propertize ")" 'face 'shadow)))))))
-        (:handler
-         (:predicate (cmd) (eq cmd 'stay))
-         ( :keymap conn-dispatch-stay-map)
-         ( :display ()
-           (concat
-            "\\[stay] "
-            (propertize "stay"
-                        'face (when stay
-                                'eldoc-highlight-function-argument))))
-         ( :update (_cmd break)
-           (cl-callf not stay)
-           (funcall break)))
-        (conn-dispatch-setup
-         (oclosure-lambda (conn-action
-                           (action-description "Kill"))
-             ()
-           (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
-                         (conn-select-target)))
-             (unless stay
-               (select-window window))
-             (with-selected-window window
-               (conn-dispatch-change-group)
-               (pcase (conn-bounds-of-dispatch thing arg pt)
-                 ((and bounds
-                       (conn-dispatch-bounds `(,beg . ,end)
-                                             `(,@dtform
-                                               ,@transform
-                                               ,@(when check-bounds
-                                                   (list 'conn-check-bounds)))))
-                  (cond ((not stay)
-                         (push-mark (conn-bounds-get bounds :origin))
-                         (conn-dispatch-goto-char beg))
-                        ((<= beg (point) end)
-                         (conn-dispatch-goto-char beg 'nopush)))
-                  (unless delete
-                    (push (cons append (filter-buffer-substring beg end))
-                          strings))
-                  (save-excursion
-                    (goto-char beg)
-                    (delete-region beg end)
-                    (when reformat
-                      (funcall conn-kill-reformat-function bounds)))
-                  (conn-dispatch-undo-case
-                    :depth 90
-                    (:undo
-                     (pop strings)
-                     (conn-dispatch-undo-pulse beg end))
-                    (:cancel
-                     (pop strings))))
-                 (_ (user-error "No %s found" thing))))))
-         thing arg dtform
-         :repeat repeat
-         :other-end other-end
-         :restrict-windows restrict-windows))
-      (when strings
-        (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
-                                                    separator)))
-          (pcase-dolist (`(,append . ,string) (nreverse strings))
-            (setq result
-                  (if append
-                      (concat result (and result sep) string)
-                    (concat string (and result sep) result))))
-          (conn--kill-string result append register sep)))
-      (conn-push-command-history
-       (let ((prev (conn-ring-head conn-dispatch-ring)))
-         (lambda ()
-           (conn-dispatch-setup-previous prev)
-           (setq prev (conn-ring-head conn-dispatch-ring))))))))
+    (with-undo-amalgamate
+      (conn-read-args (conn-dispatch-bounds-state
+                       :history-var 'conn-kill-thing-dispatch
+                       :prefix arg
+                       :prompt "Kill"
+                       :reference (list conn-dispatch-thing-reference)
+                       :display-handler (conn-read-args-display-columns 3 3))
+          ((`(,thing ,arg) (conn-dispatch-thing-argument t))
+           (repeat
+            (conn-boolean-argument "repeat"
+                                   'repeat-dispatch
+                                   conn-dispatch-repeat-argument-map
+                                   :documentation conn-repeat-argument-documentation))
+           (`(,delete ,append ,register ,separator)
+            (conn-kill-how-argument
+             :append (if (eq append 'repeat) nil append)
+             :delete delete
+             :register register
+             :separator separator))
+           (other-end
+            (conn-boolean-argument "other-end"
+                                   'other-end
+                                   conn-other-end-argument-map
+                                   :documentation conn-dispatch-other-end-documentation))
+           (restrict-windows
+            (conn-boolean-argument "this-win"
+                                   'restrict-windows
+                                   conn-restrict-windows-argument-map
+                                   :documentation conn-this-win-argument-documentation))
+           (stay
+            (conn-boolean-argument "stay"
+                                   'stay
+                                   conn-stay-argument-map
+                                   :value t
+                                   :documentation conn-stay-argument-documentation))
+           (`(,dtform ,reformat)
+            (conn-dispatch-transform-and-fixup-argument reformat)))
+        (conn-with-dispatch-event-handlers
+          (:handler
+           (:predicate (cmd) (eq cmd 'append))
+           ( :keymap conn-kill-dispatch-append-map)
+           ( :update (_cmd break)
+             (setq append (pcase append
+                            ('nil 'append)
+                            ('prepend nil)
+                            (_ 'prepend)))
+             (funcall break))
+           ( :display ()
+             (concat
+              "\\[append] "
+              (pcase append
+                ('nil "append")
+                (val
+                 (concat
+                  (propertize "(" 'face 'shadow)
+                  (propertize (format "%s" val)
+                              'face 'eldoc-highlight-function-argument)
+                  (propertize "|" 'face 'shadow)
+                  (propertize (truncate-string-ellipsis) 'face 'shadow)
+                  (propertize ")" 'face 'shadow)))))))
+          (:handler
+           (:predicate (cmd) (eq cmd 'stay))
+           ( :keymap conn-dispatch-stay-map)
+           ( :display ()
+             (concat
+              "\\[stay] "
+              (propertize "stay"
+                          'face (when stay
+                                  'eldoc-highlight-function-argument))))
+           ( :update (_cmd break)
+             (cl-callf not stay)
+             (funcall break)))
+          (conn-dispatch-setup
+           (oclosure-lambda (conn-action
+                             (action-description "Kill"))
+               ()
+             (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
+                           (conn-select-target)))
+               (unless stay
+                 (select-window window))
+               (with-selected-window window
+                 (conn-dispatch-change-group)
+                 (pcase (conn-bounds-of-dispatch thing arg pt)
+                   ((and bounds
+                         (conn-dispatch-bounds `(,beg . ,end)
+                                               `(,@dtform
+                                                 ,@transform
+                                                 ,@(when check-bounds
+                                                     (list 'conn-check-bounds)))))
+                    (cond ((not stay)
+                           (push-mark (conn-bounds-get bounds :origin))
+                           (conn-dispatch-goto-char beg))
+                          ((<= beg (point) end)
+                           (conn-dispatch-goto-char beg 'nopush)))
+                    (unless delete
+                      (push (cons append (filter-buffer-substring beg end))
+                            strings))
+                    (save-excursion
+                      (goto-char beg)
+                      (delete-region beg end)
+                      (when reformat
+                        (funcall conn-kill-reformat-function bounds)))
+                    (conn-dispatch-undo-case
+                      :depth 90
+                      (:undo
+                       (pop strings)
+                       (conn-dispatch-undo-pulse beg end))
+                      (:cancel
+                       (pop strings))))
+                   (_ (user-error "No %s found" thing))))))
+           thing arg dtform
+           :repeat repeat
+           :other-end other-end
+           :restrict-windows restrict-windows))
+        (when strings
+          (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
+                                                      separator)))
+            (pcase-dolist (`(,append . ,string) (nreverse strings))
+              (setq result
+                    (if append
+                        (concat result (and result sep) string)
+                      (concat string (and result sep) result))))
+            (conn--kill-string result append register sep)))
+        (conn-push-command-history
+         (let ((prev (conn-ring-head conn-dispatch-ring)))
+           (lambda ()
+             (conn-dispatch-setup-previous prev)
+             (setq prev (conn-ring-head conn-dispatch-ring)))))))))
 
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing expansion))
                                   arg
