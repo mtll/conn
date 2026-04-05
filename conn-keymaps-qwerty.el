@@ -898,8 +898,12 @@
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
 
-(defvar-keymap conn-wincontrol-tab-repeat-map
+(defvar-keymap conn-wincontrol-buffer-and-tab-repeat-map
   :repeat t
+  "J" 'bury-buffer
+  "L" 'unbury-buffer
+  "l" 'next-buffer
+  "j" 'previous-buffer
   "O" 'tab-bar-duplicate-tab
   "E" 'tab-new
   "o" 'tab-next
@@ -908,13 +912,6 @@
   "G" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab
   "B" 'tab-bar-switch-to-tab)
-
-(defvar-keymap conn-buffer-one-command-repeat-map
-  :repeat t
-  "J" 'bury-buffer
-  "L" 'unbury-buffer
-  "l" 'next-buffer
-  "j" 'previous-buffer)
 
 (define-keymap
   :keymap conn-wincontrol-map

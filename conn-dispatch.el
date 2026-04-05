@@ -2778,11 +2778,6 @@ the meaning of depth."
 
 ;;;;; Dispatch Target Finders
 
-(defface conn-dispatch-context-separator-face
-  '((t (:inherit (shadow tooltip) :extend t)))
-  "Face for context region separator."
-  :group 'conn-faces)
-
 (defclass conn-target-finder-base ()
   ((current-update-handlers :initform nil)
    (update-handlers :allocation :class
@@ -3342,8 +3337,9 @@ to the key binding for that target."
   ( :update-method (state)
     (cl-symbol-macrolet ((string (oref state string)))
       (unless string
-        (let ((timeout (oref state timeout)))
-          (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
+        (catch 'string-read
+          (let ((timeout (oref state timeout))
+                (prompt (propertize "String" 'face 'minibuffer-prompt)))
             (conn-with-dispatch-event-handlers
               (:handler
                (:keymap conn-dispatch-read-string-target-keymap)
@@ -3363,7 +3359,7 @@ to the key binding for that target."
                                     nil t)))))
                    (unless (equal newstr "")
                      (setq string newstr)
-                     (funcall break :return)))))
+                     (throw 'string-read nil)))))
               (setf string (char-to-string (conn-dispatch-read-char prompt t))))
             (while-no-input
               (conn-dispatch-call-update-handlers state))
