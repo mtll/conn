@@ -468,10 +468,7 @@ themselves once the selection process has concluded."
            (padding (propertize " " 'display `(space :width (,padding-width)))))
       (concat padding label))))
 
-(defvar conn--window-label-pool
-  (mapcar (lambda (str)
-            (propertize str 'face 'conn-window-label-face))
-          (conn-simple-labels 30)))
+(defvar conn--window-label-pool nil)
 
 (defun conn--simple-window-labels ()
   (setq conn-dispatch-label-input-method conn-simple-label-input-method)
@@ -479,14 +476,21 @@ themselves once the selection process has concluded."
          (window-count (length windows)))
     (when (length< conn--window-label-pool window-count)
       (setq conn--window-label-pool
-            (conn-simple-labels (* 2 window-count))))
+            (conn-simple-labels (min (ceiling (* 1.67 window-count))
+                                     20))))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
              for label = (window-parameter win 'conn-label-string)
-             unless (and label
-                         (when (member label available)
-                           (setq available (delete label available))
-                           t))
+             when (cond ((null label))
+                        ((member label available)
+                         (cl-callf2 delete label available)
+                         nil)
+                        ((not
+                          (when-let* ((new (seq-find (lambda (str)
+                                                       (string-prefix-p label str))
+                                                     available)))
+                            (cl-callf2 delq new available)
+                            (set-window-parameter win 'conn-label-string new)))))
              collect win into unlabeled
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label-string
