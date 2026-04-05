@@ -321,10 +321,10 @@ strings have `conn-dispatch-label-face'."
         (catch ',tag ,@body))
      `((:handler . ,(lambda (&rest body)
                       (conn--expand-dispatch-handler tag body)))
-       (:literal . ,(cl-function
-                     (lambda (exp &key depth)
-                       `(push (cons ,exp (cons ,(or depth 0) ',tag))
-                              conn--dispatch-read-char-handlers))))))))
+       (:with . ,(cl-function
+                  (lambda (exp &key depth)
+                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
+                           conn--dispatch-read-char-handlers))))))))
 
 ;;;;;; Labels
 
@@ -2995,7 +2995,7 @@ updated.")
         (labels (conn-dispatch-get-labels))
       (prog1
           (conn-with-dispatch-event-handlers
-            ( :literal (conn-dispatch-select-handler)
+            ( :with (conn-dispatch-select-handler)
               :depth -95)
             (when executing-kbd-macro
               (:handler
@@ -3172,7 +3172,7 @@ to the key binding for that target."
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-event-handlers
-      ( :literal (conn-dispatch-select-handler)
+      ( :with (conn-dispatch-select-handler)
         :depth -95)
       (:handler
        (:depth 100)

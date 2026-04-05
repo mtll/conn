@@ -557,7 +557,7 @@
   (conn-posframe-window-label-window label))
 
 (cl-defmethod conn-label-completed-p ((label conn-posframe-window-label))
-  (pcase-let (((cl-struct conn-posframe-window-label bufname string)
+  (pcase-let (((cl-struct conn-posframe-window-label bufname)
                label))
     (with-current-buffer bufname
       (= 0 (buffer-size)))))

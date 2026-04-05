@@ -1288,71 +1288,83 @@
   "<conn-thing-map> s l" 'conn-ts-scopename-forward
   "<conn-thing-map> s j" 'conn-ts-scopename-backward)
 
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
-  "h" (conn-anonymous-thing
-        '(conn-ts-thing)
-        :pretty-print ( :method (_) "ts-all-things")
-        :target-finder ( :method (_self _arg)
-                         (conn-ts-query-targets
-                          :things conn-ts-all-query-things))
-        :bounds-op ( :method (_self _arg)
-                     (conn-ts-select-expansion
-                      (lambda ()
-                        (conn-ts-filter-captures
-                         conn-ts-all-query-things
-                         (conn-ts-capture (point) (1+ (point)))
-                         (lambda (bd)
-                           (<= (car bd) (point) (cdr bd)))))
-                      'conn-ts-thing)))
-  "s" (conn-anonymous-thing
-        '(conn-ts-thing)
-        :pretty-print ( :method (_) "ts-all-parents")
-        :target-finder ( :method (_self _arg)
-                         (conn-ts-query-targets
-                          :things conn-ts-parent-things
-                          :region-predicate (lambda (beg end)
-                                              (and (<= beg (point))
-                                                   (<= (point) end)))))
-        :bounds-op ( :method (_self _arg)
-                     (conn-ts-select-expansion
-                      (lambda ()
-                        (conn-ts-filter-captures
-                         conn-ts-parent-things
-                         (conn-ts-capture (point) (1+ (point)))
-                         (lambda (bd)
-                           (<= (car bd) (point) (cdr bd)))))
-                      'conn-ts-thing)))
-  "n" (conn-anonymous-thing
-        '(sexp)
-        :pretty-print ( :method (_) "ts-all-sexps")
-        :target-finder ( :method (_self _arg)
-                         (conn-ts-all-things :thing 'sexp))
-        :bounds-op ( :method (_self _arg)
-                     (conn-ts-select-expansion
-                      (lambda ()
-                        (mapcar
-                         (pcase-lambda (`(,_ . ,node))
-                           (cons (treesit-node-type node)
-                                 (cons (treesit-node-start node)
-                                       (treesit-node-end node))))
-                         (treesit-query-capture
-                          (treesit-language-at (point))
-                          (conn-ts--thing-node-query 'sexp)
-                          (point) (1+ (point)))))
-                      'sexp))))
+(let ((all-things
+       (conn-anonymous-thing
+         '(conn-ts-thing)
+         :pretty-print ( :method (_) "ts-all-things")
+         :target-finder ( :method (_self _arg)
+                          (conn-ts-query-targets
+                           :things conn-ts-all-query-things))
+         :bounds-op ( :method (_self _arg)
+                      (conn-ts-select-expansion
+                       (lambda ()
+                         (conn-ts-filter-captures
+                          conn-ts-all-query-things
+                          (conn-ts-capture (point) (1+ (point)))
+                          (lambda (bd)
+                            (<= (car bd) (point) (cdr bd)))))
+                       'conn-ts-thing))))
+      (all-parents
+       (conn-anonymous-thing
+         '(conn-ts-thing)
+         :pretty-print ( :method (_) "ts-all-parents")
+         :target-finder ( :method (_self _arg)
+                          (conn-ts-query-targets
+                           :things conn-ts-parent-things
+                           :region-predicate (lambda (beg end)
+                                               (and (<= beg (point))
+                                                    (<= (point) end)))))
+         :bounds-op ( :method (_self _arg)
+                      (conn-ts-select-expansion
+                       (lambda ()
+                         (conn-ts-filter-captures
+                          conn-ts-parent-things
+                          (conn-ts-capture (point) (1+ (point)))
+                          (lambda (bd)
+                            (<= (car bd) (point) (cdr bd)))))
+                       'conn-ts-thing))))
+      (all-sexps
+       (conn-anonymous-thing
+         '(sexp)
+         :pretty-print ( :method (_) "ts-all-sexps")
+         :target-finder ( :method (_self _arg)
+                          (conn-ts-all-things :thing 'sexp))
+         :bounds-op ( :method (_self _arg)
+                      (conn-ts-select-expansion
+                       (lambda ()
+                         (mapcar
+                          (pcase-lambda (`(,_ . ,node))
+                            (cons (treesit-node-type node)
+                                  (cons (treesit-node-start node)
+                                        (treesit-node-end node))))
+                          (treesit-query-capture
+                           (treesit-language-at (point))
+                           (conn-ts--thing-node-query 'sexp)
+                           (point) (1+ (point)))))
+                       'sexp)))))
+  (define-keymap
+    :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'global-conn-ts-things-mode)
+    "h" all-things
+    "s" all-parents
+    "n" all-sexps)
+  (define-keymap
+    :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
+    "h" all-things
+    "s" all-parents
+    "n" all-sexps))
 
-;;;###autoload
 (define-minor-mode conn-ts-things-mode
   "Minor mode for conn-ts thing bindings."
   :lighter nil)
 
-;;;###autoload
-(defun conn-ts-things-mode-maybe-enable ()
+(defun conn-ts-things-mode-maybe-turn-on ()
   (when (treesit-parser-list)
     (conn-ts-things-mode 1)))
 
 ;;;###autoload
-(add-hook 'after-change-major-mode-hook #'conn-ts-things-mode-maybe-enable)
+(define-globalized-minor-mode global-conn-ts-things-mode
+  conn-ts-things-mode
+  conn-ts-things-mode-maybe-turn-on
+  :group 'conn)
 
 (provide 'conn-tree-sitter)
