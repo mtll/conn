@@ -391,8 +391,6 @@ returned."
   (string-empty-p (window-parameter (conn-window-label-window label)
                                     'conn-label-string)))
 
-(defvar conn-label-select-always-prompt nil)
-
 (defvar conn-dispatch-hide-labels nil)
 
 (defun conn-label-select (candidates
@@ -415,8 +413,7 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (let* ((prompt (propertize (or prompt "Chars")
                              'face 'minibuffer-prompt))
-         (prompt-flag (or conn-label-select-always-prompt
-                          always-prompt))
+         (prompt-flag always-prompt)
          (current candidates)
          (partial nil))
     (while-no-input
@@ -426,8 +423,7 @@ themselves once the selection process has concluded."
        ('nil
         (setq current candidates
               partial nil
-              prompt-flag (or conn-label-select-always-prompt
-                              always-prompt))
+              prompt-flag always-prompt)
         (conn-read-args-message "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
@@ -474,10 +470,11 @@ themselves once the selection process has concluded."
   (setq conn-dispatch-label-input-method conn-simple-label-input-method)
   (let* ((windows (conn--get-windows nil 'nomini t))
          (window-count (length windows)))
-    (when (length< conn--window-label-pool window-count)
+    (when (or (null conn--window-label-pool)
+              (length< conn--window-label-pool window-count))
       (setq conn--window-label-pool
-            (conn-simple-labels (min (ceiling (* 1.67 window-count))
-                                     20))))
+            (conn-simple-labels (max (ceiling (* 1.67 window-count))
+                                     (length conn-simple-label-characters)))))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
              for label = (window-parameter win 'conn-label-string)
@@ -545,42 +542,41 @@ themselves once the selection process has concluded."
     (`(,var ,val)
      `(let ((,var ,val))
         (unwind-protect
-            (progn
-              (conn-dispatch-select-mode 1)
-              ,@body)
-          (conn-dispatch-select-mode -1)
+            ,(macroexp-progn body)
           (mapc #'conn-label-delete ,var))))
     (_ (error "Unexpected binding form %s" binder))))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
-  (let (conn-label-select-always-prompt)
-    (cond
-     ((null windows) nil)
-     (t (conn-with-window-labels
-            (labels (funcall conn-window-label-function windows))
-          (conn-with-dispatch-event-handlers
-            (:handler
-             ( :predicate (cmd)
-               (or (eq cmd 'act)
-                   (eq cmd 'repeat-dispatch-at-mouse)))
-             ( :update (cmd break)
-               (when (or (and (eq cmd 'act)
-                              (mouse-event-p last-input-event))
-                         (and (eq cmd 'repeat-dispatch-at-mouse)
-                              (eq 'dispatch-mouse-repeat
-                                  (event-basic-type last-input-event))))
-                 (let* ((posn (event-start last-input-event))
-                        (win (posn-window posn)))
-                   (when (not (posn-area posn))
-                     (funcall break :return win))))))
-            (conn-label-select
-             labels
-             (lambda (prompt)
-               (conn-dispatch-read-char prompt 'label))
-             nil
-             always-prompt)))))))
+  (when windows
+    (conn-with-window-labels
+        (labels (funcall conn-window-label-function windows))
+      (conn-with-dispatch-event-handlers
+        (:handler
+         ( :predicate (cmd)
+           (or (eq cmd 'act)
+               (eq cmd 'repeat-dispatch-at-mouse)))
+         ( :update (cmd break)
+           (when (or (and (eq cmd 'act)
+                          (mouse-event-p last-input-event))
+                     (and (eq cmd 'repeat-dispatch-at-mouse)
+                          (eq 'dispatch-mouse-repeat
+                              (event-basic-type last-input-event))))
+             (let* ((posn (event-start last-input-event))
+                    (win (posn-window posn)))
+               (when (not (posn-area posn))
+                 (funcall break :return win))))))
+        (unwind-protect
+            (progn
+              (conn-dispatch-select-mode 1)
+              (conn-label-select
+               labels
+               (lambda (prompt)
+                 (conn-dispatch-read-char prompt 'label))
+               nil
+               always-prompt))
+          (conn-dispatch-select-mode -1))))))
 
 ;;;; Dispatch State
 
@@ -1360,6 +1356,8 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
 
+(defvar conn-dispatch-select-always-prompt nil)
+
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
   (eq (selected-frame) (window-frame win)))
@@ -1924,6 +1922,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-prompt-p ()
   (or conn--dispatch-must-prompt
       conn--dispatch-action-always-prompt
+      conn-dispatch-select-always-prompt
       (> conn-dispatch-iteration-count 0)
       (conn-target-finder-prompt-p conn-dispatch-target-finder)))
 

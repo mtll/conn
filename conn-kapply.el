@@ -2109,7 +2109,7 @@ finishing showing the buffers that were visited."))
 
 (cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply)
                                             _repeat)
-  (let ((conn-label-select-always-prompt t))
+  (let ((conn-dispatch-select-always-prompt t))
     (cl-call-next-method)
     (unless conn-kapply-suppress-message
       (message "Kapply completed successfully after %s %s."
