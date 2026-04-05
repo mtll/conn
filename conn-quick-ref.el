@@ -345,7 +345,10 @@
       (unwind-protect
           (conn-with-overriding-map conn-quick-ref-map
             (cl-loop
-             (let ((keys (read-key-sequence-vector nil)))
+             (let ((keys (let ((inhibit-quit t))
+                           (read-key-sequence-vector nil))))
+               (when (eql (aref keys 0) (car (last (current-input-mode))))
+                 (signal 'quit nil))
                (pcase (key-binding keys)
                  ('close (cl-return))
                  ('next
@@ -355,7 +358,7 @@
                   (conn-quick-ref-previous-page buf)
                   (conn->f state (funcall display-function buf)))
                  ((or 'quit 'keyboard-quit)
-                  (keyboard-quit))
+                  (signal 'quit nil))
                  (_ (conn-add-unread-events (this-single-command-raw-keys))
                     (cl-return))))))
         (funcall display-function buf state t)))))

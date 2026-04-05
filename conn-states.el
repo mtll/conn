@@ -1859,7 +1859,9 @@ The duration of the message display is controlled by
 
 (defun conn--read-args-describe-key (arguments message-function)
   (funcall message-function "Key Sequence...")
-  (let ((cmd (key-binding (read-key-sequence-vector nil) t)))
+  (let ((cmd (key-binding (let ((inhibit-quit t))
+                            (read-key-sequence-vector nil))
+                          t)))
     (while (arrayp cmd) ; keyboard macro
       (setq cmd (key-binding cmd t)))
     (catch 'break
@@ -1940,25 +1942,24 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (when break (throw 'break t))))))
          (read-command ()
            (let (partial-keymap keyseq cmd)
-             (setq keyseq (read-key-sequence-vector nil)
+             (setq keyseq (let ((inhibit-quit t))
+                            (read-key-sequence-vector nil))
                    cmd (key-binding keyseq t))
              (while (arrayp cmd) ; keyboard macro
                (setq cmd (key-binding cmd t)))
-             (cond ((and (null cmd)
+             (cond ((eql (aref keyseq 0) quit-event)
+                    (setq cmd 'keyboard-quit))
+                   ((and (null cmd)
                          (eql help-char (aref keyseq (1- (length keyseq)))))
                     (setq cmd 'execute-extended-command
                           partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
                    ((and (symbolp cmd)
                          (autoloadp (symbol-function cmd)))
                     (autoload-do-load (symbol-function cmd))))
-             (when (eql (aref keyseq 0) quit-event)
-               (setq cmd 'keyboard-quit))
-             (cl-loop
-              (pcase cmd
-                ('execute-extended-command
-                 (setq cmd (conn--read-args-completing-read arguments
-                                                            partial-keymap)))
-                (_ (cl-return cmd))))))
+             (while (eq cmd 'execute-extended-command)
+               (setq cmd (conn--read-args-completing-read arguments
+                                                          partial-keymap)))
+             cmd))
          (set-error-message (cstr &rest args)
            (setf conn--read-args-error-message
                  (apply #'format cstr args)))
@@ -1966,7 +1967,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (when pre (funcall pre cmd))
            (pcase cmd
              ('keyboard-quit
-              (keyboard-quit))
+              (signal 'quit nil))
              ('reference
               (apply #'conn-quick-reference
                      reference
@@ -2726,7 +2727,7 @@ be displayed in the echo area during `conn-read-args'."
 (conn-define-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql keyboard-quit)))
   "Call `keyboard-quit'."
-  ( :update (_break) (keyboard-quit)))
+  ( :update (_break) (signal 'quit nil)))
 
 ;;;;; Protected Argument
 

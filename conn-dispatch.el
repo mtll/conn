@@ -2306,7 +2306,8 @@ the meaning of depth."
                 (let ((scroll-conservatively 100))
                   (pcase inherit-input-method
                     ('nil
-                     (read-event nil nil seconds))
+                     (let ((inhibit-quit t))
+                       (read-event nil nil seconds)))
                     ('label
                      (let ((pim current-input-method)
                            (default-input-method default-input-method)
@@ -2316,10 +2317,12 @@ the meaning of depth."
                            (progn
                              (activate-input-method
                               conn-dispatch-label-input-method)
-                             (read-event nil t seconds))
+                             (let ((inhibit-quit t))
+                               (read-event nil t seconds)))
                          (activate-input-method pim))))
                     (_
-                     (read-event nil t seconds))))))
+                     (let ((inhibit-quit t))
+                       (read-event nil t seconds)))))))
             (message-fn (prompt arguments &optional _state teardown)
               (unless teardown
                 (conn--dispatch-read-char-prefix
@@ -2333,7 +2336,9 @@ the meaning of depth."
                         :key #'conn-dispatch-handler-depth)
            prompt prompt-suffix)
           (and-let* ((ev (read-ev seconds)))
-            (and (characterp ev) ev)))
+            (cond ((eql ev (car (last (current-input-mode))))
+                   (signal 'quit nil))
+                  ((characterp ev) ev))))
       (conn-read-args (nil :prompt prompt
                            :command-handler nil
                            :display-handler #'message-fn
@@ -2341,7 +2346,12 @@ the meaning of depth."
                                   (run-hook-with-args
                                    'conn-dispatch-read-char-pre-functions
                                    cmd)))
-          ((char (conn-dispatch-event-argument #'read-ev))
+          ((char (conn-dispatch-event-argument
+                  (lambda ()
+                    (let ((ev (read-ev)))
+                      (if (eql ev (car (last (current-input-mode))))
+                          (signal 'quit nil)
+                        ev)))))
            (_handlers (conn-composite-argument
                        (compat-call sort conn--dispatch-read-char-handlers
                                     :key #'conn-dispatch-handler-depth))))
