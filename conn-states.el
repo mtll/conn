@@ -1959,7 +1959,9 @@ This skips executing the body of the `conn-read-args' form entirely."
              (while (eq cmd 'execute-extended-command)
                (setq cmd (conn--read-args-completing-read arguments
                                                           partial-keymap)))
-             cmd))
+             (if (eq cmd 'undefined)
+                 (read-command)
+               cmd)))
          (set-error-message (cstr &rest args)
            (setf conn--read-args-error-message
                  (apply #'format cstr args)))
@@ -2049,7 +2051,10 @@ This skips executing the body of the `conn-read-args' form entirely."
            (unless argument-values
              (mapc #'conn-argument-cancel arguments))
            (unless executing-kbd-macro
-             (funcall display-handler nil nil display-state t)))
+             (let ((inhibit-message conn-read-args-inhibit-message)
+                   (message-log-max nil)
+                   (scroll-conservatively 100))
+               (funcall display-handler nil nil display-state t))))
          (mapc #'conn-argument-accept arguments)
          (cons callback argument-values))))))
 
@@ -2313,8 +2318,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-update ((arg conn-anonymous-argument)
                                     form
                                     break)
-  (funcall arg form break)
-  (cl-call-next-method))
+  (funcall arg form break))
 
 (cl-defmethod conn-argument-extract-value ((arg conn-anonymous-argument))
   (conn-anonymous-argument-value arg))
