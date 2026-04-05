@@ -481,10 +481,13 @@
               ,@(cdr cons))))))
 
 (defvar conn-wincontrol-label-mode-line-set-function
-  #'conn--setup-mode-line-label)
+  #'conn--setup-mode-line-label
+  "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.
+Function should take one argument, REMOVE, which when non-nil means to
+remove whatever the function has added to the mode-line.")
 
 (define-minor-mode conn-wincontrol-label-mode-line-local-mode
-  "Local mode for `conn-dispatch-window-mode-line-mode'."
+  "Add the wincontrol window label to the beginning of `mode-line-format'."
   :lighter ""
   (funcall conn-wincontrol-label-mode-line-set-function
            (unless conn-wincontrol-label-mode-line-local-mode

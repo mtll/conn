@@ -533,8 +533,11 @@
 (defun conn-posframe-window-labels (windows)
   (conn--simple-window-labels)
   (cl-loop for win in windows
-           collect (conn--setup-posframe-window-label
-                    win (window-parameter win 'conn-label-string))))
+           for str = (window-parameter win 'conn-label-string)
+           when str collect (conn--setup-posframe-window-label win str)))
+
+(cl-defmethod conn-label-redisplay ((label conn-posframe-window-label))
+  (posframe-refresh (conn-posframe-window-label-bufname label)))
 
 (cl-defmethod conn-label-delete ((label conn-posframe-window-label))
   (delete-overlay (conn-posframe-window-label-overlay label))
@@ -553,14 +556,14 @@
 (cl-defmethod conn-label-payload ((label conn-posframe-window-label))
   (conn-posframe-window-label-window label))
 
-(cl-defmethod conn-label-partial-p ((label conn-posframe-window-label))
+(cl-defmethod conn-label-completed-p ((label conn-posframe-window-label))
   (pcase-let (((cl-struct conn-posframe-window-label bufname string)
                label))
     (with-current-buffer bufname
-      (not (or (= 0 (buffer-size))
-               (= (length string) (buffer-size)))))))
+      (= 0 (buffer-size)))))
 
-(cl-defmethod conn-label-narrow ((label conn-posframe-window-label) prefix-char)
+(cl-defmethod conn-label-narrow ((label conn-posframe-window-label)
+                                 prefix-char)
   (pcase-let (((cl-struct conn-posframe-window-label bufname overlay)
                label))
     (with-current-buffer bufname

@@ -1713,7 +1713,7 @@ The duration of the message display is controlled by
   "Print an error message of FORMAT-STRING with ARGS."
   (setq conn--read-args-error-message (apply #'format format-string args)
         conn--read-args-error-flag t)
-  (let ((message-log-max 1000))
+  (let ((message-log-max t))
     (apply #'message format-string args))
   (throw 'conn-read-args-error nil))
 
@@ -2449,7 +2449,8 @@ be displayed in the echo area during `conn-read-args'."
             (eq cmd toggles))
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
-        (function (funcall doc cmd break))))))
+        (function (funcall doc cmd break))
+        (conn--reference-page doc)))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -2573,7 +2574,8 @@ be displayed in the echo area during `conn-read-args'."
     (when (memq cmd commands)
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
-        (function (funcall doc cmd break))))))
+        (function (funcall doc cmd break))
+        (conn--reference-page doc)))))
 
 ;;;;;; Read Argument
 
@@ -2607,7 +2609,8 @@ be displayed in the echo area during `conn-read-args'."
             (eq cmd toggles))
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
-        (function (funcall doc cmd break))))))
+        (function (funcall doc cmd break))
+        (conn--reference-page doc)))))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd

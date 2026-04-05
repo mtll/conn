@@ -204,6 +204,7 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-event-handlers
+    (:literal (conn-dispatch-select-handler))
     (:handler
      (:keymap conn-dispatch-toggle-focus-map)
      ( :predicate (cmd) (eq cmd 'toggle-focus))
@@ -213,7 +214,7 @@ Expansions and contractions are provided by functions in
             (conn-expansion-targets)
           (conn-expansion-focus-targets)))
        (recenter (conn-dispatch-get-display-line))
-       (funcall break :handle-and-redisplay))
+       (funcall break :redisplay))
      ( :display ()
        (when-let* ((binding (where-is-internal 'toggle-focus nil t)))
          (concat

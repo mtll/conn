@@ -1153,8 +1153,9 @@ After kapply has finished restore the previous window configuration."
           (funcall body iterator)
           (setq success t)
           (unless conn-kapply-suppress-message
-            (message "Kapply completed successfully after %s iterations"
-                     iterations)))
+            (message "Kapply completed successfully after %s %s."
+                     iterations
+                     (ngettext "iteration" "iterations" iterations))))
       (let ((conn-kmacro-apply-error (not success)))
         (with-delayed-message (1 "Finalizing Kapply...")
           (funcall iterator :cleanup)
@@ -2111,8 +2112,10 @@ finishing showing the buffers that were visited."))
   (let ((conn-label-select-always-prompt t))
     (cl-call-next-method)
     (unless conn-kapply-suppress-message
-      (message "Kapply completed successfully after %s iterations"
-               conn-dispatch-iteration-count))))
+      (message "Kapply completed successfully after %s %s."
+               conn-dispatch-iteration-count
+               (ngettext "iteration" "iterations"
+                         conn-dispatch-iteration-count)))))
 
 (cl-defmethod conn-action-display ((action conn-dispatch-kapply)
                                    &optional

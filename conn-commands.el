@@ -1358,7 +1358,7 @@ Currently selected window remains selected afterwards."
          ( :predicate (cmd) (eq cmd 'stay))
          ( :update (_cmd break)
            (cl-callf not stay)
-           (funcall break :handle))
+           (funcall break))
          ( :display ()
            (concat "\\[stay] "
                    (propertize
@@ -3217,7 +3217,7 @@ hook, which see."
                           ('nil 'append)
                           ('prepend nil)
                           (_ 'prepend)))
-           (funcall break :handle))
+           (funcall break))
          ( :display ()
            (concat
             "\\[append] "
@@ -3242,7 +3242,7 @@ hook, which see."
                                 'eldoc-highlight-function-argument))))
          ( :update (_cmd break)
            (cl-callf not stay)
-           (funcall break :handle)))
+           (funcall break)))
         (conn-dispatch-setup
          (oclosure-lambda (conn-action
                            (action-description "Kill"))
@@ -3319,7 +3319,7 @@ hook, which see."
                       ('nil 'append)
                       ('prepend nil)
                       (_ 'prepend)))
-       (funcall break :handle))
+       (funcall break))
      ( :display ()
        (concat
         "\\[append] "
@@ -3712,7 +3712,7 @@ that place."
                         ('nil 'append)
                         ('prepend nil)
                         (_ 'prepend)))
-         (funcall break :handle))
+         (funcall break))
        ( :display ()
          (concat "\\[other-end] "
                  (pcase append
@@ -4538,7 +4538,7 @@ Interactively REPEAT is given by the prefix argument."
                           'eldoc-highlight-function-argument))))
        ( :update (_cmd break)
          (cl-callf not stay)
-         (funcall break :handle)))
+         (funcall break)))
       (conn-dispatch-setup
        (oclosure-lambda (conn-action
                          (action-description "Change"))
