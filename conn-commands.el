@@ -4434,8 +4434,9 @@ Interactively REPEAT is given by the prefix argument."
                                (conn-subthing-p thing 'point)))
                       (push-hist (conn-record-one-insertion))
                     (conn-record-insertion nil cg)
-                    (conn-state-unwind
-                      (when conn-insertion-recording-other-end
+                    (conn-state-unwind clone
+                      (when (and (not clone)
+                                 conn-insertion-recording-other-end)
                         (push-hist (conn-insertion-recording-text)))))))))))
     (_ (error "No thing at point"))))
 
@@ -4605,8 +4606,9 @@ Interactively REPEAT is given by the prefix argument."
      :other-end :no-other-end)
     (if with (insert with)
       (conn-record-insertion)
-      (conn-state-unwind
-        (setq with (conn-insertion-recording-text)))))
+      (conn-state-unwind clone
+        (unless clone
+          (setq with (conn-insertion-recording-text))))))
   (conn-push-command-history
    (let ((prev (conn-ring-head conn-dispatch-ring)))
      (lambda ()
@@ -4615,8 +4617,9 @@ Interactively REPEAT is given by the prefix argument."
          (setq prev (conn-ring-head conn-dispatch-ring))
          (if with (insert with)
            (conn-record-insertion nil)
-           (conn-state-unwind
-             (setq with (conn-insertion-recording-text)))))))))
+           (conn-state-unwind clone
+             (unless clone
+               (setq with (conn-insertion-recording-text))))))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg

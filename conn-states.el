@@ -819,8 +819,9 @@ that has just been exited.")
 
 (defun conn--run-exit-fns (type)
   (let ((fns conn--state-exit-functions))
-    (setq conn--state-exit-functions (list 'conn--state-exit-default)
-          conn--state-exit-functions-ids nil)
+    (unless (cl-typep type 'conn-stack-clone)
+      (setq conn--state-exit-functions (list 'conn--state-exit-default)
+            conn--state-exit-functions-ids nil))
     (funcall (car fns) type (cdr fns))))
 
 (defmacro conn-state-on-exit (transition &rest body)
@@ -863,21 +864,30 @@ is being entered after the current state has exited or nil if
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defmacro conn-state-unwind (&rest body)
-  (declare (indent 0))
+(defvar conn-state-unwind-clone nil)
+
+(defmacro conn-state-unwind (clone &rest body)
+  "Run BODY when the state stack is unwinding past the current point.
+
+If the stack is being unwound because the buffer has been cloned then
+CLONE will be non-nil, otherwise CLONE will nil."
+  (declare (indent 1))
+  (when (eql ?_ (string-to-char (symbol-name clone)))
+    (setq clone (gensym)))
   (cl-with-gensyms (rest)
-    `(push (lambda (,rest)
+    `(push (lambda (,clone ,rest)
              (unwind-protect
                  ,(macroexp-progn body)
-               (when ,rest (funcall (car ,rest) (cdr ,rest)))))
+               (when ,rest (funcall (car ,rest) ,clone (cdr ,rest)))))
            (gethash conn--state-stack
                     conn--state-unwind-functions))))
 
-(defun conn--run-state-unwind-functions ()
+(defun conn--run-state-unwind-functions (clone)
   (let ((fns (gethash conn--state-stack
                       conn--state-unwind-functions)))
-    (remhash conn--state-stack conn--state-unwind-functions)
-    (when fns (funcall (car fns) (cdr fns)))))
+    (unless clone
+      (remhash conn--state-stack conn--state-unwind-functions))
+    (when fns (funcall (car fns) clone (cdr fns)))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
@@ -991,8 +1001,8 @@ To execute code when a state is exiting use `conn-state-on-exit'."
      (conn-stack-transition conn-stack-push
        (push state conn--state-stack)))))
 
-(defun conn--pop-state-1 ()
-  (conn--run-state-unwind-functions)
+(defun conn--pop-state-1 (&optional clone)
+  (conn--run-state-unwind-functions clone)
   (pop conn--state-stack))
 
 (defun conn-pop-state ()
@@ -1446,19 +1456,28 @@ command was a prefix command.")
     (add-hook 'pre-redisplay-functions
               #'conn--update-record-insertion-region
               nil 'local)
-    (conn-state-unwind
+    (conn-state-unwind clone
       (remove-hook 'pre-redisplay-functions
                    #'conn--update-record-insertion-region
                    'local)
       (when conn--insertion-recording-change-group
-        (accept-change-group conn--insertion-recording-change-group)
-        (undo-amalgamate-change-group conn--insertion-recording-change-group)
+        (unless clone
+          (accept-change-group conn--insertion-recording-change-group)
+          (undo-amalgamate-change-group conn--insertion-recording-change-group))
         (setq conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
-        (setq conn-insertion-recording-last-insertion
-              (conn-insertion-recording-text)))
+        (unless clone
+          (setq conn-insertion-recording-last-insertion
+                (conn-insertion-recording-text)))
+        (setq conn-insertion-recording-other-end nil))
       (when (overlayp conn--insertion-recording-overlay)
-        (delete-overlay (cl-shiftf conn--insertion-recording-overlay nil))))))
+        (if clone
+            (without-restriction
+              (mapc #'delete-overlay
+                    (conn--overlays-in-of-type (point-min) (point-max)
+                                               'conn-recording-region)))
+          (delete-overlay conn--insertion-recording-overlay))
+        (setq conn--insertion-recording-overlay nil)))))
 
 (defun conn-insertion-recording-text ()
   (filter-buffer-substring
@@ -1512,8 +1531,9 @@ command was a prefix command.")
   (interactive)
   (if with (insert with)
     (conn-record-insertion)
-    (conn-state-unwind
-      (when conn-insertion-recording-other-end
+    (conn-state-unwind clone
+      (when (and (not clone)
+                 conn-insertion-recording-other-end)
         (conn-push-command-history
          'conn-emacs-state-record-insert
          (conn-insertion-recording-text))))))
@@ -1570,12 +1590,14 @@ command was a prefix command.")
   (unless (region-active-p)
     (activate-mark))
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
-  (conn-state-unwind
-    (when (use-region-p)
-      (conn-push-mark-state-ring
-       (list (point-marker)
-             (copy-marker (mark-marker))
-             conn--mark-state-rmm)))
+  (conn-state-unwind clone
+    (unless clone
+      (when (and (use-region-p)
+                 (not conn-state-unwind-clone))
+        (conn-push-mark-state-ring
+         (list (point-marker)
+               (copy-marker (mark-marker))
+               conn--mark-state-rmm))))
     (deactivate-mark)))
 
 ;;;;; Buffer State Setup

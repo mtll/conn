@@ -516,6 +516,7 @@ themselves once the selection process has concluded."
            collect (conn--setup-header-line-label
                     win (window-parameter win 'conn-label-string))))
 
+;; From ace-window
 (defun conn--dispatch-window-predicate (window &optional dedicated)
   (not (or ;; ignore child frames
         (and (fboundp 'frame-parent)
@@ -527,7 +528,6 @@ themselves once the selection process has concluded."
           (window-parameter window 'no-other-window))
         (and (null dedicated) (window-dedicated-p window)))))
 
-;; From ace-window
 (defun conn--get-windows (&optional window
                                     minibuffer
                                     all-frames
