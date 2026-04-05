@@ -2286,10 +2286,10 @@ the meaning of depth."
     ( :as argstr
       (concat (propertize prompt 'face 'minibuffer-prompt)
               " (" argstr ")"
-              (when suffix (concat ": " suffix " "))
+              (when suffix (concat ": " suffix))
               (when conn--read-args-error-message
-                (propertize conn--read-args-error-message
-                            'face 'error))))
+                (concat " " (propertize conn--read-args-error-message
+                                        'face 'error)))))
     (message "%s")))
 
 (defvar conn-dispatch-read-char-pre-functions nil)
@@ -2440,7 +2440,6 @@ the meaning of depth."
                                        conn-dispatch-input-buffer)))
      (propertize im 'face 'read-multiple-choice-face))
    "\\[help] help"
-   (conn-target-finder-message-prefixes conn-dispatch-target-finder)
    (when (conn-dispatch-other-end-p)
      (concat
       "\\[other-end] "
@@ -2970,39 +2969,47 @@ updated.")
         (conn-target-finder-suspend target-finder)))))
 
 (cl-defmethod conn-target-finder-select (target-finder)
-  (conn-with-dispatch-event-handlers
-    (:literal (conn-dispatch-select-handler))
-    (when executing-kbd-macro
-      (:handler
-       (:depth 50)
-       ( :predicate (cmd)
-         (or (eq cmd 'exit) (eq cmd 'skip)))
-       (:keymap (define-keymap
-                  "C-e" 'exit
-                  "RET" 'exit
-                  "<return>" 'exit
-                  "C-n" 'skip))
-       ( :update (cmd _break)
-         (pcase cmd
-           ('skip
-            (setq executing-kbd-macro "")
-            (throw 'dispatch-exit nil))
-           ('exit
-            (setq executing-kbd-macro t)
-            (throw 'dispatch-exit nil))))))
-    (let ((executing-kbd-macro nil)
-          (defining-kbd-macro nil))
-      (conn-with-dispatch-labels
-          (labels (conn-dispatch-get-labels))
-        (conn-label-select
-         labels
-         (lambda (prompt) (conn-dispatch-read-char prompt 'label))
-         (cl-loop for (_ . c) in conn-target-count
-                  sum c into count
-                  finally return (conn-target-finder-prompt-string
-                                  target-finder
-                                  (format "[%s]" count)))
-         (conn-dispatch-prompt-p))))))
+  (let ((after nil))
+    (conn-with-dispatch-labels
+        (labels (conn-dispatch-get-labels))
+      (prog1
+          (conn-with-dispatch-event-handlers
+            (:literal (conn-dispatch-select-handler))
+            (when executing-kbd-macro
+              (:handler
+               (:depth 50)
+               ( :display ()
+                 (list "\\[exit] exit macro"
+                       "\\[skip] skip iteration"))
+               ( :predicate (cmd)
+                 (or (eq cmd 'exit) (eq cmd 'skip)))
+               (:keymap (define-keymap
+                          "C-e" 'exit
+                          "RET" 'exit
+                          "<return>" 'exit
+                          "C-n" 'skip))
+               ( :update (cmd break)
+                 (pcase cmd
+                   ('skip
+                    (setq after (lambda () (setq executing-kbd-macro "")))
+                    (funcall break :return))
+                   ('exit
+                    (setq after (lambda () (setq executing-kbd-macro t)))
+                    (funcall break :return))))))
+            (let ((executing-kbd-macro nil)
+                  (defining-kbd-macro nil))
+              (conn-label-select
+               labels
+               (lambda (prompt) (conn-dispatch-read-char prompt 'label))
+               (cl-loop for (_ . c) in conn-target-count
+                        sum c into count
+                        finally return (conn-target-finder-prompt-string
+                                        target-finder
+                                        (format "[%s]" count)))
+               (conn-dispatch-prompt-p))))
+        (when after
+          (funcall after)
+          (throw 'dispatch-exit nil))))))
 
 (cl-defgeneric conn-get-target-finder (cmd arg)
   (declare (conn-anonymous-thing-property :target-finder)))
@@ -3108,19 +3115,11 @@ updated.")
            (important-return-value t))
   (:method (_) nil))
 
-(cl-defgeneric conn-target-finder-save-state (target-finder)
+(cl-defgeneric conn-target-finder-restore-state-functions (target-finder)
   "Return a list of functions to restore TARGET-FINDER\\='s state.
 
 Each function should take an uninitialized target finder of the same
 type and initialize it to contain the same state as TARGET-FINDER."
-  (declare (important-return-value t))
-  (:method (_) nil))
-
-(cl-defgeneric conn-target-finder-keymaps (target-finder)
-  (declare (important-return-value t))
-  ( :method (_) nil))
-
-(cl-defgeneric conn-target-finder-message-prefixes (target-finder)
   (declare (important-return-value t))
   (:method (_) nil))
 
@@ -3183,10 +3182,10 @@ to the key binding for that target."
      ( :keymap conn-dispatch-retargeting-argument-map)
      ( :display ()
        (list
-        (when (and (conn-dispatch-has-targets-p state)
+        (when (and (conn-target-finder-has-targets-p state)
                    (not conn--dispatch-always-retarget))
           "\\[retarget] retarget")
-        (when (and (conn-dispatch-has-targets-p state)
+        (when (and (conn-target-finder-has-targets-p state)
                    conn-dispatch-repeating)
           (concat
            "\\[always-retarget] "
@@ -3207,7 +3206,7 @@ to the key binding for that target."
           (funcall break :redisplay 'maybe-dont-prompt)))))
     (cl-call-next-method)))
 
-(cl-defgeneric conn-dispatch-has-targets-p (target-finder)
+(cl-defgeneric conn-target-finder-has-targets-p (target-finder)
   (declare (important-return-value t)))
 
 (conn-define-target-finder conn-dispatch-string-targets
@@ -3235,7 +3234,7 @@ to the key binding for that target."
       (concat str " " prompt)
     prompt))
 
-(cl-defmethod conn-target-finder-save-state ((target-finder conn-dispatch-string-targets))
+(cl-defmethod conn-target-finder-restore-state-functions ((target-finder conn-dispatch-string-targets))
   (cons (let ((str (oref target-finder string)))
           (lambda (tf) (setf (oref tf string) str)))
         (cl-call-next-method)))
@@ -3243,7 +3242,7 @@ to the key binding for that target."
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
 
-(cl-defmethod conn-dispatch-has-targets-p ((state conn-dispatch-string-targets))
+(cl-defmethod conn-target-finder-has-targets-p ((state conn-dispatch-string-targets))
   (and (oref state string) t))
 
 (defvar conn-dispatch-read-n-chars-any-char ?,)
@@ -4773,7 +4772,7 @@ it."))
                                (conn-dispatch-other-end-p)))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup-function
-                   (let ((fns (conn-target-finder-save-state
+                   (let ((fns (conn-target-finder-restore-state-functions
                                conn-dispatch-target-finder)))
                      (lambda ()
                        (dolist (fn fns)
