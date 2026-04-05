@@ -2991,7 +2991,8 @@ updated.")
         (labels (conn-dispatch-get-labels))
       (prog1
           (conn-with-dispatch-event-handlers
-            (:literal (conn-dispatch-select-handler))
+            ( :literal (conn-dispatch-select-handler)
+              :depth -95)
             (when executing-kbd-macro
               (:handler
                (:depth 50)
@@ -3167,7 +3168,8 @@ to the key binding for that target."
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-event-handlers
-      (:literal (conn-dispatch-select-handler))
+      ( :literal (conn-dispatch-select-handler)
+        :depth -95)
       (:handler
        (:depth 100)
        ( :update (obj break)
