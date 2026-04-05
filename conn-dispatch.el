@@ -641,8 +641,8 @@ themselves once the selection process has concluded."
       "?" 'help
       "C-g" 'keyboard-quit
       "C-w" 'restrict-windows
-      "RET" 'ignore
-      "<return>" 'ignore
+      "RET" 'undefined
+      "<return>" 'undefined
       "M-TAB" 'repeat-dispatch)))
 
 (cl-defstruct (conn-dispatch-thing-argument
@@ -716,7 +716,8 @@ themselves once the selection process has concluded."
                   (read-string "Separator (RET for default): " nil
                                'conn-separator-history nil t))))
          (if (equal s "") 'default s))))
-   :value initial-value))
+   :value initial-value
+   :documentation "Read a separator to be inserted each string."))
 
 (defvar-keymap conn-dispatch-replace-argument-map)
 
@@ -3345,7 +3346,7 @@ to the key binding for that target."
                (:keymap conn-dispatch-read-string-target-keymap)
                (:predicate (cmd) (eq cmd 'read-string))
                (:display () "\\[read-string] edit string")
-               ( :update (_cmd break)
+               ( :update (_cmd _break)
                  (let ((newstr (conn-with-dispatch-suspended
                                  (minibuffer-with-setup-hook
                                      (conn-dispatch-lazy-update
@@ -3358,7 +3359,7 @@ to the key binding for that target."
                                     'conn-read-string-target-history
                                     nil t)))))
                    (unless (equal newstr "")
-                     (setq string newstr)
+                     (setf string newstr)
                      (throw 'string-read nil)))))
               (setf string (char-to-string (conn-dispatch-read-char prompt t))))
             (while-no-input

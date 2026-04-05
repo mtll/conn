@@ -1917,7 +1917,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                            arglist
                            callback
                            &key
-                           command-loop
                            history-var
                            (history-len 1)
                            (command-handler (conn-read-args-command-handler))
@@ -1981,8 +1980,12 @@ This skips executing the body of the `conn-read-args' form entirely."
              (while (eq cmd 'execute-extended-command)
                (setq cmd (conn--read-args-completing-read arguments
                                                           partial-keymap)))
-             (if (eq cmd 'undefined)
-                 (read-command)
+             (if (or (eq cmd 'undefined)
+                     (null cmd))
+                 (progn
+                   (conn-read-args-error "%s is undefined"
+                                         (key-description keyseq))
+                   (read-command))
                cmd)))
          (set-error-message (cstr &rest args)
            (setf conn--read-args-error-message
@@ -2044,19 +2047,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                             ,@(when history-var
                                 `((,conn-current-state
                                    . ,conn-read-args-previous-map)))))
-               (if command-loop
-                   (funcall command-loop
-                            #'setup-keymaps
-                            #'continue-p
-                            #'read-command
-                            #'update-args
-                            #'display-message
-                            #'set-error-message)
-                 (while (continue-p)
-                   (catch 'conn-read-args-error
-                     (setup-keymaps)
-                     (display-message)
-                     (execute-command (read-command)))))
+               (while (continue-p)
+                 (catch 'conn-read-args-error
+                   (setup-keymaps)
+                   (display-message)
+                   (execute-command (read-command))))
                (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
        (catch 'conn-read-args-return
@@ -2146,14 +2141,7 @@ echo area help message.
                        (list ,@(mapcar #'cadr varlist))
                        (pcase-lambda ,(mapcar #'car varlist) ,@body)
                        ,@keys)))
-    (if (and (plist-get keys :command-loop)
-             (or (plist-get keys :pre)
-                 (plist-get keys :post)
-                 (plist-get keys :around)))
-        (macroexp-warn-and-return
-         ":pre, :post and :command-handler are ignored when :command-loop present"
-         form nil nil state)
-      form)))
+    form))
 
 ;;;;; Argument Types
 
