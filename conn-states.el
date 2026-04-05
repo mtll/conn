@@ -1936,7 +1936,8 @@ This skips executing the body of the `conn-read-args' form entirely."
         (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
-        (maps nil))
+        (maps nil)
+        (keyseq nil))
     (cl-labels
         ((continue-p ()
            (cl-loop for arg in arguments
@@ -1962,7 +1963,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (conn-argument-update a cmd (lambda () (setq break t)))
                  (when break (throw 'break t))))))
          (read-command ()
-           (let (partial-keymap keyseq cmd)
+           (let (partial-keymap cmd)
              (setq keyseq (let ((inhibit-quit t))
                             (read-key-sequence-vector nil))
                    cmd (key-binding keyseq t))
@@ -2017,7 +2018,9 @@ This skips executing the body of the `conn-read-args' form entirely."
               (conn--read-args-describe-symbol arguments))
              ((pred identity)
               (or (update-args cmd)
-                  (set-error-message "Invalid Command <%s>" cmd))))
+                  (set-error-message "Invalid command: %s <%s>"
+                                     cmd
+                                     (key-description keyseq)))))
            (when post (funcall post cmd)))
          (setup-keymaps ()
            (setf (cdar maps)
