@@ -41,14 +41,6 @@
   :group 'conn-consult
   :type 'symbol)
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql consult-line)))
-  (let ((inhibit-message nil))
-    (consult-line)))
-
-(cl-defmethod conn-dispatch-common-commands ((_command (eql consult-imenu)))
-  (let ((inhibit-message nil))
-    (consult-imenu)))
-
 (defun conn--consult-jump-advice (&rest _)
   (conn-push-jump-ring (mark-marker)))
 
@@ -261,6 +253,46 @@
           ((or :next :record)
            (unless curr-file (next))
            (conn-kapply-consume-region (pop curr-file))))))))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql conn-consult-line-thing)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (call-interactively #'conn-consult-line-thing))
+    (funcall break :redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql conn-consult-ripgrep-thing)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (call-interactively #'conn-consult-ripgrep-thing))
+    (funcall break :redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql consult-ripgrep)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (call-interactively #'consult-ripgrep))
+    (funcall break :redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql consult-line)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (call-interactively #'consult-line))
+    (funcall break :redisplay)))
+
+(conn-define-argument-command ((arg conn-dispatch-select-handler)
+                               (cmd (eql consult-imenu)))
+  "Invert the prefix argument."
+  ( :update (break)
+    (conn-with-dispatch-suspended
+      (call-interactively #'consult-imenu))
+    (funcall break :redisplay)))
 
 (provide 'conn-consult)
 
