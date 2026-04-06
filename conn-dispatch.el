@@ -233,21 +233,6 @@ strings have `conn-dispatch-label-face'."
                   (keymap conn-dispatch-char-argument-map))))
   (input-method nil :read-only t))
 
-(defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
-  (with-current-buffer conn-dispatch-input-buffer
-    (pcase use-input-method
-      ((or 't 'nil)
-       (let ((inhibit-quit t))
-         (read-event nil use-input-method seconds)))
-      (im
-       (let ((pim current-input-method))
-         (unwind-protect
-             (progn
-               (activate-input-method im)
-               (let ((inhibit-quit t))
-                 (read-event nil t seconds)))
-           (activate-input-method pim)))))))
-
 (conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql dispatch-character-event)))
   "Narrow labels by character."
@@ -1831,7 +1816,8 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-pixelwise-label-p (ov)
   (declare (important-return-value t))
-  (and (with-memoization
+  (and (display-graphic-p)
+       (with-memoization
            (gethash (overlay-get ov 'window) conn--pixelwise-window-cache)
          (funcall conn-pixelwise-labels-window-predicate
                   (overlay-get ov 'window)))
@@ -2258,6 +2244,21 @@ the meaning of depth."
                 (concat " " (propertize conn--read-args-error-message
                                         'face 'error)))))
     (message "%s")))
+
+(defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
+  (with-current-buffer conn-dispatch-input-buffer
+    (pcase use-input-method
+      ((or 't 'nil)
+       (let ((inhibit-quit t))
+         (read-event nil use-input-method seconds)))
+      (im
+       (let ((pim current-input-method))
+         (unwind-protect
+             (progn
+               (activate-input-method im)
+               (let ((inhibit-quit t))
+                 (read-event nil t seconds)))
+           (activate-input-method pim)))))))
 
 (defvar conn-dispatch-read-char-pre-functions nil)
 

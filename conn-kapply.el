@@ -1800,31 +1800,63 @@ finishing showing the buffers that were visited."))
                             regexp-flag
                             delimited)))
 
-(defun conn-kapply-on-things (thing arg transform)
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
-       ((`(,thing ,arg)
-         (conn-thing-argument t (use-region-p)))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
+(conn-define-state conn-kapply-on-things-state (conn-read-thing-state))
+
+(cl-defmethod conn-kapply-on-things-do (thing arg transform)
   (let ((rmm (bound-and-true-p rectangle-mark-mode))
         (all-empty t))
     (pcase (conn-bounds-of thing arg)
       ((and bounds (conn-bounds-get :subregions transform))
        (when conn-mark-state (conn-pop-state))
        (deactivate-mark)
-       (conn-kapply-on-iterator
-        (conn-kapply-region-iterator
-         (cl-loop for b in (or subregions (list bounds))
-                  for (beg . end) = (conn-bounds b)
-                  when (< beg end) do (setq all-empty nil)
-                  collect (conn-kapply-make-region beg end)))
-        :empty (and rmm (not all-empty)))
+       (conn-protected-let*
+           ((regions (cl-loop for b in (or subregions (list bounds))
+                              for (beg . end) = (conn-bounds b)
+                              when (< beg end) do (setq all-empty nil)
+                              collect (save-excursion
+                                        (goto-char beg)
+                                        (conn-kapply-make-region beg (1+ beg))))
+                     (mapc #'delete-overlay regions)))
+         (conn-kapply-on-iterator
+          (conn-kapply-region-iterator
+           regions)
+          :empty (and rmm (not all-empty))))
        (conn-push-command-history 'conn-kapply-on-things
                                   thing
                                   arg
                                   transform)))))
+
+(cl-defmethod conn-kapply-on-things-do ((thing (conn-thing line-column))
+                                        arg
+                                        transform)
+  (let ((all-empty t))
+    (pcase (conn-bounds-of thing arg)
+      ((and bounds (conn-bounds-get :subregions transform))
+       (conn-protected-let*
+           ((regions (cl-loop for b in (or subregions (list bounds))
+                              for (beg . end) = (conn-bounds b)
+                              when (< beg end) do (setq all-empty nil)
+                              collect (save-excursion
+                                        (goto-char beg)
+                                        (conn-kapply-make-region beg (1+ beg))))
+                     (mapc #'delete-overlay regions)))
+         (conn-kapply-on-iterator
+          (conn-kapply-region-iterator regions)
+          :empty (not all-empty)))
+       (conn-push-command-history 'conn-kapply-on-things
+                                  thing
+                                  arg
+                                  transform)))))
+
+(defun conn-kapply-on-things (thing arg transform)
+  (interactive
+   (conn-read-args (conn-kapply-on-things-state
+                    :prompt "On Things")
+       ((`(,thing ,arg)
+         (conn-thing-argument t (use-region-p)))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-kapply-on-things-do thing arg transform))
 
 (defun conn-kapply-count-iterator (&optional count)
   (interactive "P")

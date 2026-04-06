@@ -181,6 +181,8 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "e" 'previous-line
+  "d" 'next-line
   "," conn-thing-inner-remap
   "l" 'forward-line
   ")" 'forward-list
