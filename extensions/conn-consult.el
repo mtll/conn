@@ -254,7 +254,7 @@
            (unless curr-file (next))
            (conn-kapply-consume-region (pop curr-file))))))))
 
-(conn-define-argument-command ((arg conn-dispatch-select-handler)
+(conn-define-argument-command ((arg conn-dispatch-select-command-handler)
                                (cmd (eql conn-consult-line-thing)))
   "Invert the prefix argument."
   ( :update (break)
@@ -262,7 +262,7 @@
       (call-interactively #'conn-consult-line-thing))
     (funcall break :redisplay)))
 
-(conn-define-argument-command ((arg conn-dispatch-select-handler)
+(conn-define-argument-command ((arg conn-dispatch-select-command-handler)
                                (cmd (eql conn-consult-ripgrep-thing)))
   "Invert the prefix argument."
   ( :update (break)
@@ -270,7 +270,7 @@
       (call-interactively #'conn-consult-ripgrep-thing))
     (funcall break :redisplay)))
 
-(conn-define-argument-command ((arg conn-dispatch-select-handler)
+(conn-define-argument-command ((arg conn-dispatch-select-command-handler)
                                (cmd (eql consult-ripgrep)))
   "Invert the prefix argument."
   ( :update (break)
@@ -278,7 +278,7 @@
       (call-interactively #'consult-ripgrep))
     (funcall break :redisplay)))
 
-(conn-define-argument-command ((arg conn-dispatch-select-handler)
+(conn-define-argument-command ((arg conn-dispatch-select-command-handler)
                                (cmd (eql consult-line)))
   "Invert the prefix argument."
   ( :update (break)
@@ -286,7 +286,7 @@
       (call-interactively #'consult-line))
     (funcall break :redisplay)))
 
-(conn-define-argument-command ((arg conn-dispatch-select-handler)
+(conn-define-argument-command ((arg conn-dispatch-select-command-handler)
                                (cmd (eql consult-imenu)))
   "Invert the prefix argument."
   ( :update (break)

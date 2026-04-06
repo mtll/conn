@@ -204,7 +204,7 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-event-handlers
-    (:with (conn-dispatch-select-handler))
+    (:with (conn-dispatch-select-command-handler))
     (:handler
      (:keymap conn-dispatch-toggle-focus-map)
      ( :predicate (cmd) (eq cmd 'toggle-focus))

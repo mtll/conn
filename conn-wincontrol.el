@@ -439,7 +439,10 @@
         (select-window (nth idx windows))
         (set-transient-map
          map t
-         (lambda () (mapc #'window-bump-use-time (nreverse windows)))
+         (lambda ()
+           (cl-loop for win in (nreverse windows)
+                    when (window-live-p win)
+                    do (window-bump-use-time win)))
          (format "Repeat with %s"
                  (propertize (key-description key)
                              'face 'read-multiple-choice-face)))))))
