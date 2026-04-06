@@ -588,8 +588,8 @@ themselves once the selection process has concluded."
   (pcase binder
     (`(,var ,val)
      `(conn-with-dispatch-input-buffer
-        (let ((conn-dispatch-label-input-method nil)
-              (,var ,val))
+        (let* ((conn-dispatch-label-input-method nil)
+               (,var ,val))
           (unwind-protect
               ,(macroexp-progn body)
             (mapc #'conn-label-delete ,var)))))
@@ -1942,44 +1942,44 @@ Target overlays may override this default by setting the
 (defun conn--with-dispatch-labels (labels body)
   (conn-cleanup-labels)
   (clrhash conn--dispatch-window-lines-cache)
-  (let ((conn-dispatch-label-input-method nil))
-    (unwind-protect
-        (conn-with-dispatch-handlers
-          (:handler
-           (:predicate (cmd) (eq cmd 'toggle-labels))
-           (:keymap conn-toggle-label-argument-map)
-           ( :display ()
-             (concat
-              "\\[toggle-labels] "
-              (propertize
-               "hide labels"
-               'face (when conn-dispatch-hide-labels
-                       'eldoc-highlight-function-argument))))
-           ( :update (_cmd break)
-             (cl-callf not conn-dispatch-hide-labels)
-             (while-no-input
-               (mapc #'conn-label-redisplay labels))
-             (funcall break)))
-          (let ((fn (make-symbol "cleanup")))
-            (fset fn (lambda (&rest _)
-                       (unwind-protect
-                           (mapc #'conn-label-delete labels)
-                         (setq conn--previous-labels-cleanup nil)
-                         (remove-hook 'pre-redisplay-functions fn))))
-            (setq conn--previous-labels-cleanup fn))
-          ;; ensure the cache gets populated
-          (ignore (conn--dispatch-window-lines))
-          (funcall body labels))
-      (clrhash conn--pixelwise-window-cache)
-      (when conn--previous-labels-cleanup
-        (add-hook 'pre-redisplay-functions
-                  conn--previous-labels-cleanup)))))
+  (unwind-protect
+      (conn-with-dispatch-handlers
+        (:handler
+         (:predicate (cmd) (eq cmd 'toggle-labels))
+         (:keymap conn-toggle-label-argument-map)
+         ( :display ()
+           (concat
+            "\\[toggle-labels] "
+            (propertize
+             "hide labels"
+             'face (when conn-dispatch-hide-labels
+                     'eldoc-highlight-function-argument))))
+         ( :update (_cmd break)
+           (cl-callf not conn-dispatch-hide-labels)
+           (while-no-input
+             (mapc #'conn-label-redisplay labels))
+           (funcall break)))
+        (let ((fn (make-symbol "cleanup")))
+          (fset fn (lambda (&rest _)
+                     (unwind-protect
+                         (mapc #'conn-label-delete labels)
+                       (setq conn--previous-labels-cleanup nil)
+                       (remove-hook 'pre-redisplay-functions fn))))
+          (setq conn--previous-labels-cleanup fn))
+        ;; ensure the cache gets populated
+        (ignore (conn--dispatch-window-lines))
+        (funcall body labels))
+    (clrhash conn--pixelwise-window-cache)
+    (when conn--previous-labels-cleanup
+      (add-hook 'pre-redisplay-functions
+                conn--previous-labels-cleanup))))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(conn--with-dispatch-labels ,val (lambda (,var) ,@body)))
+     `(let ((conn-dispatch-label-input-method nil))
+        (conn--with-dispatch-labels ,val (lambda (,var) ,@body))))
     (_ (error "Unexpected binder form"))))
 
 ;;;;; Dispatch Loop
@@ -3254,15 +3254,15 @@ to the key binding for that target."
                    ('quote
                     (setf quote-flag t)
                     (:return)))))
-              (let ((char (conn-dispatch-read-char prompt t nil
-                                                   (oref state string))))
-                (if (and (eql char conn-dispatch-read-n-chars-any-char)
-                         (not quote-flag))
-                    (cl-callf concat (oref state string)
-                      conn-dispatch-read-n-chars-any-re)
-                  (cl-callf concat (oref state string)
-                    (regexp-quote (char-to-string char)))
-                  (setf trivial nil)))
+              (let ((char (conn-dispatch-read-char
+                           prompt t nil
+                           (oref state string))))
+                (cl-callf concat (oref state string)
+                  (if (and (eql char conn-dispatch-read-n-chars-any-char)
+                           (not quote-flag))
+                      conn-dispatch-read-n-chars-any-re
+                    (setq trivial nil)
+                    (regexp-quote (char-to-string char)))))
               (cl-incf char-count)
               (setf quote-flag nil)))
           (conn-cleanup-targets))
