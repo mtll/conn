@@ -4252,7 +4252,7 @@ Only available during repeating duplicate."
                (funcall exit-fn)
                (activate-mark)
                (rectangle-mark-mode 1)
-               (conn-kapply-on-things 'region nil nil))
+               (conn-kapply-on-things-do 'region nil nil))
              (pred ()
                (pcase this-command
                  ((or 'recenter-top-bottom 'reposition-window

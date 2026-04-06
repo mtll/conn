@@ -1688,13 +1688,18 @@ finishing showing the buffers that were visited."))
                                    query
                                    empty
                                    ibuffer
-                                   (excursions t)
+                                   excursions
                                    (restrictions t)
-                                   (windows t))
+                                   (windows t)
+                                   applier)
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
                    :command-handler (conn-kapply-command-handler)
-                   :display-handler (conn-read-args-display-columns 3 3))
+                   :display-handler (conn-read-args-display-columns 3 3)
+                   :pre (lambda (_)
+                          (when (and (bound-and-true-p conn-posframe-mode)
+                                     (fboundp 'posframe-hide))
+                            (posframe-hide " *conn-list-posframe*"))))
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
@@ -1710,14 +1715,25 @@ finishing showing the buffers that were visited."))
                           (conn-kapply-window-conf-argument windows)
                           (conn-kapply-undo-argument))
                     (ensure-list extra)))))
-       (applier (conn-kapply-macro-argument)))
-    (conn-kapply-macro
-     applier
-     iterator
-     `(conn-kapply-relocate-to-region
-       conn-kapply-open-invisible
-       conn-kapply-pulse-region
-       ,@pipeline))))
+       (app (or applier (conn-kapply-macro-argument))))
+    (conn-kapply-macro app
+                       iterator
+                       `(conn-kapply-relocate-to-region
+                         conn-kapply-open-invisible
+                         conn-kapply-pulse-region
+                         ,@pipeline))
+    (list :pipeline pipeline
+          :extra extra
+          :other-end other-end
+          :query query
+          :empty empty
+          :ibuffer ibuffer
+          :excursions excursions
+          :restrictions restrictions
+          :windows windows
+          :applier (or applier
+                       (let ((macro (kmacro-ring-head)))
+                         (lambda (it) (conn-kmacro-apply it nil macro)))))))
 
 (defvar conn-kapply-matches-special-ref
   (append
@@ -1802,7 +1818,7 @@ finishing showing the buffers that were visited."))
 
 (conn-define-state conn-kapply-on-things-state (conn-read-thing-state))
 
-(cl-defmethod conn-kapply-on-things-do (thing arg transform)
+(cl-defmethod conn-kapply-on-things-do (thing arg transform &optional pipeline)
   (let ((rmm (bound-and-true-p rectangle-mark-mode))
         (all-empty t))
     (pcase (conn-bounds-of thing arg)
@@ -1815,20 +1831,23 @@ finishing showing the buffers that were visited."))
                               when (< beg end) do (setq all-empty nil)
                               collect (save-excursion
                                         (goto-char beg)
-                                        (conn-kapply-make-region beg (1+ beg))))
+                                        (conn-kapply-make-region beg end)))
                      (mapc #'delete-overlay regions)))
-         (conn-kapply-on-iterator
-          (conn-kapply-region-iterator
-           regions)
-          :empty (and rmm (not all-empty))))
-       (conn-push-command-history 'conn-kapply-on-things
+         (setq pipeline (apply #'conn-kapply-on-iterator
+                               (conn-kapply-region-iterator regions)
+                               :empty (and rmm (not all-empty))
+                               pipeline)))
+       (conn-push-command-history 'conn-kapply-on-things-do
                                   thing
                                   arg
-                                  transform)))))
+                                  transform
+                                  pipeline)))))
 
 (cl-defmethod conn-kapply-on-things-do ((thing (conn-thing line-column))
                                         arg
-                                        transform)
+                                        transform
+                                        &optional
+                                        pipeline)
   (let ((all-empty t))
     (pcase (conn-bounds-of thing arg)
       ((and bounds (conn-bounds-get :subregions transform))
@@ -1840,23 +1859,32 @@ finishing showing the buffers that were visited."))
                                         (goto-char beg)
                                         (conn-kapply-make-region beg (1+ beg))))
                      (mapc #'delete-overlay regions)))
-         (conn-kapply-on-iterator
-          (conn-kapply-region-iterator regions)
-          :empty (not all-empty)))
-       (conn-push-command-history 'conn-kapply-on-things
+         (setq pipeline (apply #'conn-kapply-on-iterator
+                               (conn-kapply-region-iterator regions)
+                               :empty (not all-empty)
+                               pipeline)))
+       (conn-push-command-history 'conn-kapply-on-things-do
                                   thing
                                   arg
-                                  transform)))))
+                                  transform
+                                  pipeline)))))
 
-(defun conn-kapply-on-things (thing arg transform)
-  (interactive
-   (conn-read-args (conn-kapply-on-things-state
-                    :prompt "On Things")
-       ((`(,thing ,arg)
-         (conn-thing-argument t (use-region-p)))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (conn-kapply-on-things-do thing arg transform))
+(defun conn-kapply-on-things ()
+  (interactive)
+  (let ((prev (cl-loop for item in conn-command-history
+                       thereis (and (eq (car item) 'conn-kapply-on-things-do)
+                                    (nth 4 item)))))
+    (conn-read-args (conn-kapply-on-things-state
+                     :prompt "On Things")
+        ((`(,thing ,arg)
+          (conn-thing-argument nil (use-region-p)))
+         (transform (conn-transform-argument))
+         (repeat (when prev
+                   (conn-boolean-argument
+                    "repeat"
+                    'conn-repeat
+                    (define-keymap "r" 'conn-repeat)))))
+      (conn-kapply-on-things-do thing arg transform (and repeat prev)))))
 
 (defun conn-kapply-count-iterator (&optional count)
   (interactive "P")

@@ -184,7 +184,8 @@
   "e" 'previous-line
   "d" 'next-line
   "," conn-thing-inner-remap
-  "l" 'forward-line
+  "k" 'forward-line
+  "i" 'conn-backward-line
   ")" 'forward-list
   "SPC" 'forward-whitespace
   "v" 'conn-forward-visual-line
@@ -664,6 +665,11 @@
   "e" 'record
   "+" 'kmacro-set-counter
   "f" 'kmacro-set-format)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-kapply-on-things-state)
+  "i" 'previous-line
+  "k" 'next-line)
 
 (define-keymap
   :keymap conn-kapply-state-argument-map
