@@ -1352,7 +1352,7 @@ Currently selected window remains selected afterwards."
                  (or read-from-kill-ring
                      (current-kill 0)))))
       (cl-assert (stringp str))
-      (conn-with-dispatch-event-handlers
+      (conn-with-dispatch-handlers
         (:handler
          ( :keymap conn-dispatch-stay-map)
          ( :predicate (cmd) (eq cmd 'stay))
@@ -3208,7 +3208,7 @@ hook, which see."
                                    :documentation conn-stay-argument-documentation))
            (`(,dtform ,reformat)
             (conn-dispatch-transform-and-fixup-argument reformat)))
-        (conn-with-dispatch-event-handlers
+        (conn-with-dispatch-handlers
           (:handler
            (:predicate (cmd) (eq cmd 'append))
            ( :keymap conn-kill-dispatch-append-map)
@@ -3310,7 +3310,7 @@ hook, which see."
                                   separator
                                   reformat
                                   check-bounds)
-  (conn-with-dispatch-event-handlers
+  (conn-with-dispatch-handlers
     (:handler
      (:predicate (cmd) (eq cmd 'append))
      ( :keymap conn-kill-dispatch-append-map)
@@ -3704,7 +3704,7 @@ that place."
                                'restrict-windows
                                conn-restrict-windows-argument-map
                                :documentation conn-this-win-argument-documentation)))
-    (conn-with-dispatch-event-handlers
+    (conn-with-dispatch-handlers
       (:handler
        (:predicate (cmd) (eq cmd 'other-end))
        ( :update (_cmd break)
@@ -4527,7 +4527,7 @@ Interactively REPEAT is given by the prefix argument."
                                conn-stay-argument-map
                                :value t
                                :documentation conn-stay-argument-documentation)))
-    (conn-with-dispatch-event-handlers
+    (conn-with-dispatch-handlers
       (:handler
        (:predicate (cmd) (eq cmd 'stay))
        ( :keymap conn-dispatch-stay-map)

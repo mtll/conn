@@ -183,7 +183,7 @@ strings have `conn-dispatch-label-face'."
 
 ;;;;;; Event Handlers
 
-(defvar conn-dispatch-event-argument-map
+(defvar conn-dispatch-char-argument-map
   (let ((map (make-keymap)))
     (set-char-table-range (nth 1 map)
                           (cons #x100 (max-char))
@@ -199,18 +199,18 @@ strings have `conn-dispatch-label-face'."
 
 (defvar conn--dispatch-read-char-handlers nil)
 
-(cl-defstruct (conn-dispatch-event-argument
+(cl-defstruct (conn-dispatch-char-argument
                (:include conn-argument)
-               ( :constructor conn-dispatch-event-argument
+               ( :constructor conn-dispatch-char-argument
                  (event-reader
                   &key
                   (reference conn-dispatch-command-reference)
                   &aux
                   (required t)
-                  (keymap conn-dispatch-event-argument-map))))
+                  (keymap conn-dispatch-char-argument-map))))
   (event-reader #'ignore :read-only t :type function))
 
-(conn-define-argument-command ((arg conn-dispatch-event-argument)
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql dispatch-character-event)))
   "Narrow labels by character."
   (:predicate)
@@ -219,11 +219,11 @@ strings have `conn-dispatch-label-face'."
           conn--dispatch-must-prompt nil)
     (conn-add-unread-events (this-single-command-raw-keys))
     (setf (conn-argument-value arg)
-          (funcall (conn-dispatch-event-argument-event-reader arg))
+          (funcall (conn-dispatch-char-argument-event-reader arg))
           (conn-argument-set-flag arg) t)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-dispatch-event-argument)
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql quoted-insert)))
   "Narrow labels by character."
   ( :update (break)
@@ -235,7 +235,7 @@ strings have `conn-dispatch-label-face'."
               (conn-argument-set-flag arg) t)))
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-dispatch-event-argument)
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql restart)))
   "Narrow labels by character."
   ( :update (break)
@@ -243,9 +243,9 @@ strings have `conn-dispatch-label-face'."
           (conn-argument-set-flag arg) t)
     (funcall break)))
 
-(cl-defstruct (conn-dispatch-event-handler
+(cl-defstruct (conn-dispatch-read-char-handler
                (:include conn-argument)
-               ( :constructor conn-dispatch-event-handler
+               ( :constructor conn-dispatch-read-char-handler
                  (update
                   predicate
                   &key
@@ -259,54 +259,39 @@ strings have `conn-dispatch-label-face'."
   (documentation #'ignore :type function :read-only t)
   (display #'ignore :type function :read-only t))
 
-(cl-defmethod conn-argument-update ((handler conn-dispatch-event-handler)
+(cl-defmethod conn-argument-update ((handler conn-dispatch-read-char-handler)
                                     cmd
                                     break)
-  (when (funcall (conn-dispatch-event-handler-predicate handler) cmd)
-    (funcall (conn-dispatch-event-handler-update handler)
-             cmd
-             (lambda (&rest how)
-               (pcase how
-                 ('nil (funcall break))
-                 ((or `(:redisplay)
-                      `(:redisplay ,maybe-dont-prompt))
-                  (redisplay)
-                  (unless maybe-dont-prompt
-                    (setq conn--dispatch-must-prompt t))
-                  (throw 'dispatch-redisplay nil))
-                 ((or `(:return ,value)
-                      `(:return))
-                  (throw (cdr (alist-get handler conn--dispatch-read-char-handlers))
-                         value))
-                 (_ (error "Invalid break form")))))))
+  (when (funcall (conn-dispatch-read-char-handler-predicate handler) cmd)
+    (funcall (conn-dispatch-read-char-handler-update handler) cmd break)))
 
-(cl-defmethod conn-argument-display ((arg conn-dispatch-event-handler))
-  (funcall (conn-dispatch-event-handler-display arg)))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-read-char-handler))
+  (funcall (conn-dispatch-read-char-handler-display arg)))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-event-handler))
-  (conn-dispatch-event-handler-keymap arg))
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-read-char-handler))
+  (conn-dispatch-read-char-handler-keymap arg))
 
-(cl-defmethod conn-argument-predicate ((arg conn-dispatch-event-handler)
+(cl-defmethod conn-argument-predicate ((arg conn-dispatch-read-char-handler)
                                        cmd)
-  (funcall (conn-dispatch-event-handler-predicate arg) cmd))
+  (funcall (conn-dispatch-read-char-handler-predicate arg) cmd))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-event-handler)
+(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-read-char-handler)
                                                    value)
-  (when-let* ((ann (conn-dispatch-event-handler-annotation arg))
-              (_ (funcall (conn-dispatch-event-handler-predicate arg) value)))
+  (when-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
+              (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
     (funcall ann value)))
 
-(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-event-handler))
-  (conn-dispatch-event-handler-reference arg))
+(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-read-char-handler))
+  (conn-dispatch-read-char-handler-reference arg))
 
-(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-event-handler)
+(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
                                                    cmd)
-  (when (funcall (conn-dispatch-event-handler-predicate arg) cmd)
-    (funcall (conn-dispatch-event-handler-documentation arg) cmd)))
+  (when (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
+    (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
 
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
-    `(push (cons (conn-dispatch-event-handler
+    `(push (cons (conn-dispatch-read-char-handler
                   ,(if-let* ((v (alist-get :update body)))
                        `(lambda ,@v)
                      '#'ignore)
@@ -327,7 +312,7 @@ strings have `conn-dispatch-label-face'."
                  (cons ,(or (car (alist-get :depth body)) 0) ',tag))
            conn--dispatch-read-char-handlers)))
 
-(defmacro conn-with-dispatch-event-handlers (&rest body)
+(defmacro conn-with-dispatch-handlers (&rest body)
   (declare (indent 0))
   (cl-with-gensyms (tag)
     (macroexpand-all
@@ -584,7 +569,7 @@ themselves once the selection process has concluded."
   (when windows
     (conn-with-window-labels
         (labels (funcall conn-window-label-function windows))
-      (conn-with-dispatch-event-handlers
+      (conn-with-dispatch-handlers
         (:handler
          ( :predicate (cmd)
            (or (eq cmd 'act)
@@ -890,7 +875,7 @@ themselves once the selection process has concluded."
               (conn-reference-page
                 (:eval
                  (substitute-command-keys
-                  "\\<conn-dispatch-event-argument-map>Perform the next dispatch in a loop.
+                  "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
 Complete the loop with \\[finish].
 Abort the loop and undo all changes with \\[keyboard-quit].")))))
     ((and (guard (function-get cmd :conn-dispatch-action)))
@@ -1927,7 +1912,7 @@ Target overlays may override this default by setting the
   (clrhash conn--dispatch-window-lines-cache)
   (let ((conn-dispatch-label-input-method nil))
     (unwind-protect
-        (conn-with-dispatch-event-handlers
+        (conn-with-dispatch-handlers
           (:handler
            (:predicate (cmd) (eq cmd 'toggle-labels))
            (:keymap conn-toggle-label-argument-map)
@@ -2052,7 +2037,7 @@ depths will be sorted before greater depths.
         (catch 'dispatch-exit
           (while (or repeat (< conn-dispatch-iteration-count 1))
             (condition-case err
-                (conn-with-dispatch-event-handlers
+                (conn-with-dispatch-handlers
                   (when (conn-action-repeatable-p action)
                     (:handler
                      ( :predicate (cmd) (eq cmd 'repeat-dispatch))
@@ -2276,7 +2261,7 @@ the meaning of depth."
                                   (run-hook-with-args
                                    'conn-dispatch-read-char-pre-functions
                                    cmd)))
-          ((char (conn-dispatch-event-argument
+          ((char (conn-dispatch-char-argument
                   (lambda ()
                     (let ((ev (read-ev)))
                       (if (eql ev (car (last (current-input-mode))))
@@ -2966,7 +2951,7 @@ updated.")
     (conn-with-dispatch-labels
         (labels (conn-dispatch-get-labels))
       (prog1
-          (conn-with-dispatch-event-handlers
+          (conn-with-dispatch-handlers
             ( :with (conn-dispatch-select-command-handler)
               :depth -95)
             (when executing-kbd-macro
@@ -3130,7 +3115,7 @@ to the key binding for that target."
                                           conn-dispatch-target-key-labels-mixin))
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
-    (conn-with-dispatch-event-handlers
+    (conn-with-dispatch-handlers
       ( :with (conn-dispatch-select-command-handler)
         :depth -95)
       (:handler
@@ -3159,7 +3144,7 @@ to the key binding for that target."
   "M-r" 'retarget)
 
 (cl-defmethod conn-target-finder-select ((_state conn-dispatch-retargetable-mixin))
-  (conn-with-dispatch-event-handlers
+  (conn-with-dispatch-handlers
     (:handler
      ( :keymap conn-dispatch-retargeting-argument-map)
      ( :display ()
@@ -3237,7 +3222,7 @@ to the key binding for that target."
             (while-no-input
               (conn-dispatch-call-update-handlers state)))
           (catch 'dispatch-redisplay
-            (conn-with-dispatch-event-handlers
+            (conn-with-dispatch-handlers
               (:handler
                (:predicate (cmd) (memq cmd '(backspace quote)))
                (:keymap (define-keymap
@@ -3309,7 +3294,7 @@ to the key binding for that target."
       (catch 'string-read
         (let ((timeout (oref state timeout))
               (prompt (propertize "String" 'face 'minibuffer-prompt)))
-          (conn-with-dispatch-event-handlers
+          (conn-with-dispatch-handlers
             (:handler
              (:keymap conn-dispatch-read-string-target-keymap)
              (:predicate (cmd) (eq cmd 'read-string))
@@ -4900,7 +4885,7 @@ it."))
           (list t)))
        (conn-dispatch-other-end (lambda () (and other-end t)))
        (conn-dispatch-target-finder nil))
-    (conn-with-dispatch-event-handlers
+    (conn-with-dispatch-handlers
       (:handler
        (:depth -99)
        ( :display ()

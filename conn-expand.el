@@ -203,7 +203,7 @@ Expansions and contractions are provided by functions in
       :initform (lambda (win) (eq win (selected-window))))))
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
-  (conn-with-dispatch-event-handlers
+  (conn-with-dispatch-handlers
     (:with (conn-dispatch-select-command-handler))
     (:handler
      (:keymap conn-dispatch-toggle-focus-map)
