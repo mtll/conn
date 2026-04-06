@@ -1882,7 +1882,7 @@ The duration of the message display is controlled by
 (defun conn--read-args-describe-key (arguments message-function)
   (funcall message-function "Key Sequence...")
   (let ((cmd (key-binding (let ((inhibit-quit t))
-                            (read-key-sequence-vector nil))
+                            (read-key-sequence nil))
                           t)))
     (while (arrayp cmd) ; keyboard macro
       (setq cmd (key-binding cmd t)))
@@ -1963,9 +1963,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (conn-argument-update a cmd (lambda () (setq break t)))
                  (when break (throw 'break t))))))
          (read-command ()
-           (let (partial-keymap cmd)
+           (let (partial-keymap cmd reading)
              (setq keyseq (let ((inhibit-quit t))
-                            (read-key-sequence-vector nil))
+                            (read-key-sequence nil))
                    cmd (key-binding keyseq t))
              (while (arrayp cmd) ; keyboard macro
                (setq cmd (key-binding cmd t)))
@@ -1980,11 +1980,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (autoload-do-load (symbol-function cmd))))
              (while (eq cmd 'execute-extended-command)
                (setq cmd (conn--read-args-completing-read arguments
-                                                          partial-keymap)))
+                                                          partial-keymap)
+                     reading t))
              (if (or (eq cmd 'undefined)
                      (null cmd))
                  (progn
-                   (conn-read-args-error "%s is undefined"
+                   (conn-read-args-error (if reading "Quit" "%s is undefined")
                                          (key-description keyseq))
                    (read-command))
                cmd)))
@@ -2095,7 +2096,7 @@ The arg reading loop continues while `conn-argument-required-p' returns
 non-nil for at least one argument.
 
 The loop then prompts the user for a command via
-`read-key-sequence-vector'.  If a PRE function was given then it is
+`read-key-sequence'.  If a PRE function was given then it is
 called with the command that has been read.
 
 Then the default command handler and the COMMAND-HANDLER function, if

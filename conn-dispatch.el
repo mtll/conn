@@ -328,6 +328,21 @@ strings have `conn-dispatch-label-face'."
 
 ;;;;;; Labels
 
+(defvar conn-dispatch-input-buffer nil
+  "Buffer that was current when dispatch began.
+
+All events read by `conn-dispatch-read-char' are read with this buffer
+current.")
+
+(defmacro conn-with-dispatch-input-buffer (&rest body)
+  (declare (indent 0))
+  `(let ((conn-dispatch-input-buffer
+          (generate-new-buffer " *conn-dispatch-input*" t)))
+     (unwind-protect
+         ,(macroexp-progn body)
+       (and (buffer-live-p conn-dispatch-input-buffer)
+            (kill-buffer conn-dispatch-input-buffer)))))
+
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
 
@@ -540,11 +555,12 @@ themselves once the selection process has concluded."
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(let ((conn-dispatch-label-input-method nil)
-            (,var ,val))
-        (unwind-protect
-            ,(macroexp-progn body)
-          (mapc #'conn-label-delete ,var))))
+     `(conn-with-dispatch-input-buffer
+        (let ((conn-dispatch-label-input-method nil)
+              (,var ,val))
+          (unwind-protect
+              ,(macroexp-progn body)
+            (mapc #'conn-label-delete ,var)))))
     (_ (error "Unexpected binding form %s" binder))))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
@@ -1180,7 +1196,7 @@ thing.  Can only be used during `conn-dispatch'.")))
   :group 'conn
   :type '(list symbol))
 
-(defun conn-dispatch-ignored-mode (win)
+(defun conn-dispatch-ignored-mode-p (win)
   "Return non-nil if the major mode of WIN's buffer is ignored by dispatch.
 
 Ignored modes are those satisfying `provided-mode-derived-p' when called
@@ -1224,12 +1240,9 @@ shorter label.
 A sort function should take two targets as arguments and return non-nil
 if the first should be sorted before the second.")
 
-(defvar conn-target-window-predicate 'conn-dispatch-ignored-mode
+(defvar conn-target-window-predicate 'conn-dispatch-ignored-mode-p
   "Predicate which windows must satisfy in order to be considered during
-dispatch.
-
-Each function should take a window and return nil if the window should
-be ignored by during dispatch.")
+dispatch.")
 
 (defvar conn-target-predicate
   (lambda (pt length window)
@@ -1991,12 +2004,6 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-current-thing nil)
 
-(defvar conn-dispatch-input-buffer nil
-  "Buffer that was current when dispatch began.
-
-All events read by `conn-dispatch-read-char' are read with this buffer
-current.")
-
 (defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
 
@@ -2241,7 +2248,8 @@ the meaning of depth."
     substitute-command-keys
     ( :as argstr
       (concat (propertize prompt 'face 'minibuffer-prompt)
-              " (" argstr ")"
+              (unless (string-empty-p argstr)
+                (concat " (" argstr ")"))
               (when suffix (concat ": " suffix))
               (when conn--read-args-error-message
                 (concat " " (propertize conn--read-args-error-message
@@ -2289,101 +2297,25 @@ the meaning of depth."
             (cond ((eql ev (car (last (current-input-mode))))
                    (signal 'quit nil))
                   ((characterp ev) ev))))
-      (conn-with-dispatch-event-handlers
-        (:handler
-         ( :depth -96)
-         ( :display ()
-           (list
-            (propertize
-             (cond (conn--read-args-prefix-mag
-                    (number-to-string
-                     (* (if conn--read-args-prefix-sign -1 1)
-                        conn--read-args-prefix-mag)))
-                   (conn--read-args-prefix-sign "[-1]")
-                   (t "[1]"))
-             'face 'read-multiple-choice-face)
-            (when-let* ((im (buffer-local-value 'current-input-method-title
-                                                conn-dispatch-input-buffer)))
-              (propertize im 'face 'read-multiple-choice-face))))
-         ( :predicate (cmd)
-           (or (eq cmd 'toggle-input-method)
-               (eq cmd 'yank-input-method)
-               (eq cmd 'set-input-method)
-               (eq cmd 'negative-argument)
-               (eq cmd 'universal-argument)
-               (eq cmd 'digit-argument)
-               (eq cmd 'reset-arg)))
-         ( :update (cmd break)
-           (pcase cmd
-             ('toggle-input-method
-              (let ((inhibit-message nil)
-                    (message-log-max t)
-                    (arg (conn-read-args-consume-prefix-arg))
-                    (buf conn-dispatch-input-buffer))
-                (conn-with-dispatch-suspended
-                  (with-current-buffer buf
-                    (toggle-input-method arg)))
-                (if arg
-                    (funcall break :redisplay)
-                  (funcall break))))
-             ('yank-input-method
-              (let ((im (or current-input-method
-                            conn--input-method)))
-                (with-current-buffer conn-dispatch-input-buffer
-                  (activate-input-method im)))
-              (funcall break))
-             ('set-input-method
-              (let ((inhibit-message nil)
-                    (message-log-max t)
-                    (buf conn-dispatch-input-buffer))
-                (conn-with-dispatch-suspended
-                  (with-current-buffer buf
-                    (activate-input-method
-                     (read-input-method-name
-                      (format-prompt "Select input method" nil)
-                      nil t)))))
-              (funcall break :redisplay))
-             ('negative-argument
-              (cl-callf not conn--read-args-prefix-sign)
-              (funcall break))
-             ('universal-argument
-              (if conn--read-args-prefix-mag
-                  (cl-callf * conn--read-args-prefix-mag 4)
-                (setq conn--read-args-prefix-mag 4))
-              (funcall break))
-             ('digit-argument
-              (let* ((char (if (integerp last-input-event)
-                               last-input-event
-                             (get last-input-event 'ascii-character)))
-                     (digit (- (logand char ?\177) ?0)))
-                (setf conn--read-args-prefix-mag
-                      (if (integerp conn--read-args-prefix-mag)
-                          (+ (* 10 conn--read-args-prefix-mag) digit)
-                        digit)))
-              (funcall break))
-             ('reset-arg
-              (setq conn--read-args-prefix-mag nil
-                    conn--read-args-prefix-sign nil)
-              (funcall break)))))
-        (conn-read-args (nil :prompt prompt
-                             :command-handler nil
-                             :display-handler #'message-fn
-                             :overriding-map conn-dispatch-read-char-map
-                             :pre (lambda (cmd)
-                                    (run-hook-with-args
-                                     'conn-dispatch-read-char-pre-functions
-                                     cmd)))
-            ((_handlers (conn-composite-argument
-                         (mapcar #'car
-                                 (compat-call sort conn--dispatch-read-char-handlers
-                                              :key #'cadr))))
-             (char (conn-dispatch-event-argument
-                    (lambda ()
-                      (let ((ev (read-ev)))
-                        (if (eql ev (car (last (current-input-mode))))
-                            (signal 'quit nil)
-                          ev))))))
-          char)))))
+      (conn-read-args (nil :prompt prompt
+                           :command-handler nil
+                           :display-handler #'message-fn
+                           :overriding-map conn-dispatch-read-char-map
+                           :pre (lambda (cmd)
+                                  (run-hook-with-args
+                                   'conn-dispatch-read-char-pre-functions
+                                   cmd)))
+          ((_handlers (conn-composite-argument
+                       (mapcar #'car
+                               (compat-call sort conn--dispatch-read-char-handlers
+                                            :key #'cadr))))
+           (char (conn-dispatch-event-argument
+                  (lambda ()
+                    (let ((ev (read-ev)))
+                      (if (eql ev (car (last (current-input-mode))))
+                          (signal 'quit nil)
+                        ev))))))
+        char))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   "Execute BODY with dispatch suspended."
@@ -2423,6 +2355,100 @@ the meaning of depth."
                  (conn-dispatch-input-buffer nil))
        (message nil)
        ,@body)))
+
+(cl-defstruct (conn-dispatch-prefix-arg
+               (:include conn-argument)
+               (:constructor conn-dispatch-prefix-arg)))
+
+(cl-defmethod conn-argument-display ((_arg conn-dispatch-prefix-arg))
+  (propertize
+   (cond (conn--read-args-prefix-mag
+          (number-to-string
+           (* (if conn--read-args-prefix-sign -1 1)
+              conn--read-args-prefix-mag)))
+         (conn--read-args-prefix-sign "[-1]")
+         (t "[1]"))
+   'face 'read-multiple-choice-face))
+
+(conn-define-argument-command ((arg conn-dispatch-prefix-arg)
+                               (cmd (eql negative-argument)))
+  ( :update (break)
+    (cl-callf not conn--read-args-prefix-sign)
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-prefix-arg)
+                               (cmd (eql universal-argument)))
+  ( :update (break)
+    (if conn--read-args-prefix-mag
+        (cl-callf * conn--read-args-prefix-mag 4)
+      (setq conn--read-args-prefix-mag 4))
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-prefix-arg)
+                               (cmd (eql digit-argument)))
+  ( :update (break)
+    (let* ((char (if (integerp last-input-event)
+                     last-input-event
+                   (get last-input-event 'ascii-character)))
+           (digit (- (logand char ?\177) ?0)))
+      (setf conn--read-args-prefix-mag
+            (if (integerp conn--read-args-prefix-mag)
+                (+ (* 10 conn--read-args-prefix-mag) digit)
+              digit)))
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-prefix-arg)
+                               (cmd (eql reset-arg)))
+  ( :update (break)
+    (setq conn--read-args-prefix-mag nil
+          conn--read-args-prefix-sign nil)
+    (funcall break)))
+
+(cl-defstruct (conn-read-char-input-method
+               (:include conn-argument)
+               (:constructor conn-read-char-input-method)))
+
+(cl-defmethod conn-argument-display ((_arg conn-read-char-input-method))
+  (when-let* ((im (buffer-local-value 'current-input-method-title
+                                      conn-dispatch-input-buffer)))
+    (propertize im 'face 'read-multiple-choice-face)))
+
+(conn-define-argument-command ((arg conn-read-char-input-method)
+                               (cmd (eql set-input-method)))
+  ( :update (break)
+    (let ((inhibit-message nil)
+          (message-log-max t)
+          (buf conn-dispatch-input-buffer))
+      (conn-with-dispatch-suspended
+        (with-current-buffer buf
+          (activate-input-method
+           (read-input-method-name
+            (format-prompt "Select input method" nil)
+            nil t)))))
+    (funcall break :redisplay)))
+
+(conn-define-argument-command ((arg conn-read-char-input-method)
+                               (cmd (eql toggle-input-method)))
+  ( :update (break)
+    (let ((inhibit-message nil)
+          (message-log-max t)
+          (arg (conn-read-args-consume-prefix-arg))
+          (buf conn-dispatch-input-buffer))
+      (conn-with-dispatch-suspended
+        (with-current-buffer buf
+          (toggle-input-method arg)))
+      (if arg
+          (funcall break :redisplay)
+        (funcall break)))))
+
+(conn-define-argument-command ((arg conn-read-char-input-method)
+                               (cmd (eql yank-input-method)))
+  ( :update (break)
+    (let ((im (or current-input-method
+                  conn--input-method)))
+      (with-current-buffer conn-dispatch-input-buffer
+        (activate-input-method im)))
+    (funcall break)))
 
 (cl-defstruct (conn-dispatch-select-handler
                (:include conn-argument)
@@ -4852,41 +4878,42 @@ it."))
         (when (eq other-end :no-other-end)
           (list t)))
        (conn-dispatch-other-end (lambda () (and other-end t)))
-       (conn-dispatch-input-buffer
-        (generate-new-buffer " *conn-dispatch-input*" t))
        (conn-dispatch-target-finder nil))
     (conn-with-dispatch-event-handlers
+      ( :with (conn-dispatch-prefix-arg)
+        :depth -97)
+      ( :with (conn-read-char-input-method)
+        :depth -96)
       (:handler
        (:depth -99)
        ( :display ()
          (propertize (conn-action-display action t)
                      'face 'conn-argument-active-face)))
-      (conn--unwind-protect-all
-        (let ((conn-dispatch-in-progress t))
-          (let ((im (or current-input-method
-                        conn--input-method)))
-            (with-current-buffer conn-dispatch-input-buffer
-              (activate-input-method im)))
-          (conn-target-finder-setup
-           (conn-get-target-finder thing arg))
-          (add-function :before-while conn-dispatch-other-end
-                        (lambda () (not conn-dispatch-no-other-end))
-                        '((depth . -100)
-                          (name . no-other-end)))
-          (when-let* ((predicate (conn-action-window-predicate action)))
-            (add-function :after-while conn-target-window-predicate predicate))
-          (when-let* ((predicate (conn-action-target-predicate action)))
-            (add-function :after-while conn-target-predicate predicate))
-          (when restrict-windows
-            (add-function :after-while conn-target-window-predicate
-                          'conn--dispatch-restrict-windows))
-          (when setup-function (funcall setup-function))
-          (conn-dispatch-perform-action action repeat)
-          (conn-dispatch-push-history (conn-make-dispatch action)))
-        (conn-cleanup-targets)
-        (conn-cleanup-labels)
-        (and (buffer-live-p conn-dispatch-input-buffer)
-             (kill-buffer conn-dispatch-input-buffer))))))
+      (conn-with-dispatch-input-buffer
+        (conn--unwind-protect-all
+          (let ((conn-dispatch-in-progress t))
+            (let ((im (or current-input-method
+                          conn--input-method)))
+              (with-current-buffer conn-dispatch-input-buffer
+                (activate-input-method im)))
+            (conn-target-finder-setup
+             (conn-get-target-finder thing arg))
+            (add-function :before-while conn-dispatch-other-end
+                          (lambda () (not conn-dispatch-no-other-end))
+                          '((depth . -100)
+                            (name . no-other-end)))
+            (when-let* ((predicate (conn-action-window-predicate action)))
+              (add-function :after-while conn-target-window-predicate predicate))
+            (when-let* ((predicate (conn-action-target-predicate action)))
+              (add-function :after-while conn-target-predicate predicate))
+            (when restrict-windows
+              (add-function :after-while conn-target-window-predicate
+                            'conn--dispatch-restrict-windows))
+            (when setup-function (funcall setup-function))
+            (conn-dispatch-perform-action action repeat)
+            (conn-dispatch-push-history (conn-make-dispatch action)))
+          (conn-cleanup-targets)
+          (conn-cleanup-labels))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)
@@ -5015,11 +5042,12 @@ This command must be bound to a mouse key."
 Calling a bound dispatch with a prefix arg inverts the value of repeat
 for the dispatch."
   (interactive)
-  (let* ((key-seq (read-key-sequence-vector
+  (let* ((key-seq (read-key-sequence
                    (format "Bind last dispatch to key in %s: "
                            conn-current-state)))
          (binding (key-binding key-seq)))
-    (when (and (not (equal key-seq "\^G"))
+    (when (and (not (eql (aref key-seq 0)
+                         (car (last (current-input-mode)))))
                (or (not binding)
                    (eq binding 'undefined)
                    (stringp binding)
