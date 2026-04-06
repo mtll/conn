@@ -2913,7 +2913,7 @@ updated.")
       (conn-cleanup-labels)
       (conn-target-finder-suspend target-finder))))
 
-(cl-defmethod conn-target-finder-select (target-finder)
+(cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil))
     (conn-with-dispatch-labels
         (labels (conn-dispatch-get-labels))
@@ -3110,7 +3110,7 @@ to the key binding for that target."
   "C-M-r" 'always-retarget
   "M-r" 'retarget)
 
-(cl-defmethod conn-target-finder-select ((state conn-dispatch-retargetable-mixin))
+(cl-defmethod conn-target-finder-select ((_state conn-dispatch-retargetable-mixin))
   (conn-with-dispatch-event-handlers
     (:handler
      ( :keymap conn-dispatch-retargeting-argument-map)
@@ -3174,50 +3174,50 @@ to the key binding for that target."
                     :initarg :string-length)
      (regex-p :initform t))
   ( :update-method (state)
-    (cl-symbol-macrolet ((string (oref state string)))
-      (if string
-          (conn-dispatch-call-update-handlers state 0)
-        (let* ((string-length (oref state string-length))
-               (prompt (if (> string-length 1)
-                           (propertize (format "%d Chars" string-length)
-                                       'face 'minibuffer-prompt)
-                         (propertize "1 Char" 'face 'minibuffer-prompt)))
-               (char-count 0)
-               (trivial t)
-               (quote-flag nil))
-          (while (or trivial (< char-count string-length))
-            (unless trivial
-              (while-no-input
-                (conn-dispatch-call-update-handlers state)))
-            (catch 'dispatch-redisplay
-              (conn-with-dispatch-event-handlers
-                (:handler
-                 (:predicate (cmd) (memq cmd '(backspace quote)))
-                 (:keymap (define-keymap
-                            "<backspace>" 'backspace
-                            "<remap> <quoted-insert>" 'quote))
-                 ( :update (cmd break)
-                   (pcase cmd
-                     ('backspace
-                      (when (length> string 0)
-                        (cl-callf substring string 0 -1))
-                      (funcall break :return))
-                     ('quote
-                      (setf quote-flag t)
-                      (funcall break :return)))))
-                (let ((char (conn-dispatch-read-char prompt t nil string)))
-                  (if (and (eql char conn-dispatch-read-n-chars-any-char)
-                           (not quote-flag))
-                      (cl-callf concat string
-                        conn-dispatch-read-n-chars-any-re)
-                    (cl-callf concat string
-                      (regexp-quote (char-to-string char)))
-                    (setf trivial nil)))
-                (cl-incf char-count)
-                (setf quote-flag nil)))
-            (conn-cleanup-targets))
-          (setf (oref state prompt) string)
-          (conn-dispatch-call-update-handlers state 0))))))
+    (if (oref state string)
+        (conn-dispatch-call-update-handlers state 0)
+      (let* ((string-length (oref state string-length))
+             (prompt (if (> string-length 1)
+                         (propertize (format "%d Chars" string-length)
+                                     'face 'minibuffer-prompt)
+                       (propertize "1 Char" 'face 'minibuffer-prompt)))
+             (char-count 0)
+             (trivial t)
+             (quote-flag nil))
+        (while (or trivial (< char-count string-length))
+          (unless trivial
+            (while-no-input
+              (conn-dispatch-call-update-handlers state)))
+          (catch 'dispatch-redisplay
+            (conn-with-dispatch-event-handlers
+              (:handler
+               (:predicate (cmd) (memq cmd '(backspace quote)))
+               (:keymap (define-keymap
+                          "<backspace>" 'backspace
+                          "<remap> <quoted-insert>" 'quote))
+               ( :update (cmd break)
+                 (pcase cmd
+                   ('backspace
+                    (when (length> (oref state string) 0)
+                      (cl-callf substring (oref state string) 0 -1))
+                    (funcall break :return))
+                   ('quote
+                    (setf quote-flag t)
+                    (funcall break :return)))))
+              (let ((char (conn-dispatch-read-char prompt t nil
+                                                   (oref state string))))
+                (if (and (eql char conn-dispatch-read-n-chars-any-char)
+                         (not quote-flag))
+                    (cl-callf concat (oref state string)
+                      conn-dispatch-read-n-chars-any-re)
+                  (cl-callf concat (oref state string)
+                    (regexp-quote (char-to-string char)))
+                  (setf trivial nil)))
+              (cl-incf char-count)
+              (setf quote-flag nil)))
+          (conn-cleanup-targets))
+        (setf (oref state prompt) (oref state string))
+        (conn-dispatch-call-update-handlers state 0)))))
 
 (defvar-keymap conn-dispatch-read-string-target-keymap
   "M-e" 'read-string)
@@ -3257,45 +3257,47 @@ to the key binding for that target."
     (conn-dispatch-string-targets)
     ((timeout :initform 0.5 :initarg :timeout))
   ( :update-method (state)
-    (cl-symbol-macrolet ((string (oref state string)))
-      (unless string
-        (catch 'string-read
-          (let ((timeout (oref state timeout))
-                (prompt (propertize "String" 'face 'minibuffer-prompt)))
-            (conn-with-dispatch-event-handlers
-              (:handler
-               (:keymap conn-dispatch-read-string-target-keymap)
-               (:predicate (cmd) (eq cmd 'read-string))
-               (:display () "\\[read-string] edit string")
-               ( :update (_cmd _break)
-                 (let* ((newstr
-                         (minibuffer-with-setup-hook
-                             (conn-dispatch-lazy-update
-                              (lambda (str)
-                                (setf string str)
-                                (while-no-input
-                                  (conn-dispatch-call-update-handlers state))))
-                           (let ((inhibit-message nil))
-                             (with-current-buffer conn-dispatch-input-buffer
-                               (read-string
-                                "String: " string
-                                'conn-read-string-target-history
-                                nil t))))))
-                   (unless (equal newstr "")
-                     (setf string newstr
-                           (oref state prompt) newstr)
-                     (throw 'string-read nil)))))
-              (setf string (char-to-string (conn-dispatch-read-char prompt t))))
-            (while-no-input
-              (conn-dispatch-call-update-handlers state))
-            (while-let ((next-char (conn-dispatch-read-char
-                                    prompt t timeout string)))
-              (conn-cleanup-targets)
-              (cl-callf concat string (char-to-string next-char))
-              (conn-dispatch-call-update-handlers state))
-            (setf (oref state prompt) string)))
-        (conn-cleanup-targets))
-      (conn-dispatch-call-update-handlers state 0))))
+    (unless (oref state string)
+      (catch 'string-read
+        (let ((timeout (oref state timeout))
+              (prompt (propertize "String" 'face 'minibuffer-prompt)))
+          (conn-with-dispatch-event-handlers
+            (:handler
+             (:keymap conn-dispatch-read-string-target-keymap)
+             (:predicate (cmd) (eq cmd 'read-string))
+             (:display () "\\[read-string] edit string")
+             ( :update (_cmd _break)
+               (let* ((newstr
+                       (minibuffer-with-setup-hook
+                           (conn-dispatch-lazy-update
+                            (lambda (str)
+                              (setf (oref state string) str)
+                              (while-no-input
+                                (conn-dispatch-call-update-handlers state))))
+                         (let ((inhibit-message nil))
+                           (with-current-buffer conn-dispatch-input-buffer
+                             (read-string
+                              "String: " (oref state string)
+                              'conn-read-string-target-history
+                              nil t))))))
+                 (unless (equal newstr "")
+                   (setf (oref state string) newstr
+                         (oref state prompt) newstr)
+                   (throw 'string-read nil)))))
+            (setf (oref state string)
+                  (char-to-string (conn-dispatch-read-char prompt t))))
+          (while-no-input
+            (conn-dispatch-call-update-handlers state))
+          (while-let ((next-char (conn-dispatch-read-char
+                                  prompt t timeout
+                                  (oref state string))))
+            (conn-cleanup-targets)
+            (cl-callf concat (oref state string)
+              (char-to-string next-char))
+            (conn-dispatch-call-update-handlers state))
+          (setf (oref state prompt) (oref state string))))
+      (conn-cleanup-targets))
+    (conn-dispatch-call-update-handlers state 0)))
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
@@ -3597,7 +3599,8 @@ contain targets."
           (conn-make-target-overlay (point) 0))))))
 
 (conn-define-target-finder conn-dispatch-button-targets
-    () ()
+    ()
+    ((other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (conn-for-each-visible (window-start) (window-end)
       (goto-char (point-min))
@@ -5041,8 +5044,7 @@ for the dispatch."
      '(button)
      :pretty-print ( :method (_self) "all-buttons")
      :target-finder ( :method (_self _arg)
-                      (conn-dispatch-button-targets))
-     :has-other-end-p ( :method (_self) :no-other-end))
+                      (conn-dispatch-button-targets)))
    nil nil))
 
 (conn-define-target-finder conn-isearch-targets
