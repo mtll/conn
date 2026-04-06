@@ -208,13 +208,13 @@ Expansions and contractions are provided by functions in
     (:handler
      (:keymap conn-dispatch-toggle-focus-map)
      ( :predicate (cmd) (eq cmd 'toggle-focus))
-     ( :update (_cmd break)
+     ( :update (_cmd _break)
        (conn-target-finder-setup
         (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
             (conn-expansion-targets)
           (conn-expansion-focus-targets)))
        (recenter (conn-dispatch-get-display-line))
-       (funcall break :redisplay))
+       (conn-dispatch-redisplay))
      ( :display ()
        (when-let* ((binding (where-is-internal 'toggle-focus nil t)))
          (concat
