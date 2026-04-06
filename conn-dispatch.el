@@ -225,13 +225,28 @@ strings have `conn-dispatch-label-face'."
 (cl-defstruct (conn-dispatch-char-argument
                (:include conn-argument)
                ( :constructor conn-dispatch-char-argument
-                 (event-reader
+                 (input-method
                   &key
                   (reference conn-dispatch-command-reference)
                   &aux
                   (required t)
                   (keymap conn-dispatch-char-argument-map))))
-  (event-reader #'ignore :read-only t :type function))
+  (input-method nil :read-only t))
+
+(defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
+  (with-current-buffer conn-dispatch-input-buffer
+    (pcase use-input-method
+      ((or 't 'nil)
+       (let ((inhibit-quit t))
+         (read-event nil use-input-method seconds)))
+      (im
+       (let ((pim current-input-method))
+         (unwind-protect
+             (progn
+               (activate-input-method im)
+               (let ((inhibit-quit t))
+                 (read-event nil t seconds)))
+           (activate-input-method pim)))))))
 
 (conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql dispatch-character-event)))
@@ -241,14 +256,17 @@ strings have `conn-dispatch-label-face'."
     (setq conn--read-args-error-message nil
           conn--dispatch-must-prompt nil)
     (conn-add-unread-events (this-single-command-raw-keys))
-    (setf (conn-argument-value arg)
-          (funcall (conn-dispatch-char-argument-event-reader arg))
-          (conn-argument-set-flag arg) t)
+    (pcase (conn--dispatch-read-char-1
+            (conn-dispatch-char-argument-input-method arg))
+      ((pred (eql (car (last (current-input-mode)))))
+       (signal 'quit nil))
+      (ev (setf (conn-argument-value arg) ev
+                (conn-argument-set-flag arg) t)))
     (funcall break)))
 
 (conn-define-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql quoted-insert)))
-  "Narrow labels by character."
+  "Narrow labels by character read with quoted-insert."
   ( :update (break)
     (let ((char (read-quoted-char
                  (propertize "Quoted Char: "
@@ -440,11 +458,7 @@ returned."
 
 (defvar conn-dispatch-hide-labels nil)
 
-(defun conn-label-select (candidates
-                          char-reader
-                          &optional
-                          prompt
-                          always-prompt)
+(defun conn-label-select (candidates &optional prompt always-prompt)
   "Select a label from CANDIDATES.
 
 Prompts the user for prefix characters one at a time and narrows the
@@ -483,15 +497,14 @@ themselves once the selection process has concluded."
      (while-no-input
        (mapc #'conn-label-redisplay candidates))
      (setq prompt-flag nil)
-     (let ((next nil)
-           (char (catch 'return
-                   (while-let ((c (funcall char-reader prompt)))
-                     (unless conn-dispatch-hide-labels
-                       (throw 'return c))))))
-       (setq partial t
-             current (dolist (label current next)
-                       (when-let* ((l (conn-label-narrow label char)))
-                         (push l next))))))))
+     (while (let ((c (conn-dispatch-read-char
+                      prompt
+                      conn-dispatch-label-input-method)))
+              (not (unless conn-dispatch-hide-labels
+                     (cl-callf2 seq-keep
+                         (lambda (l) (conn-label-narrow l c))
+                         current)
+                     (setq partial t))))))))
 
 ;;;;; Window Header-line Labels
 
@@ -616,12 +629,7 @@ themselves once the selection process has concluded."
                     (win (posn-window posn)))
                (when (not (posn-area posn))
                  (:return win))))))
-        (conn-label-select
-         labels
-         (lambda (prompt)
-           (conn-dispatch-read-char prompt 'label))
-         nil
-         always-prompt)))))
+        (conn-label-select labels nil always-prompt)))))
 
 ;;;; Dispatch State
 
@@ -2255,56 +2263,38 @@ the meaning of depth."
 
 (defun conn-dispatch-read-char (&optional
                                 prompt
-                                inherit-input-method
+                                use-input-method
                                 seconds
                                 prompt-suffix)
   (declare (important-return-value t))
-  (cl-flet ((read-ev (&optional seconds)
-              (let ((scroll-conservatively 100))
-                (if (eq inherit-input-method 'label)
-                    (with-current-buffer conn-dispatch-input-buffer
-                      (let ((im current-input-method))
-                        (unwind-protect
-                            (progn
-                              (activate-input-method
-                               conn-dispatch-label-input-method)
-                              (let ((inhibit-quit t))
-                                (read-event nil t seconds)))
-                          (activate-input-method im))))
-                  (with-current-buffer conn-dispatch-input-buffer
-                    (let ((inhibit-quit t))
-                      (read-event nil inherit-input-method seconds))))))
-            (message-fn (prompt arguments &optional _state teardown)
-              (if teardown
-                  (message nil)
-                (conn--dispatch-read-char-prefix
-                 arguments
-                 prompt
-                 prompt-suffix))))
+  (let ((message-fn (lambda (prompt arguments &optional _state teardown)
+                      (if teardown
+                          (message nil)
+                        (conn--dispatch-read-char-prefix
+                         arguments
+                         prompt
+                         prompt-suffix)))))
     (if seconds
-        (let ((inhibit-message nil))
+        (let ((inhibit-message nil)
+              (scroll-conservatively 100))
           (conn--dispatch-read-char-prefix
            (mapcar #'car
                    (compat-call sort conn--dispatch-read-char-handlers
                                 :key #'cadr))
            prompt prompt-suffix)
-          (and-let* ((ev (read-ev seconds)))
+          (and-let* ((ev (conn--dispatch-read-char-1 use-input-method seconds)))
             (cond ((eql ev (car (last (current-input-mode))))
                    (signal 'quit nil))
                   ((characterp ev) ev))))
-      (conn-read-args (nil :prompt prompt
-                           :command-handler (conn-dispatch-read-char-handlers)
-                           :display-handler #'message-fn
-                           :pre (lambda (cmd)
-                                  (run-hook-with-args
-                                   'conn-dispatch-read-char-pre-functions
-                                   cmd)))
-          ((char (conn-dispatch-char-argument
-                  (lambda ()
-                    (let ((ev (read-ev)))
-                      (if (eql ev (car (last (current-input-mode))))
-                          (signal 'quit nil)
-                        ev))))))
+      (conn-read-args (nil
+                       :prompt prompt
+                       :command-handler (conn-dispatch-read-char-handlers)
+                       :display-handler message-fn
+                       :pre (lambda (cmd)
+                              (run-hook-with-args
+                               'conn-dispatch-read-char-pre-functions
+                               cmd)))
+          ((char (conn-dispatch-char-argument use-input-method)))
         char))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -2996,7 +2986,6 @@ updated.")
                   (defining-kbd-macro nil))
               (conn-label-select
                labels
-               (lambda (prompt) (conn-dispatch-read-char prompt 'label))
                (concat
                 (when-let* ((prompt (oref conn-dispatch-target-finder prompt)))
                   (concat prompt " "))
