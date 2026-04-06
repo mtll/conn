@@ -540,7 +540,8 @@ themselves once the selection process has concluded."
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(let ((,var ,val))
+     `(let ((conn-dispatch-label-input-method nil)
+            (,var ,val))
         (unwind-protect
             ,(macroexp-progn body)
           (mapc #'conn-label-delete ,var))))
@@ -1918,7 +1919,7 @@ Target overlays may override this default by setting the
       conn--dispatch-action-always-prompt
       conn-dispatch-select-always-prompt
       (> conn-dispatch-iteration-count 0)
-      (conn-target-finder-prompt-p conn-dispatch-target-finder)))
+      (oref conn-dispatch-target-finder always-prompt)))
 
 (defvar conn--previous-labels-cleanup nil)
 
@@ -1939,37 +1940,38 @@ Target overlays may override this default by setting the
 (defun conn--with-dispatch-labels (labels body)
   (conn-cleanup-labels)
   (clrhash conn--dispatch-window-lines-cache)
-  (unwind-protect
-      (conn-with-dispatch-event-handlers
-        (:handler
-         (:predicate (cmd) (eq cmd 'toggle-labels))
-         (:keymap conn-toggle-label-argument-map)
-         ( :display ()
-           (concat
-            "\\[toggle-labels] "
-            (propertize
-             "hide labels"
-             'face (when conn-dispatch-hide-labels
-                     'eldoc-highlight-function-argument))))
-         ( :update (_cmd break)
-           (cl-callf not conn-dispatch-hide-labels)
-           (while-no-input
-             (mapc #'conn-label-redisplay labels))
-           (funcall break)))
-        (let ((fn (make-symbol "cleanup")))
-          (fset fn (lambda (&rest _)
-                     (unwind-protect
-                         (mapc #'conn-label-delete labels)
-                       (setq conn--previous-labels-cleanup nil)
-                       (remove-hook 'pre-redisplay-functions fn))))
-          (setq conn--previous-labels-cleanup fn))
-        ;; ensure the cache gets populated
-        (ignore (conn--dispatch-window-lines))
-        (funcall body labels))
-    (clrhash conn--pixelwise-window-cache)
-    (when conn--previous-labels-cleanup
-      (add-hook 'pre-redisplay-functions
-                conn--previous-labels-cleanup))))
+  (let ((conn-dispatch-label-input-method nil))
+    (unwind-protect
+        (conn-with-dispatch-event-handlers
+          (:handler
+           (:predicate (cmd) (eq cmd 'toggle-labels))
+           (:keymap conn-toggle-label-argument-map)
+           ( :display ()
+             (concat
+              "\\[toggle-labels] "
+              (propertize
+               "hide labels"
+               'face (when conn-dispatch-hide-labels
+                       'eldoc-highlight-function-argument))))
+           ( :update (_cmd break)
+             (cl-callf not conn-dispatch-hide-labels)
+             (while-no-input
+               (mapc #'conn-label-redisplay labels))
+             (funcall break)))
+          (let ((fn (make-symbol "cleanup")))
+            (fset fn (lambda (&rest _)
+                       (unwind-protect
+                           (mapc #'conn-label-delete labels)
+                         (setq conn--previous-labels-cleanup nil)
+                         (remove-hook 'pre-redisplay-functions fn))))
+            (setq conn--previous-labels-cleanup fn))
+          ;; ensure the cache gets populated
+          (ignore (conn--dispatch-window-lines))
+          (funcall body labels))
+      (clrhash conn--pixelwise-window-cache)
+      (when conn--previous-labels-cleanup
+        (add-hook 'pre-redisplay-functions
+                  conn--previous-labels-cleanup)))))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
@@ -2371,16 +2373,16 @@ the meaning of depth."
                                     (run-hook-with-args
                                      'conn-dispatch-read-char-pre-functions
                                      cmd)))
-            ((char (conn-dispatch-event-argument
+            ((_handlers (conn-composite-argument
+                         (mapcar #'car
+                                 (compat-call sort conn--dispatch-read-char-handlers
+                                              :key #'cadr))))
+             (char (conn-dispatch-event-argument
                     (lambda ()
                       (let ((ev (read-ev)))
                         (if (eql ev (car (last (current-input-mode))))
                             (signal 'quit nil)
-                          ev)))))
-             (_handlers (conn-composite-argument
-                         (mapcar #'car
-                                 (compat-call sort conn--dispatch-read-char-handlers
-                                              :key #'cadr)))))
+                          ev))))))
           char)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -2735,7 +2737,13 @@ the meaning of depth."
    (label-function :initform nil
                    :initarg :label-function)
    (label-sort-function :initform nil
-                        :initarg :label-sort-function))
+                        :initarg :label-sort-function)
+   (other-end :initform nil
+              :initarg :other-end)
+   (always-prompt :initform nil
+                  :initarg :always-prompt)
+   (prompt :initform nil
+           :initarg :prompt))
   :abstract t)
 
 (defvar conn-dispatch-post-update-functions nil
@@ -2897,8 +2905,7 @@ updated.")
   (conn-target-finder-label-faces target-finder))
 
 (cl-defmethod conn-target-finder-select :around (target-finder)
-  (let ((conn-dispatch-label-input-method nil)
-        (conn-target-sort-function (or (oref target-finder label-sort-function)
+  (let ((conn-target-sort-function (or (oref target-finder label-sort-function)
                                        conn-target-sort-function)))
     (unwind-protect
         (let ((inhibit-message t))
@@ -2940,11 +2947,12 @@ updated.")
               (conn-label-select
                labels
                (lambda (prompt) (conn-dispatch-read-char prompt 'label))
-               (cl-loop for (_ . c) in conn-target-count
-                        sum c into count
-                        finally return (conn-target-finder-prompt-string
-                                        target-finder
-                                        (format "[%s]" count)))
+               (concat
+                (when-let* ((prompt (oref conn-dispatch-target-finder prompt)))
+                  (concat prompt " "))
+                (cl-loop for (_ . c) in conn-target-count
+                         sum c into count
+                         finally return (format "[%s]" count)))
                (conn-dispatch-prompt-p))))
         (when after
           (funcall after)
@@ -2969,7 +2977,7 @@ updated.")
                     label-function
                     '((name . target-finder)))
     (remove-function conn-dispatch-label-function 'target-finder))
-  (pcase (conn-target-finder-other-end tf)
+  (pcase (oref tf other-end)
     (:no-other-end
      (push :target conn-dispatch-no-other-end)
      (remove-function conn-dispatch-other-end 'target-finder))
@@ -2978,19 +2986,14 @@ updated.")
      (add-function :around conn-dispatch-other-end
                    (lambda (fn)
                      (xor (funcall fn)
-                          (conn-target-finder-other-end
-                           conn-dispatch-target-finder)))
+                          (oref conn-dispatch-target-finder
+                                other-end)))
                    '((name . target-finder)))))
   (setf conn-dispatch-target-finder tf))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
                                       _arg)
   (conn-dispatch-read-n-chars :string-length 2))
-
-(cl-defgeneric conn-target-finder-prompt-string (target-finder prompt)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (:method (_target-finder prompt) prompt))
 
 (cl-defgeneric conn-target-finder-update (target-finder))
 
@@ -3048,12 +3051,6 @@ updated.")
       (overlay-put target 'face nil)))
   (setq conn-target-count nil))
 
-(cl-defgeneric conn-target-finder-other-end (target-finder)
-  "Default value for :other-end parameter in `conn-dispatch-perform-action'."
-  (declare (conn-anonymous-thing-property :has-other-end-p)
-           (important-return-value t))
-  (:method (_) nil))
-
 (cl-defgeneric conn-target-finder-restore-state-functions (target-finder)
   "Return a list of functions to restore TARGET-FINDER\\='s state.
 
@@ -3061,9 +3058,6 @@ Each function should take an uninitialized target finder of the same
 type and initialize it to contain the same state as TARGET-FINDER."
   (declare (important-return-value t))
   (:method (_) nil))
-
-(cl-defgeneric conn-target-finder-prompt-p (target-finder)
-  ( :method (_target-finder) nil))
 
 (defclass conn-dispatch-target-key-labels-mixin ()
   ()
@@ -3122,11 +3116,9 @@ to the key binding for that target."
      ( :keymap conn-dispatch-retargeting-argument-map)
      ( :display ()
        (list
-        (when (and (conn-target-finder-has-targets-p state)
-                   (not conn--dispatch-always-retarget))
+        (when (not conn--dispatch-always-retarget)
           "\\[retarget] retarget")
-        (when (and (conn-target-finder-has-targets-p state)
-                   conn-dispatch-repeating)
+        (when conn-dispatch-repeating
           (concat
            "\\[always-retarget] "
            (propertize "always retarget"
@@ -3145,9 +3137,6 @@ to the key binding for that target."
           (conn-target-finder-retarget conn-dispatch-target-finder)
           (funcall break :redisplay 'maybe-dont-prompt)))))
     (cl-call-next-method)))
-
-(cl-defgeneric conn-target-finder-has-targets-p (target-finder)
-  (declare (important-return-value t)))
 
 (conn-define-target-finder conn-dispatch-string-targets
     (conn-dispatch-retargetable-mixin)
@@ -3168,12 +3157,6 @@ to the key binding for that target."
             (conn-make-re-target-overlays string predicate len thing)
           (conn-make-string-target-overlays string predicate len thing))))))
 
-(cl-defmethod conn-target-finder-prompt-string ((target-finder conn-dispatch-string-targets)
-                                                prompt)
-  (if-let* ((str (oref target-finder string)))
-      (concat str " " prompt)
-    prompt))
-
 (cl-defmethod conn-target-finder-restore-state-functions ((target-finder conn-dispatch-string-targets))
   (cons (let ((str (oref target-finder string)))
           (lambda (tf) (setf (oref tf string) str)))
@@ -3181,9 +3164,6 @@ to the key binding for that target."
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
-
-(cl-defmethod conn-target-finder-has-targets-p ((state conn-dispatch-string-targets))
-  (and (oref state string) t))
 
 (defvar conn-dispatch-read-n-chars-any-char ?,)
 (defvar conn-dispatch-read-n-chars-any-re "[^a-zA-A]")
@@ -3236,6 +3216,7 @@ to the key binding for that target."
                 (cl-incf char-count)
                 (setf quote-flag nil)))
             (conn-cleanup-targets))
+          (setf (oref state prompt) string)
           (conn-dispatch-call-update-handlers state 0))))))
 
 (defvar-keymap conn-dispatch-read-string-target-keymap
@@ -3301,7 +3282,8 @@ to the key binding for that target."
                                 'conn-read-string-target-history
                                 nil t))))))
                    (unless (equal newstr "")
-                     (setf string newstr)
+                     (setf string newstr
+                           (oref state prompt) newstr)
                      (throw 'string-read nil)))))
               (setf string (char-to-string (conn-dispatch-read-char prompt t))))
             (while-no-input
@@ -3310,7 +3292,8 @@ to the key binding for that target."
                                     prompt t timeout string)))
               (conn-cleanup-targets)
               (cl-callf concat string (char-to-string next-char))
-              (conn-dispatch-call-update-handlers state))))
+              (conn-dispatch-call-update-handlers state))
+            (setf (oref state prompt) string)))
         (conn-cleanup-targets))
       (conn-dispatch-call-update-handlers state 0))))
 
@@ -3322,15 +3305,14 @@ to the key binding for that target."
    (fringe-indicator
     :initform (propertize " " 'display (list 'left-fringe
                                              'right-triangle))
-    :initarg :fringe-indicator))
+    :initarg :fringe-indicator)
+   (always-prompt
+    :initform t))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
 
 (defvar-keymap conn-dispatch-toggle-focus-map)
-
-(cl-defmethod conn-target-finder-prompt-p ((_state conn-dispatch-focus-mixin))
-  t)
 
 (defun conn-focus-targets-remove-overlays (state)
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
@@ -3467,7 +3449,8 @@ contain targets."
       :initform 1
       :initarg :context-lines)
      (window-predicate
-      :initform (lambda (win) (eq win (selected-window)))))
+      :initform (lambda (win) (eq win (selected-window))))
+     (other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (let ((points (conn-ring-list conn-jump-ring)))
       (dolist (pt points)
@@ -3477,14 +3460,12 @@ contain targets."
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
 
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-jump-ring))
-  :no-other-end)
-
 (conn-define-target-finder conn-dispatch-global-mark
     (conn-dispatch-focus-mixin)
     ((context-lines
       :initform 1
       :initarg :context-lines)
+     (other-end :initform :no-other-end)
      (window-predicate
       :initform (let ((cache nil))
                   (lambda (win)
@@ -3503,14 +3484,12 @@ contain targets."
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
 
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-global-mark))
-  :no-other-end)
-
 (conn-define-target-finder conn-dispatch-mark-register
     (conn-dispatch-focus-mixin
      conn-dispatch-target-key-labels-mixin)
     ((context-lines :initform 1
-                    :initarg :context-lines))
+                    :initarg :context-lines)
+     (other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (pcase-dolist (`(,key . ,obj) register-alist)
       (when (and (markerp obj)
@@ -3522,16 +3501,14 @@ contain targets."
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
 
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-mark-register))
-  :no-other-end)
-
 (conn-define-target-finder conn-dispatch-previous-emacs-state
     (conn-dispatch-focus-mixin)
     ((context-lines
       :initform 1
       :initarg :context-lines)
      (window-predicate
-      :initform (lambda (win) (eq win (selected-window)))))
+      :initform (lambda (win) (eq win (selected-window))))
+     (other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (dolist (pt (conn-ring-list conn-emacs-state-ring))
       (unless (invisible-p pt)
@@ -3539,9 +3516,6 @@ contain targets."
   ( :update-method (state)
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
-
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-previous-emacs-state))
-  :no-other-end)
 
 (defun conn-dispatch-chars-in-thing (thing)
   (declare (important-return-value t))
@@ -3806,7 +3780,8 @@ contain targets."
   nil)
 
 (conn-define-target-finder conn-dispatch-end-of-line-targets
-    () ()
+    ()
+    ((other-end :initform t))
   ( :default-update-handler (_state)
     (conn-for-each-visible (window-start) (window-end)
       (goto-char (point-min))
@@ -3826,9 +3801,6 @@ contain targets."
                :properties `(after-string
                              ,(propertize " " 'display '(space :width 0))))
             (conn-make-target-overlay (point) 0)))))))
-
-(cl-defmethod conn-target-finder-other-end ((_ conn-dispatch-end-of-line-targets))
-  t)
 
 (conn-define-target-finder conn-dispatch-inner-line-targets
     () ()
@@ -3852,7 +3824,8 @@ contain targets."
              :thing thing)))))))
 
 (conn-define-target-finder conn-dispatch-end-of-inner-line-targets
-    () ()
+    ()
+    ((other-end :initform t))
   ( :default-update-handler (_state)
     (let ((thing (conn-anonymous-thing
                    '(conn-forward-inner-line)
@@ -3872,10 +3845,6 @@ contain targets."
            :properties `(label-before t)
            :thing thing)
           (forward-line 1))))))
-
-(cl-defmethod conn-target-finder-other-end
-  ((_ conn-dispatch-end-of-inner-line-targets))
-  t)
 
 (conn-define-target-finder conn-dispatch-visual-line-targets
     () ()
