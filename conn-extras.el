@@ -100,7 +100,7 @@
 (declare-function outline-up-heading "outline")
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-headings
    :reference (conn-reference-quote
                 ((:heading "Heading Targets")
@@ -262,7 +262,7 @@
  'dired-tree-up 'dired-tree-down)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir))
-                                      _arg)
+                                      &rest _)
   #'conn--dispatch-dired-subdir)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
@@ -275,7 +275,7 @@
  'dired-next-dirline 'dired-prev-dirline)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline))
-                                      _arg)
+                                      &rest _)
   #'conn--dispatch-dired-dirline)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
@@ -458,7 +458,7 @@
  'ibuffer-backward-line 'ibuffer-forward-line)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line))
-                                      _arg)
+                                      &rest _)
   #'conn--dispatch-ibuffer-lines)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
@@ -472,7 +472,7 @@
  'ibuffer-backward-filter-group)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group))
-                                      _arg)
+                                      &rest _)
   #'conn--dispatch-ibuffer-filter-group)
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
@@ -649,7 +649,7 @@
        (Info-follow-nearest-node)))
    (conn-anonymous-thing
      '(point)
-     :target-finder ( :method (_self _arg)
+     :target-finder ( :method (_self &rest _)
                       (save-excursion
                         (let ((last-pt (goto-char (window-end))))
                           (while (and (> last-pt (progn

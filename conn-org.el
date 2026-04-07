@@ -160,7 +160,7 @@
  'org-insert-link)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-regexp-targets
    :regexp org-link-any-re
    :fixed-length 0
@@ -172,7 +172,7 @@
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph))
-                                      _arg)
+                                      &rest _)
   (conn-all-things-targets
    :thing 'org-paragraph
    :window-predicate #'conn--org-window-p

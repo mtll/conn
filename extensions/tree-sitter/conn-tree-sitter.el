@@ -444,13 +444,6 @@
 (conn-register-thing 'conn-ts-thing)
 (conn-register-thing 'conn-ts-flat-thing :parents '(conn-ts-thing))
 
-(defvar conn-ts-multi-always-prompt-p
-  (lambda ()
-    (and conn-dispatch-in-progress
-         (not (memq conn-dispatch-current-action
-                    '(conn-dispatch-ts-goto
-                      conn-dispatch-jump))))))
-
 (defvar-local conn-ts-parent-things
   `(conn-ts-assignment-inner
     conn-ts-assignment-outer
@@ -529,12 +522,11 @@
               :bounds-op ( :method (_self _arg)
                            (conn-with-dispatch-suspended
                              (conn-multi-thing-select
-                              (alist-get (point) bounds-alist)
-                              (funcall conn-ts-multi-always-prompt-p))))))
+                              (alist-get (point) bounds-alist))))))
            (bounds-thing
             (conn-anonymous-thing
               '(conn-ts-thing)
-              :target-finder ( :method (self _arg)
+              :target-finder ( :method (self &rest _)
                                (conn-ts-query-targets
                                 :things (conn-thing-get self :types)))
               :pretty-print ( :method (self)
@@ -609,14 +601,13 @@
               :bounds-op ( :method (self _arg)
                            (conn-with-dispatch-suspended
                              (conn-multi-thing-select
-                              (alist-get (point) bounds-alist)
-                              (funcall conn-ts-multi-always-prompt-p)))))))
+                              (alist-get (point) bounds-alist)))))))
       (cl-flet ((make-bounds (bounds parent-thing type)
                   (conn-make-bounds
                    (conn-anonymous-thing
                      (list parent-thing)
                      :types (list type)
-                     :target-finder ( :method (self _arg)
+                     :target-finder ( :method (self &rest _)
                                       (conn-ts-all-things :thing thing))
                      :pretty-print ( :method (self)
                                      (mapconcat
@@ -676,7 +667,7 @@
        (:pred? ,(conn-ts--thing-predicate thing) ,name)))))
 
 (cl-defmethod conn-get-target-finder ((cmd (conn-thing conn-ts-thing))
-                                      _arg)
+                                      &rest _)
   (conn-ts-query-targets
    :things (list (seq-find #'conn-simple-thing-p (conn-thing-all-parents cmd)))))
 
@@ -1292,7 +1283,7 @@
        (conn-anonymous-thing
          '(conn-ts-thing)
          :pretty-print ( :method (_) "ts-all-things")
-         :target-finder ( :method (_self _arg)
+         :target-finder ( :method (_self &rest _)
                           (conn-ts-query-targets
                            :things conn-ts-all-query-things))
          :bounds-op ( :method (_self _arg)
@@ -1308,7 +1299,7 @@
        (conn-anonymous-thing
          '(conn-ts-thing)
          :pretty-print ( :method (_) "ts-all-parents")
-         :target-finder ( :method (_self _arg)
+         :target-finder ( :method (_self &rest _)
                           (conn-ts-query-targets
                            :things conn-ts-parent-things
                            :region-predicate (lambda (beg end)
@@ -1327,7 +1318,7 @@
        (conn-anonymous-thing
          '(sexp)
          :pretty-print ( :method (_) "ts-all-sexps")
-         :target-finder ( :method (_self _arg)
+         :target-finder ( :method (_self &rest _)
                           (conn-ts-all-things :thing 'sexp))
          :bounds-op ( :method (_self _arg)
                       (conn-ts-select-expansion

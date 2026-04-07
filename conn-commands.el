@@ -1166,7 +1166,7 @@ Currently selected window remains selected afterwards."
    (conn-anonymous-thing
      '(expansion)
      :pretty-print ( :method (_) "expansion")
-     :target-finder (:method (_self _arg) (conn-expansion-targets)))
+     :target-finder (:method (_self &rest _) (conn-expansion-targets)))
    arg nil
    :other-end :no-other-end)
   (conn-push-state 'conn-mark-state))
@@ -1413,10 +1413,8 @@ selected by dispatch with it."))
          :other-end other-end
          :restrict-windows restrict-windows))))
   (conn-push-command-history
-   (let ((prev (conn-ring-head conn-dispatch-ring)))
-     (lambda ()
-       (conn-dispatch-setup-previous prev)
-       (setq prev (conn-ring-head conn-dispatch-ring))))))
+   'conn-dispatch-setup-previous
+   (conn-ring-head conn-dispatch-ring)))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing expansion))
                                     arg
@@ -1459,10 +1457,8 @@ selected by dispatch with it."))
     (conn-dispatch-action-pulse
      beg (point)))
   (conn-push-command-history
-   (let ((prev (conn-ring-head conn-dispatch-ring)))
-     (lambda ()
-       (conn-dispatch-setup-previous prev)
-       (setq prev (conn-ring-head conn-dispatch-ring))))))
+   'conn-dispatch-setup-previous
+   (conn-ring-head conn-dispatch-ring)))
 
 (defun conn-yank-replace (thing
                           arg
@@ -3295,10 +3291,8 @@ hook, which see."
                       (concat string (and result sep) result))))
             (conn--kill-string result append register sep)))
         (conn-push-command-history
-         (let ((prev (conn-ring-head conn-dispatch-ring)))
-           (lambda ()
-             (conn-dispatch-setup-previous prev)
-             (setq prev (conn-ring-head conn-dispatch-ring)))))))))
+         'conn-dispatch-setup-previous
+         (conn-ring-head conn-dispatch-ring))))))
 
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing expansion))
                                   arg
@@ -3357,10 +3351,8 @@ hook, which see."
      thing arg nil
      :other-end :no-other-end)
     (conn-push-command-history
-     (let ((prev (conn-ring-head conn-dispatch-ring)))
-       (lambda ()
-         (conn-dispatch-setup-previous prev)
-         (setq prev (conn-ring-head conn-dispatch-ring)))))))
+     'conn-dispatch-setup-previous
+     (conn-ring-head conn-dispatch-ring))))
 
 (cl-defmethod conn-kill-thing-do (thing
                                   arg
@@ -3765,10 +3757,8 @@ that place."
                       (concat result (and result sep) string))))
             (conn--kill-string result append register sep)))
         (conn-push-command-history
-         (let ((prev (conn-ring-head conn-dispatch-ring)))
-           (lambda ()
-             (conn-dispatch-setup-previous prev)
-             (setq prev (conn-ring-head conn-dispatch-ring)))))))))
+         'conn-dispatch-setup-previous
+         (conn-ring-head conn-dispatch-ring))))))
 
 ;;;;; How Many
 
@@ -4575,10 +4565,8 @@ Interactively REPEAT is given by the prefix argument."
        :other-end other-end
        :repeat repeat))
     (conn-push-command-history
-     (let ((prev (conn-ring-head conn-dispatch-ring)))
-       (lambda ()
-         (conn-dispatch-setup-previous prev)
-         (setq prev (conn-ring-head conn-dispatch-ring)))))))
+     'conn-dispatch-setup-previous
+     (conn-ring-head conn-dispatch-ring))))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing expansion))
                                     arg
@@ -4616,7 +4604,6 @@ Interactively REPEAT is given by the prefix argument."
      (lambda ()
        (with-undo-amalgamate
          (conn-dispatch-setup-previous prev)
-         (setq prev (conn-ring-head conn-dispatch-ring))
          (if with (insert with)
            (conn-record-insertion nil)
            (conn-state-unwind clone

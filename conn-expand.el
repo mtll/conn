@@ -223,7 +223,7 @@ Expansions and contractions are provided by functions in
           (propertize "focus"
                       'face (when (cl-typep target-finder 'conn-dispatch-focus-mixin)
                               'eldoc-highlight-function-argument))))))
-    (let ((conn--dispatch-action-always-prompt t))
+    (let ((conn-dispatch-always-prompt t))
       (cl-call-next-method))))
 
 (provide 'conn-expand)

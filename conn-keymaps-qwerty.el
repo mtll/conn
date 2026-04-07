@@ -250,7 +250,7 @@
   "e" (conn-anonymous-thing
         '(expansion)
         :pretty-print ( :method (_) "expansion")
-        :target-finder (:method (_self _arg) (conn-expansion-targets)))
+        :target-finder (:method (_self &rest _) (conn-expansion-targets)))
   "k" 'forward-line
   "i" 'conn-backward-line
   "L" 'conn-forward-inner-line
@@ -355,20 +355,20 @@
   "o" (conn-anonymous-thing
         '(forward-word)
         :pretty-print (:method (_self) "all-words")
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-all-things-targets :thing 'word)))
   "O" 'forward-word
   "u" (conn-anonymous-thing
         '(forward-symbol)
         :pretty-print (:method (_self) "all-symbols")
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-all-things-targets :thing 'symbol)))
   "U" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
   "<conn-thing-map> b" (conn-anonymous-thing
                          '(visual-line)
-                         :target-finder ( :method (_self _arg)
+                         :target-finder ( :method (_self &rest _)
                                           (conn-dispatch-end-of-visual-line-targets))
                          :bounds-op ( :method (_self _arg)
                                       (save-excursion
@@ -394,7 +394,7 @@
   "e" (conn-anonymous-thing
         '(expansion)
         :pretty-print ( :method (_) "expansion")
-        :target-finder (:method (_self _arg) (conn-expansion-targets)))
+        :target-finder (:method (_self &rest _) (conn-expansion-targets)))
   "E" (conn-anonymous-thing
         '(expansion)
         :pretty-print
@@ -405,7 +405,7 @@
            (conn-anonymous-thing
              '(expansion)
              :pretty-print ( :method (_) "expansion")
-             :target-finder ( :method (_self _arg)
+             :target-finder ( :method (_self &rest _)
                               (conn-expansion-targets)))
            arg))
         :default-action
@@ -424,17 +424,17 @@
   "O" (conn-anonymous-thing
         '(word)
         :pretty-print (:method (_self) "all-words")
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-all-things-targets :thing 'word)))
   "U" (conn-anonymous-thing
         '(symbol)
         :pretty-print (:method (_self) "all-symbols")
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-all-things-targets :thing 'symbol)))
   ")" (conn-anonymous-thing
         '(sexp)
         :pretty-print (:method (_) "outer-list-or-string")
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
                           :thing 'sexp
                           :prefix-regexp (rx (or (syntax open-parenthesis)
@@ -447,7 +447,7 @@
                        ((and bounds (conn-bounds (pred identity)))
                         bounds)
                        (_ (cl-call-next-method))))
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
                           :thing 'sexp
                           :skip-prefix t
@@ -458,7 +458,7 @@
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "H" (conn-anonymous-thing
         '(symbol)
-        :target-finder ( :method (_self _arg)
+        :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-read-prefix 'symbol 1))
         :default-action (:method (_self) (conn-dispatch-highlight-symbol)))
   "'" 'conn-dispatch-kapply
@@ -488,16 +488,16 @@
                                 ()
                               (funcall jump)
                               (conn-push-state 'conn-emacs-state))))
-        :target-finder (:method (_self _arg) (conn-dispatch-previous-emacs-state)))
+        :target-finder (:method (_self &rest _) (conn-dispatch-previous-emacs-state)))
   "j" 'point
   "S-SPC" (conn-anonymous-thing
             '(point)
             :pretty-print ( :method (_) "global-mark-ring")
-            :target-finder (:method (_self _arg) (conn-dispatch-global-mark)))
+            :target-finder (:method (_self &rest _) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
         '(point)
         :pretty-print ( :method (_) "position-registers")
-        :target-finder (:method (_self _arg) (conn-dispatch-mark-register))))
+        :target-finder (:method (_self &rest _) (conn-dispatch-mark-register))))
 
 ;;;;; Other States
 

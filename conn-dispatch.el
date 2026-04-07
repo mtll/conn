@@ -92,8 +92,6 @@
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar conn-dispatch-action-pulse-color nil)
-
 (defvar conn-window-label-function 'conn-header-line-labels
   "Function to label windows for `conn-prompt-for-window'.
 
@@ -237,7 +235,7 @@ strings have `conn-dispatch-label-face'."
   (:predicate)
   ( :update (break)
     (setq conn--read-args-error-message nil
-          conn--dispatch-must-prompt nil)
+          conn--dispatch-redisplay-prompt-flag nil)
     (conn-add-unread-events (this-single-command-raw-keys))
     (pcase (conn--dispatch-read-char-1
             (conn-dispatch-char-argument-input-method arg))
@@ -363,6 +361,9 @@ strings have `conn-dispatch-label-face'."
 
 ;;;;;; Labels
 
+
+(defvar conn-dispatch-hide-labels nil)
+
 (defvar conn-dispatch-input-buffer nil
   "Buffer that was current when dispatch began.
 
@@ -440,8 +441,6 @@ returned."
 (cl-defmethod conn-label-completed-p ((label conn-window-label))
   (string-empty-p (window-parameter (conn-window-label-window label)
                                     'conn-label-string)))
-
-(defvar conn-dispatch-hide-labels nil)
 
 (defun conn-label-select (candidates &optional prompt always-prompt)
   "Select a label from CANDIDATES.
@@ -627,20 +626,22 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-ring)
 
-(defvar conn--dispatch-must-prompt nil)
-(defvar conn--dispatch-action-always-prompt nil)
-(defvar conn--dispatch-always-retarget nil)
+(defvar conn-dispatch-always-prompt nil)
+
+(defvar conn--dispatch-redisplay-prompt-flag nil)
 
 (defvar conn-dispatch-repeating nil)
 (defvar conn-dispatch-iteration-count nil)
 
+(defvar conn-dispatch-quit-flag nil)
+
 (defvar conn-dispatch-other-end nil)
 
-(defun conn-dispatch-other-end-p ()
-  (when conn-dispatch-other-end
-    (funcall conn-dispatch-other-end)))
+(define-inline conn-dispatch-other-end-p ()
+  (inline-quote (> 0 (funcall conn-dispatch-other-end 1))))
 
-(defvar conn-dispatch-quit-flag nil)
+(define-inline conn-dispatch-no-other-end-p ()
+  (inline-quote (= 0 (funcall conn-dispatch-other-end 1))))
 
 (cl-defstruct (conn-dispatch-thing-argument
                (:include conn-thing-argument)
@@ -678,8 +679,6 @@ themselves once the selection process has concluded."
 (defun conn-dispatch-transform-argument (&optional value)
   (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))
 
-(defvar conn--dispatch-thing-predicate nil)
-
 (cl-defstruct (conn-dispatch-target-argument
                (:include conn-thing-argument)
                (:constructor conn-dispatch-target-argument
@@ -688,11 +687,6 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-target-argument))
   (make-composed-keymap conn-recursive-edit-thing-map
                         (conn-thing-argument-keymap arg)))
-
-(cl-defmethod conn-argument-predicate :around ((_arg conn-dispatch-target-argument)
-                                               sym)
-  (and (cl-call-next-method)
-       (funcall conn--dispatch-thing-predicate sym)))
 
 (defvar-keymap conn-separator-argument-map
   "+" 'separator)
@@ -875,7 +869,6 @@ themselves once the selection process has concluded."
   (arguments nil :type list))
 
 (defun conn-dispatch-action-argument (&optional required)
-  (setq conn--dispatch-thing-predicate #'always)
   (make-conn-dispatch-action-argument
    :keymap conn-dispatch-repeat-argument-map
    :required required))
@@ -925,8 +918,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
       ((guard (function-get cmd :conn-dispatch-action))
        (conn-action-cancel (conn-argument-value arg))
        (mapc #'conn-argument-cancel arguments)
-       (setf conn--dispatch-thing-predicate #'always
-             action nil
+       (setf action nil
              set-flag nil
              arguments nil)
        (when-let* ((_ (not (eq cmd (cl-shiftf action-command nil))))
@@ -945,9 +937,6 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
                   when (and (oclosure--slot-mutable-p desc)
                             (conn-argument-p val))
                   do (push val arguments))
-         (setf conn--dispatch-thing-predicate
-               (or (conn-action--action-thing-predicate new-action)
-                   #'always))
          (setf (conn-dispatch-action-argument-repeat arg)
                (pcase (conn-dispatch-action-argument-repeat arg)
                  ((guard (not (conn-action-repeatable-p new-action))))
@@ -1350,8 +1339,6 @@ Target overlays may override this default by setting the
 
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
-
-(defvar conn-dispatch-select-always-prompt nil)
 
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
@@ -1912,9 +1899,8 @@ Target overlays may override this default by setting the
     `(:state ,(list pool size in-use) ,@labels)))
 
 (defun conn-dispatch-prompt-p ()
-  (or conn--dispatch-must-prompt
-      conn--dispatch-action-always-prompt
-      conn-dispatch-select-always-prompt
+  (or conn--dispatch-redisplay-prompt-flag
+      conn-dispatch-always-prompt
       (> conn-dispatch-iteration-count 0)
       (oref conn-dispatch-target-finder always-prompt)))
 
@@ -1980,12 +1966,7 @@ Target overlays may override this default by setting the
 
 (defvar conn-dispatch-in-progress nil)
 
-(defvar conn-dispatch-current-action nil
-  "The `oclosure-type' of the current dispatch action.")
-
 (defvar conn--dispatch-change-groups nil)
-
-(defvar conn--dispatch-current-thing nil)
 
 (defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
@@ -2024,7 +2005,7 @@ depths will be sorted before greater depths.
 (defun conn-dispatch-redisplay (&optional maybe-dont-prompt)
   (redisplay)
   (unless maybe-dont-prompt
-    (setq conn--dispatch-must-prompt t))
+    (setq conn--dispatch-redisplay-prompt-flag t))
   (throw 'dispatch-redisplay nil))
 
 (defvar conn--current-dispatch-buffers)
@@ -2049,14 +2030,15 @@ depths will be sorted before greater depths.
       (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
     (set-marker mk (point))))
 
-(cl-defgeneric conn-dispatch-perform-action (action repeat))
+(cl-defgeneric conn-dispatch-perform-action (action))
 
-(cl-defmethod conn-dispatch-perform-action (action repeat)
+(cl-defmethod conn-dispatch-perform-action (action)
   (let ((success nil)
         (owconf (current-window-configuration))
         (oframe (selected-frame))
         (opoint (point))
-        (conn-dispatch-current-action (oclosure-type action))
+        (conn-dispatch-action-reference
+         (conn-action-get-reference action))
         (conn--dispatch-label-state nil)
         (conn--dispatch-change-groups nil)
         (conn--read-args-error-message nil)
@@ -2067,21 +2049,21 @@ depths will be sorted before greater depths.
       (progn
         (redisplay)
         (catch 'dispatch-exit
-          (while (or repeat (< conn-dispatch-iteration-count 1))
+          (while (or conn-dispatch-repeating
+                     (< conn-dispatch-iteration-count 1))
             (condition-case err
                 (conn-with-dispatch-handlers
                   (when (conn-action-repeatable-p action)
                     (:handler
                      ( :predicate (cmd) (eq cmd 'repeat-dispatch))
                      ( :display ()
-                       (when repeat
+                       (when conn-dispatch-repeating
                          (concat
                           "\\[repeat-dispatch] "
                           (propertize
                            "repeat"
                            'face 'conn-argument-active-face))))
                      ( :update (_cmd break)
-                       (cl-callf not repeat)
                        (cl-callf not conn-dispatch-repeating)
                        (funcall break))))
                   (catch 'dispatch-undo
@@ -2142,17 +2124,8 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
             (add-to-invisibility-spec 'conn-dispatch-invisible)))
         (cl-loop
          (catch 'dispatch-redisplay
-           (pcase-let* ((`(,pt ,win ,thing-override)
-                         (conn-target-finder-select
-                          conn-dispatch-target-finder))
-                        (`(,thing ,arg ,transform)
-                         conn--dispatch-current-thing))
-             (cl-return
-              (list pt
-                    win
-                    (or thing-override thing)
-                    arg
-                    transform))))))
+           (cl-return
+            (conn-target-finder-select conn-dispatch-target-finder)))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (remove-from-invisibility-spec 'conn-dispatch-invisible)
@@ -2246,19 +2219,19 @@ the meaning of depth."
     (message "%s")))
 
 (defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
-  (with-current-buffer conn-dispatch-input-buffer
-    (pcase use-input-method
-      ((or 't 'nil)
-       (let ((inhibit-quit t))
-         (read-event nil use-input-method seconds)))
-      (im
-       (let ((pim current-input-method))
-         (unwind-protect
-             (progn
-               (activate-input-method im)
-               (let ((inhibit-quit t))
-                 (read-event nil t seconds)))
-           (activate-input-method pim)))))))
+  (condition-case _
+      (with-current-buffer conn-dispatch-input-buffer
+        (pcase use-input-method
+          ((or 't 'nil)
+           (read-event nil use-input-method seconds))
+          (im
+           (let ((pim current-input-method))
+             (unwind-protect
+                 (progn
+                   (activate-input-method im)
+                   (read-event nil t seconds))
+               (activate-input-method pim))))))
+    (quit (car (last (current-input-mode))))))
 
 (defvar conn-dispatch-read-char-pre-functions nil)
 
@@ -2310,27 +2283,20 @@ the meaning of depth."
                     ,conn-target-predicate
                     ,conn-target-sort-function)
                   conn--dispatch-prev-state)
-                 (conn-dispatch-in-progress nil)
                  (conn--dispatch-prev-state nil)
-                 (conn--dispatch-must-prompt nil)
-                 (conn--dispatch-action-always-prompt nil)
+                 (conn-dispatch-in-progress nil)
+                 (conn--dispatch-redisplay-prompt-flag nil)
                  (conn-dispatch-label-function nil)
                  (conn-dispatch-quit-flag nil)
-                 (conn-dispatch-current-action nil)
-                 (conn--dispatch-current-thing nil)
                  (conn-dispatch-repeating nil)
                  (conn-dispatch-action-reference nil)
                  (conn-targets nil)
                  (conn--dispatch-label-state nil)
                  (conn-dispatch-target-finder nil)
                  (conn--dispatch-change-groups nil)
-                 (inhibit-message nil)
                  (conn-dispatch-iteration-count nil)
                  (conn-dispatch-other-end nil)
-                 (conn--read-args-prefix-mag nil)
-                 (conn--read-args-prefix-sign nil)
                  (conn--dispatch-read-char-handlers nil)
-                 (conn--dispatch-always-retarget nil)
                  (conn-dispatch-hide-labels nil)
                  (conn-dispatch-input-buffer nil))
        (message nil)
@@ -2546,8 +2512,7 @@ buffer."
         ((`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument)))
       (conn-target-finder-setup
-       (conn-get-target-finder thing arg))
-      (setq conn--dispatch-current-thing (list thing arg transform))
+       (conn-get-target-finder thing arg transform))
       (conn-dispatch-redisplay))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
@@ -2665,18 +2630,14 @@ buffer."
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql other-end)))
   "Toggle other end."
-  ( :update (_break)
-    (unless (or (advice-function-member-p 'no-other-end
-                                          conn-dispatch-other-end)
-                (advice-function-member-p 'target-no-other-end
-                                          conn-dispatch-other-end))
+  ( :update (break)
+    (unless (conn-dispatch-no-other-end-p)
       (if (advice-function-member-p 'toggle conn-dispatch-other-end)
           (remove-function conn-dispatch-other-end 'toggle)
-        (add-function :around conn-dispatch-other-end
-                      (lambda (fn) (not (funcall fn)))
-                      '((name . toggle)
-                        (depth . 100))))
-      (conn-dispatch-redisplay 'maybe-dont-prompt))))
+        (add-function :filter-return conn-dispatch-other-end
+                      #'- '((name . toggle)
+                            (depth . 100))))
+      (funcall break))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql restrict-windows)))
@@ -2710,7 +2671,10 @@ buffer."
                (start (overlay-start target))
                (point (or (overlay-get target 'point) start))
                (win (overlay-get target 'window))
-               (face (overlay-get target 'label-face)))
+               (face (overlay-get target 'label-face))
+               (thing (oref conn-dispatch-target-finder thing))
+               (`(,arg ,transform)
+                (oref conn-dispatch-target-finder arg-and-transform)))
     (conn-dispatch-undo-case
       (:undo
        (conn-make-target-overlay
@@ -2718,7 +2682,11 @@ buffer."
         :window win
         :properties `( label-face ,face
                        label-string ,string))))
-    (list point win (overlay-get target 'thing))))
+    (list point
+          win
+          (or (overlay-get target 'thing) thing)
+          arg
+          transform)))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
   (setf (conn-dispatch-label-narrowed-string label)
@@ -2787,20 +2755,10 @@ buffer."
    (always-prompt :initform nil
                   :initarg :always-prompt)
    (prompt :initform nil
-           :initarg :prompt))
+           :initarg :prompt)
+   (thing :initarg :thing)
+   (arg-and-transform :initarg :arg-and-transform))
   :abstract t)
-
-(defvar conn-dispatch-post-update-functions nil
-  "Abnormal hook run after a target finder updates in each window.
-
-Each function in the hook is called with the window that has been
-updated.")
-
-(defvar conn-dispatch-pre-update-functions nil
-  "Abnormal hook run before a target finder updates in each window.
-
-Each function in the hook is called with the window that is about to be
-updated.")
 
 (eval-and-compile
   (defun conn--define-target-finder (name
@@ -2922,8 +2880,6 @@ updated.")
 
 (cl-defmethod conn-target-finder-select :before (target-finder)
   (conn-cleanup-labels)
-  (when conn--dispatch-always-retarget
-    (conn-target-finder-retarget target-finder))
   (let ((old nil))
     (unwind-protect
         (progn
@@ -2958,7 +2914,8 @@ updated.")
       (conn-target-finder-suspend target-finder))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
-  (let ((after nil))
+  (let ((after nil)
+        (conn--dispatch-redisplay-prompt-flag nil))
     (conn-with-dispatch-labels
         (labels (conn-dispatch-get-labels))
       (prog1
@@ -3001,8 +2958,16 @@ updated.")
           (funcall after)
           (throw 'dispatch-exit nil))))))
 
-(cl-defgeneric conn-get-target-finder (cmd arg)
+(cl-defgeneric conn-get-target-finder (cmd arg transform)
   (declare (conn-anonymous-thing-property :target-finder)))
+
+(cl-defmethod conn-get-target-finder :around (thing arg transform)
+  (let ((tf (cl-call-next-method)))
+    (unless (slot-boundp tf 'thing)
+      (oset tf thing thing))
+    (unless (slot-boundp tf 'arg-and-transform)
+      (oset tf arg-and-transform (list arg transform)))
+    tf))
 
 (cl-defgeneric conn-target-finder-setup (target-finder))
 
@@ -3020,25 +2985,16 @@ updated.")
                     label-function
                     '((name . target-finder)))
     (remove-function conn-dispatch-label-function 'target-finder))
-  (remove-function conn-dispatch-other-end 'target-no-other-end)
-  (remove-function conn-dispatch-other-end 'target-finder)
-  (pcase (oref tf other-end)
-    (:no-other-end
-     (add-function :before-while conn-dispatch-other-end
-                   #'ignore
-                   '((name . target-no-other-end)
-                     (depth . -90))))
-    (_
-     (add-function :around conn-dispatch-other-end
-                   (lambda (fn)
-                     (xor (funcall fn)
-                          (oref conn-dispatch-target-finder
-                                other-end)))
-                   '((name . target-finder)))))
+  (add-function :filter-return conn-dispatch-other-end
+                (pcase (oref tf other-end)
+                  (:no-other-end (lambda (&rest _) 0))
+                  ('nil #'+)
+                  ('t #'-))
+                '((name . target-finder)))
   (setf conn-dispatch-target-finder tf))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-read-n-chars :string-length 2))
 
 (cl-defgeneric conn-target-finder-update (target-finder))
@@ -3046,13 +3002,6 @@ updated.")
 (cl-defmethod conn-target-finder-update (target-finder)
   (when (functionp target-finder)
     (funcall target-finder)))
-
-(cl-defmethod conn-target-finder-update :around (_target-finder)
-  (dolist (win (conn--get-target-windows))
-    (run-hook-with-args 'conn-dispatch-pre-update-functions win))
-  (cl-call-next-method)
-  (dolist (win (conn--get-target-windows))
-    (run-hook-with-args 'conn-dispatch-post-update-functions win)))
 
 (cl-defgeneric conn-target-finder-label-faces (target-finder))
 
@@ -3096,14 +3045,6 @@ updated.")
       (overlay-put target 'category 'conn-old-target)
       (overlay-put target 'face nil)))
   (setq conn-target-count nil))
-
-(cl-defgeneric conn-target-finder-restore-state-functions (target-finder)
-  "Return a list of functions to restore TARGET-FINDER\\='s state.
-
-Each function should take an uninitialized target finder of the same
-type and initialize it to contain the same state as TARGET-FINDER."
-  (declare (important-return-value t))
-  (:method (_) nil))
 
 (defclass conn-dispatch-target-key-labels-mixin ()
   ()
@@ -3149,26 +3090,35 @@ to the key binding for that target."
         (ignore (conn-dispatch-read-char "Register"))))))
 
 (defclass conn-dispatch-retargetable-mixin ()
-  ()
+  ((always-retarget :initform nil
+                    :initarg :always-retarget)
+   (retarget-tick :initform -1))
   :abstract t)
+
+(cl-defgeneric conn-target-finder-retarget (state)
+  (:method ((_ conn-dispatch-retargetable-mixin)) nil))
+
+(cl-defmethod conn-target-finder-setup ((tf conn-dispatch-retargetable-mixin))
+  (oset tf retarget-tick -1)
+  (cl-call-next-method))
 
 (defvar-keymap conn-dispatch-retargeting-argument-map
   "C-M-r" 'always-retarget
   "M-r" 'retarget)
 
-(cl-defmethod conn-target-finder-select ((_state conn-dispatch-retargetable-mixin))
+(cl-defmethod conn-target-finder-select :around ((state conn-dispatch-retargetable-mixin))
   (conn-with-dispatch-handlers
     (:handler
      ( :keymap conn-dispatch-retargeting-argument-map)
      ( :display ()
        (list
-        (when (not conn--dispatch-always-retarget)
+        (unless (oref state always-retarget)
           "\\[retarget] retarget")
         (when conn-dispatch-repeating
           (concat
            "\\[always-retarget] "
            (propertize "always retarget"
-                       'face (when conn--dispatch-always-retarget
+                       'face (when (oref state always-retarget)
                                'eldoc-highlight-function-argument))))))
      ( :predicate (cmd)
        (or (eq cmd 'always-retarget)
@@ -3176,20 +3126,22 @@ to the key binding for that target."
      ( :update (cmd _break)
        (pcase cmd
          ('always-retarget
-          (setq conn--dispatch-always-retarget
-                (not conn--dispatch-always-retarget))
+          (cl-callf not (oref state always-retarget))
           (conn-dispatch-redisplay))
          ('retarget
-          (conn-target-finder-retarget conn-dispatch-target-finder)
+          (conn-target-finder-retarget state)
           (conn-dispatch-redisplay 'maybe-dont-prompt)))))
+    (if (or (oref state always-retarget)
+            (= (oref state retarget-tick)
+               conn-dispatch-iteration-count))
+        (conn-target-finder-retarget state)
+      (oset state retarget-tick conn-dispatch-iteration-count))
     (cl-call-next-method)))
 
 (conn-define-target-finder conn-dispatch-string-targets
     (conn-dispatch-retargetable-mixin)
     ((string :initform nil
              :initarg :string)
-     (thing :initform nil
-            :initarg :thing)
      (predicate :initform nil
                 :initarg :predicate)
      (regex-p :initform nil
@@ -3202,11 +3154,6 @@ to the key binding for that target."
         (if (oref state regex-p)
             (conn-make-re-target-overlays string predicate len thing)
           (conn-make-string-target-overlays string predicate len thing))))))
-
-(cl-defmethod conn-target-finder-restore-state-functions ((target-finder conn-dispatch-string-targets))
-  (cons (let ((str (oref target-finder string)))
-          (lambda (tf) (setf (oref tf string) str)))
-        (cl-call-next-method)))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
@@ -3378,9 +3325,7 @@ contain targets."
   (cl-call-next-method))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-focus-mixin))
-  (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
-    (mapc #'delete-overlay ovs))
-  (setf (oref state hidden) nil))
+  (conn-focus-targets-remove-overlays state))
 
 (cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,win ,tick . ,ovs) (oref state hidden))
@@ -3629,8 +3574,7 @@ contain targets."
         (conn-make-target-overlay pt 0)))))
 
 (conn-define-target-finder conn-all-things-targets
-    ()
-    ((thing :initarg :thing))
+    () ()
   ( :default-update-handler (state)
     (let ((thing (oref state thing)))
       (conn-for-each-visible
@@ -3696,8 +3640,7 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-things-with-prefix-targets
     ()
-    ((thing :initarg :thing)
-     (prefix-string :initarg :prefix-string)
+    ((prefix-string :initarg :prefix-string)
      (fixed-length :initform nil
                    :initarg :fixed-length))
   ( :default-update-handler (state)
@@ -3716,8 +3659,7 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-things-with-re-prefix-targets
     ()
-    ((thing :initarg :thing)
-     (prefix-regexp :initarg :prefix-regexp)
+    ((prefix-regexp :initarg :prefix-regexp)
      (skip-prefix :initarg :skip-prefix
                   :initform nil)
      (fixed-length :initform nil
@@ -3742,8 +3684,7 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-things-matching-re-targets
     ()
-    ((thing :initarg :thing)
-     (regexp :initarg :prefix-regexp)
+    ((regexp :initarg :prefix-regexp)
      (fixed-length :initform nil
                    :initarg :fixed-length)
      (update-function
@@ -3996,9 +3937,6 @@ contain targets."
   (action-description :type (or string nil))
   (action-window-predicate :type function)
   (action-target-predicate :type function)
-  (action-thing-predicate :type function)
-  (action-always-retarget :type boolean)
-  (action-always-prompt :type boolean)
   (action-reference :type string)
   (action-not-repeatable :type boolean))
 
@@ -4007,9 +3945,6 @@ contain targets."
 (defalias 'conn-action-description 'conn-action--action-description)
 (defalias 'conn-action-window-predicate 'conn-action--action-window-predicate)
 (defalias 'conn-action-target-predicate 'conn-action--action-target-predicate)
-(defalias 'conn-action-thing-predicate 'conn-action--action-thing-predicate)
-(defalias 'conn-action-always-retarget 'conn-action--action-always-retarget)
-(defalias 'conn-action-always-prompt 'conn-action--action-always-prompt)
 (defalias 'conn-action-reference 'conn-action--action-reference)
 
 (defun conn-action-repeatable-p (action)
@@ -4103,7 +4038,6 @@ contain targets."
    (conn-change-group-action--action-change-group action))
   (setf (conn-change-group-action--action-change-group action) nil))
 
-;;;###autoload
 (defvar conn-dispatch-button-functions nil)
 
 (defun conn-dispatch-button-handler-default (pt)
@@ -4111,8 +4045,9 @@ contain targets."
          (push-button pt)
          t)
         ((fboundp 'widget-apply-action)
-         (widget-apply-action (get-char-property pt 'button) pt)
-         t)))
+         (ignore-errors
+           (widget-apply-action (get-char-property pt 'button) pt)
+           t))))
 
 (add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default 50)
 
@@ -4531,6 +4466,7 @@ it."))
   (declare (conn-dispatch-action)
            (important-return-value t))
   (oclosure-lambda (conn-action
+                    (action-no-history t)
                     (action-description "Jump"))
       ()
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
@@ -4624,7 +4560,6 @@ it."))
            (important-return-value t))
   (oclosure-lambda (conn-action
                     (action-description "Transpose")
-                    (action-always-retarget t)
                     (action-window-predicate
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
@@ -4632,7 +4567,8 @@ it."))
                     (action-reference
                      "Transpose two things selected by dispatch."))
       ()
-    (pcase-let* ((`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
+    (pcase-let* ((conn-dispatch-always-prompt t)
+                 (`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
                   (conn-select-target))
                  (ov (make-overlay pt1 pt1 (window-buffer win1))))
       (unwind-protect
@@ -4721,31 +4657,18 @@ it."))
                ( :constructor conn-make-dispatch
                  (action
                   &aux
-                  (thing-state conn--dispatch-current-thing)
+                  (repeat conn-dispatch-repeating)
                   (restrict-windows (advice-function-member-p
                                      'conn--dispatch-restrict-windows
                                      conn-target-window-predicate))
-                  (other-end
-                   (cond
-                    ((advice-function-member-p 'no-other-end
-                                               conn-dispatch-other-end)
-                     :no-other-end)
-                    ((conn-dispatch-other-end-p))))
-                  (always-retarget conn--dispatch-always-retarget)
-                  (setup-function
-                   (let ((fns (conn-target-finder-restore-state-functions
-                               conn-dispatch-target-finder)))
-                     (lambda ()
-                       (dolist (fn fns)
-                         (funcall fn conn-dispatch-target-finder)))))))
+                  (other-end conn-dispatch-other-end)
+                  (target-finder conn-dispatch-target-finder)))
                (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
-  (thing-state nil :type list)
   (other-end nil :type symbol)
-  (always-retarget nil :type boolean)
   (repeat nil :type boolean)
   (restrict-windows nil :type boolean)
-  (setup-function nil :type function))
+  (target-finder nil))
 
 (defvar conn-dispatch-ring-max 12)
 
@@ -4764,9 +4687,7 @@ it."))
               (conn-read-args-error "Last dispatch action stale"))
           (conn-read-args-return
             (conn-dispatch-setup-previous
-             prev
-             :repeat (xor (conn-read-args-consume-prefix-arg)
-                          (conn-previous-dispatch-repeat prev)))))
+             prev (conn-read-args-consume-prefix-arg))))
       (conn-read-args-error "Dispatch ring empty"))))
 
 (defun conn-previous-dispatch-copy (dispatch)
@@ -4781,19 +4702,24 @@ it."))
 
 (defun conn-describe-dispatch (dispatch)
   (declare (side-effect-free t))
-  (format "%s @ %s <%s%s>"
-          (conn-action-display
-           (conn-previous-dispatch-action dispatch))
-          (conn-thing-pretty-print
-           (car (conn-previous-dispatch-thing-state dispatch)))
-          (nth 1 (conn-previous-dispatch-thing-state dispatch))
-          (if-let* ((ts (nth 2 (conn-previous-dispatch-thing-state dispatch))))
-              (concat
-               "   "
-               (mapconcat (lambda (tf)
-                            (or (get tf :conn-transform-description) ""))
-                          ts " > "))
-            "")))
+  (pcase-let ((thing
+               (oref (conn-previous-dispatch-target-finder dispatch)
+                     thing))
+              (`(,arg ,transform)
+               (oref (conn-previous-dispatch-target-finder dispatch)
+                     arg-and-transform)))
+    (format "%s @ %s <%s%s>"
+            (conn-action-display
+             (conn-previous-dispatch-action dispatch))
+            (conn-thing-pretty-print thing)
+            arg
+            (if transform
+                (concat
+                 "   "
+                 (mapconcat (lambda (tf)
+                              (or (get tf :conn-transform-description) ""))
+                            transform " > "))
+              ""))))
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
@@ -4830,28 +4756,73 @@ it."))
     (message (conn-describe-dispatch
               (conn-ring-head conn-dispatch-ring)))))
 
-(defun conn-dispatch-setup-previous (prev-dispatch &rest override-keys)
+(defun conn-dispatch-setup-previous (prev-dispatch &optional invert-repeat)
   (when (conn-action-stale-p
          (conn-previous-dispatch-action prev-dispatch))
     (error "Action stale"))
   (pcase-let (((cl-struct conn-previous-dispatch
-                          (thing-state
-                           `(,thing ,arg ,thing-transform))
                           action
-                          other-end
-                          always-retarget
+                          (other-end conn-dispatch-other-end)
                           repeat
-                          restrict-windows
-                          setup-function)
+                          target-finder
+                          restrict-windows)
                prev-dispatch))
-    (apply #'conn-dispatch-setup
-           `( ,action ,thing ,arg ,thing-transform
-              ,@override-keys
-              :always-retarget ,always-retarget
-              :repeat ,repeat
-              :restrict-windows ,restrict-windows
-              :other-end ,other-end
-              :setup-function ,setup-function))))
+    (let ((conn-dispatch-hide-labels nil)
+          (conn-wincontrol-mode nil)
+          (conn-wincontrol-one-command-mode nil)
+          (conn-dispatch-quit-flag nil)
+          (conn--dispatch-prev-state
+           (list conn-target-window-predicate
+                 conn-target-predicate
+                 conn-target-sort-function))
+          (conn-target-window-predicate conn-target-window-predicate)
+          (conn-target-predicate conn-target-predicate)
+          (conn-target-sort-function conn-target-sort-function)
+          (conn-dispatch-label-function conn-dispatch-label-function)
+          (conn-dispatch-target-finder nil)
+          (conn-dispatch-repeating
+           (and (xor repeat invert-repeat)
+                (conn-action-repeatable-p action)))
+          (conn-dispatch-iteration-count 0))
+      (conn-with-dispatch-handlers
+        (:handler
+         (:depth -99)
+         ( :display ()
+           (propertize (conn-action-display action t)
+                       'face 'conn-argument-active-face)))
+        ( :with (conn-dispatch-prefix-arg)
+          :depth -97)
+        ( :with (conn-read-char-input-method)
+          :depth -96)
+        (conn-with-dispatch-input-buffer
+          (conn--unwind-protect-all
+            (let ((conn-dispatch-in-progress t))
+              (let ((im (or current-input-method
+                            conn--input-method)))
+                (with-current-buffer conn-dispatch-input-buffer
+                  (activate-input-method im)))
+              (conn-target-finder-setup target-finder)
+              (when-let* ((predicate (conn-action-window-predicate action)))
+                (add-function :after-while conn-target-window-predicate predicate))
+              (when-let* ((predicate (conn-action-target-predicate action)))
+                (add-function :after-while conn-target-predicate predicate))
+              (when restrict-windows
+                (add-function :after-while conn-target-window-predicate
+                              'conn--dispatch-restrict-windows))
+              (conn-dispatch-perform-action action)
+              (setf (conn-previous-dispatch-repeat prev-dispatch)
+                    conn-dispatch-repeating)
+              (setf (conn-previous-dispatch-other-end prev-dispatch)
+                    conn-dispatch-other-end)
+              (setf (conn-previous-dispatch-target-finder prev-dispatch)
+                    conn-dispatch-target-finder)
+              (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
+                    (advice-function-member-p
+                     'conn--dispatch-restrict-windows
+                     conn-target-window-predicate))
+              (conn-dispatch-push-history prev-dispatch))
+            (conn-cleanup-targets)
+            (conn-cleanup-labels)))))))
 
 ;;;;; Dispatch Commands
 
@@ -4862,22 +4833,15 @@ it."))
                                &key
                                repeat
                                restrict-windows
-                               other-end
-                               always-retarget
-                               setup-function)
+                               other-end)
   (when (null action)
     (setq action (conn-make-default-action thing)))
   (conn-protected-let*
-      ((conn-dispatch-hide-labels nil)
+      ((action action (conn-action-cancel action))
+       (conn-dispatch-hide-labels nil)
        (conn-wincontrol-mode nil)
        (conn-wincontrol-one-command-mode nil)
-       (action action (conn-action-cancel action))
        (conn-dispatch-quit-flag nil)
-       (conn-dispatch-action-reference
-        (conn-action-get-reference action))
-       (conn--dispatch-current-thing (list thing arg transform))
-       (conn-dispatch-repeating
-        (and repeat (conn-action-repeatable-p action)))
        (conn--dispatch-prev-state
         (list conn-target-window-predicate
               conn-target-predicate
@@ -4885,16 +4849,14 @@ it."))
        (conn-target-window-predicate conn-target-window-predicate)
        (conn-target-predicate conn-target-predicate)
        (conn-target-sort-function conn-target-sort-function)
-       (conn--dispatch-must-prompt nil)
-       (conn--read-args-prefix-mag nil)
-       (conn--read-args-prefix-sign nil)
-       (conn--dispatch-action-always-prompt (conn-action-always-prompt action))
        (conn-dispatch-label-function conn-dispatch-label-function)
+       (conn-dispatch-other-end (pcase other-end
+                                  (:no-other-end (lambda (&rest _) 0))
+                                  ('t #'-)
+                                  ('nil #'+)))
+       (conn-dispatch-repeating
+        (and repeat (conn-action-repeatable-p action)))
        (conn-dispatch-iteration-count 0)
-       (conn--dispatch-always-retarget
-        (or always-retarget
-            (conn-action-always-retarget action)))
-       (conn-dispatch-other-end (lambda () (and other-end t)))
        (conn-dispatch-target-finder nil))
     (conn-with-dispatch-handlers
       (:handler
@@ -4914,12 +4876,7 @@ it."))
               (with-current-buffer conn-dispatch-input-buffer
                 (activate-input-method im)))
             (conn-target-finder-setup
-             (conn-get-target-finder thing arg))
-            (when (eq other-end :no-other-end)
-              (add-function :before-while conn-dispatch-other-end
-                            #'ignore
-                            '((depth . -100)
-                              (name . no-other-end))))
+             (conn-get-target-finder thing arg transform))
             (when-let* ((predicate (conn-action-window-predicate action)))
               (add-function :after-while conn-target-window-predicate predicate))
             (when-let* ((predicate (conn-action-target-predicate action)))
@@ -4927,9 +4884,11 @@ it."))
             (when restrict-windows
               (add-function :after-while conn-target-window-predicate
                             'conn--dispatch-restrict-windows))
-            (when setup-function (funcall setup-function))
-            (conn-dispatch-perform-action action repeat)
-            (conn-dispatch-push-history (conn-make-dispatch action)))
+            (conn-dispatch-perform-action action)
+            (unless (conn-action-no-history action)
+              (let ((prev (conn-make-dispatch action)))
+                (conn-dispatch-push-history prev)
+                (conn-push-command-history 'conn-dispatch-setup-previous prev))))
           (conn-cleanup-targets)
           (conn-cleanup-labels))))))
 
@@ -4981,7 +4940,7 @@ regions matching the contents of the region at point.
 INITIAL-ARG is the initial value of the prefix argument during
 `conn-read-args'.  Interactively the current prefix argument."
   (interactive)
-  (let ((conn--dispatch-action-always-prompt t))
+  (let ((conn-dispatch-always-prompt t))
     (conn-read-args (conn-dispatch-thingatpt-state
                      :prefix current-prefix-arg
                      :command-handler (conn-dispatch-command-handler)
@@ -5027,9 +4986,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
   (let ((prev (conn-ring-extract-head conn-dispatch-ring)))
-    (conn-dispatch-setup-previous
-     prev
-     :repeat (xor invert-repeat (conn-previous-dispatch-repeat prev)))))
+    (conn-dispatch-setup-previous prev invert-repeat)))
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
   "Perform the previous dispatch at a mouse click.
@@ -5089,7 +5046,7 @@ for the dispatch."
    (conn-anonymous-thing
      '(button)
      :pretty-print ( :method (_self) "all-buttons")
-     :target-finder ( :method (_self _arg)
+     :target-finder ( :method (_self &rest _)
                       (conn-dispatch-button-targets)))
    nil nil))
 
@@ -5163,7 +5120,7 @@ for the dispatch."
           (conn-dispatch-jump)
           (conn-anonymous-thing
             '(region)
-            :target-finder ( :method (_self _arg)
+            :target-finder ( :method (_self &rest _)
                              (conn-isearch-targets
                               :window-predicate (let ((owin (selected-window)))
                                                   (lambda (win) (eq win owin)))
@@ -5223,7 +5180,7 @@ for the dispatch."
               action
               (conn-anonymous-thing
                 '(region)
-                :target-finder ( :method (_self _arg)
+                :target-finder ( :method (_self &rest _)
                                  (conn-isearch-targets
                                   :window-predicate (let ((owin (selected-window)))
                                                       (lambda (win) (eq win owin)))
@@ -5358,9 +5315,7 @@ for the dispatch."
 (cl-defmethod register-val-jump-to ((val conn-dispatch-register)
                                     arg)
   (let ((prev (conn-dispatch-register-dispatch val)))
-    (conn-dispatch-setup-previous
-     prev
-     :repeat (xor arg (conn-previous-dispatch-repeat prev)))))
+    (conn-dispatch-setup-previous prev arg)))
 
 (cl-defmethod register-val-describe ((val conn-dispatch-register)
                                      _verbose)
@@ -5380,7 +5335,7 @@ for the dispatch."
 (conn-register-thing 'dispatch)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-all-defuns
    :reference (conn-reference-quote
                 ((:heading "Defun Targets")
@@ -5388,7 +5343,7 @@ for the dispatch."
 lines."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-visual-line-targets
    :reference (conn-reference-quote
                 ((:heading "Visual Lines Targets")
@@ -5397,19 +5352,19 @@ lines."))))
 (conn-register-thing-commands '(dispatch) nil 'conn-dispatch)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing symbol))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-things-read-prefix 'symbol 1))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing word))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-things-read-prefix 'word 1))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sexp))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-things-read-prefix 'sexp 1))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence))
-                                      _arg)
+                                      &rest _)
   (conn-all-things-targets
    :thing 'sentence
    :reference (conn-reference-quote
@@ -5417,7 +5372,7 @@ lines."))))
                  "Dispatch on sentences."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph))
-                                      _arg)
+                                      &rest _)
   (conn-all-things-targets
    :thing 'paragraph
    :reference (conn-reference-quote
@@ -5425,12 +5380,12 @@ lines."))))
                  "Dispatch on paragraphs."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing char))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-read-n-chars :string-length 2
                               :thing 'forward-char))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-read-with-timeout
    :timeout conn-read-string-timeout
    :reference (conn-reference-quote
@@ -5439,42 +5394,42 @@ lines."))))
 point at the end of a match."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-line-targets
    :reference (conn-reference-quote
                 ((:heading "Line Targets")
                  "Dispatch on a line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-column-targets
    :reference (conn-reference-quote
                 ((:heading "Column Targets")
                  "Dispatch on a column.  Bounds are from point to selected column."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-line-targets
    :reference (conn-reference-quote
                 ((:heading "Outer Line Targets")
                  "Dispatch on an outer line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-inner-line-targets
    :reference (conn-reference-quote
                 ((:heading "Inner Line Targets")
                  "Dispatch on an inner line."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-end-of-inner-line-targets
    :reference (conn-reference-quote
                 ((:heading "Inner Line Targets")
                  "Dispatch on an outer line.  Other end defaults to non-nil."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line-dwim))
-                                      _arg)
+                                      &rest _)
   (conn-dispatch-end-of-inner-line-targets
    :reference (conn-reference-quote
                 ((:heading "Inner Line Targets")

@@ -1992,7 +1992,7 @@ Only the background color is used."
               (conn-argument-set-flag arg) t)))
     (funcall break)))
 
-(defun conn-multi-thing-select (things &optional always-prompt)
+(defun conn-multi-thing-select (things)
   (let ((bounds (compat-call sort things
                              :key #'conn-bounds--whole
                              :lessp (lambda (a b)
@@ -2009,9 +2009,6 @@ Only the background color is used."
                (mapconcat #'conn-argument-display args)))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
-      ((and `(,bound . nil)
-            (guard (not always-prompt)))
-       bound)
       (`(,(conn-bounds `(,beg . ,end)) . ,_)
        (save-mark-and-excursion
          (goto-char end)
