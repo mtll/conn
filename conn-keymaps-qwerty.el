@@ -88,6 +88,8 @@
 
 (define-keymap
   :keymap conn-default-edit-map
+  "w" 'conn-kapply-on-word
+  "W" 'conn-kapply-on-symbol
   "," 'conn-dispatch-on-buttons
   "r" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key

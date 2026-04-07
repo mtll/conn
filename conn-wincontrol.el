@@ -41,6 +41,16 @@
    "\\[conn-wincontrol-exit] exit; "
    "\\[conn-wincontrol-quick-ref] help):"))
 
+(defvar conn--wincontrol-one-command-help-format
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "WinControl " 'face 'minibuffer-prompt)
+   "(arg: "
+   (propertize "%s" 'face 'read-multiple-choice-face) ", "
+   "\\[conn-wincontrol-digit-argument-reset] reset arg; "
+   "\\[keyboard-quit] exit; "
+   "\\[conn-wincontrol-quick-ref] help):"))
+
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
@@ -89,22 +99,26 @@
         (list #'conn--set-wincontrol-arg-property)))
 
 (defun conn--wincontrol-post-command ()
-  (unless conn--wincontrol-preserve-arg
-    (setq conn--wincontrol-arg nil
-          conn--wincontrol-arg-sign 1))
-  (setq conn--wincontrol-preserve-arg nil)
-  (setq emulation-mode-map-alists
-        `(conn--wincontrol-maps
-          ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
-  (let ((curr (current-message))
-        (message-log-max nil))
-    (cond ((minibuffer-window-active-p (selected-window)))
-          ((null curr)
-           (message "%s" (conn--wincontrol-message)))
-          ((not (text-property-any 0 (length curr)
-                                   'conn-wincontrol-string
-                                   t curr))
-           (message "%s%s" (conn--wincontrol-message) curr)))))
+  (condition-case _
+      (progn
+        (unless conn--wincontrol-preserve-arg
+          (setq conn--wincontrol-arg nil
+                conn--wincontrol-arg-sign 1))
+        (setq conn--wincontrol-preserve-arg nil)
+        (setq emulation-mode-map-alists
+              `(conn--wincontrol-maps
+                ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
+        (let ((curr (current-message))
+              (message-log-max nil))
+          (cond ((minibuffer-window-active-p (selected-window)))
+                ((null curr)
+                 (message "%s" (conn--wincontrol-message)))
+                ((not (text-property-any 0 (length curr)
+                                         'conn-wincontrol-string
+                                         t curr))
+                 (message "%s%s" (conn--wincontrol-message) curr)))))
+    ((debug error)
+     (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-new-frame (frame)
   (set-face-inverse-video 'mode-line t frame)
@@ -119,7 +133,10 @@
   (propertize
    (format (substitute-command-keys
             (if conn--wincontrol-message-newline
-                (concat conn--wincontrol-help-format "\n")
+                (concat (if conn-wincontrol-one-command-mode
+                            conn--wincontrol-one-command-help-format
+                          conn--wincontrol-help-format)
+                        "\n")
               (concat conn--wincontrol-help-format " ")))
            (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                    (if (= conn--wincontrol-arg-sign -1) "-" "")
@@ -127,18 +144,21 @@
    'conn-wincontrol-string t))
 
 (defun conn-wincontrol-message-function (string)
-  (when conn-wincontrol-mode
-    (if (text-property-any 0 (length string)
-                           'conn-wincontrol-string
-                           t string)
-        string
-      (concat (conn--wincontrol-message) string))))
+  (condition-case _err
+      (when conn-wincontrol-mode
+        (if (text-property-any 0 (length string)
+                               'conn-wincontrol-string
+                               t string)
+            string
+          (concat (conn--wincontrol-message) string)))
+    ((debug error)
+     (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
+    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (let ((message-log-max nil))
-      (message "%s" (conn--wincontrol-message)))
-    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)))
+      (message "%s" (conn--wincontrol-message)))))
 
 (defun conn--wincontrol-minibuffer-setup ()
   (setq-local conn-wincontrol-mode nil
@@ -146,31 +166,36 @@
   (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
-  (when (zerop (minibuffer-depth))
-    (let ((message-log-max nil))
-      (message "%s" (conn--wincontrol-message))))
-  (setq emulation-mode-map-alists
-        `(conn--wincontrol-maps
-          ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
-  (add-hook 'set-message-functions #'conn-wincontrol-message-function)
-  ;; Must be before 'repeat-post-hook
-  (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
-  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-  (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
-  (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-  (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
-  (unless preserve-state
-    (setq conn--wincontrol-arg (when current-prefix-arg
-                                 (prefix-numeric-value current-prefix-arg))
-          conn--wincontrol-arg-sign 1
-          conn--wincontrol-initial-window (selected-window)
-          conn--wincontrol-initial-winconf (current-window-configuration)))
-  (set-face-inverse-video 'mode-line t)
-  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
-  (set-face-inverse-video 'mode-line-active t))
+  (condition-case _
+      (progn
+        (when (zerop (minibuffer-depth))
+          (let ((message-log-max nil))
+            (message "%s" (conn--wincontrol-message))))
+        (setq emulation-mode-map-alists
+              `(conn--wincontrol-maps
+                ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
+        (add-hook 'set-message-functions #'conn-wincontrol-message-function)
+        ;; Must be before 'repeat-post-hook
+        (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
+        (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
+        (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
+        (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+        (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
+        (unless preserve-state
+          (setq conn--wincontrol-arg (when current-prefix-arg
+                                       (prefix-numeric-value current-prefix-arg))
+                conn--wincontrol-arg-sign 1
+                conn--wincontrol-initial-window (selected-window)
+                conn--wincontrol-initial-winconf (current-window-configuration)))
+        (set-face-inverse-video 'mode-line t)
+        ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
+        (set-face-inverse-video 'mode-line-active t))
+    ((debug error)
+     (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-exit ()
   (setq conn--wincontrol-message-newline t)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -208,7 +233,6 @@
         (conn-wincontrol-mode 1)
         (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
         (setq conn--wincontrol-message-newline nil))
-    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (conn-wincontrol-mode -1)))
 
 ;;;;; Wincontrol Quick Ref

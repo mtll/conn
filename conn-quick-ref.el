@@ -249,8 +249,10 @@
                       :divider-width 2
                       :use-header-line nil
                       :objects objs)
-                     (goto-char (point-max))
-                     (add-text-properties beg (point)
+                     (goto-char beg)
+                     (while (search-forward "\n" nil 'move-to-end)
+                       (replace-match " \n"))
+                     (add-text-properties beg (point-max)
                                           '(line-prefix " ")))))))))))))
 
 (defun conn-quick-ref-insert-pages (pages buffer header)

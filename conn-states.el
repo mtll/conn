@@ -2258,6 +2258,9 @@ be displayed in the echo area during `conn-read-args'."
                                         &rest
                                         body)
   (declare (indent 1))
+  (pcase argument-and-command
+    (`((,handler ,_spec) ,_cmd))
+    (_ (error "Invalid argument form")))
   (unless (assq :predicate body)
     (setf (alist-get :predicate body)
           `(() t)))

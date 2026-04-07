@@ -199,7 +199,7 @@ strings have `conn-dispatch-label-face'."
                         `(throw (cdr (alist-get ,handler
                                                 conn--dispatch-read-char-handlers))
                                 ,value))))))))))
-    (_ (error "Invalid argument-and-command")))
+    (_ (error "Invalid argument form")))
   `(conn-define-argument-command ,argument-and-command
      ,docstring
      ,@body))
@@ -219,8 +219,6 @@ strings have `conn-dispatch-label-face'."
       "<backspace>" 'restart
       "<escape>" 'finish
       "C-q" 'quoted-insert)))
-
-(defvar conn--dispatch-read-char-handlers nil)
 
 (cl-defstruct (conn-dispatch-char-argument
                (:include conn-argument)
@@ -315,6 +313,8 @@ strings have `conn-dispatch-label-face'."
                                                    cmd)
   (when (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
     (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
+
+(defvar conn--dispatch-read-char-handlers nil)
 
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
@@ -3643,11 +3643,9 @@ contain targets."
     ((other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (conn-for-each-visible (window-start) (window-end)
-      (goto-char (point-min))
-      (when (get-char-property (point) 'button)
-        (conn-make-target-overlay (point) 0))
-      (while (not (eobp))
-        (goto-char (next-single-char-property-change (point) 'button))
+      (goto-char (point-max))
+      (while (not (bobp))
+        (goto-char (previous-single-char-property-change (point) 'button))
         (when (get-char-property (point) 'button)
           (conn-make-target-overlay (point) 0))))))
 
