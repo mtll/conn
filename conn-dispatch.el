@@ -635,7 +635,6 @@ themselves once the selection process has concluded."
 (defvar conn-dispatch-iteration-count nil)
 
 (defvar conn-dispatch-other-end nil)
-(defvar conn-dispatch-no-other-end nil)
 
 (defun conn-dispatch-other-end-p ()
   (when conn-dispatch-other-end
@@ -1408,6 +1407,7 @@ Target overlays may override this default by setting the
           (point)))))
 
 (defun conn--dispatch-setup-label-pixelwise (label)
+  (clrhash conn--pixelwise-window-cache)
   (pcase-let* (((cl-struct conn-dispatch-label
                            prefix
                            suffix
@@ -1547,6 +1547,7 @@ Target overlays may override this default by setting the
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-pixelwise-before (label)
+  (clrhash conn--pixelwise-window-cache)
   (pcase-let* (((cl-struct conn-dispatch-label
                            prefix
                            suffix
@@ -1963,7 +1964,6 @@ Target overlays may override this default by setting the
         ;; ensure the cache gets populated
         (ignore (conn--dispatch-window-lines))
         (funcall body labels))
-    (clrhash conn--pixelwise-window-cache)
     (when conn--previous-labels-cleanup
       (add-hook 'pre-redisplay-functions
                 conn--previous-labels-cleanup))))
@@ -2326,7 +2326,6 @@ the meaning of depth."
                  (conn--dispatch-change-groups nil)
                  (inhibit-message nil)
                  (conn-dispatch-iteration-count nil)
-                 (conn-dispatch-no-other-end nil)
                  (conn-dispatch-other-end nil)
                  (conn--read-args-prefix-mag nil)
                  (conn--read-args-prefix-sign nil)
@@ -2654,7 +2653,7 @@ buffer."
     (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
         (progn
           (conn-dispatch-select-window (conn-prompt-for-window windows))
-          (funcall break :redisplay 'maybe-dont-prompt))
+          (conn-dispatch-redisplay 'maybe-dont-prompt))
       (funcall break))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
@@ -2666,14 +2665,18 @@ buffer."
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql other-end)))
   "Toggle other end."
-  ( :update (break)
-    (if (advice-function-member-p 'toggle conn-dispatch-other-end)
-        (remove-function conn-dispatch-other-end 'toggle)
-      (add-function :around conn-dispatch-other-end
-                    (lambda (fn) (not (funcall fn)))
-                    '((name . toggle)
-                      (depth . 100))))
-    (funcall break :redisplay 'maybe-dont-prompt)))
+  ( :update (_break)
+    (unless (or (advice-function-member-p 'no-other-end
+                                          conn-dispatch-other-end)
+                (advice-function-member-p 'target-no-other-end
+                                          conn-dispatch-other-end))
+      (if (advice-function-member-p 'toggle conn-dispatch-other-end)
+          (remove-function conn-dispatch-other-end 'toggle)
+        (add-function :around conn-dispatch-other-end
+                      (lambda (fn) (not (funcall fn)))
+                      '((name . toggle)
+                        (depth . 100))))
+      (conn-dispatch-redisplay 'maybe-dont-prompt))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql restrict-windows)))
@@ -3017,12 +3020,15 @@ updated.")
                     label-function
                     '((name . target-finder)))
     (remove-function conn-dispatch-label-function 'target-finder))
+  (remove-function conn-dispatch-other-end 'target-no-other-end)
+  (remove-function conn-dispatch-other-end 'target-finder)
   (pcase (oref tf other-end)
     (:no-other-end
-     (push :target conn-dispatch-no-other-end)
-     (remove-function conn-dispatch-other-end 'target-finder))
+     (add-function :before-while conn-dispatch-other-end
+                   #'ignore
+                   '((name . target-no-other-end)
+                     (depth . -90))))
     (_
-     (cl-callf2 delq :target conn-dispatch-no-other-end)
      (add-function :around conn-dispatch-other-end
                    (lambda (fn)
                      (xor (funcall fn)
@@ -3167,7 +3173,7 @@ to the key binding for that target."
      ( :predicate (cmd)
        (or (eq cmd 'always-retarget)
            (eq cmd 'retarget)))
-     ( :update (cmd break)
+     ( :update (cmd _break)
        (pcase cmd
          ('always-retarget
           (setq conn--dispatch-always-retarget
@@ -3175,7 +3181,7 @@ to the key binding for that target."
           (conn-dispatch-redisplay))
          ('retarget
           (conn-target-finder-retarget conn-dispatch-target-finder)
-          (funcall break :redisplay 'maybe-dont-prompt)))))
+          (conn-dispatch-redisplay 'maybe-dont-prompt)))))
     (cl-call-next-method)))
 
 (conn-define-target-finder conn-dispatch-string-targets
@@ -4719,9 +4725,12 @@ it."))
                   (restrict-windows (advice-function-member-p
                                      'conn--dispatch-restrict-windows
                                      conn-target-window-predicate))
-                  (other-end (if (memq t conn-dispatch-no-other-end)
-                                 :no-other-end
-                               (conn-dispatch-other-end-p)))
+                  (other-end
+                   (cond
+                    ((advice-function-member-p 'no-other-end
+                                               conn-dispatch-other-end)
+                     :no-other-end)
+                    ((conn-dispatch-other-end-p))))
                   (always-retarget conn--dispatch-always-retarget)
                   (setup-function
                    (let ((fns (conn-target-finder-restore-state-functions
@@ -4885,9 +4894,6 @@ it."))
        (conn--dispatch-always-retarget
         (or always-retarget
             (conn-action-always-retarget action)))
-       (conn-dispatch-no-other-end
-        (when (eq other-end :no-other-end)
-          (list t)))
        (conn-dispatch-other-end (lambda () (and other-end t)))
        (conn-dispatch-target-finder nil))
     (conn-with-dispatch-handlers
@@ -4909,10 +4915,11 @@ it."))
                 (activate-input-method im)))
             (conn-target-finder-setup
              (conn-get-target-finder thing arg))
-            (add-function :before-while conn-dispatch-other-end
-                          (lambda () (not conn-dispatch-no-other-end))
-                          '((depth . -100)
-                            (name . no-other-end)))
+            (when (eq other-end :no-other-end)
+              (add-function :before-while conn-dispatch-other-end
+                            #'ignore
+                            '((depth . -100)
+                              (name . no-other-end))))
             (when-let* ((predicate (conn-action-window-predicate action)))
               (add-function :after-while conn-target-window-predicate predicate))
             (when-let* ((predicate (conn-action-target-predicate action)))

@@ -3354,7 +3354,8 @@ hook, which see."
             (when reformat
               (funcall conn-kill-reformat-function bounds)))
            (_ (user-error "No %s found" thing)))))
-     thing arg nil)
+     thing arg nil
+     :other-end :no-other-end)
     (conn-push-command-history
      (let ((prev (conn-ring-head conn-dispatch-ring)))
        (lambda ()
@@ -3706,7 +3707,8 @@ that place."
                                :documentation conn-this-win-argument-documentation)))
     (conn-with-dispatch-handlers
       (:handler
-       (:predicate (cmd) (eq cmd 'other-end))
+       (:keymap (define-keymap "<remap> <other-end>" 'copy-append))
+       (:predicate (cmd) (eq cmd 'copy-append))
        ( :update (_cmd break)
          (setq append (pcase append
                         ('nil 'append)
@@ -3714,7 +3716,7 @@ that place."
                         (_ 'prepend)))
          (funcall break))
        ( :display ()
-         (concat "\\[other-end] "
+         (concat "\\[copy-append] "
                  (pcase append
                    ('nil "append")
                    ('prepend
