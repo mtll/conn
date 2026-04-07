@@ -56,6 +56,7 @@
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
+(defvar conn--wincontrol-message-newline t)
 
 (function-put 'keyboard-quit :conn-wincontrol-preserve-arg t)
 
@@ -81,6 +82,18 @@
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
+
+;;;###autoload
+(define-minor-mode conn-wincontrol-one-command-mode
+  "Global minor mode for wincontrol one command."
+  :global t
+  :group 'conn-wincontrol-mode
+  (if conn-wincontrol-one-command-mode
+      (progn
+        (conn-wincontrol-mode 1)
+        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+        (setq conn--wincontrol-message-newline nil))
+    (conn-wincontrol-mode -1)))
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
@@ -126,8 +139,6 @@
   (set-face-inverse-video 'mode-line-active t frame))
 
 (defalias 'conn--wincontrol-ignore 'ignore)
-
-(defvar conn--wincontrol-message-newline t)
 
 (defun conn--wincontrol-message ()
   (propertize
@@ -222,18 +233,6 @@
              (not (conn-wincontrol-one-command-stay-p)))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (conn-wincontrol-one-command-mode -1)))
-
-;;;###autoload
-(define-minor-mode conn-wincontrol-one-command-mode
-  "Global minor mode for wincontrol one command."
-  :global t
-  :group 'conn-wincontrol-mode
-  (if conn-wincontrol-one-command-mode
-      (progn
-        (conn-wincontrol-mode 1)
-        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-        (setq conn--wincontrol-message-newline nil))
-    (conn-wincontrol-mode -1)))
 
 ;;;;; Wincontrol Quick Ref
 
