@@ -173,7 +173,7 @@ Expansions and contractions are provided by functions in
      (window-predicate
       :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (state &optional len)
-    (let* ((expansions (oref state expansions))
+    (let* ((expansions)
            (bounds nil)
            (thing
             (conn-anonymous-thing
@@ -185,9 +185,8 @@ Expansions and contractions are provided by functions in
               :bounds-op ( :method (_ _)
                            (conn-multi-thing-select
                             (alist-get (point) bounds))))))
-      (unless expansions
-        (setf expansions (conn--expand-create-expansions)
-              (oref state expansions) expansions))
+      (unless (oref state expansions)
+        (setf (oref state expansions) (conn--expand-create-expansions)))
       (pcase-dolist ((and cons `(,beg . ,end)) expansions)
         (push (conn-make-bounds 'region nil cons)
               (alist-get beg bounds))
@@ -213,5 +212,9 @@ Expansions and contractions are provided by functions in
                               'eldoc-highlight-function-argument))))))
     (let ((conn-dispatch-always-prompt t))
       (cl-call-next-method))))
+
+(cl-defmethod conn-target-finder-shelve ((target-finder conn-expansion-targets))
+  (setf (oref target-finder expansions) nil)
+  (cl-call-next-method))
 
 (provide 'conn-expand)

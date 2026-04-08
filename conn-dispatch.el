@@ -2282,7 +2282,7 @@ the meaning of depth."
   `(progn
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
-     (conn-target-finder-suspend conn-dispatch-target-finder)
+     (conn-target-finder-suspend-targets conn-dispatch-target-finder)
      (conn-cleanup-labels)
      (pcase-let ((`(,conn-target-window-predicate
                     ,conn-target-predicate
@@ -2690,7 +2690,8 @@ buffer."
    (prompt :initform nil
            :initarg :prompt)
    (thing :initarg :thing)
-   (arg-and-transform :initarg :arg-and-transform))
+   (arg :initarg :arg)
+   (transform :initarg :transform))
   :abstract t)
 
 (eval-and-compile
@@ -2850,7 +2851,7 @@ buffer."
         (let ((inhibit-message t))
           (cl-call-next-method))
       (conn-cleanup-labels)
-      (conn-target-finder-suspend target-finder))))
+      (conn-target-finder-suspend-targets target-finder))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil)
@@ -2897,6 +2898,11 @@ buffer."
           (funcall after)
           (throw 'dispatch-exit nil))))))
 
+(cl-defgeneric conn-target-finder-shelve (target-finder))
+
+(cl-defmethod conn-target-finder-shelve (target-finder)
+  target-finder)
+
 (cl-defgeneric conn-get-target-finder (cmd arg transform)
   (declare (conn-anonymous-thing-property :target-finder)))
 
@@ -2904,8 +2910,10 @@ buffer."
   (let ((tf (cl-call-next-method)))
     (unless (slot-boundp tf 'thing)
       (oset tf thing thing))
-    (unless (slot-boundp tf 'arg-and-transform)
-      (oset tf arg-and-transform (list arg transform)))
+    (unless (slot-boundp tf 'arg)
+      (oset tf arg arg))
+    (unless (slot-boundp tf 'transform)
+      (oset tf transform transform))
     tf))
 
 (cl-defgeneric conn-target-finder-setup (target-finder))
@@ -2914,7 +2922,7 @@ buffer."
   (unless conn-dispatch-in-progress
     (error "No dispatch in progress"))
   (when conn-dispatch-target-finder
-    (conn-target-finder-cleanup conn-dispatch-target-finder))
+    (conn-target-finder-clear-targets conn-dispatch-target-finder))
   (if-let* ((predicate (oref tf window-predicate)))
       (add-function :after-while conn-target-window-predicate predicate
                     '((name . target-finder)))
@@ -2964,21 +2972,21 @@ buffer."
             (overlay-put tar 'label-face face1)
             (cl-rotatef face1 face2)))))))
 
-(defun conn-cleanup-targets ()
-  (conn-target-finder-cleanup conn-dispatch-target-finder))
+(defun conn-clear-targets ()
+  (conn-target-finder-clear-targets conn-dispatch-target-finder))
 
-(cl-defgeneric conn-target-finder-cleanup (target-finder))
+(cl-defgeneric conn-target-finder-clear-targets (target-finder))
 
-(cl-defmethod conn-target-finder-cleanup (_target-finder)
+(cl-defmethod conn-target-finder-clear-targets (_target-finder)
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
       (delete-overlay target)))
   (setq conn-targets nil
         conn-target-count nil))
 
-(cl-defgeneric conn-target-finder-suspend (target-finder))
+(cl-defgeneric conn-target-finder-suspend-targets (target-finder))
 
-(cl-defmethod conn-target-finder-suspend (_target-finder)
+(cl-defmethod conn-target-finder-suspend-targets (_target-finder)
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
       (overlay-put target 'category 'conn-old-target)
@@ -3148,7 +3156,7 @@ to the key binding for that target."
                     (regexp-quote (char-to-string char)))))
               (cl-incf char-count)
               (setf quote-flag nil)))
-          (conn-cleanup-targets))
+          (conn-clear-targets))
         (setf (oref state prompt) (oref state string))
         (conn-dispatch-call-update-handlers state 0)))))
 
@@ -3166,7 +3174,7 @@ to the key binding for that target."
             (remove-function conn-target-window-predicate pred)
             (remove-hook 'after-change-functions after-change t)
             (remove-hook 'minibuffer-exit-hook unwind t)
-            (conn-cleanup-targets)))
+            (conn-clear-targets)))
     (fset after-change
           (lambda (_beg _end _len)
             (cancel-timer timer)
@@ -3175,7 +3183,7 @@ to the key binding for that target."
               (timer-set-function
                timer
                (lambda ()
-                 (conn-cleanup-targets)
+                 (conn-clear-targets)
                  (unless (equal string "")
                    (with-minibuffer-selected-window
                      (funcall updater string)))))
@@ -3224,12 +3232,12 @@ to the key binding for that target."
           (while-let ((next-char (conn-dispatch-read-char
                                   prompt t timeout
                                   (oref state string))))
-            (conn-cleanup-targets)
+            (conn-clear-targets)
             (cl-callf concat (oref state string)
               (char-to-string next-char))
             (conn-dispatch-call-update-handlers state))
           (setf (oref state prompt) (oref state string))))
-      (conn-cleanup-targets))
+      (conn-clear-targets))
     (conn-dispatch-call-update-handlers state 0)))
 
 (defclass conn-dispatch-focus-mixin ()
@@ -3255,11 +3263,11 @@ contain targets."
     (mapc #'delete-overlay ovs))
   (setf (oref state hidden) nil))
 
-(cl-defmethod conn-target-finder-cleanup ((state conn-dispatch-focus-mixin))
+(cl-defmethod conn-target-finder-clear-targets ((state conn-dispatch-focus-mixin))
   (conn-focus-targets-remove-overlays state)
   (cl-call-next-method))
 
-(cl-defmethod conn-target-finder-suspend ((state conn-dispatch-focus-mixin))
+(cl-defmethod conn-target-finder-suspend-targets ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
     (dolist (ov ovs)
       (overlay-put ov 'before-string nil)))
@@ -3455,16 +3463,6 @@ contain targets."
   ( :update-method (state)
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
-
-(defun conn-dispatch-chars-in-thing (thing)
-  (declare (important-return-value t))
-  (conn-dispatch-read-with-timeout
-   :thing thing
-   :timeout conn-read-string-timeout
-   :predicate (lambda (beg _end)
-                (goto-char beg)
-                (ignore-errors
-                  (conn-bounds-of thing nil)))))
 
 (conn-define-target-finder conn-dispatch-headings
     (conn-dispatch-focus-mixin)
@@ -3834,10 +3832,7 @@ contain targets."
                (start (overlay-start target))
                (point (or (overlay-get target 'point) start))
                (win (overlay-get target 'window))
-               (face (overlay-get target 'label-face))
-               (thing (oref conn-dispatch-target-finder thing))
-               (`(,arg ,transform)
-                (oref conn-dispatch-target-finder arg-and-transform)))
+               (face (overlay-get target 'label-face)))
     (conn-dispatch-undo-case
       (:undo
        (conn-make-target-overlay
@@ -3847,9 +3842,10 @@ contain targets."
                        label-string ,string))))
     (list point
           win
-          (or (overlay-get target 'thing) thing)
-          arg
-          transform)))
+          (or (overlay-get target 'thing)
+              (oref conn-dispatch-target-finder thing))
+          (oref conn-dispatch-target-finder arg)
+          (oref conn-dispatch-target-finder transform))))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
   (setf (conn-dispatch-label-narrowed-string label)
@@ -4681,7 +4677,8 @@ it."))
                                      'conn--dispatch-restrict-windows
                                      conn-target-window-predicate))
                   (other-end conn-dispatch-other-end)
-                  (target-finder conn-dispatch-target-finder)))
+                  (target-finder
+                   (conn-target-finder-shelve conn-dispatch-target-finder))))
                (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
   (other-end nil :type symbol)
@@ -4724,9 +4721,12 @@ it."))
   (pcase-let ((thing
                (oref (conn-previous-dispatch-target-finder dispatch)
                      thing))
-              (`(,arg ,transform)
+              (arg
                (oref (conn-previous-dispatch-target-finder dispatch)
-                     arg-and-transform)))
+                     arg))
+              (transform
+               (oref (conn-previous-dispatch-target-finder dispatch)
+                     transform)))
     (format "%s @ %s <%s%s>"
             (conn-action-display
              (conn-previous-dispatch-action dispatch))
@@ -4840,7 +4840,7 @@ it."))
                      'conn--dispatch-restrict-windows
                      conn-target-window-predicate))
               (conn-dispatch-push-history prev-dispatch))
-            (conn-cleanup-targets)
+            (conn-clear-targets)
             (conn-cleanup-labels)))))))
 
 ;;;;; Dispatch Commands
@@ -4908,7 +4908,7 @@ it."))
               (let ((prev (conn-make-dispatch action)))
                 (conn-dispatch-push-history prev)
                 (conn-push-command-history 'conn-dispatch-setup-previous prev))))
-          (conn-cleanup-targets)
+          (conn-clear-targets)
           (conn-cleanup-labels))))))
 
 (defvar-keymap conn-restrict-windows-argument-map

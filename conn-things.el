@@ -2009,6 +2009,7 @@ Only the background color is used."
                (mapconcat #'conn-argument-display args)))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
+      (`(,bound . nil) bound)
       (`(,(conn-bounds `(,beg . ,end)) . ,_)
        (save-mark-and-excursion
          (goto-char end)
@@ -2041,9 +2042,7 @@ Only the background color is used."
               ,@body)
              (_ (error "Invalid thing region"))))
          ,@(cl-loop for key on keys by #'cddr
-                    when (memq (car key) '(:history-var
-                                           :history-len
-                                           :command-handler
+                    when (memq (car key) '(:command-handler
                                            :display-handler
                                            :around
                                            :overriding-map
