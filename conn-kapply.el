@@ -57,6 +57,8 @@
 
 (defvar conn--kbd-query-automatic-flags)
 
+(defvar conn-kapply-query-on-record t)
+
 (defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))
     (setq conn--kapply-automatic-flag nil))
@@ -558,33 +560,6 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
   (without-restriction
     (cl-call-next-method)))
 
-(defun conn-kapply-on-symbol ()
-  (interactive)
-  (conn-read-args (conn-kapply-matches-state
-                   :reference conn-kapply-matches-reference
-                   :prompt "Kapply in Thing")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument)))
-    (save-excursion
-      (let (conn-kapply-query-on-record)
-        (conn-kapply-on-matches
-         thing arg transform
-         nil t t
-         (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
-
-(defun conn-kapply-on-word ()
-  (interactive)
-  (conn-read-args (conn-kapply-matches-state
-                   :reference conn-kapply-matches-reference
-                   :prompt "Kapply in Thing")
-      ((`(,thing ,arg) (conn-thing-argument))
-       (transform (conn-transform-argument)))
-    (save-excursion
-      (let (conn-kapply-query-on-record)
-        (conn-kapply-on-matches thing arg transform
-                                nil nil t
-                                (thing-at-point 'word))))))
-
 ;;;;; Pipeline Functions
 
 (defconst conn--kapply-pipeline-depths
@@ -626,8 +601,6 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[automatic]	Apply keyboard macro to rest in this buffer.
 \\[automatic-all]	Apply keyboard macro to rest in all remaining buffers.")
-
-(defvar conn-kapply-query-on-record t)
 
 (defun conn-kapply-query (iterator)
   "Query user before each iteration of the keyboard macro."
@@ -2044,6 +2017,33 @@ finishing showing the buffers that were visited."))
         (setq isearch-window-configuration nil)
         (isearch-done)
         (switch-to-buffer curr)))))
+
+(defun conn-kapply-on-symbol ()
+  (interactive)
+  (conn-read-args (conn-kapply-matches-state
+                   :reference conn-kapply-matches-reference
+                   :prompt "Kapply in Thing")
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument)))
+    (save-excursion
+      (let (conn-kapply-query-on-record)
+        (conn-kapply-on-matches
+         thing arg transform
+         nil t t
+         (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
+
+(defun conn-kapply-on-word ()
+  (interactive)
+  (conn-read-args (conn-kapply-matches-state
+                   :reference conn-kapply-matches-reference
+                   :prompt "Kapply in Thing")
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument)))
+    (save-excursion
+      (let (conn-kapply-query-on-record)
+        (conn-kapply-on-matches thing arg transform
+                                nil nil t
+                                (thing-at-point 'word))))))
 
 (defvar-keymap conn-read-pattern-map)
 

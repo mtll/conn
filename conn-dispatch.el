@@ -222,8 +222,6 @@ strings have `conn-dispatch-label-face'."
                (:include conn-argument)
                ( :constructor conn-dispatch-char-argument
                  (input-method
-                  &key
-                  (reference conn-dispatch-command-reference)
                   &aux
                   (required t)
                   (keymap conn-dispatch-char-argument-map))))
@@ -398,9 +396,22 @@ returned."
 
 (cl-defgeneric conn-label-completed-p (label))
 
-(cl-defgeneric conn-label-redisplay (label)
+(cl-defgeneric conn-label-display (label)
   "Redisplay LABEL."
   (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-label-clear (label)
+  "Redisplay LABEL."
+  (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-label-setup (label)
+  "Redisplay LABEL."
+  (:method (_) "Noop" nil))
+
+(defun conn-redisplay-labels (labels)
+  (mapc #'conn-label-clear labels)
+  (mapc #'conn-label-setup labels)
+  (mapc #'conn-label-display labels))
 
 (cl-defgeneric conn-label-reset (label)
   "Reset LABEL to its initial state.")
@@ -462,7 +473,7 @@ themselves once the selection process has concluded."
          (current candidates)
          (partial nil))
     (while-no-input
-      (mapc #'conn-label-redisplay candidates))
+      (conn-redisplay-labels candidates))
     (cl-loop
      (pcase current
        ('nil
@@ -472,14 +483,14 @@ themselves once the selection process has concluded."
         (conn-read-args-message "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
-          (mapc #'conn-label-redisplay candidates)))
+          (conn-redisplay-labels candidates)))
        ((and `(,it . nil)
              (guard (not (or prompt-flag
                              (and partial
                                   (not (conn-label-completed-p it)))))))
         (cl-return (conn-label-payload it))))
      (while-no-input
-       (mapc #'conn-label-redisplay candidates))
+       (conn-redisplay-labels candidates))
      (setq prompt-flag nil)
      (while (let ((c (conn-dispatch-read-char
                       prompt
@@ -631,6 +642,7 @@ themselves once the selection process has concluded."
 (defvar conn--dispatch-redisplay-prompt-flag nil)
 
 (defvar conn-dispatch-repeating nil)
+
 (defvar conn-dispatch-iteration-count nil)
 
 (defvar conn-dispatch-quit-flag nil)
@@ -1014,7 +1026,9 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
 
 (cl-defstruct (conn-dispatch-command-handler
                (:include conn-read-args-command-handler)
-               ( :constructor conn-dispatch-command-handler)))
+               ( :constructor conn-dispatch-command-handler
+                 (&aux
+                  (reference conn-dispatch-command-reference)))))
 
 (cl-defmethod conn-argument-get-reference ((_arg conn-read-args-command-handler))
   (list conn-dispatch-command-reference
@@ -1340,16 +1354,22 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
 
+(defvar conn--label-start-time nil)
+
+(defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
+
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
   (eq (selected-frame) (window-frame win)))
 
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
-  (< (save-excursion
-       (goto-char (overlay-start target))
-       (- (point) (pos-bol)))
-     conn-dispatch-pixelwise-labels-line-limit))
+  (and (< (save-excursion
+            (goto-char (overlay-start target))
+            (- (point) (pos-bol)))
+          conn-dispatch-pixelwise-labels-line-limit)
+       (time-less-p (float-time (time-since conn--label-start-time))
+                    0.01)))
 
 (put 'conn-label-overlay 'priority 3000)
 
@@ -1418,7 +1438,7 @@ Target overlays may override this default by setting the
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
           (overlay-put ov 'wrap-prefix "")
-          (pcase (get-char-property (overlay-start target) 'display)
+          (pcase (get-text-property (overlay-start target) 'display)
             (`(raise ,amount)
              (add-display-text-property 0 (length full-string)
                                         'raise amount
@@ -1518,19 +1538,17 @@ Target overlays may override this default by setting the
                             pt 'composition nil line-end)))
                  (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
-          (cond
-           ((= (overlay-start overlay) (overlay-end overlay))
-            (overlay-put overlay 'before-string full-string))
-           ((overlay-get overlay 'after-string)
-            (overlay-put overlay 'display full-string))
-           (t
-            (overlay-put overlay 'display full-string)
-            (when pixelwise
-              (funcall (or padding-function
-                           conn-default-label-padding-function)
-                       overlay
-                       padding-width
-                       (get-text-property 0 'face full-string))))))
+          (if (= (overlay-start overlay) (overlay-end overlay))
+              (overlay-put overlay 'setup (list 'before-string full-string))
+            (overlay-put overlay 'setup (list 'display full-string))
+            (when (and pixelwise
+                       (not (overlay-get overlay 'after-string)))
+              (overlay-put overlay 'padding
+                           (list (or padding-function
+                                     conn-default-label-padding-function)
+                                 overlay
+                                 padding-width
+                                 (get-text-property 0 'face full-string))))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-pixelwise-before (label)
@@ -1558,7 +1576,7 @@ Target overlays may override this default by setting the
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
           (overlay-put ov 'wrap-prefix "")
-          (pcase (get-char-property (min (1+ (overlay-start target))
+          (pcase (get-text-property (min (1+ (overlay-start target))
                                          (overlay-end target))
                                     'display)
             (`(raise ,amount)
@@ -1640,19 +1658,17 @@ Target overlays may override this default by setting the
                             (1- pt) 'composition nil line-beg)))
                  (t (cl-decf pt))))
               (move-overlay overlay end beg)))
-          (cond
-           ((= (overlay-start overlay) (overlay-end overlay))
-            (overlay-put overlay 'before-string full-string))
-           ((overlay-get overlay 'after-string)
-            (overlay-put overlay 'display full-string))
-           (t
-            (overlay-put overlay 'display full-string)
-            (when pixelwise
-              (funcall (or padding-function
-                           conn-default-label-padding-function)
-                       overlay
-                       padding-width
-                       (get-text-property 0 'face full-string))))))
+          (if (= (overlay-start overlay) (overlay-end overlay))
+              (overlay-put overlay 'setup (list 'before-string full-string))
+            (overlay-put overlay 'setup (list 'display full-string))
+            (when (and pixelwise
+                       (not (overlay-get overlay 'after-string)))
+              (overlay-put overlay 'padding
+                           (list (or padding-function
+                                     conn-default-label-padding-function)
+                                 overlay
+                                 padding-width
+                                 (get-text-property 0 'face full-string))))))
       (when ov (delete-overlay ov)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
@@ -1690,13 +1706,13 @@ Target overlays may override this default by setting the
                                             'conn-target-overlay
                                             win))
             (setq end pt))
-           ((or (and (get-char-property pt 'display)
+           ((or (and (get-text-property pt 'display)
                      (= pt (next-single-char-property-change
                             (1- pt) 'display nil (1+ pt))))
-                (and (get-char-property pt 'after-string)
+                (and (get-text-property pt 'after-string)
                      (= pt (next-single-char-property-change
                             (1- pt) 'after-string nil (1+ pt))))
-                (and (get-char-property pt 'before-string)
+                (and (get-text-property pt 'before-string)
                      (= pt (next-single-char-property-change
                             (1- pt) 'before-string nil (1+ pt)))))
             (setq end (max beg (1- pt))))
@@ -1706,8 +1722,8 @@ Target overlays may override this default by setting the
            (t (cl-incf pt))))
         (move-overlay overlay (overlay-start overlay) end)))
     (if (= (overlay-start overlay) (overlay-end overlay))
-        (overlay-put overlay 'before-string full-string)
-      (overlay-put overlay 'display full-string))))
+        (overlay-put overlay 'setup (list 'before-string full-string))
+      (overlay-put overlay 'setup (list 'display full-string)))))
 
 (defun conn--dispatch-setup-label-charwise-before (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -1756,8 +1772,8 @@ Target overlays may override this default by setting the
              (t (cl-decf pt)))))
         (move-overlay overlay end beg)))
     (if (= (overlay-start overlay) (overlay-end overlay))
-        (overlay-put overlay 'before-string full-string)
-      (overlay-put overlay 'display full-string))))
+        (overlay-put overlay 'setup (list 'before-string full-string))
+      (overlay-put overlay 'setup (list 'display full-string)))))
 
 (defun conn-before-string-label (label)
   (pcase-let* (((cl-struct conn-dispatch-label
@@ -1800,15 +1816,11 @@ Target overlays may override this default by setting the
            when (<= beg (or point (point)) end)
            return line))
 
-(defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
-
 (defun conn-dispatch-pixelwise-label-p (ov)
   (declare (important-return-value t))
   (and (display-graphic-p)
-       (with-memoization
-           (gethash (overlay-get ov 'window) conn--pixelwise-window-cache)
-         (funcall conn-pixelwise-labels-window-predicate
-                  (overlay-get ov 'window)))
+       (funcall conn-pixelwise-labels-window-predicate
+                (overlay-get ov 'window))
        (funcall conn-pixelwise-labels-target-predicate ov)))
 
 (defun conn-dispatch-create-label (target string)
@@ -1898,12 +1910,6 @@ Target overlays may override this default by setting the
                   (push (conn-dispatch-create-label tar str) labels)))
     `(:state ,(list pool size in-use) ,@labels)))
 
-(defun conn-dispatch-prompt-p ()
-  (or conn--dispatch-redisplay-prompt-flag
-      conn-dispatch-always-prompt
-      (> conn-dispatch-iteration-count 0)
-      (oref conn-dispatch-target-finder always-prompt)))
-
 (defvar conn--previous-labels-cleanup nil)
 
 (defun conn-cleanup-labels ()
@@ -1935,11 +1941,9 @@ Target overlays may override this default by setting the
              "hide labels"
              'face (when conn-dispatch-hide-labels
                      'eldoc-highlight-function-argument))))
-         ( :update (_cmd break)
+         ( :update (_cmd _break)
            (cl-callf not conn-dispatch-hide-labels)
-           (while-no-input
-             (mapc #'conn-label-redisplay labels))
-           (funcall break)))
+           (conn-dispatch-redisplay)))
         (let ((fn (make-symbol "cleanup")))
           (fset fn (lambda (&rest _)
                      (unwind-protect
@@ -1958,7 +1962,8 @@ Target overlays may override this default by setting the
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(let ((conn-dispatch-label-input-method nil))
+     `(let ((conn-dispatch-label-input-method nil)
+            (conn--label-start-time (float-time (current-time))))
         (conn--with-dispatch-labels ,val (lambda (,var) ,@body))))
     (_ (error "Unexpected binder form"))))
 
@@ -2663,78 +2668,6 @@ buffer."
         (funcall undo-fn :undo)))
     (throw 'dispatch-undo nil)))
 
-;;;;; Dispatch Labels
-
-(cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (pcase-let* (((cl-struct conn-dispatch-label string target)
-                label)
-               (start (overlay-start target))
-               (point (or (overlay-get target 'point) start))
-               (win (overlay-get target 'window))
-               (face (overlay-get target 'label-face))
-               (thing (oref conn-dispatch-target-finder thing))
-               (`(,arg ,transform)
-                (oref conn-dispatch-target-finder arg-and-transform)))
-    (conn-dispatch-undo-case
-      (:undo
-       (conn-make-target-overlay
-        start 0
-        :window win
-        :properties `( label-face ,face
-                       label-string ,string))))
-    (list point
-          win
-          (or (overlay-get target 'thing) thing)
-          arg
-          transform)))
-
-(cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (setf (conn-dispatch-label-narrowed-string label)
-        (conn-dispatch-label-string label)))
-
-(cl-defmethod conn-label-delete ((label conn-dispatch-label))
-  (delete-overlay (conn-dispatch-label-overlay label)))
-
-(cl-defmethod conn-label-narrow ((label conn-dispatch-label)
-                                 prefix-char)
-  (if (not (thread-first
-             (conn-dispatch-label-narrowed-string label)
-             (string-to-char)
-             (eql prefix-char)))
-      (setf (conn-dispatch-label-narrowed-string label) nil)
-    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
-    label))
-
-(cl-defmethod conn-label-completed-p ((label conn-dispatch-label))
-  (string-empty-p (conn-dispatch-label-narrowed-string label)))
-
-(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label
-                          overlay
-                          target
-                          narrowed-string
-                          setup-function)
-               label))
-    (with-selected-window (overlay-get overlay 'window)
-      (cond (conn-dispatch-hide-labels
-             (overlay-put overlay 'display nil)
-             (overlay-put overlay 'after-string nil)
-             (overlay-put overlay 'before-string nil)
-             (overlay-put overlay 'face nil))
-            ((length> narrowed-string 0)
-             (overlay-put overlay 'display nil)
-             (overlay-put overlay 'before-string nil)
-             (overlay-put overlay 'after-string nil)
-             (funcall setup-function label)
-             (overlay-put target 'face 'conn-target-overlay-face))
-            (t
-             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-             (overlay-put overlay 'display nil)
-             (overlay-put overlay 'after-string nil)
-             (overlay-put overlay 'before-string nil)
-             (overlay-put target 'after-string nil)
-             (overlay-put target 'face nil))))))
-
 ;;;;; Dispatch Target Finders
 
 (defclass conn-target-finder-base ()
@@ -2834,7 +2767,7 @@ buffer."
   (let ((ufns (oref target-finder current-update-handlers))
         (default nil)
         (handler-ctors nil))
-    (dolist (win (conn--get-target-windows))
+    (dolist (win (nreverse (conn--get-target-windows)))
       (with-selected-window win
         (apply
          (with-memoization (alist-get (current-buffer) ufns)
@@ -2875,6 +2808,12 @@ buffer."
                                                          'conn-target-overlay
                                                          (selected-window))))))))
 
+(defun conn-dispatch-prompt-p ()
+  (or conn--dispatch-redisplay-prompt-flag
+      conn-dispatch-always-prompt
+      (> conn-dispatch-iteration-count 0)
+      (oref conn-dispatch-target-finder always-prompt)))
+
 (cl-defgeneric conn-target-finder-select (target-finder)
   (declare (important-return-value t)))
 
@@ -2890,7 +2829,7 @@ buffer."
                 conn-target-count nil)
           (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
-                         (cl-callf nreverse conn-targets))
+                         conn-targets)
             (cl-loop for tar in targets
                      if (<= (window-start window)
                             (overlay-start tar)
@@ -3083,7 +3022,8 @@ to the key binding for that target."
            (cl-loop for label in labels
                     for key = (conn-dispatch-label-string label)
                     do (keymap-set map key label))
-           (mapc #'conn-label-redisplay labels)
+           (while-no-input
+             (conn-redisplay-labels labels))
            map)))
       (ignore (conn-dispatch-read-char "Register"))
       (while t
@@ -3879,6 +3819,79 @@ contain targets."
                             (conn--flush-left-padding ov width nil)))
        (when (eobp) (cl-return nil))
        (vertical-motion 1)))))
+
+;;;;; Dispatch Labels
+
+(cl-defmethod conn-label-payload ((label conn-dispatch-label))
+  (pcase-let* (((cl-struct conn-dispatch-label string target)
+                label)
+               (start (overlay-start target))
+               (point (or (overlay-get target 'point) start))
+               (win (overlay-get target 'window))
+               (face (overlay-get target 'label-face))
+               (thing (oref conn-dispatch-target-finder thing))
+               (`(,arg ,transform)
+                (oref conn-dispatch-target-finder arg-and-transform)))
+    (conn-dispatch-undo-case
+      (:undo
+       (conn-make-target-overlay
+        start 0
+        :window win
+        :properties `( label-face ,face
+                       label-string ,string))))
+    (list point
+          win
+          (or (overlay-get target 'thing) thing)
+          arg
+          transform)))
+
+(cl-defmethod conn-label-reset ((label conn-dispatch-label))
+  (setf (conn-dispatch-label-narrowed-string label)
+        (conn-dispatch-label-string label)))
+
+(cl-defmethod conn-label-delete ((label conn-dispatch-label))
+  (delete-overlay (conn-dispatch-label-overlay label)))
+
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label)
+                                 prefix-char)
+  (if (not (thread-first
+             (conn-dispatch-label-narrowed-string label)
+             (string-to-char)
+             (eql prefix-char)))
+      (setf (conn-dispatch-label-narrowed-string label) nil)
+    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
+    label))
+
+(cl-defmethod conn-label-completed-p ((label conn-dispatch-label))
+  (string-empty-p (conn-dispatch-label-narrowed-string label)))
+
+(cl-defmethod conn-label-clear ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label overlay target)
+               label))
+    (overlay-put overlay 'display nil)
+    (overlay-put overlay 'before-string nil)
+    (overlay-put overlay 'after-string nil)
+    (overlay-put target 'face nil)))
+
+(cl-defmethod conn-label-setup ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay
+                          target
+                          narrowed-string
+                          setup-function)
+               label))
+    (unless (or conn-dispatch-hide-labels
+                (length< narrowed-string 1))
+      (overlay-put target 'face 'conn-target-overlay-face)
+      (with-selected-window (overlay-get overlay 'window)
+        (funcall setup-function label)))))
+
+(cl-defmethod conn-label-display ((label conn-dispatch-label))
+  (pcase-let* (((cl-struct conn-dispatch-label overlay) label)
+               (setup (cl-shiftf (overlay-get overlay 'setup) nil))
+               (padding (cl-shiftf (overlay-get overlay 'padding) nil)))
+    (when setup (apply #'overlay-put overlay setup))
+    (when padding (apply padding))))
 
 ;;;;; Dispatch Actions
 

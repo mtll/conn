@@ -536,7 +536,7 @@
            for str = (window-parameter win 'conn-label-string)
            when str collect (conn--setup-posframe-window-label win str)))
 
-(cl-defmethod conn-label-redisplay ((label conn-posframe-window-label))
+(cl-defmethod conn-label-display ((label conn-posframe-window-label))
   (posframe-refresh (conn-posframe-window-label-bufname label)))
 
 (cl-defmethod conn-label-delete ((label conn-posframe-window-label))
