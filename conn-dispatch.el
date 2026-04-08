@@ -3234,6 +3234,7 @@ to the key binding for that target."
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
+   (hide :initform t :initarg :hide)
    (context-lines :initform 0 :initarg :context-lines)
    (cursor-location :initform nil)
    (separator-p :initarg :separator)
@@ -3282,52 +3283,57 @@ contain targets."
                  (fringe-indicator (oref state fringe-indicator))
                  (line nil))
       (with-selected-window win
-        (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
-          (if (eql tick (buffer-chars-modified-tick (window-buffer win)))
-              (dolist (ov old-hidden)
-                (overlay-put ov 'before-string fringe-indicator))
-            (setf line (1- (count-screen-lines (window-start) (point) t)))
-            (mapc #'delete old-hidden)
-            (save-excursion
-              (dolist (tar targets)
-                (push (or (overlay-get tar 'context)
-                          (progn
-                            (goto-char (overlay-start tar))
-                            (let ((beg (pos-bol (- 1 context-lines)))
-                                  (end (pos-bol (+ 2 context-lines))))
-                              (cons (max (if (invisible-p end) (1- beg) beg)
-                                         (point-min))
-                                    end))))
-                      regions)))
-            (cl-callf conn--merge-overlapping-regions regions t)
-            (conn--compat-callf sort regions :key #'car :in-place t)
-            (cl-loop for region in regions
-                     for (beg . end) = region
-                     sum (count-lines beg end) into lines
-                     do (setf (car region) (max (1- beg) (point-min))
-                              (cdr region) (1- end))
-                     finally (let ((diff (- (ceiling (window-screen-lines))
-                                            lines)))
-                               (when (> diff 0)
-                                 (save-excursion
-                                   (goto-char (caar regions))
-                                   (setf (caar regions) (pos-bol (- diff)))))))
-            (cl-loop
-             for beg = (point-min) then next-beg
-             for (end . next-beg) in regions
-             while end
-             do (let ((ov (make-overlay beg end)))
-                  (push ov hidden)
-                  (overlay-put ov 'invisible 'conn-dispatch-invisible)
-                  (overlay-put ov 'window win)
+        (setf line (1- (count-screen-lines (window-start) (point) t)))
+        (if (not (oref state hide))
+            (progn
+              (mapc #'delete-overlay old-hidden)
+              (setf (alist-get win (oref state hidden)) nil)
+              (recenter line))
+          (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden)))
+            (if (eql tick (buffer-chars-modified-tick (window-buffer win)))
+                (dolist (ov old-hidden)
                   (overlay-put ov 'before-string fringe-indicator))
-             finally (let ((ov (make-overlay beg (point-max))))
-                       (push ov hidden)
-                       (overlay-put ov 'window win)
-                       (overlay-put ov 'invisible 'conn-dispatch-invisible)))
-            (setf (alist-get win (oref state hidden))
-                  (cons (buffer-chars-modified-tick) hidden))
-            (recenter line))))))
+              (mapc #'delete-overlay old-hidden)
+              (save-excursion
+                (dolist (tar targets)
+                  (push (or (overlay-get tar 'context)
+                            (progn
+                              (goto-char (overlay-start tar))
+                              (let ((beg (pos-bol (- 1 context-lines)))
+                                    (end (pos-bol (+ 2 context-lines))))
+                                (cons (max (if (invisible-p end) (1- beg) beg)
+                                           (point-min))
+                                      end))))
+                        regions)))
+              (cl-callf conn--merge-overlapping-regions regions t)
+              (conn--compat-callf sort regions :key #'car :in-place t)
+              (cl-loop for region in regions
+                       for (beg . end) = region
+                       sum (count-lines beg end) into lines
+                       do (setf (car region) (max (1- beg) (point-min))
+                                (cdr region) (1- end))
+                       finally (let ((diff (- (ceiling (window-screen-lines))
+                                              lines)))
+                                 (when (> diff 0)
+                                   (save-excursion
+                                     (goto-char (caar regions))
+                                     (setf (caar regions) (pos-bol (- diff)))))))
+              (cl-loop
+               for beg = (point-min) then next-beg
+               for (end . next-beg) in regions
+               while end
+               do (let ((ov (make-overlay beg end)))
+                    (push ov hidden)
+                    (overlay-put ov 'invisible 'conn-dispatch-invisible)
+                    (overlay-put ov 'window win)
+                    (overlay-put ov 'before-string fringe-indicator))
+               finally (let ((ov (make-overlay beg (point-max))))
+                         (push ov hidden)
+                         (overlay-put ov 'window win)
+                         (overlay-put ov 'invisible 'conn-dispatch-invisible)))
+              (setf (alist-get win (oref state hidden))
+                    (cons (buffer-chars-modified-tick) hidden))
+              (recenter line)))))))
   (redisplay))
 
 (conn-define-target-finder conn-dispatch-focus-thing-at-point

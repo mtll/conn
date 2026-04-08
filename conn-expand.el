@@ -164,8 +164,9 @@ Expansions and contractions are provided by functions in
     bounds))
 
 (conn-define-target-finder conn-expansion-targets
-    ()
-    ((expansions :initform nil)
+    (conn-dispatch-focus-mixin)
+    ((hide :initform nil :initarg :hide)
+     (expansions :initform nil)
      (context-lines
       :initform 1
       :initarg :context-lines)
@@ -192,26 +193,13 @@ Expansions and contractions are provided by functions in
               (alist-get beg bounds))
         (conn-make-target-overlay beg 0 :thing thing)))))
 
-(conn-define-target-finder conn-expansion-focus-targets
-    (conn-expansion-targets
-     conn-dispatch-focus-mixin)
-    ((expansions :initform nil)
-     (context-lines
-      :initform 1
-      :initarg :context-lines)
-     (window-predicate
-      :initform (lambda (win) (eq win (selected-window))))))
-
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-handlers
     (:handler
      (:keymap conn-dispatch-toggle-focus-map)
      ( :predicate (cmd) (eq cmd 'toggle-focus))
      ( :update (_cmd _break)
-       (conn-target-finder-setup
-        (if (cl-typep target-finder 'conn-dispatch-focus-mixin)
-            (conn-expansion-targets)
-          (conn-expansion-focus-targets)))
+       (cl-callf not (oref target-finder hide))
        (recenter (conn-dispatch-get-display-line))
        (conn-dispatch-redisplay))
      ( :display ()
@@ -221,7 +209,7 @@ Expansions and contractions are provided by functions in
                       'face 'help-key-binding)
           " "
           (propertize "focus"
-                      'face (when (cl-typep target-finder 'conn-dispatch-focus-mixin)
+                      'face (when (oref target-finder hide)
                               'eldoc-highlight-function-argument))))))
     (let ((conn-dispatch-always-prompt t))
       (cl-call-next-method))))
