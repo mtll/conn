@@ -1022,6 +1022,11 @@ current state does not have a :pop-alternate property then push
      (conn-state-get conn-current-state :pop-alternate
                      t conn-pop-alternate-default))))
 
+(defun conn-unwind-stack ()
+  (interactive)
+  (while (conn-peek-state)
+    (conn-pop-state)))
+
 (defun conn-peek-state ()
   "Returns the next state in the state stack."
   (declare (side-effect-free t)

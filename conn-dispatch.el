@@ -374,8 +374,8 @@ current.")
           (generate-new-buffer " *conn-dispatch-input*" t)))
      (unwind-protect
          ,(macroexp-progn body)
-       (and (buffer-live-p conn-dispatch-input-buffer)
-            (kill-buffer conn-dispatch-input-buffer)))))
+       (when (buffer-live-p conn-dispatch-input-buffer)
+         (kill-buffer conn-dispatch-input-buffer)))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -1910,12 +1910,6 @@ Target overlays may override this default by setting the
                   (push (conn-dispatch-create-label tar str) labels)))
     `(:state ,(list pool size in-use) ,@labels)))
 
-(defvar conn--previous-labels-cleanup nil)
-
-(defun conn-cleanup-labels ()
-  (when conn--previous-labels-cleanup
-    (funcall conn--previous-labels-cleanup)))
-
 (defun conn-dispatch-get-labels ()
   (pcase (if conn--dispatch-label-state
              (funcall conn-dispatch-label-function
@@ -1927,7 +1921,6 @@ Target overlays may override this default by setting the
     (labels labels)))
 
 (defun conn--with-dispatch-labels (labels body)
-  (conn-cleanup-labels)
   (clrhash conn--dispatch-window-lines-cache)
   (unwind-protect
       (conn-with-dispatch-handlers
@@ -1944,19 +1937,10 @@ Target overlays may override this default by setting the
          ( :update (_cmd _break)
            (cl-callf not conn-dispatch-hide-labels)
            (conn-dispatch-redisplay)))
-        (let ((fn (make-symbol "cleanup")))
-          (fset fn (lambda (&rest _)
-                     (unwind-protect
-                         (mapc #'conn-label-delete labels)
-                       (setq conn--previous-labels-cleanup nil)
-                       (remove-hook 'pre-redisplay-functions fn))))
-          (setq conn--previous-labels-cleanup fn))
-        ;; ensure the cache gets populated
-        (ignore (conn--dispatch-window-lines))
+        (dolist (window (conn--get-target-windows))
+          (ignore (conn--dispatch-window-lines window)))
         (funcall body labels))
-    (when conn--previous-labels-cleanup
-      (add-hook 'pre-redisplay-functions
-                conn--previous-labels-cleanup))))
+    (mapc #'conn-label-delete labels)))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
@@ -2278,7 +2262,6 @@ the meaning of depth."
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
      (conn-target-finder-suspend-targets conn-dispatch-target-finder)
-     (conn-cleanup-labels)
      (pcase-let ((`(,conn-target-window-predicate
                     ,conn-target-predicate
                     ,conn-target-sort-function)
@@ -2814,7 +2797,6 @@ buffer."
   (declare (important-return-value t)))
 
 (cl-defmethod conn-target-finder-select :before (target-finder)
-  (conn-cleanup-labels)
   (let ((old nil))
     (unwind-protect
         (progn
@@ -4832,8 +4814,7 @@ it."))
                      'conn--dispatch-restrict-windows
                      conn-target-window-predicate))
               (conn-dispatch-push-history prev-dispatch))
-            (conn-clear-targets)
-            (conn-cleanup-labels)))))))
+            (conn-clear-targets)))))))
 
 ;;;;; Dispatch Commands
 
@@ -4900,8 +4881,7 @@ it."))
               (let ((prev (conn-make-dispatch action)))
                 (conn-dispatch-push-history prev)
                 (conn-push-command-history 'conn-dispatch-setup-previous prev))))
-          (conn-clear-targets)
-          (conn-cleanup-labels))))))
+          (conn-clear-targets))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)
