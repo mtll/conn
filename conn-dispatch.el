@@ -2127,10 +2127,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
         (dolist (win (conn--get-target-windows))
           (with-selected-window win
             (add-to-invisibility-spec 'conn-dispatch-invisible)))
-        (cl-loop
-         (catch 'dispatch-redisplay
-           (cl-return
-            (conn-target-finder-select conn-dispatch-target-finder)))))
+        (conn-target-finder-select conn-dispatch-target-finder))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (remove-from-invisibility-spec 'conn-dispatch-invisible)
@@ -2848,7 +2845,9 @@ buffer."
              conn-target-sort-function)))
     (unwind-protect
         (let ((inhibit-message t))
-          (cl-call-next-method))
+          (cl-loop
+           (catch 'dispatch-redisplay
+             (cl-return (cl-call-next-method)))))
       (conn-target-finder-suspend-targets target-finder))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
@@ -3104,27 +3103,31 @@ to the key binding for that target."
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
 
-(defvar conn-dispatch-read-n-chars-any-char ?,)
-(defvar conn-dispatch-read-n-chars-any-re "[^a-zA-A]")
+(defvar conn-dispatch-read-n-chars-re-alist
+  `((?, . "[^a-zA-A]")))
 
 (conn-define-target-finder conn-dispatch-read-n-chars
     (conn-dispatch-string-targets)
     ((string-length :initform 1
                     :initarg :string-length)
-     (regex-p :initform t))
+     (regex-p :initform t)
+     (literal :initform 1
+              :initarg :literal))
   ( :update-method (state)
     (if (oref state string)
         (conn-dispatch-call-update-handlers state 0)
       (let* ((string-length (oref state string-length))
+             (literal (oref state literal))
              (prompt (if (> string-length 1)
                          (propertize (format "%d Chars" string-length)
                                      'face 'minibuffer-prompt)
                        (propertize "1 Char" 'face 'minibuffer-prompt)))
              (char-count 0)
-             (trivial t)
+             (literal-count 0)
              (quote-flag nil))
-        (while (or trivial (< char-count string-length))
-          (unless trivial
+        (while (or (< literal-count literal)
+                   (< char-count string-length))
+          (unless (= literal-count 0)
             (while-no-input
               (conn-dispatch-call-update-handlers state)))
           (catch 'dispatch-redisplay
@@ -3147,11 +3150,11 @@ to the key binding for that target."
                            prompt t nil
                            (oref state string))))
                 (cl-callf concat (oref state string)
-                  (if (and (eql char conn-dispatch-read-n-chars-any-char)
-                           (not quote-flag))
-                      conn-dispatch-read-n-chars-any-re
-                    (setq trivial nil)
-                    (regexp-quote (char-to-string char)))))
+                  (or (and (not quote-flag)
+                           (alist-get char conn-dispatch-read-n-chars-re-alist))
+                      (progn
+                        (cl-incf literal-count)
+                        (regexp-quote (char-to-string char))))))
               (cl-incf char-count)
               (setf quote-flag nil)))
           (conn-clear-targets))
@@ -3567,6 +3570,7 @@ contain targets."
 (defun conn-dispatch-things-read-prefix (thing prefix-length)
   (declare (important-return-value t))
   (conn-dispatch-read-n-chars
+   :literal 0
    :string-length prefix-length
    :predicate (lambda (beg _end)
                 (save-excursion
