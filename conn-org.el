@@ -174,7 +174,7 @@
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph))
                                       &rest _)
   (conn-all-things-targets
-   :thing 'org-paragraph
+   :all-things 'org-paragraph
    :window-predicate #'conn--org-window-p
    :reference (conn-reference-quote
                 ((:heading "Org Paragraph Targets")))))

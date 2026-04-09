@@ -1763,51 +1763,41 @@ The duration of the message display is controlled by
       (concat ": " msg)))))
 
 (defun conn--read-args-prompt (prompt arguments)
-  (concat
-   (conn-read-args-prompt-line prompt)
-   (when-let* ((args (flatten-tree
-                      (mapcar #'conn-argument-display arguments))))
-     (conn-<
-       (compat-call
-        sort args
-        :key (lambda (str)
-               (or (get-text-property 0 'conn-read-args-display-depth str)
-                   0)))
-       (string-join "   ")
-       (:> (concat "\n"))))))
-
-(defun conn--read-args-display-prompt (prompt
-                                       arguments
-                                       &optional
-                                       _state
-                                       teardown)
-  (if teardown
-      (message nil)
-    (message "%s" (conn--read-args-prompt prompt arguments))))
+  (message "%s"
+           (concat
+            (conn-read-args-prompt-line prompt)
+            (when-let* ((args (flatten-tree
+                               (mapcar #'conn-argument-display arguments))))
+              (conn-<
+                (compat-call
+                 sort args
+                 :key (lambda (str)
+                        (or (get-text-property 0 'conn-read-args-display-depth str)
+                            0)))
+                (string-join "   ")
+                (:> (concat "\n")))))))
 
 (defun conn-read-args-display-columns (column-count separator-width)
-  (lambda (prompt arguments &optional _state teardown)
-    (if teardown
-        (message nil)
-      (message
-       "%s"
-       (let ((to-display
-              (flatten-tree
-               (cl-loop for arg in arguments
-                        collect (conn-argument-display arg))))
-             (prompt-line (conn-read-args-prompt-line prompt)))
-         (if (length> to-display column-count)
-             (conn--with-work-buffer
-               (insert prompt-line "\n")
-               (conn-to-vtable to-display
-                               column-count
-                               (current-buffer)
-                               :separator-width separator-width
-                               :use-header-line nil)
-               (buffer-substring (point-min) (1- (point-max))))
-           (concat prompt-line "\n"
-                   (string-join to-display
-                                (make-string separator-width ?\ )))))))))
+  (lambda (prompt arguments)
+    (message
+     "%s"
+     (let ((to-display
+            (flatten-tree
+             (cl-loop for arg in arguments
+                      collect (conn-argument-display arg))))
+           (prompt-line (conn-read-args-prompt-line prompt)))
+       (if (length> to-display column-count)
+           (conn--with-work-buffer
+             (insert prompt-line "\n")
+             (conn-to-vtable to-display
+                             column-count
+                             (current-buffer)
+                             :separator-width separator-width
+                             :use-header-line nil)
+             (buffer-substring (point-min) (1- (point-max))))
+         (concat prompt-line "\n"
+                 (string-join to-display
+                              (make-string separator-width ?\ ))))))))
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
@@ -1915,7 +1905,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            callback
                            &key
                            (command-handler (conn-read-args-command-handler))
-                           (display-handler #'conn--read-args-display-prompt)
+                           (display-handler #'conn--read-args-prompt)
                            around
                            overriding-map
                            prompt
@@ -1928,7 +1918,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                      arglist))
         (prefix (when prefix (prefix-numeric-value prefix)))
         (prompt (or prompt "Read Args"))
-        (display-state nil)
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
         (maps nil)
@@ -1946,10 +1935,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              (let ((inhibit-message conn-read-args-inhibit-message)
                    (message-log-max nil)
                    (scroll-conservatively 100))
-               (conn->f display-state
-                 (funcall display-handler
-                          prompt
-                          arguments))))
+               (funcall display-handler prompt arguments)))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
            (catch 'break
@@ -2056,7 +2042,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              (let ((inhibit-message conn-read-args-inhibit-message)
                    (message-log-max nil)
                    (scroll-conservatively 100))
-               (funcall display-handler nil nil display-state t))))
+               (message nil))))
          (mapc #'conn-argument-accept arguments)
          (cons callback argument-values))))))
 

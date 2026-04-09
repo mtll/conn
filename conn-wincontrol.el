@@ -238,29 +238,30 @@
 
 (defvar conn-wincontrol-windows-1
   (conn-reference-page
-    (:heading "Windows")
+    (:heading "Window:")
     ((("switch window" conn-goto-window)
       ("quit win" quit-window)
       ("delete win" delete-window)
       ("delete other" delete-other-windows)
-      ("undo/redo" tab-bar-history-back tab-bar-history-forward)
-      ("zoom in/out" text-scale-increase text-scale-decrease))
+      ("undo/redo"
+       tab-bar-history-back
+       tab-bar-history-forward))
      (("kill buffer and win" kill-buffer-and-window)
       ("split win right/vert"
        conn-wincontrol-split-right
        conn-wincontrol-split-vertically)
-      (:heading "Scroll:")
-      ("up/down" conn-wincontrol-scroll-up conn-wincontrol-scroll-down)
+      ("scroll up/down"
+       conn-wincontrol-scroll-up
+       conn-wincontrol-scroll-down)
       ("other win up/down"
        conn-wincontrol-other-window-scroll-up
        conn-wincontrol-other-window-scroll-down)
       ("register prefix" conn-register-prefix))
-     ((:heading "Buffer:")
-      ("switch" switch-to-buffer)
-      ("beg/end" beginning-of-buffer end-of-buffer)
-      ("prev/next" conn-previous-buffer conn-next-buffer)
-      ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
-      ("kill buffer" conn-kill-this-buffer)))
+     (("mru win" conn-wincontrol-mru-window)
+      ("yank win" conn-yank-window)
+      ("transpose win" conn-transpose-window)
+      ("throw buffer" conn-throw-buffer)
+      ("fit win" shrink-window-if-larger-than-buffer)))
     (((:keymap conn-window-resize-map)
       (:eval (concat
               (propertize "Resize Map:"
@@ -270,9 +271,10 @@
                            (where-is-internal conn-window-resize-map
                                               conn-wincontrol-map t))
                           'face 'help-key-binding)))
-      ("widen/narrow/heighten/shorten"
+      ("widen/narrow"
        conn-wincontrol-widen-window
-       conn-wincontrol-narrow-window
+       conn-wincontrol-narrow-window)
+      ("heighten/shorten"
        conn-wincontrol-heighten-window
        conn-wincontrol-shorten-window)
       ("maximize" maximize-window)
@@ -280,11 +282,15 @@
        conn-wincontrol-maximize-vertically
        conn-wincontrol-maximize-horizontally)
       ("balance" balance-windows))
-     (("mru win" conn-wincontrol-mru-window)
-      ("yank win" conn-yank-window)
-      ("transpose win" conn-transpose-window)
-      ("throw buffer" conn-throw-buffer)
-      ("fit win" shrink-window-if-larger-than-buffer)))))
+     ((:heading "Buffer:")
+      ("beg/end" beginning-of-buffer end-of-buffer)
+      ("prev/next" conn-previous-buffer conn-next-buffer)
+      ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
+      ("kill buffer" conn-kill-this-buffer)
+      ("zoom in/out/reset"
+       conn-wincontrol-zoom-in
+       conn-wincontrol-zoom-out
+       conn-wincontrol-reset-zoom)))))
 
 (defvar conn-wincontrol-windows-2
   (conn-reference-page

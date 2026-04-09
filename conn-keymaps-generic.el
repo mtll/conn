@@ -363,12 +363,12 @@
         '(forward-word)
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'word)))
+                         (conn-all-things-targets :all-things 'word)))
   "U" (conn-anonymous-thing
         '(forward-symbol)
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'symbol))))
+                         (conn-all-things-targets :all-things 'symbol))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state :override)

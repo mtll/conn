@@ -2266,8 +2266,6 @@ Exiting the recursive edit will resume the isearch."
 
 ;;;;; Transpose
 
-(defvar conn--recursive-edit-transpose nil)
-
 (defvar conn-transpose-special-ref
   (conn-reference-quote
     (("line" conn-backward-line forward-line)
@@ -2416,34 +2414,9 @@ Exiting the recursive edit will resume the isearch."
                                         _at-point-and-mark)
   (deactivate-mark)
   (pulse-momentary-highlight-region (region-beginning) (region-end))
-  (let ((bounds1 (cons (region-beginning) (region-end)))
-        (buf (current-buffer))
-        (conn--recursive-edit-transpose t))
-    (conn-with-recursive-stack 'conn-command-state
-      (unwind-protect
-          (progn
-            (conn-bounds-of-recursive-edit-mode 1)
-            (recursive-edit))
-        (conn-bounds-of-recursive-edit-mode -1)))
-    (unless (region-active-p)
-      (user-error "No region to transpose"))
-    (conn--dispatch-transpose-subr
-     buf
-     (car bounds1)
-     (conn-anonymous-thing
-       '(region)
-       :bounds-op ( :method (_self _arg)
-                    (conn-make-bounds 'region nil bounds1)))
-     nil nil
-     (current-buffer)
-     (point)
-     (let ((bounds2 (conn-make-bounds
-                     'region nil
-                     (cons (region-beginning) (region-end)))))
-       (conn-anonymous-thing
-         '(region)
-         :bounds-op ( :method (_self _arg) bounds2)))
-     nil nil)))
+  (let* ((bounds1 (conn-bounds-of 'region nil))
+         (bounds2 (conn-bounds-of 'recursive-edit nil)))
+    (conn--dispatch-transpose-subr bounds1 bounds2)))
 
 (cl-defmethod conn-transpose-things-do ((_thing (conn-thing dispatch))
                                         arg
@@ -2482,8 +2455,12 @@ Exiting the recursive edit will resume the isearch."
            (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
                          (conn-select-target)))
              (conn--dispatch-transpose-subr
-              (window-buffer window2) pt2 thing2 arg2 nil
-              buf1 pt1 thing1 arg2 nil)))
+              (with-current-buffer (window-buffer window2)
+                (conn-bounds-of-dispatch thing2 arg2 pt2))
+              (with-current-buffer buf1
+                (save-excursion
+                  (goto-char pt1)
+                  (conn-bounds-of (or thing1 thing2) arg2))))))
          thing arg nil
          :other-end :no-other-end
          :restrict-windows restrict-windows)))))
@@ -2546,8 +2523,6 @@ region after a `recursive-edit'."
                             conn-transpose-point-and-mark-argument-map
                             :documentation "Transpose the things at the point and mark.")))
      (list thing arg at-point-and-mark)))
-  (when conn--recursive-edit-transpose
-    (user-error "Recursive call to conn-transpose-things"))
   (conn-transpose-things-do thing arg at-point-and-mark)
   (conn-push-command-history 'conn-transpose-things
                              thing

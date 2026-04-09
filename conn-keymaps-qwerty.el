@@ -356,13 +356,13 @@
         '(forward-word)
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'word)))
+                         (conn-all-things-targets :all-things 'word)))
   "O" 'forward-word
   "u" (conn-anonymous-thing
         '(forward-symbol)
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'symbol)))
+                         (conn-all-things-targets :all-things 'symbol)))
   "U" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
@@ -425,12 +425,12 @@
         '(word)
         :pretty-print (:method (_self) "all-words")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'word)))
+                         (conn-all-things-targets :all-things 'word)))
   "U" (conn-anonymous-thing
         '(symbol)
         :pretty-print (:method (_self) "all-symbols")
         :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :thing 'symbol)))
+                         (conn-all-things-targets :all-things 'symbol)))
   ")" (conn-anonymous-thing
         '(sexp)
         :pretty-print (:method (_) "outer-list-or-string")

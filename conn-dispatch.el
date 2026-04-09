@@ -2246,13 +2246,11 @@ the meaning of depth."
                                 seconds
                                 prompt-suffix)
   (declare (important-return-value t))
-  (let ((message-fn (lambda (prompt arguments &optional _state teardown)
-                      (if teardown
-                          (message nil)
-                        (conn--dispatch-read-char-prefix
-                         arguments
-                         prompt
-                         prompt-suffix)))))
+  (let ((message-fn (lambda (prompt arguments)
+                      (conn--dispatch-read-char-prefix
+                       arguments
+                       prompt
+                       prompt-suffix))))
     (if seconds
         (let ((inhibit-message nil)
               (scroll-conservatively 100))
@@ -2845,12 +2843,12 @@ buffer."
   (conn-target-finder-label-faces target-finder))
 
 (cl-defmethod conn-target-finder-select :around (target-finder)
-  (let ((conn-target-sort-function (or (oref target-finder label-sort-function)
-                                       conn-target-sort-function)))
+  (let ((conn-target-sort-function
+         (or (oref target-finder label-sort-function)
+             conn-target-sort-function)))
     (unwind-protect
         (let ((inhibit-message t))
           (cl-call-next-method))
-      (conn-cleanup-labels)
       (conn-target-finder-suspend-targets target-finder))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
@@ -3518,9 +3516,10 @@ contain targets."
         (conn-make-target-overlay pt 0)))))
 
 (conn-define-target-finder conn-all-things-targets
-    () ()
+    ()
+    ((all-things :initarg :all-things))
   ( :default-update-handler (state)
-    (let ((thing (oref state thing)))
+    (let ((thing (oref state all-things)))
       (conn-for-each-visible
           (max (1- (window-start))
                (point-min))
@@ -4608,25 +4607,25 @@ it."))
                 (conn-dispatch-change-group (window-buffer win2)))
               (delete-overlay ov)
               (conn--dispatch-transpose-subr
-               (window-buffer win1) pt1 thing1 arg1 transform1
-               (window-buffer win2) pt2 thing2 arg2 transform2)))
+               (conn-transform-bounds
+                (conn-bounds-of-dispatch thing1 arg1 pt1)
+                transform1)
+               (conn-transform-bounds
+                (conn-bounds-of-dispatch thing2 arg2 pt2)
+                transform2))))
         (delete-overlay ov)))))
 
-(defun conn--dispatch-transpose-subr ( buffer1 pt1 thing1 arg1 transform1
-                                       buffer2 pt2 thing2 arg2 transform2)
-  (if (eq buffer1 buffer2)
-      (with-current-buffer buffer1
-        (pcase-let* (((and bounds1
-                           (conn-bounds `(,beg1 . ,end1) transform1))
-                      (save-excursion
-                        (goto-char pt1)
-                        (or (conn-bounds-of thing1 arg1)
-                            (user-error "Cannot find thing at point"))))
-                     ((conn-bounds `(,beg2 . ,end2) transform2)
-                      (save-excursion
-                        (goto-char pt2)
-                        (or (conn-bounds-of (or thing2 bounds1) arg2)
-                            (user-error "Cannot find thing at point")))))
+(defun conn--dispatch-transpose-subr (bounds1 bounds2)
+  (pcase-let* (((conn-bounds `(,beg1 . ,end1)) bounds1)
+               (buffer1 (conn-bounds-buffer bounds1))
+               ((conn-bounds `(,beg2 . ,end2)) bounds2)
+               (buffer2 (conn-bounds-buffer bounds2)))
+    (cl-psetf beg1 (min beg1 end1)
+              end1 (max beg1 end1)
+              beg2 (min beg2 end2)
+              end2 (max beg2 end2))
+    (if (eq buffer1 buffer2)
+        (with-current-buffer buffer1
           (if (and (or (<= beg1 end1 beg2 end2)
                        (<= beg2 end2 beg1 end1))
                    (/= beg1 end1)
@@ -4634,37 +4633,26 @@ it."))
                    (<= (point-min) (min beg2 end2 beg1 end1))
                    (> (point-max) (max beg2 end2 beg1 end1)))
               (transpose-regions beg1 end1 beg2 end2)
-            (user-error "Invalid regions"))))
-    (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
-                                     (prepare-change-group buffer2))
-                              (cancel-change-group cg))
-                          (bounds1 nil)
-                          (str1)
-                          (str2))
-      (activate-change-group cg)
-      (with-current-buffer buffer1
-        (save-excursion
-          (goto-char pt1)
-          (pcase (setq bounds1 (conn-bounds-of thing1 arg1))
-            ((conn-bounds `(,beg . ,end) transform1)
-             (setq pt1 beg)
-             (setq str1 (filter-buffer-substring beg end))
-             (delete-region beg end))
-            (_ (user-error "Cannot find thing at point")))))
-      (with-current-buffer buffer2
-        (save-excursion
-          (goto-char pt2)
-          (pcase (conn-bounds-of (or thing2 bounds1) arg2)
-            ((conn-bounds `(,beg . ,end) transform2)
-             (setq str2 (filter-buffer-substring beg end))
-             (delete-region beg end)
-             (insert str1))
-            (_ (user-error "Cannot find thing at point")))))
-      (with-current-buffer buffer1
-        (save-excursion
-          (goto-char pt1)
-          (insert str2)))
-      (accept-change-group cg))))
+            (user-error "Invalid regions")))
+      (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
+                                       (prepare-change-group buffer2))
+                                (cancel-change-group cg))
+                            (str1)
+                            (str2))
+        (activate-change-group cg)
+        (with-current-buffer buffer1
+          (setq str1 (filter-buffer-substring beg1 end1))
+          (delete-region beg1 end1))
+        (with-current-buffer buffer2
+          (setq str2 (filter-buffer-substring beg2 end2))
+          (goto-char (min beg2 end2))
+          (delete-region beg2 end2)
+          (insert str1))
+        (with-current-buffer buffer1
+          (save-excursion
+            (goto-char (min beg1 end1))
+            (insert str2)))
+        (accept-change-group cg)))))
 
 ;;;;; Dispatch Ring
 
@@ -5385,7 +5373,7 @@ lines."))))
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence))
                                       &rest _)
   (conn-all-things-targets
-   :thing 'sentence
+   :all-things 'sentence
    :reference (conn-reference-quote
                 ((:heading "Sentence Targets")
                  "Dispatch on sentences."))))
@@ -5393,7 +5381,7 @@ lines."))))
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph))
                                       &rest _)
   (conn-all-things-targets
-   :thing 'paragraph
+   :all-things 'paragraph
    :reference (conn-reference-quote
                 ((:heading "Paragraph Targets")
                  "Dispatch on paragraphs."))))

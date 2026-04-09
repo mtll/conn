@@ -142,6 +142,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (whole nil :type cons)
   (properties nil :type list))
 
+(defalias 'conn-bounds-thing 'conn-bounds--thing)
+(defalias 'conn-bounds-arg 'conn-bounds--arg)
+(defalias 'conn-bounds-buffer 'conn-bounds--buffer)
+
 (cl-defstruct (conn--anonymous-thing
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
@@ -167,9 +171,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        (save-excursion
          (goto-char (conn-bounds--point ,bounds))
          ,@body))))
-
-(defalias 'conn-bounds-thing 'conn-bounds--thing)
-(defalias 'conn-bounds-arg 'conn-bounds--arg)
 
 (define-inline conn-thing-p (thing)
   (declare (side-effect-free t)
@@ -692,6 +693,8 @@ command moves over."
               `(conn--make-bounds-transform
                 :thing (conn-bounds-thing ,from)
                 :arg (conn-bounds-arg ,from)
+                :buffer (conn-bounds-buffer ,from)
+                :tick (conn-bounds--tick ,from)
                 :whole ,to
                 :properties (nconc (list ,@properties)
                                    (conn-bounds--properties ,from))
@@ -701,6 +704,8 @@ command moves over."
   (conn--make-bounds-transform
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)
+   :buffer (conn-bounds-buffer from)
+   :tick (conn-bounds--tick from)
    :whole to
    :properties (nconc properties (conn-bounds--properties from))
    :transforms (append (when (conn-transformed-bounds-p from)
@@ -885,18 +890,6 @@ Returns a `conn-bounds' struct."
      (conn--bounds-of-thing bounds))
    :subregions (conn-bounds-delay bounds
                  (conn--bounds-of-thing-subregions bounds))))
-
-(conn-register-thing 'simple-motion)
-
-(cl-defmethod conn-bounds-of ((cmd (conn-thing simple-motion))
-                              arg)
-  (conn-make-bounds
-   cmd arg
-   (conn-bounds-delay bounds
-     (let ((pt (point)))
-       (funcall cmd arg)
-       (setf (conn-bounds bounds)
-             (cons pt (point)))))))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing region))
                               arg)
@@ -2000,13 +1993,11 @@ Only the background color is used."
                                           (< (cdr a) (cdr b))
                                         (> (car a) (car b))))))
         (display-handler
-         (lambda (prompt args &optional _state teardown)
-           (if teardown
-               (message nil)
-             (message
-              (concat
-               (propertize prompt 'face 'minibuffer-prompt)
-               (mapconcat #'conn-argument-display args)))))))
+         (lambda (prompt args)
+           (message
+            (concat
+             (propertize prompt 'face 'minibuffer-prompt)
+             (mapconcat #'conn-argument-display args))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
       (`(,bound . nil) bound)
