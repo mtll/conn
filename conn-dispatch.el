@@ -2843,12 +2843,12 @@ buffer."
   (let ((conn-target-sort-function
          (or (oref target-finder label-sort-function)
              conn-target-sort-function)))
-    (unwind-protect
-        (let ((inhibit-message t))
-          (cl-loop
-           (catch 'dispatch-redisplay
-             (cl-return (cl-call-next-method)))))
-      (conn-target-finder-suspend-targets target-finder))))
+    (let ((inhibit-message t))
+      (cl-loop
+       (catch 'dispatch-redisplay
+         (unwind-protect
+             (cl-return (cl-call-next-method))
+           (conn-target-finder-suspend-targets target-finder)))))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil)
