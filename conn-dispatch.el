@@ -1362,14 +1362,16 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (eq (selected-frame) (window-frame win)))
 
+(defvar conn-pixelwise-label-timeout 0.1)
+
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
   (and (< (save-excursion
             (goto-char (overlay-start target))
             (- (point) (pos-bol)))
           conn-dispatch-pixelwise-labels-line-limit)
-       (time-less-p (float-time (time-since conn--label-start-time))
-                    0.01)))
+       (time-less-p (time-since conn--label-start-time)
+                    conn-pixelwise-label-timeout)))
 
 (put 'conn-label-overlay 'priority 3000)
 
@@ -1947,7 +1949,7 @@ Target overlays may override this default by setting the
   (pcase binder
     (`(,var ,val)
      `(let ((conn-dispatch-label-input-method nil)
-            (conn--label-start-time (float-time (current-time))))
+            (conn--label-start-time (current-time)))
         (conn--with-dispatch-labels ,val (lambda (,var) ,@body))))
     (_ (error "Unexpected binder form"))))
 
