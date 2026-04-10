@@ -2197,6 +2197,8 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
+(defvar conn--dispatch-suspend-labels nil)
+
 (defun conn--with-dispatch-labels (labels body)
   (clrhash conn--dispatch-window-lines-cache)
   (unwind-protect
@@ -2216,7 +2218,9 @@ Target overlays may override this default by setting the
            (conn-dispatch-redisplay)))
         (dolist (window (conn--get-target-windows))
           (ignore (conn--dispatch-window-lines window)))
-        (funcall body labels))
+        (let ((conn--dispatch-suspend-labels
+               (lambda () (mapc #'conn-label-clear labels))))
+          (funcall body labels)))
     (mapc #'conn-label-delete labels)))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
@@ -2533,6 +2537,8 @@ the meaning of depth."
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
      (conn-target-finder-suspend-targets conn-dispatch-target-finder)
+     (when conn--dispatch-suspend-labels
+       (funcall conn--dispatch-suspend-labels))
      (pcase-let ((`(,conn-target-window-predicate
                     ,conn-target-predicate
                     ,conn-target-sort-function)
