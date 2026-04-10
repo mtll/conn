@@ -2223,48 +2223,53 @@ be displayed in the echo area during `conn-read-args'."
            ,@(nreverse qualifiers)
            ,(append fixed-args arglist)
            (ignore ,@(cdr (cl--generic-split-args fixed-args)))
-           ,@body)))))
+           ,@body))))
+
+  (defun conn--define-argument-command (argument-and-command
+                                        docstring
+                                        body)
+    (pcase argument-and-command
+      (`((,handler ,_spec) ,_cmd))
+      (_ (error "Invalid argument form")))
+    (unless (assq :predicate body)
+      (setf (alist-get :predicate body)
+            `(() t)))
+    (cond ((stringp docstring)
+           (setf (alist-get :documentation body)
+                 `((break)
+                   (funcall break (conn-reference-page
+                                    (:eval (substitute-command-keys ,docstring)))))))
+          ((eq :documentation (car-safe docstring))
+           (push docstring body)))
+    (macroexpand-all
+     `(progn ,@body)
+     `((:update . ,(lambda (&rest body)
+                     (conn--argument-expand-method
+                      'conn-argument-update
+                      argument-and-command
+                      body)))
+       (:documentation . ,(lambda (&rest body)
+                            (conn--argument-expand-method
+                             'conn-argument-command-documentation
+                             argument-and-command
+                             body)))
+       (:annotation . ,(lambda (&rest body)
+                         (conn--argument-expand-method
+                          'conn-argument-annotation
+                          argument-and-command
+                          body)))
+       (:predicate . ,(lambda (&rest body)
+                        (conn--argument-expand-method
+                         'conn-argument-predicate
+                         argument-and-command
+                         body)))))))
 
 (defmacro conn-define-argument-command (argument-and-command
                                         docstring
                                         &rest
                                         body)
   (declare (indent 1))
-  (pcase argument-and-command
-    (`((,handler ,_spec) ,_cmd))
-    (_ (error "Invalid argument form")))
-  (unless (assq :predicate body)
-    (setf (alist-get :predicate body)
-          `(() t)))
-  (cond ((stringp docstring)
-         (setf (alist-get :documentation body)
-               `((break)
-                 (funcall break (conn-reference-page
-                                  (:eval (substitute-command-keys ,docstring)))))))
-        ((eq :documentation (car-safe docstring))
-         (push docstring body)))
-  (macroexpand-all
-   `(progn ,@body)
-   `((:update . ,(lambda (&rest body)
-                   (conn--argument-expand-method
-                    'conn-argument-update
-                    argument-and-command
-                    body)))
-     (:documentation . ,(lambda (&rest body)
-                          (conn--argument-expand-method
-                           'conn-argument-command-documentation
-                           argument-and-command
-                           body)))
-     (:annotation . ,(lambda (&rest body)
-                       (conn--argument-expand-method
-                        'conn-argument-annotation
-                        argument-and-command
-                        body)))
-     (:predicate . ,(lambda (&rest body)
-                      (conn--argument-expand-method
-                       'conn-argument-predicate
-                       argument-and-command
-                       body))))))
+  (conn--define-argument-command argument-and-command docstring body))
 
 ;;;;;; Anonymous Argument
 

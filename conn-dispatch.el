@@ -2885,7 +2885,7 @@ buffer."
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql scroll-up-command)))
   "Scroll the window up."
-  ( :update (_break)
+  ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
       (ignore-error end-of-buffer
@@ -4125,12 +4125,11 @@ contain targets."
 ;;;;; Dispatch Labels
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (pcase-let* (((cl-struct conn-dispatch-label string target)
+  (pcase-let* (((cl-struct conn-dispatch-label target)
                 label)
                (start (overlay-start target))
                (point (or (overlay-get target 'point) start))
-               (win (overlay-get target 'window))
-               (face (overlay-get target 'label-face)))
+               (win (overlay-get target 'window)))
     (list point
           win
           (or (overlay-get target 'thing)
