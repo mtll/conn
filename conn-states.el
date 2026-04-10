@@ -2000,7 +2000,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              ((pred identity)
               (or (update-args cmd)
                   (set-error-message "Invalid command: %s <%s>"
-                                     cmd
+                                     (if (symbolp cmd) cmd "_")
                                      (key-description keyseq)))))
            (when post (funcall post cmd)))
          (setup-keymaps ()

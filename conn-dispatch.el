@@ -474,8 +474,6 @@ themselves once the selection process has concluded."
          (prompt-flag always-prompt)
          (current candidates)
          (partial nil))
-    (while-no-input
-      (conn-redisplay-labels candidates))
     (cl-loop
      (pcase current
        ('nil
@@ -483,16 +481,12 @@ themselves once the selection process has concluded."
               partial nil
               prompt-flag always-prompt)
         (conn-read-args-message "No matches")
-        (mapc #'conn-label-reset current)
-        (while-no-input
-          (conn-redisplay-labels candidates)))
+        (mapc #'conn-label-reset current))
        ((and `(,it . nil)
              (guard (not (or prompt-flag
                              (and partial
                                   (not (conn-label-completed-p it)))))))
         (cl-return (conn-label-payload it))))
-     (while-no-input
-       (conn-redisplay-labels candidates))
      (setq prompt-flag nil)
      (while (let ((c (conn-dispatch-read-char
                       prompt
@@ -987,8 +981,10 @@ themselves once the selection process has concluded."
 
 (defun conn-action-stale-p (action)
   (cl-loop for slot in (conn-action--slots action)
-           thereis (funcall (conn-action-slot--stale slot)
-                            (conn-action-slot--value slot))))
+           thereis (condition-case _
+                       (funcall (conn-action-slot--stale slot)
+                                (conn-action-slot--value slot))
+                     (error t))))
 
 (defun conn-action-copy (action)
   (make-conn-action
@@ -1146,8 +1142,8 @@ themselves once the selection process has concluded."
     (kill-new str)))
 
 (defun conn-action-repeatable-p (action)
-  (not (or (eq (conn-action-repeat action) t)
-           (eq (conn-action-repeat action) nil))))
+  (or (eq (conn-action-repeat action) t)
+      (eq (conn-action-repeat action) nil)))
 
 (defun conn-action-get-reference (action)
   (when-let* ((ref (and action
@@ -2198,31 +2194,43 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
-(defvar conn--dispatch-suspend-labels nil)
+(defvar conn--dispatch-suspend-labels #'ignore)
+(defvar conn--dispatch-resume-labels #'ignore)
 
 (defun conn--with-dispatch-labels (labels body)
   (clrhash conn--dispatch-window-lines-cache)
-  (unwind-protect
-      (conn-with-dispatch-handlers
-        (:handler
-         (:predicate (cmd) (eq cmd 'toggle-labels))
-         (:keymap conn-toggle-label-argument-map)
-         ( :display ()
-           (concat
-            "\\[toggle-labels] "
-            (propertize
-             "hide labels"
-             'face (when conn-dispatch-hide-labels
-                     'eldoc-highlight-function-argument))))
-         ( :update (_cmd _break)
-           (cl-callf not conn-dispatch-hide-labels)
-           (conn-dispatch-redisplay)))
-        (dolist (window (conn--get-target-windows))
-          (ignore (conn--dispatch-window-lines window)))
-        (let ((conn--dispatch-suspend-labels
-               (lambda () (mapc #'conn-label-clear labels))))
-          (funcall body labels)))
-    (mapc #'conn-label-delete labels)))
+  (let* ((redisplay (lambda ()
+                      (while-no-input
+                        (conn-redisplay-labels labels))))
+         (timer (run-with-idle-timer 0 t redisplay)))
+    (unwind-protect
+        (conn-with-dispatch-handlers
+          (:handler
+           (:predicate (cmd) (eq cmd 'toggle-labels))
+           (:keymap conn-toggle-label-argument-map)
+           ( :display ()
+             (concat
+              "\\[toggle-labels] "
+              (propertize
+               "hide labels"
+               'face (when conn-dispatch-hide-labels
+                       'eldoc-highlight-function-argument))))
+           ( :update (_cmd _break)
+             (cl-callf not conn-dispatch-hide-labels)
+             (conn-dispatch-redisplay)))
+          (dolist (window (conn--get-target-windows))
+            (ignore (conn--dispatch-window-lines window)))
+          (let ((conn--dispatch-suspend-labels
+                 (lambda ()
+                   (cancel-timer (cl-shiftf timer nil))
+                   (mapc #'conn-label-clear labels)))
+                (conn--dispatch-resume-labels
+                 (lambda ()
+                   (unless timer
+                     (setq timer (run-with-idle-timer 0 t redisplay))))))
+            (funcall body labels)))
+      (when timer (cancel-timer timer))
+      (mapc #'conn-label-delete labels))))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
   (declare (indent 1))
@@ -2336,25 +2344,23 @@ depths will be sorted before greater depths.
                          (funcall break))))
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
-                          (pt (point))
-                          (label-state conn--dispatch-label-state))
+                          (pt (point)))
                       (push nil conn--dispatch-change-groups)
                       (conn-dispatch-undo-case
                         :depth 100
                         (:undo (redisplay)))
-                      (unwind-protect
-                          (conn-call-action conn-dispatch-action)
-                        (unless (or (equal wconf (current-window-configuration))
-                                    (null (car conn--dispatch-change-groups)))
-                          (conn-dispatch-undo-case
-                            :depth -90
-                            (:undo
-                             (select-frame frame)
-                             (set-window-configuration wconf)
-                             (goto-char pt)
-                             (setq conn--dispatch-label-state label-state)
-                             (cl-decf conn-dispatch-iteration-count)))))
-                      (cl-incf conn-dispatch-iteration-count))))
+                      (conn-dispatch-undo-case
+                        :depth -90
+                        (:undo
+                         (unless (and (equal wconf (current-window-configuration))
+                                      (= (point) pt))
+                           (select-frame frame)
+                           (set-window-configuration wconf)
+                           (goto-char pt))))
+                      (conn-call-action conn-dispatch-action)
+                      (cl-incf conn-dispatch-iteration-count)
+                      (conn-dispatch-undo-case
+                        (:undo (cl-decf conn-dispatch-iteration-count))))))
               (user-error
                (pcase-dolist (`(,_ . ,undo-fn)
                               (pop conn--dispatch-change-groups))
@@ -2539,31 +2545,34 @@ the meaning of depth."
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
      (conn-target-finder-suspend-targets conn-dispatch-target-finder)
-     (when conn--dispatch-suspend-labels
-       (funcall conn--dispatch-suspend-labels))
-     (pcase-let ((`(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function)
-                  conn--dispatch-prev-state)
-                 (conn--dispatch-prev-state nil)
-                 (conn-dispatch-in-progress nil)
-                 (conn--dispatch-redisplay-prompt-flag nil)
-                 (conn-dispatch-label-function nil)
-                 (conn-dispatch-quit-flag nil)
-                 (conn-dispatch-action nil)
-                 (conn-dispatch-repeating nil)
-                 (conn-dispatch-action-reference nil)
-                 (conn-targets nil)
-                 (conn--dispatch-label-state nil)
-                 (conn-dispatch-target-finder nil)
-                 (conn--dispatch-change-groups nil)
-                 (conn-dispatch-iteration-count nil)
-                 (conn-dispatch-other-end nil)
-                 (conn--dispatch-read-char-handlers nil)
-                 (conn-dispatch-hide-labels nil)
-                 (conn-dispatch-input-buffer nil))
-       (message nil)
-       ,@body)))
+     (funcall conn--dispatch-suspend-labels)
+     (unwind-protect
+         (pcase-let ((`(,conn-target-window-predicate
+                        ,conn-target-predicate
+                        ,conn-target-sort-function)
+                      conn--dispatch-prev-state)
+                     (conn--dispatch-prev-state nil)
+                     (conn-dispatch-in-progress nil)
+                     (conn--dispatch-redisplay-prompt-flag nil)
+                     (conn-dispatch-label-function nil)
+                     (conn-dispatch-quit-flag nil)
+                     (conn-dispatch-action nil)
+                     (conn-dispatch-repeating nil)
+                     (conn-dispatch-action-reference nil)
+                     (conn-targets nil)
+                     (conn--dispatch-label-state nil)
+                     (conn-dispatch-target-finder nil)
+                     (conn--dispatch-change-groups nil)
+                     (conn-dispatch-iteration-count nil)
+                     (conn-dispatch-other-end nil)
+                     (conn--dispatch-read-char-handlers nil)
+                     (conn-dispatch-hide-labels nil)
+                     (conn-dispatch-input-buffer nil)
+                     (conn--dispatch-suspend-labels nil)
+                     (conn--dispatch-resume-labels nil))
+           (message nil)
+           ,@body)
+       (funcall conn--dispatch-resume-labels))))
 
 (cl-defstruct (conn-dispatch-read-char-handlers
                (:include conn-composite-argument)
@@ -2880,18 +2889,20 @@ buffer."
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
       (ignore-error end-of-buffer
-        (scroll-up))
-      (conn-dispatch-redisplay))))
+        (scroll-up)
+        (conn-dispatch-redisplay))
+      (funcall break))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql scroll-down-command)))
   "Scroll the window down."
-  ( :update (_break)
+  ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
       (ignore-error beginning-of-buffer
-        (scroll-down))
-      (conn-dispatch-redisplay))))
+        (scroll-down)
+        (conn-dispatch-redisplay))
+      (funcall break))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql conn-goto-window)))
@@ -3104,8 +3115,7 @@ buffer."
     (unwind-protect
         (progn
           (pcase-dolist (`(,_ . ,targets) conn-targets)
-            (dolist (target targets)
-              (push target old)))
+            (cl-callf2 nconc targets old))
           (setq conn-targets nil
                 conn-target-count nil)
           (conn-target-finder-update target-finder)
@@ -4121,13 +4131,6 @@ contain targets."
                (point (or (overlay-get target 'point) start))
                (win (overlay-get target 'window))
                (face (overlay-get target 'label-face)))
-    (conn-dispatch-undo-case
-      (:undo
-       (conn-make-target-overlay
-        start 0
-        :window win
-        :properties `( label-face ,face
-                       label-string ,string))))
     (list point
           win
           (or (overlay-get target 'thing)

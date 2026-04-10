@@ -172,8 +172,7 @@ Expansions and contractions are provided by functions in
      (window-predicate
       :initform (lambda (win) (eq win (selected-window)))))
   ( :default-update-handler (state &optional len)
-    (let* ((expansions)
-           (bounds nil)
+    (let* ((bounds nil)
            (thing
             (conn-anonymous-thing
               '(region)
@@ -186,7 +185,8 @@ Expansions and contractions are provided by functions in
                             (alist-get (point) bounds))))))
       (unless (oref state expansions)
         (setf (oref state expansions) (conn--expand-create-expansions)))
-      (pcase-dolist ((and cons `(,beg . ,end)) expansions)
+      (pcase-dolist ((and cons `(,beg . ,end))
+                     (oref state expansions))
         (push (conn-make-bounds 'region nil cons)
               (alist-get beg bounds))
         (conn-make-target-overlay beg 0 :thing thing)))))
