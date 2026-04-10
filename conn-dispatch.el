@@ -38,6 +38,8 @@
 (declare-function conn-toggle-highlight-at-point "conn-commands")
 (declare-function conn--unhighlight-at-point "conn-commands")
 
+(autoload 'pulse-momentary-highlight-overlay "pulse")
+
 ;;;; Labels
 
 (defcustom conn-simple-label-characters
@@ -1168,10 +1170,9 @@ themselves once the selection process has concluded."
   (action-command nil)
   (arguments nil :type list))
 
-(defun conn-dispatch-action-argument (&optional required)
+(defun conn-dispatch-action-argument ()
   (make-conn-dispatch-action-argument
-   :keymap conn-dispatch-repeat-argument-map
-   :required required))
+   :keymap conn-dispatch-repeat-argument-map))
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
   (let* ((action (conn-dispatch-action-argument-value arg))
@@ -2401,9 +2402,10 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
      (face-background 'pulse-highlight-start-face
                       nil
                       'default))
-    (pulse-momentary-highlight-region
-     beg end
-     'conn--dispatch-action-current-pulse-face)))
+    (let ((ov (make-overlay beg end nil t)))
+      (overlay-put ov 'pulse-delete t)
+      (pulse-momentary-highlight-overlay
+       ov 'conn--dispatch-action-current-pulse-face))))
 
 (defun conn--dispatch-push-undo-case (depth body)
   (push (cons depth body)
@@ -2790,8 +2792,8 @@ buffer."
         ((`(,action ,repeat)
           (make-conn-dispatch-action-argument
            :keymap conn-dispatch-repeat-argument-map
-           :required t
-           :repeat conn-dispatch-repeating)))
+           :repeat conn-dispatch-repeating))
+         (_finish (conn-finished-argument)))
       (conn-action-setup action repeat)
       (throw 'dispatch-undo nil))))
 
@@ -5159,66 +5161,6 @@ for the dispatch."
         (goto-char opoint))
     (save-mark-and-excursion
       (isearch-exit))))
-
-(defun conn-dispatch-isearch-with-action ()
-  "Jump to an isearch match with dispatch labels."
-  (interactive)
-  (let (ovs action repeat other-end)
-    (unwind-protect
-        (progn
-          (with-restriction (window-start) (window-end)
-            (cl-loop for (beg . end) in (conn--isearch-matches)
-                     do (let ((ov (make-overlay beg end)))
-                          (push ov ovs)
-                          (overlay-put ov 'face 'lazy-highlight))))
-          (let ((regexp-search-ring
-                 (if isearch-regexp
-                     (cons isearch-string regexp-search-ring)
-                   regexp-search-ring))
-                (search-ring
-                 (if isearch-regexp
-                     search-ring
-                   (cons isearch-string search-ring))))
-            (with-isearch-suspended
-             (conn-read-args (conn-dispatch-state
-                              :prompt "Dispatch on Isearch")
-                 ((`(,act ,rep) (conn-dispatch-action-argument t))
-                  (oe (conn-boolean-argument "other-end"
-                                             'other-end
-                                             conn-other-end-argument-map)))
-               (setq action act
-                     repeat rep
-                     other-end oe)))))
-      (mapc #'delete-overlay ovs))
-    (unwind-protect
-        (let ((regexp-search-ring
-               (if isearch-regexp
-                   (cons isearch-string regexp-search-ring)
-                 regexp-search-ring))
-              (search-ring
-               (if isearch-regexp
-                   search-ring
-                 (cons isearch-string search-ring)))
-              (opoint nil))
-          (with-isearch-suspended
-           (save-selected-window
-             (conn-dispatch-setup
-              action
-              (conn-anonymous-thing
-                '(region)
-                :target-finder ( :method (_self &rest _)
-                                 (conn-isearch-targets
-                                  :window-predicate (let ((owin (selected-window)))
-                                                      (lambda (win) (eq win owin)))
-                                  :context-lines (floor (window-screen-lines) 2.5))))
-              nil nil
-              :repeat repeat
-              :restrict-windows t
-              :other-end other-end))
-           (setq opoint (point)))
-          (when opoint (goto-char opoint)))
-      (save-mark-and-excursion
-        (isearch-exit)))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."

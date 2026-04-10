@@ -2736,4 +2736,37 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-cancel ((arg conn-protected-argument))
   (funcall (conn-protected-argument-cleanup arg)))
 
+;;;;; Finished Argument
+
+(cl-defstruct (conn-finished-argument
+               (:include conn-argument)
+               ( :constructor conn-finished-argument
+                 (&optional
+                  (name "finish")
+                  (finish-command 'finish)
+                  (keymap (define-keymap
+                            "RET" 'finish
+                            "<return>" 'finish))
+                  &aux
+                  (required t))))
+  (finish-command nil :type symbol :read-only t))
+
+(cl-defmethod conn-argument-update ((arg conn-finished-argument)
+                                    cmd
+                                    break)
+  (when (eq cmd (conn-finished-argument-finish-command arg))
+    (setf (conn-argument-set-flag arg) t)
+    (funcall break)))
+
+(cl-defmethod conn-argument-predicate ((arg conn-finished-argument)
+                                       cmd)
+  (eq cmd (conn-finished-argument-finish-command arg)))
+
+(cl-defmethod conn-argument-display ((arg conn-finished-argument))
+  (concat
+   (substitute-command-keys
+    (format "\\[%s]" (conn-finished-argument-finish-command arg)))
+   " "
+   (conn-finished-argument-name arg)))
+
 (provide 'conn-states)
