@@ -871,6 +871,8 @@ themselves once the selection process has concluded."
 
 ;;;;;; Action
 
+(defvar conn-dispatch-action nil)
+
 (defvar-keymap conn-dispatch-repeat-argument-map
   "TAB" 'repeat-dispatch)
 
@@ -2021,15 +2023,11 @@ depths will be sorted before greater depths.
       (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
     (set-marker mk (point))))
 
-(cl-defgeneric conn-dispatch-perform-action (action))
-
-(cl-defmethod conn-dispatch-perform-action (action)
+(defun conn-dispatch-loop ()
   (let ((success nil)
         (owconf (current-window-configuration))
         (oframe (selected-frame))
         (opoint (point))
-        (conn-dispatch-action-reference
-         (conn-action-get-reference action))
         (conn--dispatch-label-state nil)
         (conn--dispatch-change-groups nil)
         (conn--read-args-error-message nil)
@@ -2043,21 +2041,21 @@ depths will be sorted before greater depths.
           (while (or conn-dispatch-repeating
                      (< conn-dispatch-iteration-count 1))
             (condition-case err
-                (conn-with-dispatch-handlers
-                  (when (conn-action-repeatable-p action)
-                    (:handler
-                     ( :predicate (cmd) (eq cmd 'repeat-dispatch))
-                     ( :display ()
-                       (when conn-dispatch-repeating
-                         (concat
-                          "\\[repeat-dispatch] "
-                          (propertize
-                           "repeat"
-                           'face 'conn-argument-active-face))))
-                     ( :update (_cmd break)
-                       (cl-callf not conn-dispatch-repeating)
-                       (funcall break))))
-                  (catch 'dispatch-undo
+                (catch 'dispatch-undo
+                  (conn-with-dispatch-handlers
+                    (when (conn-action-repeatable-p conn-dispatch-action)
+                      (:handler
+                       ( :predicate (cmd) (eq cmd 'repeat-dispatch))
+                       ( :display ()
+                         (when conn-dispatch-repeating
+                           (concat
+                            "\\[repeat-dispatch] "
+                            (propertize
+                             "repeat"
+                             'face 'conn-argument-active-face))))
+                       ( :update (_cmd break)
+                         (cl-callf not conn-dispatch-repeating)
+                         (funcall break))))
                     (let ((frame (selected-frame))
                           (wconf (current-window-configuration))
                           (pt (point))
@@ -2067,7 +2065,7 @@ depths will be sorted before greater depths.
                         :depth 100
                         (:undo (redisplay)))
                       (unwind-protect
-                          (funcall action)
+                          (funcall conn-dispatch-action)
                         (unless (or (equal wconf (current-window-configuration))
                                     (null (car conn--dispatch-change-groups)))
                           (conn-dispatch-undo-case
@@ -2092,9 +2090,6 @@ depths will be sorted before greater depths.
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel))))
-      (if success
-          (conn-action-accept action)
-        (conn-action-cancel action))
       (maphash
        (lambda (_buf mk)
          (when (markerp mk) (set-marker mk nil)))
@@ -2177,7 +2172,8 @@ the meaning of depth."
                 for pt in saved-pos
                 do (with-current-buffer buf
                      (goto-char pt))))
-      (:accept (accept-change-group cg)))))
+      (:accept
+       (accept-change-group cg)))))
 
 (defun conn-dispatch-undo-pulse (beg end)
   "Highlight an undo between BEG and END."
@@ -2273,6 +2269,7 @@ the meaning of depth."
                  (conn--dispatch-redisplay-prompt-flag nil)
                  (conn-dispatch-label-function nil)
                  (conn-dispatch-quit-flag nil)
+                 (conn-dispatch-action nil)
                  (conn-dispatch-repeating nil)
                  (conn-dispatch-action-reference nil)
                  (conn-targets nil)
@@ -2419,6 +2416,7 @@ buffer."
   "<mouse-1>" 'act
   "<mouse-3>" 'undo
   "C-t" 'change-target-finder
+  "C-a" 'change-action
   "C-o" 'conn-goto-window
   "C-s" 'isearch-forward
   "C-M-s" 'isearch-regexp-forward
@@ -2499,6 +2497,24 @@ buffer."
       (conn-target-finder-setup
        (conn-get-target-finder thing arg transform))
       (conn-dispatch-redisplay))))
+
+(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+                                       (cmd (eql change-action)))
+  "Change the current target finder."
+  ( :update (_break)
+    (conn-read-args (conn-dispatch-state
+                     :prompt "New Action"
+                     :reference (list conn-dispatch-thing-reference)
+                     :around (lambda (cont)
+                               (conn-with-dispatch-suspended
+                                 (funcall cont))))
+        ((`(,action ,repeat)
+          (make-conn-dispatch-action-argument
+           :keymap conn-dispatch-repeat-argument-map
+           :required t
+           :repeat conn-dispatch-repeating)))
+      (conn-action-setup action repeat)
+      (throw 'dispatch-undo nil))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql help)))
@@ -2641,12 +2657,16 @@ buffer."
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql undo)))
   "Undo the most recent iteration of dispatch."
-  ( :update (_break)
-    (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
-                     (cl-callf2 drop 2 conn--dispatch-change-groups)))
-      (pcase-dolist (`(,_ . ,undo-fn) group)
-        (funcall undo-fn :undo)))
-    (throw 'dispatch-undo nil)))
+  ( :update (break)
+    (if (null (cdr conn--dispatch-change-groups))
+        (progn
+          (conn-read-args-error "Nothing to undo")
+          (funcall break))
+      (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
+                       (cl-callf2 drop 2 conn--dispatch-change-groups)))
+        (pcase-dolist (`(,_ . ,undo-fn) group)
+          (funcall undo-fn :undo)))
+      (throw 'dispatch-undo nil))))
 
 ;;;;; Dispatch Target Finders
 
@@ -3966,14 +3986,32 @@ contain targets."
   (setf (alist-get 'conn-dispatch-action defun-declarations-alist)
         (list #'conn--set-action-property)))
 
-(cl-defgeneric conn-make-default-action (cmd)
+(cl-defgeneric conn-action-setup (action repeat))
+
+(cl-defmethod conn-action-setup ((action conn-action)
+                                 repeat)
+  (when conn-dispatch-action
+    (pcase-dolist (`(,_ . ,undo-fn)
+                   (pop conn--dispatch-change-groups))
+      (funcall undo-fn :undo))
+    (dolist (undo (cl-shiftf conn--dispatch-change-groups nil))
+      (pcase-dolist (`(,_ . ,undo-fn) undo)
+        (funcall undo-fn :accept)))
+    (conn-action-accept conn-dispatch-action))
+  (setq conn-dispatch-action action)
+  (setq conn-dispatch-action-reference
+        (conn-action-get-reference action))
+  (setq conn-dispatch-repeating
+        (and repeat (conn-action-repeatable-p action))))
+
+(cl-defgeneric conn-get-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t)))
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing t)))
   (conn-dispatch-jump))
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing line-column)))
   (conn-dispatch-jump))
 
 (cl-defgeneric conn-action-stale-p (action)
@@ -4032,13 +4070,15 @@ contain targets."
 
 (cl-defmethod conn-action-accept ((action conn-change-group-action))
   (conn--action-accept-change-group
-   (conn-change-group-action--action-change-group action))
+   (cl-shiftf (conn-change-group-action--action-change-group action)
+              nil))
   (cl-call-next-method))
 
 (cl-defmethod conn-action-cancel ((action conn-change-group-action))
   (conn--action-cancel-change-group
-   (conn-change-group-action--action-change-group action))
-  (setf (conn-change-group-action--action-change-group action) nil))
+   (cl-shiftf (conn-change-group-action--action-change-group action)
+              nil))
+  (conn-action-cleanup action))
 
 (defvar conn-dispatch-button-functions nil)
 
@@ -4278,15 +4318,6 @@ it."))
                  (insert (conn-kill-separator-for-strings str separator))))
               (_ (user-error "Cannot find thing at point")))))))))
 
-(cl-defmethod conn-action-accept ((action conn-dispatch-send))
-  (conn--action-accept-change-group
-   (conn-dispatch-send--action-change-group action))
-  (cl-call-next-method))
-
-(cl-defmethod conn-action-cancel ((action conn-dispatch-send))
-  (conn--action-cancel-change-group
-   (conn-dispatch-send--action-change-group action)))
-
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
   (register :type integer)
@@ -4340,7 +4371,10 @@ it."))
 
 (cl-defmethod conn-action-cleanup ((action conn-dispatch-copy-from))
   (ignore-errors
-    (set-marker (conn-dispatch-copy-from--action-opoint action) nil)))
+    (when-let* ((mk (conn-dispatch-copy-from--action-opoint action))
+                (_ (markerp mk)))
+      (setf (conn-dispatch-copy-from--action-opoint action) nil)
+      (set-marker mk nil))))
 
 (cl-defmethod conn-action-copy ((action conn-dispatch-copy-from))
   (conn-<
@@ -4388,15 +4422,12 @@ it."))
                 (do)
               (save-excursion (do)))))))))
 
-(cl-defmethod conn-action-cancel ((action conn-dispatch-copy-from))
+(cl-defmethod conn-action-cleanup ((action conn-dispatch-copy-from))
   (ignore-errors
-    (set-marker (conn-dispatch-copy-from--action-opoint action) nil))
-  (conn--action-cancel-change-group
-   (conn-dispatch-copy-from--action-change-group action)))
-
-(cl-defmethod conn-action-accept ((action conn-dispatch-copy-from))
-  (conn--action-accept-change-group
-   (conn-dispatch-copy-from--action-change-group action))
+    (when-let* ((mk (conn-dispatch-copy-from--action-opoint action))
+                (_ (markerp mk)))
+      (setf (conn-dispatch-copy-from--action-opoint action) nil)
+      (set-marker mk nil)))
   (cl-call-next-method))
 
 (oclosure-define (conn-dispatch-take
@@ -4775,28 +4806,29 @@ it."))
           (conn-target-sort-function conn-target-sort-function)
           (conn-dispatch-label-function conn-dispatch-label-function)
           (conn-dispatch-target-finder nil)
-          (conn-dispatch-repeating
-           (and (xor repeat invert-repeat)
-                (conn-action-repeatable-p action)))
+          (conn-dispatch-action-reference nil)
+          (conn-dispatch-action nil (conn-action-cancel conn-dispatch-action))
+          (conn-dispatch-repeating nil)
           (conn-dispatch-iteration-count 0))
-      (conn-with-dispatch-handlers
-        (:handler
-         (:depth -99)
-         ( :display ()
-           (propertize (conn-action-display action t)
-                       'face 'conn-argument-active-face)))
-        ( :with (conn-dispatch-prefix-arg)
-          :depth -97)
-        ( :with (conn-read-char-input-method)
-          :depth -96)
-        (conn-with-dispatch-input-buffer
-          (conn--unwind-protect-all
+      (conn--unwind-protect-all
+        (conn-with-dispatch-handlers
+          (:handler
+           (:depth -99)
+           ( :display ()
+             (propertize (conn-action-display conn-dispatch-action t)
+                         'face 'conn-argument-active-face)))
+          ( :with (conn-dispatch-prefix-arg)
+            :depth -97)
+          ( :with (conn-read-char-input-method)
+            :depth -96)
+          (conn-with-dispatch-input-buffer
             (let ((conn-dispatch-in-progress t))
               (let ((im (or current-input-method
                             conn--input-method)))
                 (with-current-buffer conn-dispatch-input-buffer
                   (activate-input-method im)))
               (conn-target-finder-setup target-finder)
+              (conn-action-setup action (xor repeat invert-repeat))
               (when-let* ((predicate (conn-action-window-predicate action)))
                 (add-function :after-while conn-target-window-predicate predicate))
               (when-let* ((predicate (conn-action-target-predicate action)))
@@ -4804,7 +4836,8 @@ it."))
               (when restrict-windows
                 (add-function :after-while conn-target-window-predicate
                               'conn--dispatch-restrict-windows))
-              (conn-dispatch-perform-action action)
+              (conn-dispatch-loop)
+              (conn-action-accept conn-dispatch-action)
               (setf (conn-previous-dispatch-repeat prev-dispatch)
                     conn-dispatch-repeating)
               (setf (conn-previous-dispatch-other-end prev-dispatch)
@@ -4815,8 +4848,8 @@ it."))
                     (advice-function-member-p
                      'conn--dispatch-restrict-windows
                      conn-target-window-predicate))
-              (conn-dispatch-push-history prev-dispatch))
-            (conn-clear-targets)))))))
+              (conn-dispatch-push-history prev-dispatch))))
+        (conn-clear-targets)))))
 
 ;;;;; Dispatch Commands
 
@@ -4829,11 +4862,9 @@ it."))
                                restrict-windows
                                other-end)
   (when (null action)
-    (setq action (conn-make-default-action thing)))
+    (setq action (conn-get-default-action thing)))
   (conn-protected-let*
-      ((action action (conn-action-cancel action))
-       (conn-dispatch-hide-labels nil)
-       (conn-wincontrol-mode nil)
+      ((conn-wincontrol-mode nil)
        (conn-wincontrol-one-command-mode nil)
        (conn-dispatch-quit-flag nil)
        (conn--dispatch-prev-state
@@ -4848,29 +4879,32 @@ it."))
                                   (:no-other-end (lambda (&rest _) 0))
                                   ('t #'-)
                                   ('nil #'+)))
-       (conn-dispatch-repeating
-        (and repeat (conn-action-repeatable-p action)))
+       (conn-dispatch-action-reference nil)
+       (conn-dispatch-action nil (conn-action-cancel conn-dispatch-action))
+       (conn-dispatch-repeating nil)
        (conn-dispatch-iteration-count 0)
        (conn-dispatch-target-finder nil))
-    (conn-with-dispatch-handlers
-      (:handler
-       (:depth -99)
-       ( :display ()
-         (propertize (conn-action-display action t)
-                     'face 'conn-argument-active-face)))
-      ( :with (conn-dispatch-prefix-arg)
-        :depth -97)
-      ( :with (conn-read-char-input-method)
-        :depth -96)
-      (conn-with-dispatch-input-buffer
-        (conn--unwind-protect-all
+    (conn--unwind-protect-all
+      (conn-with-dispatch-handlers
+        (:handler
+         (:depth -99)
+         ( :display ()
+           (propertize (conn-action-display conn-dispatch-action t)
+                       'face 'conn-argument-active-face)))
+        ( :with (conn-dispatch-prefix-arg)
+          :depth -97)
+        ( :with (conn-read-char-input-method)
+          :depth -96)
+        (conn-with-dispatch-input-buffer
           (let ((conn-dispatch-in-progress t))
+            (conn-action-setup (or action (conn-get-default-action thing))
+                               repeat)
+            (conn-target-finder-setup
+             (conn-get-target-finder thing arg transform))
             (let ((im (or current-input-method
                           conn--input-method)))
               (with-current-buffer conn-dispatch-input-buffer
                 (activate-input-method im)))
-            (conn-target-finder-setup
-             (conn-get-target-finder thing arg transform))
             (when-let* ((predicate (conn-action-window-predicate action)))
               (add-function :after-while conn-target-window-predicate predicate))
             (when-let* ((predicate (conn-action-target-predicate action)))
@@ -4878,12 +4912,13 @@ it."))
             (when restrict-windows
               (add-function :after-while conn-target-window-predicate
                             'conn--dispatch-restrict-windows))
-            (conn-dispatch-perform-action action)
+            (conn-dispatch-loop)
+            (conn-action-accept conn-dispatch-action)
             (unless (conn-action-no-history action)
               (let ((prev (conn-make-dispatch action)))
                 (conn-dispatch-push-history prev)
-                (conn-push-command-history 'conn-dispatch-setup-previous prev))))
-          (conn-clear-targets))))))
+                (conn-push-command-history 'conn-dispatch-setup-previous prev))))))
+      (conn-clear-targets))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)

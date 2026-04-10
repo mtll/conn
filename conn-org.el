@@ -194,7 +194,7 @@
         (goto-char pt)
         (org-open-at-point-global)))))
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing org-link)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing org-link)))
   (conn-open-org-link))
 
 (defun conn-org-sentence-forward (arg)

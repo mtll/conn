@@ -2179,7 +2179,8 @@ finishing showing the buffers that were visited."))
                       (action-auto-repeat t))
         ()
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target))
+                    (let ((conn-dispatch-always-prompt t))
+                      (conn-select-target)))
                    (counter (if macro
                                 (kmacro--counter macro)
                               kmacro-counter)))
@@ -2206,15 +2207,6 @@ finishing showing the buffers that were visited."))
         (conn-dispatch-undo-case
           ((or :undo :cancel)
            (setf (kmacro--counter macro) counter)))))))
-
-(cl-defmethod conn-dispatch-perform-action ((_action conn-dispatch-kapply))
-  (let ((conn-dispatch-always-prompt t))
-    (cl-call-next-method)
-    (unless conn-kapply-suppress-message
-      (message "Kapply completed successfully after %s %s."
-               conn-dispatch-iteration-count
-               (ngettext "iteration" "iterations"
-                         conn-dispatch-iteration-count)))))
 
 (cl-defmethod conn-action-display ((action conn-dispatch-kapply)
                                    &optional

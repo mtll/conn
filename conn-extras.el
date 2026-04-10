@@ -251,7 +251,7 @@
 (conn-add-update-handler 'conn-dispatch-column-targets
                          #'conn--dispatch-dired-lines)
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing dired-line)))
   (conn-dispatch-jump))
 
 (conn-register-thing 'dired-subdir)
@@ -265,7 +265,7 @@
                                       &rest _)
   #'conn--dispatch-dired-subdir)
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing dired-subdir)))
   (conn-dispatch-jump))
 
 (conn-register-thing 'dired-dirline)
@@ -278,7 +278,7 @@
                                       &rest _)
   #'conn--dispatch-dired-dirline)
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing dired-dirline)))
   (conn-dispatch-jump))
 
 (defun conn-dispatch-dired-mark ()
@@ -461,7 +461,7 @@
                                       &rest _)
   #'conn--dispatch-ibuffer-lines)
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing ibuffer-line)))
   (conn-dispatch-jump))
 
 (conn-register-thing 'ibuffer-filter-group)
@@ -475,7 +475,7 @@
                                       &rest _)
   #'conn--dispatch-ibuffer-filter-group)
 
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
+(cl-defmethod conn-get-default-action ((_cmd (conn-thing ibuffer-filter-group)))
   (conn-dispatch-jump))
 
 (defun conn-dispatch-ibuffer-mark ()
