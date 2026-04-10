@@ -186,13 +186,14 @@
 
 (defun conn-open-org-link ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Open Link"))
-      (window pt _thing _arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (org-open-at-point-global)))))
+  (conn-action ()
+    (:description "Open Link")
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (org-open-at-point-global))))))
 
 (cl-defmethod conn-get-default-action ((_cmd (conn-thing org-link)))
   (conn-open-org-link))

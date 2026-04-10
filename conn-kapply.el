@@ -2151,10 +2151,6 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Dispatch Kapply
 
-(oclosure-define (conn-dispatch-kapply
-                  (:parent conn-action))
-  (macro :mutable t))
-
 (defun conn-dispatch-kapply ()
   (declare (conn-dispatch-action))
   (conn-read-args (conn-kapply-state
@@ -2174,48 +2170,38 @@ finishing showing the buffers that were visited."))
                #'conn-kapply-relocate-to-region
                #'conn-kapply-pulse-region)))
        (applier (conn-kapply-macro-argument)))
-    (oclosure-lambda (conn-dispatch-kapply
-                      (macro nil)
-                      (action-auto-repeat t))
-        ()
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (let ((conn-dispatch-always-prompt t))
-                      (conn-select-target)))
-                   (counter (if macro
-                                (kmacro--counter macro)
-                              kmacro-counter)))
-        (with-selected-window window
-          (conn-dispatch-change-group)
-          (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (conn-dispatch-undo-case
-               :depth 50
-               (:undo (conn-dispatch-undo-pulse beg end)))
-             (with-undo-amalgamate
-               (conn-with-dispatch-suspended
-                 (save-excursion
-                   (let ((conn-kapply-suppress-message t))
-                     (conn-kapply-macro
-                      (if macro
-                          (lambda (it) (conn-kmacro-apply it nil macro))
-                        applier)
-                      (conn-kapply-region-iterator
-                       (list (conn-kapply-make-region beg end)))
-                      pipeline)
-                     (unless macro (setq macro (kmacro-ring-head))))))))
-            (_ (user-error "Cannot find thing at point"))))
-        (conn-dispatch-undo-case
-          ((or :undo :cancel)
-           (setf (kmacro--counter macro) counter)))))))
-
-(cl-defmethod conn-action-display ((action conn-dispatch-kapply)
-                                   &optional
-                                   short)
-  (if short "Kapply"
-    (concat "Kapply"
-            (when-let* ((macro (oref action macro)))
-              (concat " <"
-                      (conn--kmacro-display (kmacro--keys macro))
-                      ">")))))
+    (let ((macro nil))
+      (conn-action ()
+        (:description "Kapply")
+        (:repeat t)
+        (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
+                      (let ((conn-dispatch-always-prompt t))
+                        (conn-select-target)))
+                     (counter (if macro
+                                  (kmacro--counter macro)
+                                kmacro-counter)))
+          (with-selected-window window
+            (conn-dispatch-change-group)
+            (pcase (conn-bounds-of-dispatch thing arg pt)
+              ((conn-bounds `(,beg . ,end) transform)
+               (conn-dispatch-undo-case
+                 :depth 50
+                 (:undo (conn-dispatch-undo-pulse beg end)))
+               (with-undo-amalgamate
+                 (conn-with-dispatch-suspended
+                   (save-excursion
+                     (let ((conn-kapply-suppress-message t))
+                       (conn-kapply-macro
+                        (if macro
+                            (lambda (it) (conn-kmacro-apply it nil macro))
+                          applier)
+                        (conn-kapply-region-iterator
+                         (list (conn-kapply-make-region beg end)))
+                        pipeline)
+                       (unless macro (setq macro (kmacro-ring-head))))))))
+              (_ (user-error "Cannot find thing at point"))))
+          (conn-dispatch-undo-case
+            ((or :undo :cancel)
+             (setf (kmacro--counter macro) counter))))))))
 
 (provide 'conn-kapply)

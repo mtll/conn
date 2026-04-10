@@ -385,9 +385,8 @@
           (conn-bounds-of 'conn-expand arg))
         :default-action
         ( :method (_self)
-          (oclosure-lambda (conn-action
-                            (action-description "Jump"))
-              ()
+          (conn-action ()
+            (:description "Jump")
             (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                           (conn-select-target)))
               (conn-dispatch-select-window window)
@@ -441,12 +440,10 @@
           :pretty-print ( :method (_) "prev-emacs-state")
           :default-action ( :method (_self)
                             (let ((jump (conn-dispatch-jump)))
-                              (oclosure-lambda (conn-action
-                                                (action-description "Previous Emacs State")
-                                                (action-no-history t))
-                                  ()
-                                (funcall jump)
-                                (conn-push-state 'conn-emacs-state))))
+                              (add-function :after (conn-action-function jump)
+                                            (lambda (&rest _)
+                                              (conn-push-state 'conn-emacs-state)))
+                              jump))
           :target-finder (:method (_self &rest _) (conn-dispatch-previous-emacs-state)))
   "b" 'point
   "S-SPC" (conn-anonymous-thing

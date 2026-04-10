@@ -283,14 +283,13 @@
 
 (defun conn-dispatch-dired-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
+  (conn-action ()
+    (:description "Mark")
+    (:window-predicate
+     (lambda (win)
+       (eq (buffer-local-value 'major-mode
+                               (window-buffer win))
+           'dired-mode)))
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -304,14 +303,13 @@
 
 (defun conn-dispatch-dired-kill-line ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Kill Line")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
+  (conn-action ()
+    (:description "Kill Line")
+    (:window-predicate
+     (lambda (win)
+       (eq (buffer-local-value 'major-mode
+                               (window-buffer win))
+           'dired-mode)))
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -321,14 +319,13 @@
 
 (defun conn-dispatch-dired-kill-subdir ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Kill Subdir")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'dired-mode))))
-      ()
+  (conn-action ()
+    (:description "Kill Subdir")
+    (:window-predicate
+     (lambda (win)
+       (eq (buffer-local-value 'major-mode
+                               (window-buffer win))
+           'dired-mode)))
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -480,14 +477,13 @@
 
 (defun conn-dispatch-ibuffer-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'ibuffer-mode))))
-      ()
+  (conn-action ()
+    (:description "Mark")
+    (:window-predicate
+     (lambda (win)
+       (eq (buffer-local-value 'major-mode
+                               (window-buffer win))
+           'ibuffer-mode)))
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -560,14 +556,13 @@
 
 (defun conn-dispatch-bmenu-mark ()
   (declare (conn-dispatch-action))
-  (oclosure-lambda (conn-action
-                    (action-description "Mark")
-                    (action-window-predicate
-                     (lambda (win)
-                       (eq (buffer-local-value 'major-mode
-                                               (window-buffer win))
-                           'bookmark-bmenu-mode))))
-      ()
+  (conn-action ()
+    (:description "Mark")
+    (:window-predicate
+     (lambda (win)
+       (eq (buffer-local-value 'major-mode
+                               (window-buffer win))
+           'bookmark-bmenu-mode)))
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -634,14 +629,13 @@
 (defun conn-dispatch-on-info-refs ()
   (interactive)
   (conn-dispatch-setup
-   (oclosure-lambda (conn-action
-                     (action-description "Info Refs")
-                     (action-window-predicate
-                      (lambda (win)
-                        (eq 'Info-mode
-                            (buffer-local-value 'major-mode
-                                                (window-buffer win))))))
-       ()
+   (conn-action ()
+     (:description "Info Refs")
+     (:window-predicate
+      (lambda (win)
+        (eq 'Info-mode
+            (buffer-local-value 'major-mode
+                                (window-buffer win)))))
      (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                    (conn-select-target)))
        (select-window window)

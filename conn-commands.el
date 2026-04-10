@@ -1121,9 +1121,8 @@ Currently selected window remains selected afterwards."
                                conn-restrict-windows-argument-map
                                :documentation conn-this-win-argument-documentation)))
     (conn-dispatch-setup
-     (oclosure-lambda (conn-action
-                       (action-description "Mark"))
-         ()
+     (conn-action ()
+       (:description "Mark")
        (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                      (conn-select-target)))
          (conn-protected-let* ((owin (selected-window)
@@ -1145,9 +1144,8 @@ Currently selected window remains selected afterwards."
                                   arg
                                   transform)
   (conn-dispatch-setup
-   (oclosure-lambda (conn-action
-                     (action-description "Mark"))
-       ()
+   (conn-action ()
+     (:description "Mark")
      (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                    (conn-select-target)))
        (conn-protected-let* ((owin (selected-window)
@@ -1360,17 +1358,16 @@ Currently selected window remains selected afterwards."
                     'face (when stay
                             'eldoc-highlight-function-argument)))))
         (conn-dispatch-setup
-         (oclosure-lambda (conn-action
-                           (action-description "Yank and Replace To")
-                           (action-window-predicate
-                            (lambda (win)
-                              (not
-                               (buffer-local-value 'buffer-read-only
-                                                   (window-buffer win)))))
-                           (action-reference
-                            "Yank the the last killed text from the kill ring and replace the region
-selected by dispatch with it."))
-             ()
+         (conn-action ()
+           (:window-predicate
+            (lambda (win)
+              (not
+               (buffer-local-value 'buffer-read-only
+                                   (window-buffer win)))))
+           (:reference
+            "Yank the the last killed text from the kill ring and replace the region
+selected by dispatch with it.")
+           (:description "Yank and Replace To")
            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                          (conn-select-target)))
              (unless stay
@@ -1419,17 +1416,16 @@ selected by dispatch with it."))
                                     check-bounds)
   (let (beg end)
     (conn-dispatch-setup
-     (oclosure-lambda (conn-action
-                       (action-description "Yank and Replace To")
-                       (action-window-predicate
-                        (lambda (win)
-                          (not
-                           (buffer-local-value 'buffer-read-only
-                                               (window-buffer win)))))
-                       (action-reference
-                        "Yank the the last killed text from the kill ring and replace the region
-selected by dispatch with it."))
-         ()
+     (conn-action ()
+       (:description "Yank and Replace To")
+       (:window-predicate
+        (lambda (win)
+          (not
+           (buffer-local-value 'buffer-read-only
+                               (window-buffer win)))))
+       (:reference
+        "Yank the the last killed text from the kill ring and replace the region
+selected by dispatch with it.")
        (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
                      (conn-select-target)))
          (conn-dispatch-change-group)
@@ -2444,14 +2440,13 @@ Exiting the recursive edit will resume the isearch."
       (deactivate-mark)
       (save-excursion
         (conn-dispatch-setup
-         (oclosure-lambda (conn-action
-                           (action-description "Transpose")
-                           (action-no-history t)
-                           (action-window-predicate
-                            (lambda (win)
-                              (not (buffer-local-value 'buffer-read-only
-                                                       (window-buffer win))))))
-             ()
+         (conn-action ()
+           (:description "Transpose")
+           (:no-history t)
+           (:window-predicate
+            (lambda (win)
+              (not (buffer-local-value 'buffer-read-only
+                                       (window-buffer win)))))
            (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
                          (conn-select-target)))
              (conn--dispatch-transpose-subr
@@ -3196,9 +3191,8 @@ hook, which see."
              (cl-callf not stay)
              (funcall break)))
           (conn-dispatch-setup
-           (oclosure-lambda (conn-action
-                             (action-description "Kill"))
-               ()
+           (conn-action ()
+             (:description "Kill")
              (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
                            (conn-select-target)))
                (unless stay
@@ -3284,10 +3278,9 @@ hook, which see."
             (propertize (truncate-string-ellipsis) 'face 'shadow)
             (propertize ")" 'face 'shadow)))))))
     (conn-dispatch-setup
-     (oclosure-lambda (conn-action
-                       (action-description "Kill")
-                       (action-not-repeatable t))
-         ()
+     (conn-action ()
+       (:description "Kill")
+       (:repeat :not-repeatable)
        (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
                      (conn-select-target)))
          (conn-dispatch-change-group)
@@ -3674,9 +3667,8 @@ that place."
       (let ((result nil)
             (strings nil))
         (conn-dispatch-setup
-         (oclosure-lambda (conn-action
-                           (action-description "Copy"))
-             ()
+         (conn-action ()
+           (:description "Copy")
            (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                          (conn-select-target)))
              (with-selected-window window
@@ -4481,9 +4473,8 @@ Interactively REPEAT is given by the prefix argument."
          (cl-callf not stay)
          (funcall break)))
       (conn-dispatch-setup
-       (oclosure-lambda (conn-action
-                         (action-description "Change"))
-           ()
+       (conn-action ()
+         (:description "Change")
          (pcase-let ((`(,pt ,_window ,thing ,arg ,dtform)
                       (conn-select-target))
                      (end-pt nil))
@@ -4525,10 +4516,9 @@ Interactively REPEAT is given by the prefix argument."
                                     _kbd-macro-query)
   (with-undo-amalgamate
     (conn-dispatch-setup
-     (oclosure-lambda (conn-action
-                       (action-description "Change")
-                       (action-not-repeatable t))
-         ()
+     (conn-action ()
+       (:description "Change")
+       (:repeat :not-repeatable)
        (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
                     (conn-select-target)))
          (conn-dispatch-change-group)
