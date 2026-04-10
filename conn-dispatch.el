@@ -2888,10 +2888,13 @@ buffer."
   ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
-      (ignore-error end-of-buffer
-        (scroll-up)
-        (conn-dispatch-redisplay))
-      (funcall break))))
+      (condition-case err
+          (progn
+            (scroll-up)
+            (conn-dispatch-redisplay))
+        (end-of-buffer
+         (conn-read-args-error (error-message-string err))
+         (funcall break))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql scroll-down-command)))
@@ -2899,10 +2902,13 @@ buffer."
   ( :update (break)
     (let ((next-screen-context-lines (or (conn-read-args-prefix-arg)
                                          next-screen-context-lines)))
-      (ignore-error beginning-of-buffer
-        (scroll-down)
-        (conn-dispatch-redisplay))
-      (funcall break))))
+      (condition-case err
+          (progn
+            (scroll-down)
+            (conn-dispatch-redisplay))
+        (beginning-of-buffer
+         (conn-read-args-error (error-message-string err))
+         (funcall break))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql conn-goto-window)))
