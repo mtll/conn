@@ -399,7 +399,7 @@
         :pretty-print (:method (_) "outer-list-or-string")
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
-                          :thing 'sexp
+                          :prefix-thing 'sexp
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote))))))
   "]" (conn-anonymous-thing
@@ -412,7 +412,7 @@
                        (_ (cl-call-next-method))))
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
-                          :thing 'sexp
+                          :prefix-thing 'sexp
                           :skip-prefix t
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote)))))))

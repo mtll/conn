@@ -3417,11 +3417,10 @@ to the key binding for that target."
   ( :default-update-handler (state &optional len)
     (while-no-input
       (let ((string (oref state string))
-            (predicate (oref state predicate))
-            (thing (oref state thing)))
+            (predicate (oref state predicate)))
         (if (oref state regex-p)
-            (conn-make-re-target-overlays string predicate len thing)
-          (conn-make-string-target-overlays string predicate len thing))))))
+            (conn-make-re-target-overlays string predicate len)
+          (conn-make-string-target-overlays string predicate len))))))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
@@ -3911,10 +3910,11 @@ contain targets."
 (conn-define-target-finder conn-dispatch-things-with-prefix-targets
     ()
     ((prefix-string :initarg :prefix-string)
+     (prefix-thing :initarg :prefix-thing)
      (fixed-length :initform nil
                    :initarg :fixed-length))
   ( :default-update-handler (state)
-    (let ((thing (oref state thing))
+    (let ((thing (oref state prefix-thing))
           (prefix (oref state prefix-string))
           (fixed-length (oref state fixed-length)))
       (conn-make-string-target-overlays
@@ -3933,9 +3933,10 @@ contain targets."
      (skip-prefix :initarg :skip-prefix
                   :initform nil)
      (fixed-length :initform nil
-                   :initarg :fixed-length))
+                   :initarg :fixed-length)
+     (prefix-thing :initarg :prefix-thing))
   ( :default-update-handler (state)
-    (let ((thing (oref state thing))
+    (let ((thing (oref state prefix-thing))
           (prefix (oref state prefix-regexp))
           (fixed-length (oref state fixed-length))
           (skip-prefix (oref state skip-prefix)))
@@ -3955,13 +3956,14 @@ contain targets."
 (conn-define-target-finder conn-dispatch-things-matching-re-targets
     ()
     ((regexp :initarg :prefix-regexp)
+     (match-thing :initarg :match-thing)
      (fixed-length :initform nil
                    :initarg :fixed-length)
      (update-function
       :allocation :class
       :initform #'conn--things-matching-re-update))
   ( :default-update-handler (state)
-    (let ((thing (oref state thing))
+    (let ((thing (oref state match-thing))
           (regexp (oref state regexp))
           (fixed-length (oref state fixed-length)))
       (pcase-dolist (`(,beg . ,end)

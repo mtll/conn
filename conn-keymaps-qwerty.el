@@ -419,22 +419,12 @@
                 ((conn-dispatch-bounds `(,beg . ,_end) transform)
                  (unless (= beg (point))
                    (conn-dispatch-goto-char beg))))))))
-  "O" (conn-anonymous-thing
-        '(word)
-        :pretty-print (:method (_self) "all-words")
-        :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :all-things 'word)))
-  "U" (conn-anonymous-thing
-        '(symbol)
-        :pretty-print (:method (_self) "all-symbols")
-        :target-finder ( :method (_self &rest _)
-                         (conn-all-things-targets :all-things 'symbol)))
   ")" (conn-anonymous-thing
         '(sexp)
         :pretty-print (:method (_) "outer-list-or-string")
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
-                          :thing 'sexp
+                          :prefix-thing 'sexp
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote))))))
   "]" (conn-anonymous-thing
@@ -447,7 +437,7 @@
                        (_ (cl-call-next-method))))
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
-                          :thing 'sexp
+                          :prefix-thing 'sexp
                           :skip-prefix t
                           :prefix-regexp (rx (or (syntax open-parenthesis)
                                                  (syntax string-quote)))))))
