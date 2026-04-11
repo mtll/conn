@@ -4697,7 +4697,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
   (interactive)
   (when conn-record-emacs-state
     (when (markerp conn-insertion-recording-other-end)
-      (set-marker (point) nil))
+      (set-marker conn-insertion-recording-other-end (point)))
     (insert conn-insertion-recording-last-insertion)
     (conn-pop-state)))
 

@@ -107,6 +107,8 @@ which see.")
 
 (defvar conn-dispatch-all-frames 'visible)
 
+(defvar conn--dispatch-redisplay-prompt-flag nil)
+
 (cl-defstruct (conn-dispatch-label)
   "State for a dispatch label."
   (prefix nil :type (or string nil))
@@ -635,8 +637,6 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-always-prompt nil)
 
-(defvar conn--dispatch-redisplay-prompt-flag nil)
-
 (defvar conn-dispatch-repeating nil)
 
 (defvar conn-dispatch-iteration-count nil)
@@ -870,6 +870,8 @@ themselves once the selection process has concluded."
 ;;;;;; Action
 
 (defvar conn-dispatch-action nil)
+
+(defvar conn--dispatch-change-groups nil)
 
 (cl-defstruct (conn-action (:conc-name conn-action--))
   (function #'ignore :type function)
@@ -2248,8 +2250,6 @@ Target overlays may override this default by setting the
 ;;;;; Dispatch Loop
 
 (defvar conn-dispatch-in-progress nil)
-
-(defvar conn--dispatch-change-groups nil)
 
 (defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
