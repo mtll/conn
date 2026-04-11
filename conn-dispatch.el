@@ -916,10 +916,12 @@ themselves once the selection process has concluded."
                   (cleanup #'ignore)
                   (accept #'ignore)
                   (cancel #'ignore)
+                  stay-live
                   &aux
                   (live (not read)))))
   (value nil)
   (live nil :type boolean)
+  (stay-live nil :type boolean :read-only t)
   (read nil :type boolean)
   (stale #'ignore :type function :read-only t)
   (cleanup #'ignore :type function :read-only t)
@@ -1020,7 +1022,9 @@ themselves once the selection process has concluded."
           ((conn-action-slot--read slot)
            (conn-argument-cancel (conn-action-slot--value slot))
            (setf (conn-action-slot--read slot) nil)))
-    (setf (conn-action-slot--value slot) nil)))
+    (unless (conn-action-slot--stay-live slot)
+      (setf (conn-action-slot--live slot) nil
+            (conn-action-slot--value slot) nil))))
 
 (defun conn-action-accept (action)
   (dolist (slot (conn-action--slots action))
@@ -1028,7 +1032,8 @@ themselves once the selection process has concluded."
       (when-let* ((accept (conn-action-slot--accept slot)))
         (setf (conn-action-slot--value slot)
               (funcall accept (conn-action-slot--value slot))))
-      (setf (conn-action-slot--live slot) nil))))
+      (unless (conn-action-slot--stay-live slot)
+        (setf (conn-action-slot--live slot) nil)))))
 
 (defun conn-action-setup (action repeat)
   (when conn-dispatch-action
@@ -1051,7 +1056,8 @@ themselves once the selection process has concluded."
 
 (defun conn--action-accept-change-group (change-group)
   (pcase-let ((`(,handle ,_saved-point ,_saved-mark) change-group))
-    (accept-change-group handle)))
+    (accept-change-group handle)
+    nil))
 
 (defun conn--action-cancel-change-group (change-group)
   (pcase change-group
@@ -4458,12 +4464,8 @@ it.")
   (declare (conn-dispatch-action)
            (important-return-value t))
   (let ((str nil)
-        (init nil)
-        (accepted nil))
-    (conn-action ((_cg (conn-action-replace))
-                  (_accepted (conn-action-slot
-                              nil
-                              :accept (lambda (_) (setq accepted t))))
+        (init nil))
+    (conn-action ((cg (conn-action-replace))
                   (opoint (conn-action-marker))
                   (separator (conn-action-slot
                               (conn-separator-argument)
@@ -4483,9 +4485,9 @@ it.")
                     (conn-dispatch-change-group)
                     (goto-char opoint)
                     (when separator
-                      (cond ((or accepted init)
+                      (cond ((or (null cg) init)
                              (insert (conn-kill-separator-for-strings str separator)))
-                            ((and (not accepted) (not init))
+                            ((and cg (not init))
                              (setq init t)
                              (conn-dispatch-undo-case
                                (:undo (setq init nil))))))
@@ -4498,14 +4500,10 @@ it.")
 (defun conn-dispatch-take ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (let ((init nil)
-        (accepted nil))
+  (let ((init nil))
     (conn-action ((separator (conn-action-separator))
                   (opoint (conn-action-marker))
-                  (_cg (conn-action-replace))
-                  (_accepted (conn-action-slot
-                              nil
-                              :accept (lambda (_) (setq accepted t)))))
+                  (cg (conn-action-replace)))
       (:description "Take From")
       (:window-predicate
        (lambda (win)
@@ -4529,9 +4527,9 @@ it.")
               (_ (user-error "Cannot find thing at point")))))
         (with-current-buffer (marker-buffer opoint)
           (when separator
-            (cond ((or accepted init)
+            (cond ((or (null cg) init)
                    (insert (conn-kill-separator-for-strings str separator)))
-                  ((and (not accepted) (not init))
+                  ((and cg (not init))
                    (setq init t)
                    (conn-dispatch-undo-case
                      (:undo (setq init nil))))))
