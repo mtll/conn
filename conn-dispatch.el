@@ -2201,7 +2201,6 @@ Target overlays may override this default by setting the
     (labels labels)))
 
 (defvar conn--dispatch-suspend-labels #'ignore)
-(defvar conn--dispatch-resume-labels #'ignore)
 
 (defun conn--with-dispatch-labels (labels body)
   (clrhash conn--dispatch-window-lines-cache)
@@ -2228,12 +2227,9 @@ Target overlays may override this default by setting the
             (ignore (conn--dispatch-window-lines window)))
           (let ((conn--dispatch-suspend-labels
                  (lambda ()
-                   (cancel-timer (cl-shiftf timer nil))
-                   (mapc #'conn-label-clear labels)))
-                (conn--dispatch-resume-labels
-                 (lambda ()
-                   (unless timer
-                     (setq timer (run-with-idle-timer 0 t redisplay))))))
+                   (when timer (cancel-timer (cl-shiftf timer nil)))
+                   (mapc #'conn-label-delete (cl-shiftf labels nil))
+                   (setf conn--dispatch-suspend-labels #'ignore))))
             (while-no-input
               (conn-redisplay-labels labels))
             (funcall body labels)))
@@ -2290,7 +2286,6 @@ depths will be sorted before greater depths.
               (pcase ,signal ,@cases))))))))
 
 (defun conn-dispatch-redisplay (&optional maybe-dont-prompt)
-  (redisplay)
   (unless maybe-dont-prompt
     (setq conn--dispatch-redisplay-prompt-flag t))
   (throw 'dispatch-redisplay nil))
@@ -2400,7 +2395,13 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
         (dolist (win (conn--get-target-windows))
           (with-selected-window win
             (add-to-invisibility-spec 'conn-dispatch-invisible)))
-        (conn-target-finder-select conn-dispatch-target-finder))
+        (cl-loop
+         (catch 'dispatch-redisplay
+           (unwind-protect
+               (cl-return
+                (conn-target-finder-select conn-dispatch-target-finder))
+             (conn-target-finder-step conn-dispatch-target-finder)))
+         (redisplay)))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (remove-from-invisibility-spec 'conn-dispatch-invisible)
@@ -2552,7 +2553,7 @@ the meaning of depth."
   `(progn
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
-     (conn-target-finder-suspend-targets conn-dispatch-target-finder)
+     (conn-target-finder-suspend conn-dispatch-target-finder)
      (funcall conn--dispatch-suspend-labels)
      (unwind-protect
          (pcase-let ((`(,conn-target-window-predicate
@@ -2576,11 +2577,11 @@ the meaning of depth."
                      (conn--dispatch-read-char-handlers nil)
                      (conn-dispatch-hide-labels nil)
                      (conn-dispatch-input-buffer nil)
-                     (conn--dispatch-suspend-labels nil)
-                     (conn--dispatch-resume-labels nil))
+                     (conn--dispatch-suspend-labels nil))
            (message nil)
-           ,@body)
-       (funcall conn--dispatch-resume-labels))))
+           ,@body
+           (conn-dispatch-redisplay))
+       (conn--mark-targets 'conn-old-target))))
 
 (cl-defstruct (conn-dispatch-read-char-handlers
                (:include conn-composite-argument)
@@ -2677,8 +2678,7 @@ the meaning of depth."
           (activate-input-method
            (read-input-method-name
             (format-prompt "Select input method" nil)
-            nil t)))))
-    (conn-dispatch-redisplay)))
+            nil t)))))))
 
 (conn-define-dispatch-handler-command ((arg conn-read-char-input-method)
                                        (cmd (eql toggle-input-method)))
@@ -2689,11 +2689,9 @@ the meaning of depth."
           (arg (conn-read-args-consume-prefix-arg))
           (buf conn-dispatch-input-buffer))
       (if arg
-          (progn
-            (conn-with-dispatch-suspended
-              (with-current-buffer buf
-                (toggle-input-method arg)))
-            (conn-dispatch-redisplay))
+          (conn-with-dispatch-suspended
+            (with-current-buffer buf
+              (toggle-input-method arg)))
         (with-current-buffer buf
           (toggle-input-method))
         (funcall break)))))
@@ -2788,8 +2786,9 @@ buffer."
                      :prompt "New Targets"
                      :reference (list conn-dispatch-thing-reference)
                      :around (lambda (cont)
-                               (conn-with-dispatch-suspended
-                                 (funcall cont))))
+                               (catch 'dispatch-redisplay
+                                 (conn-with-dispatch-suspended
+                                   (funcall cont)))))
         ((`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument)))
       (conn-target-finder-setup
@@ -2802,17 +2801,20 @@ buffer."
   ( :update (_break)
     (conn-read-args (conn-dispatch-state
                      :prompt "New Action"
-                     :reference (list conn-dispatch-thing-reference)
                      :around (lambda (cont)
-                               (conn-with-dispatch-suspended
-                                 (funcall cont))))
+                               (catch 'dispatch-redisplay
+                                 (conn-with-dispatch-suspended
+                                   (funcall cont)))))
         ((`(,action ,repeat)
           (make-conn-dispatch-action-argument
            :keymap conn-dispatch-repeat-argument-map
            :repeat conn-dispatch-repeating))
          (_finish (conn-finished-argument)))
-      (conn-action-setup action repeat)
-      (throw 'dispatch-undo nil))))
+      (if action
+          (progn
+            (conn-action-setup action repeat)
+            (throw 'dispatch-undo nil))
+        (conn-dispatch-redisplay)))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql help)))
@@ -2838,8 +2840,7 @@ buffer."
   ( :update (_break)
     (conn-with-dispatch-suspended
       (conn-with-recursive-stack 'conn-command-state
-        (recursive-edit)))
-    (conn-dispatch-redisplay)))
+        (recursive-edit)))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql recenter-top-bottom)))
@@ -2863,32 +2864,28 @@ buffer."
   "isearch forward with dispatch suspended."
   ( :update (_break)
     (conn-with-dispatch-suspended
-      (isearch-forward))
-    (conn-dispatch-redisplay)))
+      (isearch-forward))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql isearch-backward)))
   "isearch backward with dispatch suspended."
   ( :update (_break)
     (conn-with-dispatch-suspended
-      (isearch-backward))
-    (conn-dispatch-redisplay)))
+      (isearch-backward))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql isearch-forward-regexp)))
   "isearch forward regexp with dispatch suspended."
   ( :update (_break)
     (conn-with-dispatch-suspended
-      (isearch-forward-regexp))
-    (conn-dispatch-redisplay)))
+      (isearch-forward-regexp))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql isearch-backward-regexp)))
   "isearch backward regexp with dispatch suspended."
   ( :update (_break)
     (conn-with-dispatch-suspended
-      (isearch-backward-regexp))
-    (conn-dispatch-redisplay)))
+      (isearch-backward-regexp))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql end-of-buffer)))
@@ -3167,11 +3164,7 @@ buffer."
          (or (oref target-finder label-sort-function)
              conn-target-sort-function)))
     (let ((inhibit-message t))
-      (cl-loop
-       (catch 'dispatch-redisplay
-         (unwind-protect
-             (cl-return (cl-call-next-method))
-           (conn-target-finder-suspend-targets target-finder)))))))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil)
@@ -3242,7 +3235,7 @@ buffer."
   (unless conn-dispatch-in-progress
     (error "No dispatch in progress"))
   (when conn-dispatch-target-finder
-    (conn-target-finder-clear-targets conn-dispatch-target-finder))
+    (conn-target-finder-clear conn-dispatch-target-finder))
   (if-let* ((predicate (oref tf window-predicate)))
       (add-function :after-while conn-target-window-predicate predicate
                     '((name . target-finder)))
@@ -3293,25 +3286,33 @@ buffer."
             (cl-rotatef face1 face2)))))))
 
 (defun conn-clear-targets ()
-  (conn-target-finder-clear-targets conn-dispatch-target-finder))
+  (conn-target-finder-clear conn-dispatch-target-finder))
 
-(cl-defgeneric conn-target-finder-clear-targets (target-finder))
+(cl-defgeneric conn-target-finder-clear (target-finder))
 
-(cl-defmethod conn-target-finder-clear-targets (_target-finder)
+(cl-defmethod conn-target-finder-clear (_target-finder)
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
       (delete-overlay target)))
   (setq conn-targets nil
         conn-target-count nil))
 
-(cl-defgeneric conn-target-finder-suspend-targets (target-finder))
-
-(cl-defmethod conn-target-finder-suspend-targets (_target-finder)
+(defun conn--mark-targets (property)
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
-      (overlay-put target 'category 'conn-old-target)
+      (overlay-put target 'category property)
       (overlay-put target 'face nil)))
   (setq conn-target-count nil))
+
+(cl-defgeneric conn-target-finder-suspend (target-finder))
+
+(cl-defmethod conn-target-finder-suspend (_target-finder)
+  (conn--mark-targets 'conn-suspended-target))
+
+(cl-defgeneric conn-target-finder-step (target-finder))
+
+(cl-defmethod conn-target-finder-step (_target-finder)
+  (conn--mark-targets 'conn-old-target))
 
 (defclass conn-dispatch-target-key-labels-mixin ()
   ()
@@ -3399,12 +3400,15 @@ to the key binding for that target."
          ('retarget
           (conn-target-finder-retarget state)
           (conn-dispatch-redisplay 'maybe-dont-prompt)))))
-    (if (or (oref state always-retarget)
-            (= (oref state retarget-tick)
-               conn-dispatch-iteration-count))
-        (conn-target-finder-retarget state)
-      (oset state retarget-tick conn-dispatch-iteration-count))
-    (cl-call-next-method)))
+    (when (or (oref state always-retarget)
+              (= (oref state retarget-tick)
+                 conn-dispatch-iteration-count))
+      (conn-target-finder-retarget state))
+    (prog1 (cl-call-next-method)
+      (let ((prev (cl-shiftf (oref state retarget-tick)
+                             conn-dispatch-iteration-count)))
+        (conn-dispatch-undo-case
+          (:undo (setf (oref state retarget-tick) prev)))))))
 
 (conn-define-target-finder conn-dispatch-string-targets
     (conn-dispatch-retargetable-mixin)
@@ -3586,11 +3590,17 @@ contain targets."
     (mapc #'delete-overlay ovs))
   (setf (oref state hidden) nil))
 
-(cl-defmethod conn-target-finder-clear-targets ((state conn-dispatch-focus-mixin))
+(cl-defmethod conn-target-finder-clear ((state conn-dispatch-focus-mixin))
   (conn-focus-targets-remove-overlays state)
   (cl-call-next-method))
 
-(cl-defmethod conn-target-finder-suspend-targets ((state conn-dispatch-focus-mixin))
+(cl-defmethod conn-target-finder-suspend ((state conn-dispatch-focus-mixin))
+  (pcase-dolist (`(,win ,_tick . ,ovs) (oref state hidden))
+    (mapc #'delete-overlay ovs)
+    (setf (alist-get win (oref state hidden)) nil))
+  (cl-call-next-method))
+
+(cl-defmethod conn-target-finder-step ((state conn-dispatch-focus-mixin))
   (pcase-dolist (`(,_win ,_tick . ,ovs) (oref state hidden))
     (dolist (ov ovs)
       (overlay-put ov 'before-string nil)))
