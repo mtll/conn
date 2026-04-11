@@ -201,14 +201,11 @@ Expansions and contractions are provided by functions in
        (recenter (conn-dispatch-get-display-line))
        (conn-dispatch-redisplay))
      ( :display ()
-       (when-let* ((binding (where-is-internal 'toggle-focus nil t)))
-         (concat
-          (propertize (key-description binding)
-                      'face 'help-key-binding)
-          " "
-          (propertize "focus"
-                      'face (when (oref target-finder hide)
-                              'eldoc-highlight-function-argument))))))
+       (concat
+        (substitute-command-keys "\\[toggle-focus] ")
+        (propertize "focus"
+                    'face (when (oref target-finder hide)
+                            'eldoc-highlight-function-argument)))))
     (let ((conn-dispatch-always-prompt t))
       (cl-call-next-method))))
 

@@ -1494,7 +1494,7 @@ the point is within the region then the entire region is returned.")))
                                      (conn-thing-all-parents sym))
                          sym))))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-thing-argument))
+(cl-defmethod conn-argument-payload ((arg conn-thing-argument))
   (pcase (conn-thing-argument-value arg)
     ((and val `(,cmd ,prefix))
      (when-let* ((fundef (and (symbolp cmd)
@@ -1631,7 +1631,7 @@ words."))
                              'conn-argument-active-face)))
         (cl-call-next-method)))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-thing-with-subregions-argument))
+(cl-defmethod conn-argument-payload ((arg conn-thing-with-subregions-argument))
   (nconc (cl-call-next-method)
          (list (conn-thing-with-subregions-argument-subregions arg))))
 
@@ -1831,7 +1831,7 @@ check bounds in the current buffer.
                  ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
-(cl-defmethod conn-argument-extract-value ((_arg conn-transform-argument))
+(cl-defmethod conn-argument-payload ((_arg conn-transform-argument))
   (nreverse (cl-call-next-method)))
 
 ;;;;; Multi Things

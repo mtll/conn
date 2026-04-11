@@ -1353,7 +1353,7 @@ The iterator must be the first argument in ARGLIST.
         (setf (conn-kapply-macro-argument-register arg) reg)))
     (funcall break)))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-macro-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-macro-argument))
   (let ((register (conn-kapply-macro-argument-register arg)))
     (pcase (conn-argument-value arg)
       ('record
@@ -1405,7 +1405,7 @@ The iterator must be the first argument in ARGLIST.
                   (keymap conn-kapply-state-argument-map)
                   (formatter #'conn--format-state-argument)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-state-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-state-argument))
   (let ((state (conn-argument-value arg)))
     (lambda (it) (conn-kapply-with-state it state))))
 
@@ -1423,7 +1423,7 @@ The iterator must be the first argument in ARGLIST.
                   (keymap conn-kapply-order-argument-map)
                   (formatter #'conn-format-cycling-argument)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-order-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-order-argument))
   (pcase (conn-argument-value arg)
     ('forward (lambda (it)
                 (funcall it :forward)
@@ -1449,7 +1449,7 @@ The iterator must be the first argument in ARGLIST.
                   (toggle-command 'kapply-empty)
                   (keymap conn-kapply-empty-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-empty-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-empty-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-skip-empty))
 
@@ -1475,7 +1475,7 @@ finishing showing the buffers that were visited."))
                   (keymap conn-kapply-ibuffer-argument-map)
                   (reference conn-kapply-ibuffer-reference)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-ibuffer-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-ibuffer-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-ibuffer-overview))
 
@@ -1499,7 +1499,7 @@ finishing showing the buffers that were visited."))
                   (keymap conn-kapply-undo-argument-map)
                   (value (car choices))))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-undo-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-undo-argument))
   (pcase (conn-argument-value arg)
     ('buffer-atomic #'conn-kapply-per-buffer-atomic-undo)
     ('buffer #'conn-kapply-per-buffer-undo)
@@ -1533,7 +1533,7 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-excursions)
                   (keymap conn-kapply-excursions-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-excursions-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-excursions-argument))
   (let ((val (conn-argument-value arg)))
     (lambda (it) (conn-kapply-save-excursion it val))))
 
@@ -1551,7 +1551,7 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-restrictions)
                   (keymap conn-kapply-restrictions-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-restrictions-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-restrictions-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-save-restriction))
 
@@ -1569,7 +1569,7 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-window-conf)
                   (keymap conn-kapply-window-conf-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-window-conf-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-window-conf-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-save-windows))
 
@@ -1587,7 +1587,7 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'query)
                   (keymap conn-kapply-query-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-query-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-query-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-query))
 
@@ -1603,7 +1603,7 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'other-end)
                   (keymap conn-other-end-argument-map)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-kapply-other-end-argument))
+(cl-defmethod conn-argument-payload ((arg conn-kapply-other-end-argument))
   (and (conn-argument-value arg)
        #'conn-kapply-at-end))
 

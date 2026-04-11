@@ -755,7 +755,7 @@ themselves once the selection process has concluded."
                (:include conn-argument)
                (:constructor conn-dispatch-marker-argument ())))
 
-(cl-defmethod conn-argument-extract-value ((_arg conn-dispatch-marker-argument))
+(cl-defmethod conn-argument-payload ((_arg conn-dispatch-marker-argument))
   (copy-marker (point) t))
 
 ;;;;;; Dispatch Quick Ref
@@ -1230,7 +1230,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
            (when (conn-action-slot--read slot)
              (push (conn-action-slot--value slot) arguments)))
          (setf (conn-dispatch-action-argument-repeat arg)
-               (unless (conn-action-repeatable-p new-action)
+               (when (conn-action-repeatable-p new-action)
                  (and (conn-action-repeat new-action) 'auto))))
        (funcall break))
       (_
@@ -1244,13 +1244,13 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
   (mapc #'conn-argument-accept
         (conn-dispatch-action-argument-arguments arg)))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-payload ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-dispatch-action-argument-value arg)))
     (dolist (slot (conn-action--slots action))
       (when (conn-action-slot--read slot)
         (setf (conn-action-slot--read slot) nil
               (conn-action-slot--live slot) t)
-        (cl-callf conn-argument-extract-value
+        (cl-callf conn-argument-payload
             (conn-action-slot--value slot)))))
   (list (conn-dispatch-action-argument-value arg)
         (conn-dispatch-action-argument-repeat arg)))
@@ -2228,6 +2228,8 @@ Target overlays may override this default by setting the
                  (lambda ()
                    (unless timer
                      (setq timer (run-with-idle-timer 0 t redisplay))))))
+            (while-no-input
+              (conn-redisplay-labels labels))
             (funcall body labels)))
       (when timer (cancel-timer timer))
       (mapc #'conn-label-delete labels))))
@@ -2880,6 +2882,20 @@ buffer."
   ( :update (_break)
     (conn-with-dispatch-suspended
       (isearch-backward-regexp))
+    (conn-dispatch-redisplay)))
+
+(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+                                       (cmd (eql end-of-buffer)))
+  "Go to the end of the buffer."
+  ( :update (_break)
+    (goto-char (point-max))
+    (conn-dispatch-redisplay)))
+
+(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+                                       (cmd (eql beginning-of-buffer)))
+  "Go to the beginning of the buffer."
+  ( :update (_break)
+    (goto-char (point-min))
     (conn-dispatch-redisplay)))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)

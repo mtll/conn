@@ -2039,7 +2039,7 @@ This skips executing the body of the `conn-read-args' form entirely."
          (conn--unwind-protect-all
            (let ((conn-read-args-last-prefix nil))
              (if around (funcall around #'cont) (cont))
-             (setq argument-values (mapcar #'conn-argument-extract-value
+             (setq argument-values (mapcar #'conn-argument-payload
                                            arglist)))
            (unless argument-values
              (mapc #'conn-argument-cancel arguments))
@@ -2088,7 +2088,7 @@ command and the current iteration of the loop end.
 If no command handler handles the current command and no argument
 calls an updater then an invalid command message is printed.
 
-Once the loop ends `conn-argument-extract-value' is called on each
+Once the loop ends `conn-argument-payload' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
@@ -2149,7 +2149,7 @@ echo area help message.
 (cl-defgeneric conn-argument-update (argument form break)
   ( :method (_arg _form _break) nil))
 
-(cl-defgeneric conn-argument-extract-value (argument)
+(cl-defgeneric conn-argument-payload (argument)
   "Extract ARGUMENT's value."
   (declare (important-return-value t))
   ( :method (arg) arg)
@@ -2314,7 +2314,7 @@ be displayed in the echo area during `conn-read-args'."
                                     break)
   (funcall arg form break))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-anonymous-argument))
+(cl-defmethod conn-argument-payload ((arg conn-anonymous-argument))
   (conn-anonymous-argument-value arg))
 
 (cl-defmethod conn-argument-display ((arg conn-anonymous-argument))
@@ -2369,9 +2369,9 @@ be displayed in the echo area during `conn-read-args'."
   (dolist (a (conn-argument-value arg))
     (conn-argument-update a form break)))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-composite-argument))
+(cl-defmethod conn-argument-payload ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
-           collect (conn-argument-extract-value a)))
+           collect (conn-argument-payload a)))
 
 (cl-defmethod conn-argument-display ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
@@ -2512,7 +2512,7 @@ be displayed in the echo area during `conn-read-args'."
              (car (conn-cycling-argument-choices arg)))
        (funcall break)))))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-cycling-argument))
+(cl-defmethod conn-argument-payload ((arg conn-cycling-argument))
   (let ((val (conn-argument-value arg)))
     (or (cdr-safe val) val)))
 

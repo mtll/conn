@@ -66,7 +66,7 @@
                                        (_sym (conn-thing conn-surround)))
   t)
 
-(cl-defmethod conn-argument-extract-value ((arg conn-surround-with-argument))
+(cl-defmethod conn-argument-payload ((arg conn-surround-with-argument))
   (pcase (conn-argument-value arg)
     (`(,(and ev (pred integerp)) ,arg)
      (list
@@ -536,7 +536,7 @@
               (conn-read-args-consume-prefix-arg)))
   (funcall break))
 
-(cl-defmethod conn-argument-extract-value ((arg conn-change-surround-argument))
+(cl-defmethod conn-argument-payload ((arg conn-change-surround-argument))
   (pcase (conn-argument-value arg)
     (`(,(and ev (pred integerp)) ,arg)
      (list
