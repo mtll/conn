@@ -1485,9 +1485,10 @@ command was a prefix command.")
         (setq conn--insertion-recording-overlay nil)))))
 
 (defun conn-insertion-recording-text ()
-  (filter-buffer-substring
-   (min (point) conn-insertion-recording-other-end)
-   (max (point) conn-insertion-recording-other-end)))
+  (when (markerp conn-insertion-recording-other-end)
+    (filter-buffer-substring
+     (min (point) conn-insertion-recording-other-end)
+     (max (point) conn-insertion-recording-other-end))))
 
 (defvar-keymap conn-record-insertion-transient-map)
 (defvar-keymap conn-record-insertion-recursive-transient-map)

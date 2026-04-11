@@ -4514,39 +4514,51 @@ Interactively REPEAT is given by the prefix argument."
                                     check-bounds
                                     with
                                     _kbd-macro-query)
-  (with-undo-amalgamate
-    (conn-dispatch-setup
-     (conn-action ()
-       (:description "Change")
-       (:repeat :not-repeatable)
-       (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
-                    (conn-select-target)))
-         (conn-dispatch-change-group)
-         (pcase (conn-bounds-of-dispatch thing arg pt)
-           ((conn-bounds `(,beg . ,end)
-                         (if check-bounds
-                             (append transform
-                                     (list 'conn-check-bounds))
-                           transform))
-            (conn-dispatch-goto-char beg 'nopush)
-            (delete-region beg end)))))
-     thing arg nil
-     :other-end :no-other-end)
-    (if with (insert with)
-      (conn-record-insertion)
-      (conn-state-unwind clone
-        (unless clone
-          (setq with (conn-insertion-recording-text))))))
+  (conn-protected-let* ((cg (prepare-change-group)
+                            (cancel-change-group cg)))
+    (activate-change-group cg)
+    (with-undo-amalgamate
+      (conn-dispatch-setup
+       (conn-action ()
+         (:description "Change")
+         (:repeat :not-repeatable)
+         (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
+                      (conn-select-target)))
+           (conn-dispatch-change-group)
+           (pcase (conn-bounds-of-dispatch thing arg pt)
+             ((conn-bounds `(,beg . ,end)
+                           (if check-bounds
+                               (append transform
+                                       (list 'conn-check-bounds))
+                             transform))
+              (conn-dispatch-goto-char beg 'nopush)
+              (delete-region beg end)))))
+       thing arg nil
+       :other-end :no-other-end)
+      (if with
+          (progn
+            (insert with)
+            (accept-change-group cg))
+        (conn-record-insertion nil cg)
+        (conn-state-unwind clone
+          (unless clone
+            (setq with (conn-insertion-recording-text)))))))
   (conn-push-command-history
    (let ((prev (conn-ring-head conn-dispatch-ring)))
      (lambda ()
-       (with-undo-amalgamate
-         (conn-dispatch-setup-previous prev)
-         (if with (insert with)
-           (conn-record-insertion nil)
-           (conn-state-unwind clone
-             (unless clone
-               (setq with (conn-insertion-recording-text))))))))))
+       (conn-protected-let* ((cg (prepare-change-group)
+                                 (cancel-change-group cg)))
+         (activate-change-group cg)
+         (with-undo-amalgamate
+           (conn-dispatch-setup-previous prev)
+           (if with
+               (progn
+                 (insert with)
+                 (accept-change-group cg))
+             (conn-record-insertion nil cg)
+             (conn-state-unwind clone
+               (unless clone
+                 (setq with (conn-insertion-recording-text)))))))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
@@ -4690,14 +4702,16 @@ For how the region is determined using THING, ARG, and TRANSFORM see
   (when conn-record-emacs-state
     (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
     (when (markerp conn-insertion-recording-other-end)
-      (set-marker (cl-shiftf conn-insertion-recording-other-end nil) nil))
+      (set-marker (cl-shiftf conn-insertion-recording-other-end nil)
+                  nil))
     (conn-pop-state)))
 
 (defun conn-insertion-insert-previous ()
   (interactive)
   (when conn-record-emacs-state
     (when (markerp conn-insertion-recording-other-end)
-      (set-marker conn-insertion-recording-other-end (point)))
+      (set-marker (cl-shiftf conn-insertion-recording-other-end nil)
+                  (point)))
     (insert conn-insertion-recording-last-insertion)
     (conn-pop-state)))
 
