@@ -4368,9 +4368,9 @@ Interactively REPEAT is given by the prefix argument."
                       (push-hist (conn-record-one-insertion))
                     (conn-record-insertion nil cg)
                     (conn-state-unwind clone
-                      (when (and (not clone)
-                                 conn-insertion-recording-other-end)
-                        (push-hist (conn-insertion-recording-text)))))))))))
+                      (when (not clone)
+                        (when-let* ((text (conn-insertion-recording-text)))
+                          (push-hist text)))))))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-record-insert))

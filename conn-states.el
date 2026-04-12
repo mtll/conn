@@ -1519,7 +1519,8 @@ command was a prefix command.")
                          (propertize
                           "Change Transient Map: "
                           'face 'minibuffer-prompt)
-                         "\\<conn-record-insertion-transient-map>"
+                         "\\<conn-record-insertion-recursive-transient-map>"
+                         "\\[abort-recursive-edit] abort, "
                          "\\[conn-insertion-insert-previous] insert previous")))
     (conn-with-recursive-stack 'conn-record-emacs-recursive-state
       (atomic-change-group

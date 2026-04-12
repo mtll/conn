@@ -510,6 +510,7 @@
 
 (define-keymap
   :keymap conn-record-insertion-recursive-transient-map
+  "<escape>" #'abort-recursive-edit
   "M-p" #'conn-insertion-insert-previous)
 
 (define-keymap

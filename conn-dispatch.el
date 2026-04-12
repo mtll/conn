@@ -1687,7 +1687,7 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-eovl (pt window)
   (declare (important-return-value t))
-  (or (cl-loop for (beg _ . end) in (conn--dispatch-window-lines window)
+  (or (cl-loop for (beg end . _) in (conn--dispatch-window-lines window)
                when (<= beg pt end) return end)
       (with-selected-window window
         (save-excursion
@@ -2077,25 +2077,30 @@ Target overlays may override this default by setting the
       (with-selected-window window
         (save-excursion
           (goto-char (window-start window))
-          (setq prev (point))
+          (setq prev (point-marker))
+          (set-marker-insertion-type prev t)
           (while (and (<= prev (window-end window))
                       (not (eobp)))
             (let ((eovl (save-excursion
                           (vertical-motion (cons (window-width) 0))
-                          (point))))
+                          (point-marker))))
+              (set-marker-insertion-type eovl t)
               (vertical-motion 1)
               (if (= (point) eovl)
-                  (push (cons prev (cons (1- eovl) eovl))
+                  (push (cons prev (cons eovl t))
                         lines)
-                (push (cons prev (cons eovl eovl))
+                (push (cons prev (cons eovl nil))
                       lines))
-              (setq prev (point))))))
+              (setq prev (point-marker))
+              (set-marker-insertion-type prev t)))))
       (nreverse lines))))
 
 (defun conn-dispatch-get-display-line (&optional point)
   (cl-loop for line from 0
-           for (beg end . _) in (conn--dispatch-window-lines)
-           when (<= beg (or point (point)) end)
+           for (beg end . exclusive) in (conn--dispatch-window-lines)
+           when (<= beg
+                    (or point (point))
+                    (if exclusive (1- end) end))
            return line))
 
 (defun conn-dispatch-pixelwise-label-p (ov)
@@ -2205,6 +2210,11 @@ Target overlays may override this default by setting the
 (defvar conn--dispatch-suspend-labels #'ignore)
 
 (defun conn--with-dispatch-labels (labels body)
+  (maphash (lambda (_win mks)
+             (pcase-dolist (`(,a ,b . ,_) mks)
+               (set-marker a nil)
+               (set-marker b nil)))
+           conn--dispatch-window-lines-cache)
   (clrhash conn--dispatch-window-lines-cache)
   (let* ((redisplay (lambda ()
                       (while-no-input
@@ -2384,7 +2394,8 @@ depths will be sorted before greater depths.
       (unless success
         (select-frame oframe)
         (set-window-configuration owconf)
-        (goto-char opoint)))))
+        (goto-char opoint))
+      (clrhash conn--dispatch-window-lines-cache))))
 
 (defun conn-select-target ()
   "Prompt the user to select a target during dispatch.
@@ -2394,7 +2405,9 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
       (progn
         (dolist (win (conn--get-target-windows))
           (with-selected-window win
-            (add-to-invisibility-spec 'conn-dispatch-invisible)))
+            (add-to-invisibility-spec 'conn-dispatch-invisible)
+            (when-let* ((line (conn-dispatch-get-display-line)))
+              (recenter line))))
         (cl-loop
          (catch 'dispatch-redisplay
            (unwind-protect
@@ -2404,9 +2417,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
          (redisplay)))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
-        (remove-from-invisibility-spec 'conn-dispatch-invisible)
-        (when-let* ((line (conn-dispatch-get-display-line)))
-          (recenter line))))))
+        (remove-from-invisibility-spec 'conn-dispatch-invisible)))))
 
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
@@ -4088,7 +4099,7 @@ contain targets."
                  (forward-line -1)
                  (conn-beginning-of-inner-line)
                  (/= (point) pt))
-          (when (not (invisible-p (point)))
+          (unless (= (pos-bol) (pos-eol))
             (conn-make-target-overlay
              (point) 0
              :thing thing)))))))
@@ -4110,10 +4121,11 @@ contain targets."
           (forward-line 1))
         (while (not (eobp))
           (conn--end-of-inner-line-1)
-          (conn-make-target-overlay
-           (point) 0
-           :properties `(label-before t)
-           :thing thing)
+          (unless (= (pos-bol) (pos-eol))
+            (conn-make-target-overlay
+             (point) 0
+             :properties `(label-before t)
+             :thing thing))
           (forward-line 1))))))
 
 (conn-define-target-finder conn-dispatch-visual-line-targets
@@ -4165,11 +4177,20 @@ contain targets."
 ;;;;; Dispatch Labels
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (pcase-let* (((cl-struct conn-dispatch-label target)
+  (pcase-let* (((cl-struct conn-dispatch-label string target)
                 label)
                (start (overlay-start target))
                (point (or (overlay-get target 'point) start))
-               (win (overlay-get target 'window)))
+               (win (overlay-get target 'window))
+               (face (overlay-get target 'label-face)))
+    (conn-dispatch-undo-case
+      (:undo
+       (overlay-put (conn-make-target-overlay
+                     start 0
+                     :window win
+                     :properties `( label-face ,face
+                                    label-string ,string))
+                    'category 'conn-old-target)))
     (list point
           win
           (or (overlay-get target 'thing)
@@ -4900,6 +4921,7 @@ it.")
   (conn-protected-let*
       ((conn-wincontrol-mode nil)
        (conn-wincontrol-one-command-mode nil)
+       (conn-dispatch-hide-labels nil)
        (conn-dispatch-quit-flag nil)
        (conn--dispatch-prev-state
         (list conn-target-window-predicate
