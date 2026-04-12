@@ -53,34 +53,40 @@
 
 ;;;; Commands
 
-(defun conn--unhighlight-at-point ()
-  (let ((regexp (hi-lock-regexp-okay
-		 (find-tag-default-as-symbol-regexp))))
-    (hi-lock-unface-buffer regexp)))
-
 (defvar conn-highlight-region-history nil)
 
-(defun conn-toggle-highlight-at-point ()
-  (interactive)
-  (if (use-region-p)
-      (let ((hi-lock-auto-select-face t))
-        (hi-lock-face-buffer
-         (read-regexp "Regexp"
-                      (regexp-quote
-                       (buffer-substring-no-properties
-                        (region-beginning)
-                        (region-end)))
-                      'conn-highlight-region-history)
-         (hi-lock-read-face-name))
-        (deactivate-mark))
-    (let ((regexp (hi-lock-regexp-okay
-		   (find-tag-default-as-symbol-regexp))))
-      (if (or (when (assoc regexp hi-lock-interactive-lighters)
-                (setq regexp (cadr (assoc regexp hi-lock-interactive-lighters))))
-              (assoc regexp hi-lock-interactive-patterns))
-          (hi-lock-unface-buffer regexp)
-        (let* ((hi-lock-auto-select-face t))
-          (hi-lock-face-buffer regexp (hi-lock-read-face-name)))))))
+(defun conn-toggle-highlight-at-point (&optional read)
+  (interactive "P")
+  (let ((hi-lock-auto-select-face t)
+        (regexps nil))
+    (cond ((use-region-p)
+           (hi-lock-face-buffer
+            (hi-lock-regexp-okay
+             (if read
+                 (read-regexp "Regexp"
+                              (regexp-quote
+                               (buffer-substring-no-properties
+                                (region-beginning)
+                                (region-end)))
+                              'conn-highlight-region-history)
+               (regexp-quote
+                (buffer-substring-no-properties
+                 (region-beginning)
+                 (region-end)))))
+            (hi-lock-read-face-name))
+           (deactivate-mark))
+          ((setq regexps (and (fboundp 'hi-lock--regexps-at-point)
+                              (hi-lock--regexps-at-point)))
+           (mapc #'hi-lock-unface-buffer regexps))
+          (t
+           (hi-lock-face-buffer
+            (hi-lock-regexp-okay
+             (if read
+                 (read-regexp "Regexp"
+                              (find-tag-default-as-symbol-regexp)
+                              'conn-highlight-region-history)
+               (find-tag-default-as-symbol-regexp)))
+            (hi-lock-read-face-name))))))
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
