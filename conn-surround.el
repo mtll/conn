@@ -82,9 +82,8 @@
 
 ;;;;; Bounds
 
-(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
+(conn-define-state conn-surround-with-state ()
   :lighter "WITH"
-  :mode-line-face 'conn-read-surround-with-mode-line-face
   :full-keymap t)
 
 (let ((map (conn-get-state-map 'conn-surround-with-state)))
@@ -148,8 +147,7 @@
                   (annotation "surrounded by")))))
 
 (conn-define-state conn-surround-bounds-state (conn-surround-with-state)
-  :lighter "SURROUND"
-  :mode-line-face 'conn-read-surround-with-mode-line-face)
+  :lighter "SURROUND")
 
 (conn-register-thing 'conn-surround)
 
@@ -331,11 +329,6 @@
     (conn-kill-surround thing arg transform delete register)))
 
 ;;;;; Surround
-
-(defface conn-read-surround-with-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a read-thing state."
-  :group 'conn-faces)
 
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
   :lighter "SURROUND")

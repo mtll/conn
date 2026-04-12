@@ -126,10 +126,9 @@ Expansions and contractions are provided by functions in
 
 ;;;;; Bounds of expansion
 
-(conn-define-state conn-expand-state (conn-mode-line-face-state)
+(conn-define-state conn-expand-state ()
   "State for expanding."
-  :lighter "EXPAND"
-  :mode-line-face 'conn-read-thing-mode-line-face)
+  :lighter "EXPAND")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)

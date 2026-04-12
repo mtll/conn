@@ -1836,10 +1836,9 @@ check bounds in the current buffer.
 
 ;;;;; Multi Things
 
-(conn-define-state conn-multi-thing-select-state (conn-mode-line-face-state)
+(conn-define-state conn-multi-thing-select-state ()
   "State for selecting a tree sit node."
-  :lighter "THING"
-  :mode-line-face 'conn-read-thing-mode-line-face)
+  :lighter "THING")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-multi-thing-select-state)

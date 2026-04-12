@@ -635,11 +635,6 @@ themselves once the selection process has concluded."
 
 ;;;; Dispatch State
 
-(defface conn-dispatch-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a dispatch state."
-  :group 'conn-faces)
-
 (defvar conn-dispatch-target-finder nil)
 
 (defvar conn-dispatch-ring)
@@ -678,13 +673,9 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-dispatch-targets-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
-  :cursor 'hollow
-  :lighter "DISPATCH"
-  :mode-line-face 'conn-dispatch-mode-line-face)
+  :lighter "DISPATCH")
 
-(conn-define-state conn-dispatch-bounds-state (conn-dispatch-targets-state)
-  :lighter "DISPATCH"
-  :mode-line-face 'conn-dispatch-mode-line-face)
+(conn-define-state conn-dispatch-bounds-state (conn-dispatch-targets-state))
 
 (conn-define-state conn-dispatch-state (conn-dispatch-targets-state)
   "State for reading a dispatch command.")

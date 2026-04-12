@@ -1271,46 +1271,17 @@ By default `conn-emacs-state' does not bind anything except
   :lighter "E"
   :cursor '(bar . 4))
 
-(conn-define-state conn-mode-line-face-state ()
-  "An abstract state for adding a mode-line face to a state.
-
-Causes the mode-line face to be remapped to the face specified by the
-:mode-line-face state property when the state is current."
-  :abstract t
-  :no-keymap t)
-
-(conn-declare-state-property
- :mode-line-face
- "Used by `conn-mode-line-face-state'.  Face for the mode line in the
-state.")
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state))
-                                _transition)
-  (when-let* ((face (conn-state-get state :mode-line-face))
-              (cookie (face-remap-add-relative 'mode-line face)))
-    (conn-state-on-exit _transition
-      (face-remap-remove-relative cookie)))
-  (cl-call-next-method))
-
 ;;;;; Read Thing State
-
-(defface conn-read-thing-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a read-thing state."
-  :group 'conn-faces)
 
 (defun conn-read-thing-cursor ()
   "Returns the cursor to be used in `conn-read-thing-common-state'."
   `(hbar . ,(floor (default-line-height) 2.5)))
 
-(conn-define-state conn-read-thing-common-state (conn-command-state
-                                                 conn-mode-line-face-state)
+(conn-define-state conn-read-thing-common-state (conn-command-state)
   "Common elements of thing reading states."
   :cursor #'conn-read-thing-cursor
   :suppress-input-method t
-  :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
-
 
 ;;;;; Autopop State
 
