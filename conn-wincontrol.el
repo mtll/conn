@@ -469,9 +469,10 @@
         (set-transient-map
          map t
          (lambda ()
-           (cl-loop for win in (nreverse windows)
-                    when (window-live-p win)
-                    do (window-bump-use-time win)))
+           (let ((inhibit-quit t))
+             (cl-loop for win in (nreverse windows)
+                      when (window-live-p win)
+                      do (window-bump-use-time win))))
          (format "Repeat with %s"
                  (propertize (key-description key)
                              'face 'read-multiple-choice-face)))))))

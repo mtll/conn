@@ -1206,10 +1206,11 @@ Currently selected window remains selected afterwards."
      conn-yank-pop-repeat-map
      t
      (lambda ()
-       (advice-remove 'yank-pop ad-sym)
-       (advice-remove 'conn-yank-unpop ad-sym)
-       (advice-remove 'conn-yank-with-completion ad-sym)
-       (undo-amalgamate-change-group cg))
+       (let ((inhibit-quit t))
+         (advice-remove 'yank-pop ad-sym)
+         (advice-remove 'conn-yank-unpop ad-sym)
+         (advice-remove 'conn-yank-with-completion ad-sym)
+         (undo-amalgamate-change-group cg)))
      (format "%s yank pop; %s yank unpop; %s yank with completion"
              (propertize
               (key-description
@@ -2332,8 +2333,9 @@ Exiting the recursive edit will resume the isearch."
           (setq mc (or (command-remapping mc) mc)))
         (and mc (eq this-command mc)))))
    (lambda ()
-     (advice-remove 'conn-transpose-repeat repeat)
-     (advice-remove 'conn-transpose-repeat-inverse repeat-inverse))
+     (let ((inhibit-quit t))
+       (advice-remove 'conn-transpose-repeat repeat)
+       (advice-remove 'conn-transpose-repeat-inverse repeat-inverse)))
    (concat
     (format "%s repeat"
             (propertize
@@ -4008,17 +4010,18 @@ Only available during repeating duplicate."
                  (set-marker m2 nil)))
              (set-marker end-marker (point))))
          (cleanup ()
-           (set-marker end-marker nil)
-           (set-marker m1 nil)
-           (set-marker m2 nil)
-           (mapc #'delete-overlay regions)
-           (undo-amalgamate-change-group cg)
-           (conn--remove-all-advice 'conn-duplicate-repeat-indent
-                                    'conn-duplicate-repeat-kapply
-                                    'conn-duplicate-repeat
-                                    'conn-duplicate-repeat-delete
-                                    'conn-duplicate-repeat-comment
-                                    'conn-duplicate-repeat-toggle-padding))
+           (let ((inhibit-quit t))
+             (set-marker end-marker nil)
+             (set-marker m1 nil)
+             (set-marker m2 nil)
+             (mapc #'delete-overlay regions)
+             (conn--remove-all-advice 'conn-duplicate-repeat-indent
+                                      'conn-duplicate-repeat-kapply
+                                      'conn-duplicate-repeat
+                                      'conn-duplicate-repeat-delete
+                                      'conn-duplicate-repeat-comment
+                                      'conn-duplicate-repeat-toggle-padding)
+             (undo-amalgamate-change-group cg)))
          (indent ()
            (interactive)
            (indent-region (overlay-start (car (last regions)))
@@ -4209,12 +4212,13 @@ Only available during repeating duplicate."
                     (setq mc (or (command-remapping mc) mc)))
                   (and mc (eq this-command mc)))))
              (cleanup ()
-               (dolist (cg cgs)
-                 (accept-change-group cg))
-               (undo-amalgamate-change-group (car (last cgs)))
-               (conn--remove-all-advice 'conn-duplicate-repeat
-                                        'conn-duplicate-repeat-delete
-                                        'conn-duplicate-repeat-kapply)))
+               (let ((inhibit-quit t))
+                 (conn--remove-all-advice 'conn-duplicate-repeat
+                                          'conn-duplicate-repeat-delete
+                                          'conn-duplicate-repeat-kapply)
+                 (dolist (cg cgs)
+                   (accept-change-group cg))
+                 (undo-amalgamate-change-group (car (last cgs))))))
           (advice-add 'conn-duplicate-repeat :override #'dup)
           (advice-add 'conn-duplicate-repeat-delete :override #'delete)
           (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
@@ -4891,11 +4895,12 @@ If CLEANUP-WHITESPACE is non-nil then also run
         conn-indent-thing-rigidly-map
         t
         (lambda ()
-          (set-marker end nil)
-          (conn--remove-all-advice 'conn-indent-left
-                                   'conn-indent-right
-                                   'conn-indent-right-to-tab-stop
-                                   'conn-indent-left-to-tab-stop))
+          (let ((inhibit-quit t))
+            (set-marker end nil)
+            (conn--remove-all-advice 'conn-indent-left
+                                     'conn-indent-right
+                                     'conn-indent-right-to-tab-stop
+                                     'conn-indent-left-to-tab-stop)))
         "Type %k to indent region interactively")
        (conn-push-command-history 'conn-indent-thing-rigidly
                                   thing
