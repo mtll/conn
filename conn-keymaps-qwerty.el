@@ -515,6 +515,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "i" 'conn-backward-outer-line
+  "k" 'conn-forward-outer-line
   "x" 'conn-record-emacs-state
   "d" 'conn-emacs-state-record-insert
   "q" 'conn-kapply-kbd-macro-query
