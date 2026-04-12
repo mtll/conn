@@ -585,7 +585,7 @@ themselves once the selection process has concluded."
                                     predicate)
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
-           when (and (conn--dispatch-window-predicate dedicated)
+           when (and (conn--dispatch-window-predicate win dedicated)
                      (or (null predicate) (funcall predicate win)))
            collect win))
 
@@ -593,12 +593,21 @@ themselves once the selection process has concluded."
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     `(conn-with-dispatch-input-buffer
-        (let* ((conn-dispatch-label-input-method nil)
-               (,var ,val))
-          (unwind-protect
-              ,(macroexp-progn body)
-            (mapc #'conn-label-delete ,var)))))
+     (cl-with-gensyms (timer)
+       `(conn-with-dispatch-input-buffer
+          (let* ((conn-dispatch-label-input-method nil)
+                 (,var ,val)
+                 (,timer (run-with-idle-timer
+                          0 t (lambda ()
+                                (while-no-input
+                                  (conn-redisplay-labels ,var))))))
+            (unwind-protect
+                (progn
+                  (while-no-input
+                    (conn-redisplay-labels ,var))
+                  ,@body)
+              (when ,timer (cancel-timer ,timer))
+              (mapc #'conn-label-delete ,var))))))
     (_ (error "Unexpected binding form %s" binder))))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
