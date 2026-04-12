@@ -845,21 +845,6 @@ themselves once the selection process has concluded."
       ("act at mouse click" act)
       ("toggle other end" other-end)))))
 
-(defun conn-dispatch-select-target-reference ()
-  (conn-reference-page
-    (:splice (oref conn-dispatch-target-finder reference))
-    (((:heading "Targeting Commands")
-      ("retarget" retarget)
-      ("always retarget" always-retarget)
-      ("change target finder" change-target-finder)
-      (:keymap conn-toggle-label-argument-map)
-      ("toggle hide labels" toggle-labels))
-     ((:heading "Window Commands")
-      ("goto window" conn-goto-window)
-      ("scroll up" scroll-up-command)
-      ("scroll down" scroll-down-command)
-      ("restrict to selected" restrict-windows)))))
-
 (defvar conn-misc-reference-list
   (conn-reference-quote
     (("isearch forward" isearch-forward)
@@ -901,14 +886,18 @@ themselves once the selection process has concluded."
 (define-inline conn-action-description (action)
   (inline-letevals (action)
     (inline-quote
-     (apply (conn-action--description ,action)
-            (conn-action--slots ,action)))))
+     (let ((desc (conn-action--description ,action)))
+       (cl-typecase desc
+         (string desc)
+         (function (apply desc (conn-action--slots ,action))))))))
 
 (define-inline conn-action-reference (action)
   (inline-letevals (action)
     (inline-quote
-     (apply (conn-action--reference ,action)
-            (conn-action--slots ,action)))))
+     (let ((ref (conn-action--reference ,action)))
+       (cl-typecase ref
+         (string ref)
+         (function (apply ref (conn-action--slots ,action))))))))
 
 (define-inline conn-call-action (action)
   (inline-letevals (action)
@@ -1165,8 +1154,6 @@ themselves once the selection process has concluded."
 (defun conn-action-get-reference (action)
   (when-let* ((ref (and action
                         (conn-action-reference action))))
-    (when (functionp ref)
-      (cl-callf apply ref (conn-action--slots action)))
     (cl-typecase ref
       (conn--reference-page ref)
       (string
@@ -1304,7 +1291,8 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
                          'face 'bold
                          'conn-read-args-display-depth -50)
              ": "
-             (propertize (or (conn-action-description action) "")
+             (propertize (or (conn-action-description action)
+                             "unnamed action")
                          'face 'eldoc-highlight-function-argument)))
    (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
             collect (mapcar
@@ -4184,6 +4172,25 @@ contain targets."
        (when (eobp) (cl-return nil))
        (vertical-motion 1)))))
 
+;;;;;; Target Finder Reference
+
+(defun conn-dispatch-select-target-reference ()
+  (conn-reference-page
+    (:splice (oref conn-dispatch-target-finder reference))
+    (((:heading "Targeting Commands")
+      (:splice (when (cl-typep conn-dispatch-target-finder
+                               'conn-dispatch-retargetable-mixin)
+                 '(("retarget" retarget)
+                   ("always retarget" always-retarget))))
+      ("change target finder" change-target-finder)
+      (:keymap conn-toggle-label-argument-map)
+      ("toggle hide labels" toggle-labels))
+     ((:heading "Window Commands")
+      ("goto window" conn-goto-window)
+      ("scroll up" scroll-up-command)
+      ("scroll down" scroll-down-command)
+      ("restrict to selected" restrict-windows)))))
+
 ;;;;; Dispatch Labels
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
@@ -4780,6 +4787,7 @@ it.")
 (defun conn-previous-dispatch-copy (dispatch)
   (declare (important-return-value t))
   (let ((copy (conn--copy-previous-dispatch dispatch)))
+    (cl-callf clone (conn-previous-dispatch-target-finder copy))
     (setf (conn-previous-dispatch-action copy)
           (conn-action-copy (conn-previous-dispatch-action dispatch)))
     copy))
@@ -4799,8 +4807,9 @@ it.")
                (oref (conn-previous-dispatch-target-finder dispatch)
                      transform)))
     (format "%s @ %s <%s%s>"
-            (conn-action-description
-             (conn-previous-dispatch-action dispatch))
+            (or (conn-action-description
+                 (conn-previous-dispatch-action dispatch))
+                "unnamed action")
             (conn-thing-pretty-print thing)
             arg
             (if transform
@@ -4815,7 +4824,7 @@ it.")
   (conn-dispatch-ring-remove-stale)
   (unless (conn-action-no-history (conn-previous-dispatch-action dispatch))
     (add-to-history 'command-history `(conn-dispatch-setup-previous
-                                       (conn-ring-head conn-dispatch-ring)))
+                                       ,(conn-previous-dispatch-copy dispatch)))
     (conn-ring-insert-front conn-dispatch-ring dispatch)))
 
 (defun conn-dispatch-ring-remove-stale ()
@@ -4880,8 +4889,8 @@ it.")
           (:handler
            (:depth -99)
            ( :display ()
-             (propertize (conn-action-description conn-dispatch-action)
-                         'face 'conn-argument-active-face)))
+             (when-let* ((desc (conn-action-description conn-dispatch-action)))
+               (propertize desc 'face 'conn-argument-active-face))))
           ( :with (conn-dispatch-prefix-arg)
             :depth -97)
           ( :with (conn-read-char-input-method)
@@ -4955,8 +4964,8 @@ it.")
         (:handler
          (:depth -99)
          ( :display ()
-           (propertize (conn-action-description conn-dispatch-action)
-                       'face 'conn-argument-active-face)))
+           (when-let* ((desc (conn-action-description conn-dispatch-action)))
+             (propertize desc 'face 'conn-argument-active-face))))
         ( :with (conn-dispatch-prefix-arg)
           :depth -97)
         ( :with (conn-read-char-input-method)

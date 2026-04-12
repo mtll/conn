@@ -1405,7 +1405,8 @@ selected by dispatch with it.")
          :restrict-windows restrict-windows))))
   (conn-push-command-history
    'conn-dispatch-setup-previous
-   (conn-ring-head conn-dispatch-ring)))
+   (conn-previous-dispatch-copy
+    (conn-ring-head conn-dispatch-ring))))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing expansion))
                                     arg
@@ -1448,7 +1449,8 @@ selected by dispatch with it.")
      beg (point)))
   (conn-push-command-history
    'conn-dispatch-setup-previous
-   (conn-ring-head conn-dispatch-ring)))
+   (conn-previous-dispatch-copy
+    (conn-ring-head conn-dispatch-ring))))
 
 (defun conn-yank-replace (thing
                           arg
@@ -3242,7 +3244,8 @@ hook, which see."
             (conn--kill-string result append register sep)))
         (conn-push-command-history
          'conn-dispatch-setup-previous
-         (conn-ring-head conn-dispatch-ring))))))
+         (conn-previous-dispatch-copy
+          (conn-ring-head conn-dispatch-ring)))))))
 
 (cl-defmethod conn-kill-thing-do ((thing (conn-thing expansion))
                                   arg
@@ -3301,7 +3304,8 @@ hook, which see."
      :other-end :no-other-end)
     (conn-push-command-history
      'conn-dispatch-setup-previous
-     (conn-ring-head conn-dispatch-ring))))
+     (conn-previous-dispatch-copy
+      (conn-ring-head conn-dispatch-ring)))))
 
 (cl-defmethod conn-kill-thing-do (thing
                                   arg
@@ -3702,7 +3706,8 @@ that place."
             (conn--kill-string result append register sep)))
         (conn-push-command-history
          'conn-dispatch-setup-previous
-         (conn-ring-head conn-dispatch-ring))))))
+         (conn-previous-dispatch-copy
+          (conn-ring-head conn-dispatch-ring)))))))
 
 ;;;;; How Many
 
@@ -4505,7 +4510,8 @@ Interactively REPEAT is given by the prefix argument."
        :repeat repeat))
     (conn-push-command-history
      'conn-dispatch-setup-previous
-     (conn-ring-head conn-dispatch-ring))))
+     (conn-previous-dispatch-copy
+      (conn-ring-head conn-dispatch-ring)))))
 
 (cl-defmethod conn-change-thing-do ((thing (conn-thing expansion))
                                     arg
@@ -4544,7 +4550,8 @@ Interactively REPEAT is given by the prefix argument."
           (unless clone
             (setq with (conn-insertion-recording-text)))))))
   (conn-push-command-history
-   (let ((prev (conn-ring-head conn-dispatch-ring)))
+   (let ((prev (conn-previous-dispatch-copy
+                (conn-ring-head conn-dispatch-ring))))
      (lambda ()
        (conn-protected-let* ((cg (prepare-change-group)
                                  (cancel-change-group cg)))
