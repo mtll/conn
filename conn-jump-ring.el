@@ -30,8 +30,10 @@
   (set-marker conn-this-command-start (point) (current-buffer)))
 
 (defun conn--jump-post-command-hook ()
-  (when-let* ((pred (get this-command :conn-jump-command)))
-    (when (and (marker-position conn-this-command-start)
+  (when-let* ((pred (and (symbolp this-command)
+                         (get this-command :conn-jump-command))))
+    (when (and (markerp conn-this-command-start)
+               (marker-position conn-this-command-start)
                (eq (marker-buffer conn-this-command-start)
                    (current-buffer))
                (/= (point) conn-this-command-start))
@@ -161,6 +163,8 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
 
 (conn-set-jump-command 'scroll-up-command #'conn-ignore-repeat-jump-handler)
 (conn-set-jump-command 'scroll-down-command #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'conn-wincontrol-scroll-up #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'conn-wincontrol-scroll-down #'conn-ignore-repeat-jump-handler)
 
 (conn-set-jump-command 'beginning-of-buffer #'conn-ignore-repeat-jump-handler)
 (conn-set-jump-command 'end-of-buffer #'conn-ignore-repeat-jump-handler)
