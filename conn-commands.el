@@ -1667,23 +1667,23 @@ selected by dispatch with it.")
     (deactivate-mark)
     (save-excursion
       (if subregions
-          (let* ((region-extract-function
-                  (lambda (method)
-                    (pcase method
-                      ('nil
-                       (cl-loop for (beg . end) in subregions
-                                collect (buffer-substring beg end)))
-                      ('delete-only
-                       (cl-loop for (beg . end) in subregions
-                                do (delete-region beg end)))
-                      ('bounds subregions)
-                      (_
-                       (prog1
-                           (cl-loop for (beg . end) in subregions
-                                    collect (filter-buffer-substring
-                                             beg end method))
-                         (cl-loop for (beg . end) in subregions
-                                  do (delete-region beg end))))))))
+          (let ((region-extract-function
+                 (lambda (method)
+                   (pcase method
+                     ('nil
+                      (cl-loop for (beg . end) in subregions
+                               collect (buffer-substring beg end)))
+                     ('delete-only
+                      (cl-loop for (beg . end) in subregions
+                               do (delete-region beg end)))
+                     ('bounds subregions)
+                     (_
+                      (prog1
+                          (cl-loop for (beg . end) in subregions
+                                   collect (filter-buffer-substring
+                                            beg end method))
+                        (cl-loop for (beg . end) in subregions
+                                 do (delete-region beg end))))))))
             (perform-replace from to t regexp-flag delimited
                              nil nil beg end backward t))
         (perform-replace from to t regexp-flag delimited

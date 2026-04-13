@@ -30,31 +30,31 @@
   (set-marker conn-this-command-start (point) (current-buffer)))
 
 (defun conn--jump-post-command-hook ()
-  (when-let* ((pred (and (symbolp this-command)
-                         (get this-command :conn-jump-command))))
+  (when-let* ((handler (and (symbolp this-command)
+                            (get this-command :conn-jump-command))))
     (when (and (markerp conn-this-command-start)
                (marker-position conn-this-command-start)
                (eq (marker-buffer conn-this-command-start)
                    (current-buffer))
                (/= (point) conn-this-command-start))
-      (if (eq t pred)
+      (if (eq t handler)
           (conn-push-jump-ring conn-this-command-start)
         (ignore-errors
-          (funcall pred (marker-position conn-this-command-start)))))))
+          (funcall handler (marker-position conn-this-command-start)))))))
 
 ;;;###autoload
-(defun conn-set-jump-command (command &optional predicate)
+(defun conn-set-jump-command (command &optional handler)
   "Register COMMAND as a jump command.
 
-If optional argument PREDICATE is nil then COMMAND will unconditionally
-push to the jump ring.  If predicate is non-nil it should be a function
+If optional argument HANDLER is nil then COMMAND will unconditionally
+push to the jump ring.  If handler is non-nil it should be a function
 that will be called from the `post-command-hook' with the position at
 which command was first called and is responsible for pushing a position
 to the jump ring."
   (dolist (cmd (ensure-list command))
-    (function-put cmd :conn-jump-command (or predicate t))))
+    (function-put cmd :conn-jump-command (or handler t))))
 
-(defun conn--isearch-jump-predicate ()
+(defun conn--isearch-jump-handler ()
   (when (/= (point) isearch-opoint)
     (or mark-active
         (conn-push-jump-ring isearch-opoint))))
@@ -93,11 +93,11 @@ to the jump ring."
   (if conn-jump-ring-mode
       (progn
         (advice-add 'xref--push-markers :after #'conn--xref-push-markers-ad)
-        (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
+        (add-hook 'isearch-mode-end-hook #'conn--isearch-jump-handler)
         (add-hook 'pre-command-hook #'conn--jump-pre-command-hook)
         (add-hook 'post-command-hook #'conn--jump-post-command-hook 90))
     (advice-remove 'xref--push-markers #'conn--xref-push-markers-ad)
-    (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
+    (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-handler)
     (remove-hook 'pre-command-hook #'conn--jump-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--jump-post-command-hook)))
 
@@ -114,30 +114,32 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
             (conn-make-ring 40
                             :cleanup (lambda (mk) (set-marker mk nil))
                             :copier #'conn--copy-mark)))
-    (with-demoted-errors "%s"
-      (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
-                  (ptf (conn-ring-head conn-jump-ring)))
-        (cond
-         ((and ptf (= location ptf))
-          (when back (conn-ring-rotate-forward conn-jump-ring)))
-         ((and ptb (= location ptb))
-          (unless back (conn-ring-rotate-backward conn-jump-ring)))
-         (t
-          (if back
-              (conn-ring-insert-back conn-jump-ring
-                                     (conn--create-marker location))
-            (conn-ring-insert-front conn-jump-ring
-                                    (conn--create-marker location))))))
-      (run-hook-with-args 'conn-push-jump-functions location back)
-      (when msg (message "Jump ring pushed")))))
+    (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
+                (ptf (conn-ring-head conn-jump-ring)))
+      (cond
+       ((and ptf (= location ptf))
+        (when back (conn-ring-rotate-forward conn-jump-ring)))
+       ((and ptb (= location ptb))
+        (unless back (conn-ring-rotate-backward conn-jump-ring)))
+       (t
+        (if back
+            (conn-ring-insert-back conn-jump-ring
+                                   (conn--create-marker location))
+          (conn-ring-insert-front conn-jump-ring
+                                  (conn--create-marker location))))))
+    (run-hook-wrapped 'conn-push-jump-functions
+                      (lambda (fn location back)
+                        (ignore-errors
+                          (ignore (funcall fn location back)))))
+    (when msg (message "Jump ring pushed"))))
 
 (setf (alist-get 'conn-jump defun-declarations-alist)
       (list #'conn--set-jump-property))
 
-(defun conn--set-jump-property (f _args &optional predicate)
+(defun conn--set-jump-property (f _args &optional handler)
   `(progn
      :autoload-end
-     (conn-set-jump-command ',f ,predicate)))
+     (conn-set-jump-command ',f ,handler)))
 
 (defvar-local conn-jump-repeating nil)
 

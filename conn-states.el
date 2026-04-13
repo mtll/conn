@@ -987,11 +987,12 @@ To execute code when a state is exiting use `conn-state-on-exit'."
     (run-hook-wrapped
      'conn-state-entry-hook
      (lambda (fn)
-       (condition-case err
-           (funcall fn)
-         (error
-          (remove-hook 'conn-state-entry-hook fn)
-          (message "Error in conn-state-entry-hook: %s" (car err))))))))
+       (ignore
+        (condition-case err
+            (funcall fn)
+          (error
+           (remove-hook 'conn-state-entry-hook fn)
+           (message "Error in conn-state-entry-hook: %s" (car err)))))))))
 
 (defun conn-push-state (state)
   "Enter STATE and push it to the state stack."
