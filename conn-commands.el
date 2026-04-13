@@ -220,15 +220,12 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (forward-symbol (- arg)))
 
-(defun conn--scroll-jump-predicate (_start)
-  (not (memq last-command '(conn-scroll-down conn-scroll-up))))
-
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position.
 
 Pulses line that was the first visible line before scrolling."
   (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
-           (conn-jump #'conn--scroll-jump-predicate))
+           (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
@@ -248,7 +245,7 @@ Pulses line that was the first visible line before scrolling."
 
 Pulses line that was the last visible line before scrolling."
   (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
-           (conn-jump #'conn--scroll-jump-predicate))
+           (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))

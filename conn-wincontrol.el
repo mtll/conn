@@ -563,6 +563,7 @@ remove whatever the function has added to the mode-line.")
 ;;;###autoload
 (defun conn-wincontrol-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
+  (declare (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive)
   (setq this-command 'conn-scroll-down)
   (let ((next-screen-context-lines
@@ -573,6 +574,7 @@ remove whatever the function has added to the mode-line.")
 ;;;###autoload
 (defun conn-wincontrol-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
+  (declare (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive)
   (setq this-command 'conn-scroll-up)
   (let ((next-screen-context-lines
