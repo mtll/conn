@@ -1102,10 +1102,12 @@ Currently selected window remains selected afterwards."
   (cl-call-next-method)
   (rectangle-mark-mode 1))
 
+(conn-define-state conn-mark-dispatch-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
                                   arg
                                   transform)
-  (conn-read-args (conn-dispatch-bounds-state
+  (conn-read-args (conn-mark-dispatch-state
                    :prefix arg
                    :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")
@@ -1305,6 +1307,8 @@ Currently selected window remains selected afterwards."
                (yank))))))
     (cl-call-next-method)))
 
+(conn-define-state conn-yank-replace-dispatch-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-yank-replace-do ((_thing (conn-thing dispatch))
                                     arg
                                     transform
@@ -1312,7 +1316,7 @@ Currently selected window remains selected afterwards."
                                     swap
                                     register
                                     check-bounds)
-  (conn-read-args (conn-dispatch-bounds-state
+  (conn-read-args (conn-yank-replace-dispatch-state
                    :prefix arg
                    :prompt "Yank and Replace"
                    :reference (list conn-dispatch-thing-reference))
@@ -2424,6 +2428,8 @@ Exiting the recursive edit will resume the isearch."
          (bounds2 (conn-bounds-of 'recursive-edit nil)))
     (conn--dispatch-transpose-subr bounds1 bounds2)))
 
+(conn-define-state conn-transpose-dispatch-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-transpose-things-do ((_thing (conn-thing dispatch))
                                         arg
                                         _at-point-and-mark)
@@ -2437,7 +2443,7 @@ Exiting the recursive edit will resume the isearch."
                                               (cons (region-beginning)
                                                     (region-end)))))
                                  (:method (_self _arg) bounds))))))
-    (conn-read-args (conn-dispatch-transpose-state
+    (conn-read-args (conn-transpose-dispatch-state
                      :prompt "Transpose Dispatch"
                      :prefix arg
                      :reference (list conn-dispatch-thing-reference))
@@ -3117,6 +3123,8 @@ hook, which see."
 
 (defvar-keymap conn-kill-dispatch-append-map)
 
+(conn-define-state conn-kill-dispatch-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-kill-thing-do ((_thing (conn-thing dispatch))
                                   arg
                                   transform
@@ -3130,7 +3138,7 @@ hook, which see."
   (let ((result nil)
         (strings nil))
     (with-undo-amalgamate
-      (conn-read-args (conn-dispatch-bounds-state
+      (conn-read-args (conn-kill-dispatch-state
                        :prefix arg
                        :prompt "Kill"
                        :reference (list conn-dispatch-thing-reference)
@@ -3626,6 +3634,8 @@ that place."
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
+(conn-define-state conn-copy-dispatch-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-copy-thing-do ((_thing (conn-thing dispatch))
                                   arg
                                   &optional
@@ -3633,7 +3643,7 @@ that place."
                                   append
                                   register
                                   separator)
-  (conn-read-args (conn-dispatch-bounds-state
+  (conn-read-args (conn-copy-dispatch-state
                    :prefix arg
                    :prompt "Copy"
                    :reference (list conn-dispatch-thing-reference))
@@ -4445,6 +4455,8 @@ Interactively REPEAT is given by the prefix argument."
          thing nil nil nil nil kbd-macro-query))
     (cl-call-next-method)))
 
+(conn-define-state conn-dispatch-change-state (conn-dispatch-bounds-state))
+
 (cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
                                     arg
                                     transform
@@ -4452,7 +4464,7 @@ Interactively REPEAT is given by the prefix argument."
                                     check-bounds
                                     with
                                     _kbd-macro-query)
-  (conn-read-args (conn-dispatch-bounds-state
+  (conn-read-args (conn-dispatch-change-state
                    :prefix arg
                    :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")

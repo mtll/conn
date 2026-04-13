@@ -494,7 +494,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)
-  "<escape>" 'exit-recursive-edit)
+  "<escape>" 'exit-recursive-edit
+  "C-M-<escape>" 'abort-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-state)
@@ -527,6 +528,11 @@
   "j" conn-backward-char-remap
   "l" conn-forward-char-remap
   "w" 'conn-replace)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-change-state)
+  "i" 'conn-backward-outer-line
+  "k" 'conn-forward-outer-line)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kill-state)
