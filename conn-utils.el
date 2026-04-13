@@ -38,12 +38,12 @@
                                    (setq ,success t))))
         (pcase binding
           ('nil body)
-          (`(,var ,val . ,(and cleanup (pred identity)))
+          (`(,var ,val ,cleanup)
            (protect (car rest) (cdr rest)
                     `(let* ((,var ,val))
                        (unwind-protect
                            ,body
-                         (unless ,success ,@cleanup)))))
+                         (unless ,success ,cleanup)))))
           (_ (protect (car rest) (cdr rest)
                       (macroexp-let* (list binding) body))))))))
 
@@ -680,9 +680,11 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn-to-vtable (list max-cols buffer &rest keys)
   (cl-loop with rows = (ceiling (length list) max-cols)
+           with cols = (ceiling (length list) rows)
            with objs = (make-list rows nil)
-           for i from 0 below (* max-cols rows)
-           do (push (or (pop list) "") (nth (mod i rows) objs))
+           for i from 0 below (* rows cols)
+           do (push (or (pop list) "")
+                    (nth (floor i cols) objs))
            finally (with-current-buffer buffer
                      (apply #'make-vtable
                             :objects (mapcar #'nreverse objs)

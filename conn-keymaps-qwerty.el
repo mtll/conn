@@ -531,7 +531,6 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-change-state)
-  "i" 'conn-backward-outer-line
   "k" 'conn-forward-outer-line)
 
 (define-keymap

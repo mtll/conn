@@ -828,7 +828,7 @@ themselves once the selection process has concluded."
 
 (defun conn-dispatch-select-action-reference ()
   (conn-reference-page
-    (:splice (conn-action-get-reference conn-dispatch-action))
+    (:splice (conn-action-reference conn-dispatch-action))
     (((:heading "Action Commands")
       ("toggle repeat" repeat-dispatch)
       ("undo" undo))
@@ -882,13 +882,15 @@ themselves once the selection process has concluded."
          (string desc)
          (function (apply desc (conn-action--slots ,action))))))))
 
-(define-inline conn-action-reference (action)
-  (inline-letevals (action)
-    (inline-quote
-     (let ((ref (conn-action--reference ,action)))
-       (cl-typecase ref
-         (string ref)
-         (function (apply ref (conn-action--slots ,action))))))))
+(defun conn-action-reference (action)
+  (when-let* ((ref (and action
+                        (conn-action--reference action))))
+    (cl-typecase ref
+      (conn--reference-page ref)
+      (string
+       (conn-reference-quote
+         ((:heading (concat "Action: " (conn-action-description action)))
+          (:eval ref)))))))
 
 (define-inline conn-call-action (action)
   (inline-letevals (action)
@@ -991,10 +993,10 @@ themselves once the selection process has concluded."
                    collect copy)
    :function (conn-action--function action)
    :repeat (conn-action-repeat action)
-   :description (conn-action-description action)
+   :description (conn-action--description action)
    :window-predicate (conn-action-window-predicate action)
    :target-predicate (conn-action-target-predicate action)
-   :reference (conn-action-reference action)))
+   :reference (conn-action--reference action)))
 
 (defun conn-action-cleanup (action)
   (dolist (slot (conn-action--slots action))
@@ -1142,16 +1144,6 @@ themselves once the selection process has concluded."
   (or (eq (conn-action-repeat action) t)
       (eq (conn-action-repeat action) nil)))
 
-(defun conn-action-get-reference (action)
-  (when-let* ((ref (and action
-                        (conn-action-reference action))))
-    (cl-typecase ref
-      (conn--reference-page ref)
-      (string
-       (conn-reference-quote
-         ((:heading (concat "Action: " (conn-action-description action)))
-          (:eval ref)))))))
-
 (defvar-keymap conn-dispatch-repeat-argument-map
   "TAB" 'repeat-dispatch)
 
@@ -1167,7 +1159,7 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
   (let* ((action (conn-dispatch-action-argument-value arg))
-         (ref (conn-action-get-reference action)))
+         (ref (conn-action-reference action)))
     (conn-reference-page
       :depth -50
       (:splice ref)
@@ -1234,7 +1226,8 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
          (conn-argument-update a cmd break))))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
-  (conn-action-cancel (conn-argument-value arg)))
+  (when-let* ((action (conn-argument-value arg)))
+    (conn-action-cancel action)))
 
 (cl-defmethod conn-argument-accept ((arg conn-dispatch-action-argument))
   (mapc #'conn-argument-accept

@@ -366,7 +366,7 @@
         (funcall display-function buf state t)))))
 
 (defun conn-quick-ref-to-cols (list col-count)
-  (cl-loop with cols = (cl-loop repeat col-count collect nil)
+  (cl-loop with cols = (make-list col-count nil)
            for elem in list
            for i from 0
            do (push elem (nth (mod i col-count) cols))
