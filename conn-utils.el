@@ -51,10 +51,10 @@
   "Bind variables according to VARLIST then eval body as in `let*'.
 
 In addition to what `let*' accepts, each element of VARLIST may also be
-of the form (SYMBOL VALUEFORM . CLEANUP-FORMS), which binds SYMBOL to
-VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
+of the form (SYMBOL VALUEFORM CLEANUP-FORM), which binds SYMBOL to
+VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM.
 
-CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
+CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
   (conn--protected-let* varlist body))
 

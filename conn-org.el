@@ -418,4 +418,16 @@
   (conn-with-recursive-stack 'conn-emacs-state
     (recursive-edit)))
 
+(conn-set-jump-command 'org-forward-paragraph #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-backward-paragraph #'conn-ignore-repeat-jump-handler)
+
+(conn-set-jump-command 'org-forward-element #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-backward-element #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-up-element #'conn-ignore-repeat-jump-handler)
+
+(conn-set-jump-command 'org-forward-heading-same-level #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-backward-heading-same-level #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-next-visible-heading #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'org-previous-visible-heading #'conn-ignore-repeat-jump-handler)
+
 (provide 'conn-org)

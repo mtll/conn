@@ -30,16 +30,15 @@
   (set-marker conn-this-command-start (point) (current-buffer)))
 
 (defun conn--jump-post-command-hook ()
-  (when-let*
-      ((_ (marker-position conn-this-command-start))
-       (pred (function-get this-command :conn-jump-command))
-       (_ (and (eq (marker-buffer conn-this-command-start)
+  (when-let* ((pred (get this-command :conn-jump-command)))
+    (when (and (marker-position conn-this-command-start)
+               (eq (marker-buffer conn-this-command-start)
                    (current-buffer))
-               (/= (point) conn-this-command-start)
-               (or (eq t pred)
-                   (ignore-errors
-                     (funcall pred (marker-position conn-this-command-start)))))))
-    (conn-push-jump-ring conn-this-command-start)))
+               (/= (point) conn-this-command-start))
+      (if (eq t pred)
+          (conn-push-jump-ring conn-this-command-start)
+        (ignore-errors
+          (funcall pred (marker-position conn-this-command-start)))))))
 
 ;;;###autoload
 (defun conn-set-jump-command (command &optional predicate)
@@ -100,6 +99,8 @@ to the jump ring."
     (remove-hook 'pre-command-hook #'conn--jump-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--jump-post-command-hook)))
 
+(defvar conn-push-jump-functions nil)
+
 (defun conn-push-jump-ring (location &optional back msg)
   "Push LOCATION to the jump ring.
 
@@ -111,20 +112,22 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
             (conn-make-ring 40
                             :cleanup (lambda (mk) (set-marker mk nil))
                             :copier #'conn--copy-mark)))
-    (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
-                (ptf (conn-ring-head conn-jump-ring)))
-      (cond
-       ((and ptf (= location ptf))
-        (when back (conn-ring-rotate-forward conn-jump-ring)))
-       ((and ptb (= location ptb))
-        (unless back (conn-ring-rotate-backward conn-jump-ring)))
-       (t
-        (if back
-            (conn-ring-insert-back conn-jump-ring
-                                   (conn--create-marker location))
-          (conn-ring-insert-front conn-jump-ring
-                                  (conn--create-marker location))))))
-    (when msg (message "Jump ring pushed"))))
+    (with-demoted-errors "%s"
+      (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
+                  (ptf (conn-ring-head conn-jump-ring)))
+        (cond
+         ((and ptf (= location ptf))
+          (when back (conn-ring-rotate-forward conn-jump-ring)))
+         ((and ptb (= location ptb))
+          (unless back (conn-ring-rotate-backward conn-jump-ring)))
+         (t
+          (if back
+              (conn-ring-insert-back conn-jump-ring
+                                     (conn--create-marker location))
+            (conn-ring-insert-front conn-jump-ring
+                                    (conn--create-marker location))))))
+      (run-hook-with-args 'conn-push-jump-functions location back)
+      (when msg (message "Jump ring pushed")))))
 
 (setf (alist-get 'conn-jump defun-declarations-alist)
       (list #'conn--set-jump-property))
@@ -133,5 +136,39 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
   `(progn
      :autoload-end
      (conn-set-jump-command ',f ,predicate)))
+
+(defvar-local conn-jump-repeating nil)
+
+(defun conn--repeat-push-jump-hook (&rest _)
+  (remove-hook 'conn-push-jump-functions 'conn--repeat-jump-hook 'local)
+  (remove-hook 'after-change-functions 'conn--repeat-push-jump-hook 'local)
+  (setq conn-jump-repeating nil))
+
+(defun conn--repeat-change-hook (&rest _)
+  (unless (eql (buffer-chars-modified-tick)
+               conn-jump-repeating)
+    (remove-hook 'conn-push-jump-functions 'conn--repeat-jump-hook 'local)
+    (remove-hook 'post-command-hook 'conn--repeat-change-hook 'local)
+    (setq conn-jump-repeating nil)))
+
+(defun conn-ignore-repeat-jump-handler (pos)
+  (unless conn-jump-repeating
+    (let (conn-jump-repeating)
+      (conn-push-jump-ring pos))
+    (setq conn-jump-repeating (buffer-chars-modified-tick))
+    (add-hook 'conn-push-jump-functions 'conn--repeat-push-jump-hook nil 'local)
+    (add-hook 'post-command-hook 'conn--repeat-change-hook nil 'local)))
+
+(conn-set-jump-command 'scroll-up-command #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'scroll-down-command #'conn-ignore-repeat-jump-handler)
+
+(conn-set-jump-command 'beginning-of-buffer #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'end-of-buffer #'conn-ignore-repeat-jump-handler)
+
+(conn-set-jump-command 'beginning-of-defun #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'end-of-defun #'conn-ignore-repeat-jump-handler)
+
+(conn-set-jump-command 'forward-paragraph #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'backward-paragraph #'conn-ignore-repeat-jump-handler)
 
 (provide 'conn-jump-ring)

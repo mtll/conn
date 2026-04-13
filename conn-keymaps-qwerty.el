@@ -275,6 +275,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "SPC" 'conn-one-emacs-state
   "R" 'conn-rectangle-mark
   "V" 'conn-previous-mark-command
   "@" 'kmacro-start-macro-or-insert-counter
