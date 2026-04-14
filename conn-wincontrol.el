@@ -133,11 +133,6 @@
     ((debug error)
      (conn-wincontrol-mode -1))))
 
-(defun conn--wincontrol-new-frame (frame)
-  (set-face-inverse-video 'mode-line t frame)
-  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
-  (set-face-inverse-video 'mode-line-active t frame))
-
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-message ()
@@ -189,8 +184,11 @@
         ;; Must be before 'repeat-post-hook
         (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
         (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-        (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
         (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+        (add-function :after after-focus-change-function
+                      (lambda (&rest _)
+                        (set-face-inverse-video 'mode-line-active t))
+                      '((name . wincontrol-mode-line)))
         (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
         (unless preserve-state
           (setq conn--wincontrol-arg (when current-prefix-arg
@@ -198,8 +196,6 @@
                 conn--wincontrol-arg-sign 1
                 conn--wincontrol-initial-window (selected-window)
                 conn--wincontrol-initial-winconf (current-window-configuration)))
-        (set-face-inverse-video 'mode-line t)
-        ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
         (set-face-inverse-video 'mode-line-active t))
     ((debug error)
      (conn-wincontrol-mode -1))))
@@ -210,11 +206,9 @@
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
   (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+  (remove-function after-focus-change-function 'wincontrol-mode-line)
   (remove-function eldoc-message-function 'conn--wincontrol-ignore)
-  (set-face-inverse-video 'mode-line nil)
-  ;; Modus themes no longer have 'mode-line-active inherit from 'mode-line
   (set-face-inverse-video 'mode-line-active nil))
 
 (defvar conn-wincontrol-one-command-stay-command

@@ -798,8 +798,9 @@
   :keymap conn-dispatch-transform-argument-map
   "a" 'conn-dispatch-bounds-anchored
   "B" 'conn-dispatch-bounds-between
-  "<" 'conn-bounds-trim
-  ">" 'conn-bounds-untrim
+  "^" 'conn-bounds-trim
+  ">" 'conn-bounds-untrim-right
+  "<" 'conn-bounds-untrim-left
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-butlast
@@ -835,8 +836,9 @@
 
 (define-keymap
   :keymap conn-transform-map
-  "<" 'conn-bounds-trim
-  ">" 'conn-bounds-untrim
+  "^" 'conn-bounds-trim
+  "<" 'conn-bounds-untrim-left
+  ">" 'conn-bounds-untrim-right
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
