@@ -118,7 +118,7 @@
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
-      (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-predicate)
+      (remove-hook 'isearch-mode-end-hook #'conn--isearch-jump-handler)
       (remove-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
       (remove-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup))))
 

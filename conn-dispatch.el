@@ -649,6 +649,129 @@ themselves once the selection process has concluded."
 
 (defvar conn-dispatch-other-end nil)
 
+(defvar conn-dispatch-action nil)
+
+(defvar conn--dispatch-change-groups nil)
+
+(defvar conn-targets nil
+  "Alist of (WINDOW . TARGETS).")
+
+(defvar conn-target-count nil
+  "Alist of (WINDOW . TARGET-COUNT).")
+
+(defvar conn-target-sort-function 'conn-target-sort-adjacent-then-nearest
+  "Sort function for targets in each window.
+
+Labels are sorted first by length and then lexicographically by the
+position of the characters in `conn-simple-label-characters'.  Then the
+target that is sorted into first position by `conn-target-sort-function'
+will received the first label, the second the second label and so one.
+Thus a target sorted before another target has higher priority for a
+shorter label.
+
+A sort function should take two targets as arguments and return non-nil
+if the first should be sorted before the second.")
+
+(defvar conn-target-window-predicate 'conn-dispatch-ignored-mode-p
+  "Predicate which windows must satisfy in order to be considered during
+dispatch.")
+
+(defvar conn-target-predicate
+  (lambda (pt length window)
+    (not (conn--overlays-in-of-type pt (+ pt length)
+                                    'conn-target-overlay
+                                    window)))
+  "Predicate which a buffer position must satisfy in order to be a valid
+target.
+
+A target predicate function should take POINT, LENGTH, and WINDOW as
+arguments and return non-nil if a target at POINT of LENGTH in WINDOW's
+buffer is a valid target.")
+
+(defvar conn--dispatch-prev-state nil
+  "Holds state to be restored during `conn-with-dispatch-suspended'.
+
+3-tuple of `conn-target-window-predicate', `conn-target-predicate', and
+`conn-target-sort-function'.")
+
+(defvar conn--dispatch-label-state nil
+  "The state for `conn-dispatch-label-function' during dispatch.")
+
+(defvar conn--dispatch-suspend-labels #'ignore)
+
+(defvar conn-dispatch-in-progress nil)
+
+(defvar conn--current-dispatch-buffers nil)
+
+(defmacro conn-with-dispatch-state (&rest body)
+  (declare (indent 0))
+  `(conn-protected-let*
+       ((conn-wincontrol-mode nil)
+        (conn-wincontrol-one-command-mode nil)
+        (conn--dispatch-prev-state
+         (list conn-target-window-predicate
+               conn-target-predicate
+               conn-target-sort-function))
+        (conn-dispatch-hide-labels nil)
+        (conn-dispatch-quit-flag nil)
+        (conn-target-window-predicate conn-target-window-predicate)
+        (conn-target-predicate conn-target-predicate)
+        (conn-target-sort-function conn-target-sort-function)
+        (conn-dispatch-label-function conn-dispatch-label-function)
+        (conn-dispatch-other-end #'+)
+        (conn-dispatch-action-reference nil)
+        (conn-targets nil)
+        (conn-target-count nil)
+        ( conn-dispatch-action nil
+          (when conn-dispatch-action
+            (conn-action-cancel conn-dispatch-action)))
+        (conn-dispatch-repeating nil)
+        (conn-dispatch-iteration-count 0)
+        (conn-dispatch-target-finder nil)
+        (conn--dispatch-label-state nil)
+        (conn--dispatch-change-groups nil)
+        (conn--current-dispatch-buffers (make-hash-table :test 'eq))
+        (conn-dispatch-in-progress t))
+     ,@body))
+
+(defmacro conn-with-dispatch-suspended (&rest body)
+  "Execute BODY with dispatch suspended."
+  (declare (indent 0))
+  `(progn
+     (unless conn-dispatch-in-progress
+       (error "Trying to suspend dispatch when state not active"))
+     (conn-target-finder-suspend conn-dispatch-target-finder)
+     (funcall conn--dispatch-suspend-labels)
+     (unwind-protect
+         (pcase-let ((`(,conn-target-window-predicate
+                        ,conn-target-predicate
+                        ,conn-target-sort-function)
+                      conn--dispatch-prev-state)
+                     (conn-target-count nil)
+                     (conn--dispatch-prev-state nil)
+                     (conn-dispatch-hide-labels nil)
+                     (conn--dispatch-redisplay-prompt-flag nil)
+                     (conn-dispatch-label-function nil)
+                     (conn-dispatch-quit-flag nil)
+                     (conn-dispatch-action nil)
+                     (conn-dispatch-repeating nil)
+                     (conn-dispatch-action-reference nil)
+                     (conn-targets nil)
+                     (conn--dispatch-label-state nil)
+                     (conn-dispatch-target-finder nil)
+                     (conn-dispatch-iteration-count nil)
+                     (conn-dispatch-other-end nil)
+                     (conn--dispatch-read-char-handlers nil)
+                     (conn-dispatch-input-buffer nil)
+                     (conn--dispatch-suspend-labels nil)
+                     (conn--dispatch-change-groups nil)
+                     (conn--current-dispatch-buffers nil)
+                     (conn-dispatch-in-progress nil))
+           (message nil)
+           ,@body
+           (conn-dispatch-redisplay))
+       (conn--mark-targets 'conn-old-target))))
+
 (define-inline conn-dispatch-other-end-p ()
   (inline-quote (> 0 (funcall conn-dispatch-other-end 1))))
 
@@ -853,10 +976,6 @@ themselves once the selection process has concluded."
             conn-misc-reference-list 2))))
 
 ;;;;;; Action
-
-(defvar conn-dispatch-action nil)
-
-(defvar conn--dispatch-change-groups nil)
 
 (cl-defstruct (conn-action (:conc-name conn-action--))
   (function #'ignore :type function)
@@ -1467,47 +1586,6 @@ with `conn-dispatch-thing-ignored-modes'."
   "Face for matches when reading strings."
   :group 'conn-faces)
 
-(defvar conn-targets nil
-  "Alist of (WINDOW . TARGETS).")
-
-(defvar conn-target-count nil
-  "Alist of (WINDOW . TARGET-COUNT).")
-
-(defvar conn-target-sort-function 'conn-target-sort-adjacent-then-nearest
-  "Sort function for targets in each window.
-
-Labels are sorted first by length and then lexicographically by the
-position of the characters in `conn-simple-label-characters'.  Then the
-target that is sorted into first position by `conn-target-sort-function'
-will received the first label, the second the second label and so one.
-Thus a target sorted before another target has higher priority for a
-shorter label.
-
-A sort function should take two targets as arguments and return non-nil
-if the first should be sorted before the second.")
-
-(defvar conn-target-window-predicate 'conn-dispatch-ignored-mode-p
-  "Predicate which windows must satisfy in order to be considered during
-dispatch.")
-
-(defvar conn-target-predicate
-  (lambda (pt length window)
-    (not (conn--overlays-in-of-type pt (+ pt length)
-                                    'conn-target-overlay
-                                    window)))
-  "Predicate which a buffer position must satisfy in order to be a valid
-target.
-
-A target predicate function should take POINT, LENGTH, and WINDOW as
-arguments and return non-nil if a target at POINT of LENGTH in WINDOW's
-buffer is a valid target.")
-
-(defvar conn--dispatch-prev-state nil
-  "Holds state to be restored during `conn-with-dispatch-suspended'.
-
-3-tuple of `conn-target-window-predicate', `conn-target-predicate', and
-`conn-target-sort-function'.")
-
 (put 'conn-target-overlay 'priority 2002)
 (put 'conn-target-overlay 'face 'conn-target-overlay-face)
 
@@ -1597,9 +1675,6 @@ return either a list of label strings or a list of the form
 list then NEW-STATE will be passed to the labeling function the next
 time it is called.  The first time the labeling function is called STATE
 will be nil.")
-
-(defvar conn--dispatch-label-state nil
-  "The state for `conn-dispatch-label-function' during dispatch.")
 
 (defvar conn-default-label-padding-function 'conn--centered-padding
   "Default function for padding dispatch labels.
@@ -2189,8 +2264,6 @@ Target overlays may override this default by setting the
      labels)
     (labels labels)))
 
-(defvar conn--dispatch-suspend-labels #'ignore)
-
 (defun conn--with-dispatch-labels (labels body)
   (maphash (lambda (_win mks)
              (pcase-dolist (`(,a ,b . ,_) mks)
@@ -2241,8 +2314,6 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Loop
 
-(defvar conn-dispatch-in-progress nil)
-
 (defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
 
@@ -2282,8 +2353,6 @@ depths will be sorted before greater depths.
     (setq conn--dispatch-redisplay-prompt-flag t))
   (throw 'dispatch-redisplay nil))
 
-(defvar conn--current-dispatch-buffers)
-
 (defun conn-dispatch-select-window (window)
   (prog1 (select-window window)
     (or (gethash (current-buffer) conn--current-dispatch-buffers)
@@ -2304,15 +2373,11 @@ depths will be sorted before greater depths.
       (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
     (set-marker mk (point))))
 
-(defun conn-dispatch-loop ()
+(defun conn--dispatch-loop ()
   (let ((success nil)
         (owconf (current-window-configuration))
         (oframe (selected-frame))
-        (opoint (point))
-        (conn--dispatch-label-state nil)
-        (conn--dispatch-change-groups nil)
-        (conn--read-args-error-message nil)
-        (conn--current-dispatch-buffers (make-hash-table :test 'eq)))
+        (opoint (point)))
     (setf (gethash (current-buffer) conn--current-dispatch-buffers)
           (point-marker))
     (conn--unwind-protect-all
@@ -2539,42 +2604,6 @@ the meaning of depth."
                                cmd)))
           ((char (conn-dispatch-char-argument use-input-method)))
         char))))
-
-(defmacro conn-with-dispatch-suspended (&rest body)
-  "Execute BODY with dispatch suspended."
-  (declare (indent 0))
-  `(progn
-     (unless conn-dispatch-in-progress
-       (error "Trying to suspend dispatch when state not active"))
-     (conn-target-finder-suspend conn-dispatch-target-finder)
-     (funcall conn--dispatch-suspend-labels)
-     (unwind-protect
-         (pcase-let ((`(,conn-target-window-predicate
-                        ,conn-target-predicate
-                        ,conn-target-sort-function)
-                      conn--dispatch-prev-state)
-                     (conn--dispatch-prev-state nil)
-                     (conn-dispatch-in-progress nil)
-                     (conn--dispatch-redisplay-prompt-flag nil)
-                     (conn-dispatch-label-function nil)
-                     (conn-dispatch-quit-flag nil)
-                     (conn-dispatch-action nil)
-                     (conn-dispatch-repeating nil)
-                     (conn-dispatch-action-reference nil)
-                     (conn-targets nil)
-                     (conn--dispatch-label-state nil)
-                     (conn-dispatch-target-finder nil)
-                     (conn--dispatch-change-groups nil)
-                     (conn-dispatch-iteration-count nil)
-                     (conn-dispatch-other-end nil)
-                     (conn--dispatch-read-char-handlers nil)
-                     (conn-dispatch-hide-labels nil)
-                     (conn-dispatch-input-buffer nil)
-                     (conn--dispatch-suspend-labels nil))
-           (message nil)
-           ,@body
-           (conn-dispatch-redisplay))
-       (conn--mark-targets 'conn-old-target))))
 
 (cl-defstruct (conn-dispatch-read-char-handlers
                (:include conn-composite-argument)
@@ -4843,70 +4872,53 @@ it.")
   (when (conn-action-stale-p
          (conn-previous-dispatch-action prev-dispatch))
     (error "Action stale"))
-  (pcase-let (((cl-struct conn-previous-dispatch
-                          action
-                          (other-end conn-dispatch-other-end)
-                          repeat
-                          target-finder
-                          restrict-windows)
-               prev-dispatch))
-    (conn-protected-let*
-        ((conn-dispatch-hide-labels nil)
-         (conn-wincontrol-mode nil)
-         (conn-wincontrol-one-command-mode nil)
-         (conn-dispatch-quit-flag nil)
-         (conn--dispatch-prev-state
-          (list conn-target-window-predicate
-                conn-target-predicate
-                conn-target-sort-function))
-         (conn-target-window-predicate conn-target-window-predicate)
-         (conn-target-predicate conn-target-predicate)
-         (conn-target-sort-function conn-target-sort-function)
-         (conn-dispatch-label-function conn-dispatch-label-function)
-         (conn-dispatch-target-finder nil)
-         (conn-dispatch-action-reference nil)
-         (conn-dispatch-action nil (conn-action-cancel conn-dispatch-action))
-         (conn-dispatch-repeating nil)
-         (conn-dispatch-iteration-count 0))
-      (conn--unwind-protect-all
-        (conn-with-dispatch-handlers
-          (:handler
-           (:depth -99)
-           ( :display ()
-             (when-let* ((desc (conn-action-description conn-dispatch-action)))
-               (propertize desc 'face 'conn-argument-active-face))))
-          ( :with (conn-dispatch-prefix-arg)
-            :depth -97)
-          ( :with (conn-read-char-input-method)
-            :depth -96)
-          (conn-with-dispatch-input-buffer
-            (let ((conn-dispatch-in-progress t))
-              (let ((im (or current-input-method
-                            conn--input-method)))
-                (with-current-buffer conn-dispatch-input-buffer
-                  (activate-input-method im)))
-              (conn-target-finder-setup target-finder)
-              (conn-action-setup action (xor repeat invert-repeat))
-              (when-let* ((predicate (conn-action-window-predicate action)))
-                (add-function :after-while conn-target-window-predicate predicate))
-              (when-let* ((predicate (conn-action-target-predicate action)))
-                (add-function :after-while conn-target-predicate predicate))
-              (when restrict-windows
-                (add-function :after-while conn-target-window-predicate
-                              'conn--dispatch-restrict-windows))
-              (conn-dispatch-loop)
-              (conn-action-accept conn-dispatch-action)
-              (setf (conn-previous-dispatch-repeat prev-dispatch)
-                    conn-dispatch-repeating)
-              (setf (conn-previous-dispatch-other-end prev-dispatch)
-                    conn-dispatch-other-end)
-              (setf (conn-previous-dispatch-target-finder prev-dispatch)
-                    conn-dispatch-target-finder)
-              (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
-                    (advice-function-member-p
-                     'conn--dispatch-restrict-windows
-                     conn-target-window-predicate))
-              (conn-dispatch-push-history prev-dispatch))))
+  (conn-with-dispatch-state
+    (pcase-let (((cl-struct conn-previous-dispatch
+                            action
+                            (other-end conn-dispatch-other-end)
+                            repeat
+                            target-finder
+                            restrict-windows)
+                 prev-dispatch))
+      (unwind-protect
+          (conn-with-dispatch-handlers
+            (:handler
+             (:depth -99)
+             ( :display ()
+               (when-let* ((desc (conn-action-description conn-dispatch-action)))
+                 (propertize desc 'face 'conn-argument-active-face))))
+            ( :with (conn-dispatch-prefix-arg)
+              :depth -97)
+            ( :with (conn-read-char-input-method)
+              :depth -96)
+            (conn-with-dispatch-input-buffer
+              (let ((conn-dispatch-in-progress t))
+                (let ((im (or current-input-method
+                              conn--input-method)))
+                  (with-current-buffer conn-dispatch-input-buffer
+                    (activate-input-method im)))
+                (conn-target-finder-setup target-finder)
+                (conn-action-setup action (xor repeat invert-repeat))
+                (when-let* ((predicate (conn-action-window-predicate action)))
+                  (add-function :after-while conn-target-window-predicate predicate))
+                (when-let* ((predicate (conn-action-target-predicate action)))
+                  (add-function :after-while conn-target-predicate predicate))
+                (when restrict-windows
+                  (add-function :after-while conn-target-window-predicate
+                                'conn--dispatch-restrict-windows))
+                (conn--dispatch-loop)
+                (conn-action-accept conn-dispatch-action)
+                (setf (conn-previous-dispatch-repeat prev-dispatch)
+                      conn-dispatch-repeating)
+                (setf (conn-previous-dispatch-other-end prev-dispatch)
+                      conn-dispatch-other-end)
+                (setf (conn-previous-dispatch-target-finder prev-dispatch)
+                      conn-dispatch-target-finder)
+                (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
+                      (advice-function-member-p
+                       'conn--dispatch-restrict-windows
+                       conn-target-window-predicate))
+                (conn-dispatch-push-history prev-dispatch))))
         (conn-clear-targets)))))
 
 ;;;;; Dispatch Commands
@@ -4921,41 +4933,23 @@ it.")
                                other-end)
   (when (null action)
     (setq action (conn-get-default-action thing)))
-  (conn-protected-let*
-      ((conn-wincontrol-mode nil)
-       (conn-wincontrol-one-command-mode nil)
-       (conn-dispatch-hide-labels nil)
-       (conn-dispatch-quit-flag nil)
-       (conn--dispatch-prev-state
-        (list conn-target-window-predicate
-              conn-target-predicate
-              conn-target-sort-function))
-       (conn-target-window-predicate conn-target-window-predicate)
-       (conn-target-predicate conn-target-predicate)
-       (conn-target-sort-function conn-target-sort-function)
-       (conn-dispatch-label-function conn-dispatch-label-function)
-       (conn-dispatch-other-end (pcase other-end
-                                  (:no-other-end (lambda (&rest _) 0))
-                                  ('t #'-)
-                                  ('nil #'+)))
-       (conn-dispatch-action-reference nil)
-       (conn-dispatch-action nil (conn-action-cancel conn-dispatch-action))
-       (conn-dispatch-repeating nil)
-       (conn-dispatch-iteration-count 0)
-       (conn-dispatch-target-finder nil))
-    (conn--unwind-protect-all
-      (conn-with-dispatch-handlers
-        (:handler
-         (:depth -99)
-         ( :display ()
-           (when-let* ((desc (conn-action-description conn-dispatch-action)))
-             (propertize desc 'face 'conn-argument-active-face))))
-        ( :with (conn-dispatch-prefix-arg)
-          :depth -97)
-        ( :with (conn-read-char-input-method)
-          :depth -96)
-        (conn-with-dispatch-input-buffer
-          (let ((conn-dispatch-in-progress t))
+  (conn-with-dispatch-state
+    (setq conn-dispatch-other-end (pcase other-end
+                                    (:no-other-end (lambda (&rest _) 0))
+                                    ('t #'-)
+                                    ('nil #'+)))
+    (unwind-protect
+        (conn-with-dispatch-handlers
+          (:handler
+           (:depth -99)
+           ( :display ()
+             (when-let* ((desc (conn-action-description conn-dispatch-action)))
+               (propertize desc 'face 'conn-argument-active-face))))
+          ( :with (conn-dispatch-prefix-arg)
+            :depth -97)
+          ( :with (conn-read-char-input-method)
+            :depth -96)
+          (conn-with-dispatch-input-buffer
             (conn-action-setup (or action (conn-get-default-action thing))
                                repeat)
             (conn-target-finder-setup
@@ -4971,12 +4965,12 @@ it.")
             (when restrict-windows
               (add-function :after-while conn-target-window-predicate
                             'conn--dispatch-restrict-windows))
-            (conn-dispatch-loop)
+            (conn--dispatch-loop)
             (conn-action-accept conn-dispatch-action)
             (unless (conn-action-no-history action)
               (let ((prev (conn-make-dispatch action)))
                 (conn-dispatch-push-history prev)
-                (conn-push-command-history 'conn-dispatch-setup-previous prev))))))
+                (conn-push-command-history 'conn-dispatch-setup-previous prev)))))
       (conn-clear-targets))))
 
 (defvar-keymap conn-restrict-windows-argument-map

@@ -539,7 +539,7 @@
   "w" 'copy
   "/" 'buffer-filename
   "P" 'project-filename
-  ">" 'kill-matching-lines
+  "*" 'kill-matching-lines
   "%" 'keep-lines
   "j" 'move-end-of-line)
 
@@ -637,7 +637,7 @@
   :keymap conn-copy-thing-argument-map
   "/" 'buffer-filename
   "p" 'project-filename
-  ">" 'copy-matching-lines)
+  "*" 'copy-matching-lines)
 
 (define-keymap
   :keymap conn-sort-reverse-argument-map
@@ -799,6 +799,7 @@
   "a" 'conn-dispatch-bounds-anchored
   "B" 'conn-dispatch-bounds-between
   "<" 'conn-bounds-trim
+  ">" 'conn-bounds-untrim
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-butlast
@@ -835,6 +836,7 @@
 (define-keymap
   :keymap conn-transform-map
   "<" 'conn-bounds-trim
+  ">" 'conn-bounds-untrim
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point

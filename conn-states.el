@@ -1158,10 +1158,9 @@ can only be changed by redefining a state and are not inherited.
     `(progn
        (dolist (parent ',parents)
          (cl-check-type (conn--find-state parent) conn-state))
-       (cl-assert
-        (cl-loop for parent in ',parents
-                 never (memq ',name (conn-state-all-parents parent)))
-        nil "Cycle detected in %s inheritance hierarchy" ',name)
+       (unless (cl-loop for parent in ',parents
+                        never (memq ',name (conn-state-all-parents parent)))
+         (error "Cycle detected in %s inheritance hierarchy" ',name))
        (conn--define-state
         ',name
         (list ,@(mapcar (lambda (p) `',(or (car-safe p) p)) parents))

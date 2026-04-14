@@ -1009,6 +1009,27 @@ the point is within the region then the entire region is returned.")))
        'conn-bounds-trim
        bounds (cons tb te)))))
 
+(cl-defgeneric conn-bounds-untrim (bounds)
+  (declare (conn-bounds-transformation
+            "untrim"
+            "Expand bounds to include `conn-bounds-trim-chars'."
+            :no-reformat t)))
+
+(cl-defmethod conn-bounds-untrim (bounds)
+  (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
+               (tb (save-excursion
+                     (goto-char beg)
+                     (skip-chars-backward conn-bounds-trim-chars)
+                     (point)))
+               (te (save-excursion
+                     (goto-char end)
+                     (skip-chars-forward conn-bounds-trim-chars)
+                     (point))))
+    (unless (> tb te)
+      (conn-make-transformed-bounds
+       'conn-bounds-trim
+       bounds (cons tb te)))))
+
 ;;;;;; Bounds Before/After
 
 (cl-defgeneric conn-bounds-after-point (bounds &optional exclusive)

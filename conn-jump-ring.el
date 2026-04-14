@@ -130,7 +130,8 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
     (run-hook-wrapped 'conn-push-jump-functions
                       (lambda (fn location back)
                         (ignore-errors
-                          (ignore (funcall fn location back)))))
+                          (ignore (funcall fn location back))))
+                      location back)
     (when msg (message "Jump ring pushed"))))
 
 (setf (alist-get 'conn-jump defun-declarations-alist)

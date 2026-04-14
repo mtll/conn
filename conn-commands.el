@@ -53,39 +53,30 @@
 
 ;;;; Commands
 
-(defvar conn-highlight-region-history nil)
-
 (defun conn-toggle-highlight-at-point (&optional read)
   (interactive "P")
   (let ((hi-lock-auto-select-face t)
         (regexps nil))
     (cond ((use-region-p)
-           (hi-lock-face-buffer
-            (hi-lock-regexp-okay
-             (if read
-                 (read-regexp "Regexp"
-                              (regexp-quote
-                               (buffer-substring-no-properties
-                                (region-beginning)
-                                (region-end)))
-                              'conn-highlight-region-history)
-               (regexp-quote
-                (buffer-substring-no-properties
-                 (region-beginning)
-                 (region-end)))))
-            (hi-lock-read-face-name))
+           (let ((re (hi-lock-regexp-okay
+                      (regexp-quote
+                       (buffer-substring-no-properties
+                        (region-beginning)
+                        (region-end))))))
+             (hi-lock-face-buffer
+              (if (not read) re
+                (read-regexp "Regexp" re 'regexp-history))
+              (hi-lock-read-face-name)))
            (deactivate-mark))
           ((setq regexps (and (fboundp 'hi-lock--regexps-at-point)
                               (hi-lock--regexps-at-point)))
            (mapc #'hi-lock-unface-buffer regexps))
           (t
            (hi-lock-face-buffer
-            (hi-lock-regexp-okay
-             (if read
-                 (read-regexp "Regexp"
-                              (find-tag-default-as-symbol-regexp)
-                              'conn-highlight-region-history)
-               (find-tag-default-as-symbol-regexp)))
+            (if (not read) (find-tag-default-as-symbol-regexp)
+              (read-regexp "Regexp"
+                           (find-tag-default-as-symbol-regexp)
+                           'regexp-history))
             (hi-lock-read-face-name))))))
 
 (defun conn-bind-last-kmacro-to-key ()
