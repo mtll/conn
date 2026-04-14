@@ -1569,13 +1569,12 @@ command was a prefix command.")
     (activate-mark))
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
   (conn-state-unwind clone
-    (unless clone
-      (when (and (use-region-p)
-                 (not conn-state-unwind-clone))
-        (conn-push-mark-state-ring
-         (list (point-marker)
-               (copy-marker (mark-marker))
-               conn--mark-state-rmm))))
+    (when (and (not clone)
+               (use-region-p))
+      (conn-push-mark-state-ring
+       (list (point-marker)
+             (copy-marker (mark-marker))
+             conn--mark-state-rmm)))
     (deactivate-mark)))
 
 ;;;;; Buffer State Setup
