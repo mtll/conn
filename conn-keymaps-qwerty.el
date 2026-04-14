@@ -803,7 +803,7 @@
   "<" 'conn-bounds-untrim-left
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
-  "g" 'conn-bounds-butlast
+  "g" 'conn-bounds-upto-next
   "G" 'conn-bounds-last)
 
 (define-keymap
@@ -844,7 +844,7 @@
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
   "G" 'conn-bounds-last
-  "g" 'conn-bounds-butlast
+  "g" 'conn-bounds-upto-next
   "C-t" 'conn-transform-reset)
 
 ;;;; Wincontrol

@@ -431,7 +431,6 @@
 
 (defalias 'conn-other-window 'other-window)
 
-;;;###autoload
 (defun conn-goto-window ()
   "Prompt for a window and then select it."
   (interactive)
@@ -443,7 +442,6 @@
         (select-window window)
       (user-error "No other windows available to select"))))
 
-;;;###autoload
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
@@ -471,7 +469,6 @@
                  (propertize (key-description key)
                              'face 'read-multiple-choice-face)))))))
 
-;;;###autoload
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
   "`quit-window' in `other-window-for-scrolling'."
   (interactive)
@@ -528,7 +525,6 @@ remove whatever the function has added to the mode-line.")
 
 ;;;;; Window Scroll Commands
 
-;;;###autoload
 (defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -541,7 +537,6 @@ remove whatever the function has added to the mode-line.")
                    (command-remapping #'conn-scroll-down)
                    #'conn-scroll-down)))))
 
-;;;###autoload
 (defun conn-wincontrol-other-window-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
@@ -554,7 +549,6 @@ remove whatever the function has added to the mode-line.")
                    (command-remapping #'conn-scroll-up)
                    #'conn-scroll-up)))))
 
-;;;###autoload
 (defun conn-wincontrol-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
   (declare (conn-jump #'conn-ignore-repeat-jump-handler))
@@ -565,7 +559,6 @@ remove whatever the function has added to the mode-line.")
              next-screen-context-lines)))
     (conn-scroll-down)))
 
-;;;###autoload
 (defun conn-wincontrol-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (declare (conn-jump #'conn-ignore-repeat-jump-handler))
@@ -652,13 +645,11 @@ Operates with the selected windows parent window."
              collect sub into to-delete
              finally (mapc #'delete-window to-delete))))
 
-;;;###autoload
 (defvar-keymap conn-kill-buffer-repeat-map)
 
-;;;###autoload
 (defun conn-kill-this-buffer ()
   (interactive)
   (kill-buffer)
   (set-transient-map conn-kill-buffer-repeat-map t nil t))
 
-(provide 'conn-wincontrol-mode)
+(provide 'conn-wincontrol)

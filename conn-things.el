@@ -947,25 +947,31 @@ Returns a `conn-bounds' struct."
 
 ;;;;;; Butlast Bounds
 
-(cl-defgeneric conn-bounds-butlast (bounds)
+(cl-defgeneric conn-bounds-upto-next (bounds)
   (declare (conn-bounds-transformation
-            "butlast"
-            "Bounds from point up to the nearest bound of the final subregion.  If
-the point is within the region then the entire region is returned.")))
+            "upto"
+            "Bounds upto the start of the next thing after end.")))
 
-(cl-defmethod conn-bounds-butlast (bounds)
-  (pcase (car (last (conn-bounds-get bounds :subregions)))
-    ((and (conn-bounds `(,lbeg . ,lend))
-          (let (conn-bounds `(,beg . ,end))
-            bounds))
+(cl-defmethod conn-bounds-upto-next (bounds)
+  (pcase bounds
+    ((conn-bounds `(,beg . ,end))
      (conn-make-transformed-bounds
-      'conn-bounds-butlast
+      'conn-bounds-upto-next
       bounds
-      (if (= beg lbeg)
-          (cons lend end)
-        (cons beg lbeg))
-      :subregions (butlast (conn-bounds-get bounds :subregions))))
-    (_ bounds)))
+      (if-let* ((dir (conn-bounds-get bounds :direction))
+                (fop (conn-thing-get bounds 'forward-op)))
+          (condition-case _
+              (pcase dir
+                (1 (goto-char end)
+                   (funcall fop dir)
+                   (funcall fop (- dir))
+                   (cons beg (max (point) end)))
+                (-1 (goto-char beg)
+                    (funcall fop dir)
+                    (funcall fop (- dir))
+                    (cons (min (point) beg) end)))
+            (error (cons beg end)))
+        (cons beg end))))))
 
 ;;;;;; Last Bounds
 
@@ -1785,7 +1791,7 @@ check bounds in the current buffer.
      ("trim" conn-bounds-trim)
      ("last/butlast"
       conn-bounds-last
-      conn-bounds-butlast)
+      conn-bounds-upto-next)
      ("before point/exclusive"
       conn-bounds-before-point
       conn-bounds-before-point-exclusive)
@@ -2077,6 +2083,10 @@ Only the background color is used."
     (_ (error "Invalid pattern-and-keys"))))
 
 ;;;; Thing Definitions
+
+(conn-register-thing
+ 'word
+ :forward-op 'forward-word)
 
 (conn-register-thing
  'inner-string

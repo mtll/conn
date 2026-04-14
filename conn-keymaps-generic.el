@@ -767,7 +767,7 @@
   "e" 'conn-bounds-before-point
   "E" 'conn-bounds-before-point-exclusive
   "t" 'conn-bounds-last
-  "T" 'conn-bounds-butlast
+  "T" 'conn-bounds-upto-next
   "C-t" 'conn-transform-reset)
 
 ;;;; Wincontrol

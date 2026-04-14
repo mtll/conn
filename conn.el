@@ -30,6 +30,7 @@
 ;;;; Requires
 
 (require 'conn-utils)
+(require 'conn-wincontrol)
 (require 'conn-things)
 (require 'conn-states)
 (require 'conn-kapply)
