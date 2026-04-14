@@ -183,6 +183,17 @@ strings have `conn-dispatch-label-face'."
 
 ;;;;; Label Reading
 
+(eval-and-compile
+  (defun conn--dispatch-expand-handler-update (handler update-body)
+    (macroexp-unprogn
+     (macroexpand-all
+      (macroexp-progn update-body)
+      `((:return
+         . ,(lambda (&optional value)
+              `(throw (cdr (alist-get ,handler
+                                      conn--dispatch-read-char-handlers))
+                      ,value))))))))
+
 (defmacro conn-define-dispatch-handler-command (argument-and-command
                                                 docstring
                                                 &rest
@@ -193,14 +204,7 @@ strings have `conn-dispatch-label-face'."
      (pcase (alist-get :update body)
        (`(,_args . ,update-body)
         (setf (cdr (alist-get :update body))
-              (macroexp-unprogn
-               (macroexpand-all
-                (macroexp-progn update-body)
-                `((:return
-                   . ,(lambda (&optional value)
-                        `(throw (cdr (alist-get ,handler
-                                                conn--dispatch-read-char-handlers))
-                                ,value))))))))))
+              (conn--dispatch-expand-handler-update handler update-body)))))
     (_ (error "Invalid argument form")))
   `(conn-define-argument-command ,argument-and-command
      ,docstring
