@@ -492,14 +492,15 @@
             (assq-delete-all
              'conn-wincontrol-label-mode-line-local-mode
              mode-line-format))
-    (when-let* ((_ (not (assq 'conn-wincontrol-label-mode-line-local-mode
-                              mode-line-format)))
-                (cons (memq 'mode-line-front-space mode-line-format)))
-      (setf (cdr cons)
-            `((conn-wincontrol-label-mode-line-local-mode
-               ((:eval (conn-window-label-mode-line))
-                " "))
-              ,@(cdr cons))))))
+    (when (consp mode-line-format)
+      (when-let* ((_ (not (assq 'conn-wincontrol-label-mode-line-local-mode
+                                mode-line-format)))
+                  (cons (memq 'mode-line-front-space mode-line-format)))
+        (setf (cdr cons)
+              `((conn-wincontrol-label-mode-line-local-mode
+                 ((:eval (conn-window-label-mode-line))
+                  " "))
+                ,@(cdr cons)))))))
 
 (defvar conn-wincontrol-label-mode-line-set-function
   #'conn--setup-mode-line-label

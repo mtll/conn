@@ -804,7 +804,8 @@
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
-  "G" 'conn-bounds-last)
+  "G" 'conn-bounds-upto-next
+  "SPC" 'conn-bounds-last)
 
 (define-keymap
   :keymap conn-dispatch-replace-argument-map
@@ -843,8 +844,9 @@
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
-  "G" 'conn-bounds-last
+  "SPC" 'conn-bounds-last
   "g" 'conn-bounds-upto-next
+  "G" 'conn-bounds-upto-previous
   "C-t" 'conn-transform-reset)
 
 ;;;; Wincontrol

@@ -945,12 +945,12 @@ Returns a `conn-bounds' struct."
   (setf (alist-get 'conn-bounds-transformation defun-declarations-alist)
         (list #'conn--set-bounds-transform-property)))
 
-;;;;;; Butlast Bounds
+;;;;;; Bounds Upto
 
 (cl-defgeneric conn-bounds-upto-next (bounds)
   (declare (conn-bounds-transformation
             "upto"
-            "Bounds upto the start of the next thing after end.")))
+            "Bounds upto the start of the next thing.")))
 
 (cl-defmethod conn-bounds-upto-next (bounds)
   (pcase bounds
@@ -970,6 +970,32 @@ Returns a `conn-bounds' struct."
                     (funcall fop dir)
                     (funcall fop (- dir))
                     (cons (min (point) beg) end)))
+            (error (cons beg end)))
+        (cons beg end))))))
+
+(cl-defgeneric conn-bounds-upto-previous (bounds)
+  (declare (conn-bounds-transformation
+            "upto-prev"
+            "Bounds upto the start of the previous thing.")))
+
+(cl-defmethod conn-bounds-upto-previous (bounds)
+  (pcase bounds
+    ((conn-bounds `(,beg . ,end))
+     (conn-make-transformed-bounds
+      'conn-bounds-upto-next
+      bounds
+      (if-let* ((dir (conn-bounds-get bounds :direction))
+                (fop (conn-thing-get bounds 'forward-op)))
+          (condition-case _
+              (pcase dir
+                (1 (goto-char beg)
+                   (funcall fop (- dir))
+                   (funcall fop dir)
+                   (cons (min (point) beg) end))
+                (-1 (goto-char end)
+                    (funcall fop (- dir))
+                    (funcall fop dir)
+                    (cons beg (max (point) end))))
             (error (cons beg end)))
         (cons beg end))))))
 
