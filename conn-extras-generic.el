@@ -25,8 +25,8 @@
   "h" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state
-  "w" 'conn-wincontrol-one-command-mode
-  ";" 'conn-wincontrol-mode
+  "w" 'conn-wincontrol-one-command
+  ";" 'conn-wincontrol
   "`" 'conn-wincontrol-mru-window)
 
 ;;; Load Extensions

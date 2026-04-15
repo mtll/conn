@@ -313,7 +313,7 @@
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-thing
   "/" (conn-remap-key conn-undo-keys t)
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "'" 'conn-kapply-on-things
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
@@ -321,7 +321,7 @@
   "A" 'execute-extended-command-for-buffer
   "r" 'conn-change-thing
   "d" 'conn-dispatch
-  "w" 'conn-wincontrol-one-command-mode
+  "w" 'conn-wincontrol-one-command
   "." 'conn-register-load
   "<" 'point-to-register
   "t" 'conn-transpose-things

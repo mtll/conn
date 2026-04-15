@@ -78,22 +78,30 @@
   "Global minor mode for wincontrol."
   :global t
   :lighter " WinC"
-  :group 'conn-wincontrol-mode
+  :group 'conn-wincontrol
+  :interactive nil
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
+
+(defun conn-wincontrol ()
+  (interactive)
+  (conn-wincontrol-mode 1))
 
 ;;;###autoload
 (define-minor-mode conn-wincontrol-one-command-mode
   "Global minor mode for wincontrol one command."
   :global t
-  :group 'conn-wincontrol-mode
-  (if conn-wincontrol-one-command-mode
-      (progn
-        (conn-wincontrol-mode 1)
-        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-        (setq conn--wincontrol-message-newline nil))
-    (conn-wincontrol-mode -1)))
+  :group 'conn-wincontrol
+  :interactive nil
+  (when conn-wincontrol-one-command-mode
+    (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (conn-wincontrol-mode 1)
+    (setq conn--wincontrol-message-newline nil)))
+
+(defun conn-wincontrol-one-command ()
+  (interactive)
+  (conn-wincontrol-one-command-mode 1))
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
@@ -202,6 +210,7 @@
 
 (defun conn--wincontrol-exit ()
   (setq conn--wincontrol-message-newline t)
+  (conn-wincontrol-one-command-mode -1)
   (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
@@ -223,10 +232,10 @@
   (memq this-command conn-wincontrol-one-command-stay-command))
 
 (defun conn--wincontrol-one-command-hook ()
-  (when (and conn-wincontrol-mode
+  (when (and conn-wincontrol-one-command-mode
              (not (conn-wincontrol-one-command-stay-p)))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (conn-wincontrol-one-command-mode -1)))
+    (conn-wincontrol-mode -1)))
 
 ;;;;; Wincontrol Quick Ref
 
