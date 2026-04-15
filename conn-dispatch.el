@@ -3367,18 +3367,18 @@ to the key binding for that target."
       ( :with (conn-dispatch-select-command-handler)
         :depth -95)
       (:handler
-       (:depth 100)
+       (:depth -100)
+       ( :predicate (obj)
+         (conn-dispatch-label-p obj))
        ( :update (obj _break)
          (if (conn-dispatch-label-p obj)
              (:return (conn-label-payload obj))
-           (conn-read-args-error "Invalid key")))
+           (conn-read-args-error "Invalid key %s" obj)))
        ( :keymap
          (let ((map (make-sparse-keymap)))
            (cl-loop for label in labels
                     for key = (conn-dispatch-label-string label)
                     do (keymap-set map key label))
-           (while-no-input
-             (conn-redisplay-labels labels))
            map)))
       (ignore (conn-dispatch-read-char "Register"))
       (while t

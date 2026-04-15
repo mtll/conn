@@ -481,7 +481,7 @@
             '(point)
             :pretty-print ( :method (_) "global-mark-ring")
             :target-finder (:method (_self &rest _) (conn-dispatch-global-mark)))
-  "<" (conn-anonymous-thing
+  "P" (conn-anonymous-thing
         '(point)
         :pretty-print ( :method (_) "position-registers")
         :target-finder (:method (_self &rest _) (conn-dispatch-mark-register))))
