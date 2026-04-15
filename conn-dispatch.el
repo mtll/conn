@@ -181,193 +181,6 @@ strings have `conn-dispatch-label-face'."
          (cl-return (cl-loop for bucket across buckets
                              nconc bucket)))))))
 
-;;;;; Label Reading
-
-(eval-and-compile
-  (defun conn--dispatch-expand-handler-update (handler update-body)
-    (macroexp-unprogn
-     (macroexpand-all
-      (macroexp-progn update-body)
-      `((:return
-         . ,(lambda (&optional value)
-              `(throw (cdr (alist-get ,handler
-                                      conn--dispatch-read-char-handlers))
-                      ,value))))))))
-
-(defmacro conn-define-dispatch-handler-command (argument-and-command
-                                                docstring
-                                                &rest
-                                                body)
-  (declare (indent 1))
-  (pcase argument-and-command
-    (`((,handler ,_spec) ,_cmd)
-     (pcase (alist-get :update body)
-       (`(,_args . ,update-body)
-        (setf (cdr (alist-get :update body))
-              (conn--dispatch-expand-handler-update handler update-body)))))
-    (_ (error "Invalid argument form")))
-  `(conn-define-argument-command ,argument-and-command
-     ,docstring
-     ,@body))
-
-;;;;;; Event Handlers
-
-(defvar conn-dispatch-char-argument-map
-  (let ((map (make-keymap)))
-    (set-char-table-range (nth 1 map)
-                          (cons #x100 (max-char))
-                          'dispatch-character-event)
-    (cl-loop for i from ?\s below 256
-             do (define-key map (vector i) 'dispatch-character-event))
-    (define-keymap
-      :keymap map
-      "DEL" 'restart
-      "<backspace>" 'restart
-      "<escape>" 'finish
-      "C-q" 'quoted-insert)))
-
-(cl-defstruct (conn-dispatch-char-argument
-               (:include conn-argument)
-               ( :constructor conn-dispatch-char-argument
-                 (input-method
-                  &aux
-                  (required t)
-                  (keymap conn-dispatch-char-argument-map))))
-  (input-method nil :read-only t))
-
-(conn-define-argument-command ((arg conn-dispatch-char-argument)
-                               (cmd (eql dispatch-character-event)))
-  "Narrow labels by character."
-  (:predicate)
-  ( :update (break)
-    (setq conn--read-args-error-message nil
-          conn--dispatch-redisplay-prompt-flag nil)
-    (conn-add-unread-events (this-single-command-raw-keys))
-    (pcase (conn--dispatch-read-char-1
-            (conn-dispatch-char-argument-input-method arg))
-      ((pred (eql (car (last (current-input-mode)))))
-       (signal 'quit nil))
-      (ev (setf (conn-argument-value arg) ev
-                (conn-argument-set-flag arg) t)))
-    (funcall break)))
-
-(conn-define-argument-command ((arg conn-dispatch-char-argument)
-                               (cmd (eql quoted-insert)))
-  "Narrow labels by character read with quoted-insert."
-  ( :update (break)
-    (let ((char (read-quoted-char
-                 (propertize "Quoted Char: "
-                             'face 'minibuffer-prompt))))
-      (unless (eq char (car (last (current-input-mode))))
-        (setf (conn-argument-value arg) char
-              (conn-argument-set-flag arg) t)))
-    (funcall break)))
-
-(conn-define-argument-command ((arg conn-dispatch-char-argument)
-                               (cmd (eql restart)))
-  "Narrow labels by character."
-  ( :update (break)
-    (setf (conn-argument-value arg) 8
-          (conn-argument-set-flag arg) t)
-    (funcall break)))
-
-(cl-defstruct (conn-dispatch-read-char-handler
-               (:include conn-argument)
-               ( :constructor conn-dispatch-read-char-handler
-                 (update
-                  predicate
-                  &key
-                  keymap
-                  annotation
-                  documentation
-                  display
-                  reference)))
-  (update #'ignore :type function :read-only t)
-  (predicate #'ignore :type function :read-only t)
-  (documentation #'ignore :type function :read-only t)
-  (display #'ignore :type function :read-only t))
-
-(cl-defmethod conn-argument-update ((handler conn-dispatch-read-char-handler)
-                                    cmd
-                                    break)
-  (when (funcall (conn-dispatch-read-char-handler-predicate handler) cmd)
-    (funcall (conn-dispatch-read-char-handler-update handler)
-             handler cmd break)))
-
-(cl-defmethod conn-argument-display ((arg conn-dispatch-read-char-handler))
-  (funcall (conn-dispatch-read-char-handler-display arg)))
-
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-read-char-handler))
-  (conn-dispatch-read-char-handler-keymap arg))
-
-(cl-defmethod conn-argument-predicate ((arg conn-dispatch-read-char-handler)
-                                       cmd)
-  (funcall (conn-dispatch-read-char-handler-predicate arg) cmd))
-
-(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-read-char-handler)
-                                                   value)
-  (when-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
-              (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
-    (funcall ann value)))
-
-(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-read-char-handler))
-  (conn-dispatch-read-char-handler-reference arg))
-
-(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
-                                                   cmd)
-  (when (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
-    (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
-
-(defvar conn--dispatch-read-char-handlers nil)
-
-(eval-and-compile
-  (defun conn--expand-dispatch-handler (tag body)
-    (cl-with-gensyms (self)
-      `(push (cons (conn-dispatch-read-char-handler
-                    ,(pcase (alist-get :update body)
-                       (`(,args . ,update-body)
-                        (macroexpand-all
-                         `(lambda ,(cons self args)
-                            (ignore ,self)
-                            ,@update-body)
-                         `((:return
-                            . ,(lambda (&optional value)
-                                 `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
-                                         ,value)))))))
-                    ,(if-let* ((v (alist-get :predicate body)))
-                         `(lambda ,@v)
-                       '#'ignore)
-                    :reference ,(car (alist-get :reference body))
-                    :display ,(if-let* ((v (alist-get :display body)))
-                                  `(lambda ,@v)
-                                '#'ignore)
-                    :annotation ,(if-let* ((v (alist-get :annotation body)))
-                                     `(lambda ,@v)
-                                   '#'ignore)
-                    :documentation ,(if-let* ((v (alist-get :documentation body)))
-                                        `(lambda ,@v)
-                                      '#'ignore)
-                    :keymap ,(car (alist-get :keymap body)))
-                   (cons ,(or (car (alist-get :depth body)) 0) ',tag))
-             conn--dispatch-read-char-handlers))))
-
-(defmacro conn-with-dispatch-handlers (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (tag)
-    (macroexpand-all
-     `(let ((conn--dispatch-read-char-handlers
-             conn--dispatch-read-char-handlers))
-        (catch ',tag ,@body))
-     `((:handler . ,(lambda (&rest body)
-                      (conn--expand-dispatch-handler tag body)))
-       (:with . ,(cl-function
-                  (lambda (exp &key depth)
-                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
-                           conn--dispatch-read-char-handlers))))))))
-
-;;;;;; Labels
-
-
 (defvar conn-dispatch-hide-labels nil)
 
 (defvar conn-dispatch-input-buffer nil
@@ -636,6 +449,188 @@ themselves once the selection process has concluded."
                (when (not (posn-area posn))
                  (:return win))))))
         (conn-label-select labels nil always-prompt)))))
+
+;;;;; Label Event Handlers
+
+(eval-and-compile
+  (defun conn--dispatch-expand-handler-update (handler update-body)
+    (macroexp-unprogn
+     (macroexpand-all
+      (macroexp-progn update-body)
+      `((:return
+         . ,(lambda (&optional value)
+              `(throw (cdr (alist-get ,handler
+                                      conn--dispatch-read-char-handlers))
+                      ,value))))))))
+
+(defmacro conn-define-dispatch-handler-command (argument-and-command
+                                                docstring
+                                                &rest
+                                                body)
+  (declare (indent 1))
+  (pcase argument-and-command
+    (`((,handler ,_spec) ,_cmd)
+     (pcase (alist-get :update body)
+       (`(,_args . ,update-body)
+        (setf (cdr (alist-get :update body))
+              (conn--dispatch-expand-handler-update handler update-body)))))
+    (_ (error "Invalid argument form")))
+  `(conn-define-argument-command ,argument-and-command
+     ,docstring
+     ,@body))
+
+(defvar conn-dispatch-char-argument-map
+  (let ((map (make-keymap)))
+    (set-char-table-range (nth 1 map)
+                          (cons #x100 (max-char))
+                          'dispatch-character-event)
+    (cl-loop for i from ?\s below 256
+             do (define-key map (vector i) 'dispatch-character-event))
+    (define-keymap
+      :keymap map
+      "DEL" 'restart
+      "<backspace>" 'restart
+      "<escape>" 'finish
+      "C-q" 'quoted-insert)))
+
+(cl-defstruct (conn-dispatch-char-argument
+               (:include conn-argument)
+               ( :constructor conn-dispatch-char-argument
+                 (input-method
+                  &aux
+                  (required t)
+                  (keymap conn-dispatch-char-argument-map))))
+  (input-method nil :read-only t))
+
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
+                               (cmd (eql dispatch-character-event)))
+  "Narrow labels by character."
+  (:predicate)
+  ( :update (break)
+    (setq conn--read-args-error-message nil
+          conn--dispatch-redisplay-prompt-flag nil)
+    (conn-add-unread-events (this-single-command-raw-keys))
+    (pcase (conn--dispatch-read-char-1
+            (conn-dispatch-char-argument-input-method arg))
+      ((pred (eql (car (last (current-input-mode)))))
+       (signal 'quit nil))
+      (ev (setf (conn-argument-value arg) ev
+                (conn-argument-set-flag arg) t)))
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
+                               (cmd (eql quoted-insert)))
+  "Narrow labels by character read with quoted-insert."
+  ( :update (break)
+    (let ((char (read-quoted-char
+                 (propertize "Quoted Char: "
+                             'face 'minibuffer-prompt))))
+      (unless (eq char (car (last (current-input-mode))))
+        (setf (conn-argument-value arg) char
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
+
+(conn-define-argument-command ((arg conn-dispatch-char-argument)
+                               (cmd (eql restart)))
+  "Narrow labels by character."
+  ( :update (break)
+    (setf (conn-argument-value arg) 8
+          (conn-argument-set-flag arg) t)
+    (funcall break)))
+
+(cl-defstruct (conn-dispatch-read-char-handler
+               (:include conn-argument)
+               ( :constructor conn-dispatch-read-char-handler
+                 (update
+                  predicate
+                  &key
+                  keymap
+                  annotation
+                  documentation
+                  display
+                  reference)))
+  (update #'ignore :type function :read-only t)
+  (predicate #'ignore :type function :read-only t)
+  (documentation #'ignore :type function :read-only t)
+  (display #'ignore :type function :read-only t))
+
+(cl-defmethod conn-argument-update ((handler conn-dispatch-read-char-handler)
+                                    cmd
+                                    break)
+  (when (funcall (conn-dispatch-read-char-handler-predicate handler) cmd)
+    (funcall (conn-dispatch-read-char-handler-update handler)
+             handler cmd break)))
+
+(cl-defmethod conn-argument-display ((arg conn-dispatch-read-char-handler))
+  (funcall (conn-dispatch-read-char-handler-display arg)))
+
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-read-char-handler))
+  (conn-dispatch-read-char-handler-keymap arg))
+
+(cl-defmethod conn-argument-predicate ((arg conn-dispatch-read-char-handler)
+                                       cmd)
+  (funcall (conn-dispatch-read-char-handler-predicate arg) cmd))
+
+(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-read-char-handler)
+                                                   value)
+  (when-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
+              (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
+    (funcall ann value)))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-read-char-handler))
+  (conn-dispatch-read-char-handler-reference arg))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
+                                                   cmd)
+  (when (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
+    (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
+
+(defvar conn--dispatch-read-char-handlers nil)
+
+(eval-and-compile
+  (defun conn--expand-dispatch-handler (tag body)
+    (cl-with-gensyms (self)
+      `(push (cons (conn-dispatch-read-char-handler
+                    ,(pcase (alist-get :update body)
+                       (`(,args . ,update-body)
+                        (macroexpand-all
+                         `(lambda ,(cons self args)
+                            (ignore ,self)
+                            ,@update-body)
+                         `((:return
+                            . ,(lambda (&optional value)
+                                 `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
+                                         ,value)))))))
+                    ,(if-let* ((v (alist-get :predicate body)))
+                         `(lambda ,@v)
+                       '#'ignore)
+                    :reference ,(car (alist-get :reference body))
+                    :display ,(if-let* ((v (alist-get :display body)))
+                                  `(lambda ,@v)
+                                '#'ignore)
+                    :annotation ,(if-let* ((v (alist-get :annotation body)))
+                                     `(lambda ,@v)
+                                   '#'ignore)
+                    :documentation ,(if-let* ((v (alist-get :documentation body)))
+                                        `(lambda ,@v)
+                                      '#'ignore)
+                    :keymap ,(car (alist-get :keymap body)))
+                   (cons ,(or (car (alist-get :depth body)) 0) ',tag))
+             conn--dispatch-read-char-handlers))))
+
+(defmacro conn-with-dispatch-handlers (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (tag)
+    (macroexpand-all
+     `(let ((conn--dispatch-read-char-handlers
+             conn--dispatch-read-char-handlers))
+        (catch ',tag ,@body))
+     `((:handler . ,(lambda (&rest body)
+                      (conn--expand-dispatch-handler tag body)))
+       (:with . ,(cl-function
+                  (lambda (exp &key depth)
+                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
+                           conn--dispatch-read-char-handlers))))))))
 
 ;;;; Dispatch State
 
