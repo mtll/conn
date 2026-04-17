@@ -328,14 +328,7 @@ Called when the inheritance hierarchy for STATE changes."
 ;;;;;; State Maps
 
 (defun conn--compose-state-map ()
-  "Return composed state map for STATE.
-
-The composed keymap is of the form:
-
-(keymap
- (keymap . bindings)  ;; state map for STATE
- (keymap . bindings)  ;; state map for STATE parent
- ...)"
+  "Return composed state map for STATE."
   (declare (important-return-value t))
   (with-memoization (gethash conn-current-state conn--composed-state-maps)
     (cl-assert (not (conn-state-get conn-current-state :no-keymap))
@@ -362,7 +355,8 @@ The composed keymap is of the form:
   "Return the state keymap for STATE.
 
 If dont-create is non-nil then return nil if STATE does not have a
-keymap."
+keymap.  Otherwise a keymap will be created if one does not already
+exist."
   (declare (important-return-value t))
   (if (conn-state-get state :no-keymap)
       (unless dont-create

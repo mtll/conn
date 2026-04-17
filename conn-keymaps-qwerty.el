@@ -90,7 +90,7 @@
   "w" 'conn-kapply-on-word
   "W" 'conn-kapply-on-symbol
   "," 'conn-dispatch-on-buttons
-  "r" 'conn-register-prefix
+  "t" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
   "b" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
@@ -98,7 +98,7 @@
   "+" 'indent-relative-first-indent-point
   "c" 'conn-comment-thing
   "_" 'indent-relative
-  "L" 'clone-indirect-buffer
+  "i" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
   "q" 'conn-indent-thing
   "l" 'conn-indent-thing-rigidly
@@ -116,7 +116,7 @@
   "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
   "d" 'conn-emacs-state-open-line
-  "n" 'conn-narrow-to-thing
+  "r" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
   "Y" 'yank-rectangle
   "s" 'conn-sort-things
@@ -915,13 +915,13 @@
   "L" 'unbury-buffer
   "l" 'next-buffer
   "j" 'previous-buffer
-  "O" 'tab-bar-duplicate-tab
-  "E" 'tab-new
+  "D" 'tab-bar-duplicate-tab
+  "O" 'tab-new
   "o" 'tab-next
   "U" 'tab-close
   "u" 'tab-previous
   "G" 'tab-bar-move-window-to-tab
-  "D" 'tab-bar-detach-tab
+  "E" 'tab-bar-detach-tab
   "B" 'tab-bar-switch-to-tab)
 
 (define-keymap
@@ -966,8 +966,8 @@
   "TAB" 'conn-other-place-prefix
   "G" 'tab-bar-move-window-to-tab
   "B" 'tab-bar-switch-to-tab
-  "O" 'tab-bar-duplicate-tab
-  "D" 'tab-bar-detach-tab
+  "D" 'tab-bar-duplicate-tab
+  "E" 'tab-bar-detach-tab
   "F" 'toggle-frame-fullscreen
   "H" 'conn-kill-this-buffer
   "k" 'windmove-down
@@ -980,7 +980,7 @@
   "I" 'windmove-swap-states-up
   "N" 'conn-wincontrol-other-window-scroll-down
   "M" 'conn-wincontrol-other-window-scroll-up
-  "E" 'tab-new
+  "O" 'tab-new
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "U" 'tab-close

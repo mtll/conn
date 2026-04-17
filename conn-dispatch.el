@@ -2764,9 +2764,8 @@ buffer."
       (propertize
        "other end"
        'face 'conn-argument-active-face)))
-   (when (advice-function-member-p
-          'conn--dispatch-restrict-windows
-          conn-target-window-predicate)
+   (when (advice-function-member-p 'restrict-windows
+                                   conn-target-window-predicate)
      (concat
       "\\[restrict-windows] "
       (propertize
@@ -2953,7 +2952,12 @@ buffer."
                                        (cmd (eql conn-goto-window)))
   "Select a different window."
   ( :update (break)
-    (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
+    (if-let* ((windows (delq (selected-window)
+                             (let ((conn-target-window-predicate
+                                    conn-target-window-predicate))
+                               (remove-function conn-target-window-predicate
+                                                'restrict-windows)
+                               (conn--get-target-windows)))))
         (progn
           (conn-dispatch-select-window (conn-prompt-for-window windows))
           (conn-dispatch-redisplay 'maybe-dont-prompt))
@@ -2981,14 +2985,15 @@ buffer."
                                        (cmd (eql restrict-windows)))
   "Restrict targets to the selected window."
   ( :update (_break)
-    (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
+    (cond ((advice-function-member-p 'restrict-windows
                                      conn-target-window-predicate)
            (remove-function conn-target-window-predicate
-                            'conn--dispatch-restrict-windows)
+                            'restrict-windows)
            (conn-dispatch-redisplay))
           ((length> conn-targets 1)
            (add-function :after-while conn-target-window-predicate
-                         'conn--dispatch-restrict-windows)
+                         'conn--dispatch-restrict-windows
+                         '((name . restrict-windows)))
            (conn-dispatch-redisplay)))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
@@ -4763,7 +4768,7 @@ it.")
                   &aux
                   (repeat conn-dispatch-repeating)
                   (restrict-windows (advice-function-member-p
-                                     'conn--dispatch-restrict-windows
+                                     'restrict-windows
                                      conn-target-window-predicate))
                   (other-end conn-dispatch-other-end)
                   (target-finder
@@ -4903,7 +4908,8 @@ it.")
                   (add-function :after-while conn-target-predicate predicate))
                 (when restrict-windows
                   (add-function :after-while conn-target-window-predicate
-                                'conn--dispatch-restrict-windows))
+                                'conn--dispatch-restrict-windows
+                                '((name . restrict-windows))))
                 (conn--dispatch-loop)
                 (conn-action-accept conn-dispatch-action)
                 (setf (conn-previous-dispatch-repeat prev-dispatch)
@@ -4914,7 +4920,7 @@ it.")
                       conn-dispatch-target-finder)
                 (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
                       (advice-function-member-p
-                       'conn--dispatch-restrict-windows
+                       'restrict-windows
                        conn-target-window-predicate))
                 (conn-dispatch-push-history prev-dispatch))))
         (conn-clear-targets)))))
@@ -4962,7 +4968,8 @@ it.")
               (add-function :after-while conn-target-predicate predicate))
             (when restrict-windows
               (add-function :after-while conn-target-window-predicate
-                            'conn--dispatch-restrict-windows))
+                            'conn--dispatch-restrict-windows
+                            '((name . restrict-windows))))
             (conn--dispatch-loop)
             (conn-action-accept conn-dispatch-action)
             (unless (conn-action-no-history action)

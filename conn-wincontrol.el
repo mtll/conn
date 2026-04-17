@@ -144,18 +144,18 @@
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-message ()
-  (propertize
-   (format (substitute-command-keys
-            (if conn--wincontrol-message-newline
-                (concat (if conn-wincontrol-one-command-mode
-                            conn--wincontrol-one-command-help-format
-                          conn--wincontrol-help-format)
-                        "\n")
-              (concat conn--wincontrol-help-format " ")))
-           (format (if conn--wincontrol-arg "%s%s" "[%s1]")
-                   (if (= conn--wincontrol-arg-sign -1) "-" "")
-                   conn--wincontrol-arg))
-   'conn-wincontrol-string t))
+  (let ((help (if conn-wincontrol-one-command-mode
+                  conn--wincontrol-one-command-help-format
+                conn--wincontrol-help-format)))
+    (propertize
+     (format (substitute-command-keys
+              (if conn--wincontrol-message-newline
+                  (concat help "\n")
+                (concat help " ")))
+             (format (if conn--wincontrol-arg "%s%s" "[%s1]")
+                     (if (= conn--wincontrol-arg-sign -1) "-" "")
+                     conn--wincontrol-arg))
+     'conn-wincontrol-string t)))
 
 (defun conn-wincontrol-message-function (string)
   (condition-case _err

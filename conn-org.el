@@ -430,4 +430,14 @@
 (conn-set-jump-command 'org-next-visible-heading #'conn-ignore-repeat-jump-handler)
 (conn-set-jump-command 'org-previous-visible-heading #'conn-ignore-repeat-jump-handler)
 
+;;;; DWIM
+
+(defun conn-dwim-org-link ()
+  (and (org-in-regexp org-link-any-re)
+       (if (derived-mode-p 'org-mode)
+           'org-open-at-point
+         'org-open-at-point-global)))
+
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-org-link -71)
+
 (provide 'conn-org)
