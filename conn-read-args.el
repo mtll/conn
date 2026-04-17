@@ -25,6 +25,8 @@
 (eval-when-compile
   (require 'cl-lib))
 
+(declare-function conn-thing-pretty-print "conn-things")
+
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
@@ -317,8 +319,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (when break (throw 'break t))))))
          (read-command ()
            (let (partial-keymap cmd reading)
-             (let ((conn-wincontrol-mode nil)
-                   (conn-wincontrol-one-command-mode nil))
+             (dlet ((conn-wincontrol-mode nil)
+                    (conn-wincontrol-one-command-mode nil))
                (setq keyseq (let ((inhibit-quit t))
                               (read-key-sequence nil))
                      cmd (key-binding keyseq t))

@@ -317,6 +317,8 @@ themselves once the selection process has concluded."
                          current)
                      (setq partial t))))))))
 
+(defvar conn--dispatch-read-char-handlers nil)
+
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
     (cl-with-gensyms (self)
@@ -630,8 +632,6 @@ themselves once the selection process has concluded."
                                                    cmd)
   (and (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
        (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
-
-(defvar conn--dispatch-read-char-handlers nil)
 
 ;;;; Dispatch State
 

@@ -28,7 +28,6 @@
 (defvar conn-wincontrol-mode)
 (defvar conn-wincontrol-one-command-mode)
 (declare-function conn-local-mode "conn")
-(declare-function conn-thing-pretty-print "conn-things")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function conn--thing-post-command-hook "conn-things")
 
