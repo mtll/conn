@@ -19,6 +19,7 @@
 
 (require 'conn-utils)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'thingatpt)
 (eval-when-compile
   (require 'cl-lib))

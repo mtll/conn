@@ -25,6 +25,7 @@
 (require 'conn-utils)
 (require 'conn-things)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'conn-dispatch)
 (require 'conn-kapply)
 (require 'conn-expand)

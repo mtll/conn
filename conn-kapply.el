@@ -23,6 +23,7 @@
 (require 'conn-vars)
 (require 'conn-utils)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'conn-things)
 (require 'conn-dispatch)
 

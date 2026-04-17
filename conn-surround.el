@@ -20,6 +20,7 @@
 (require 'compat)
 (require 'conn-things)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'conn-expand)
 (require 'conn-commands)
 

@@ -33,6 +33,7 @@
 (require 'conn-wincontrol)
 (require 'conn-things)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'conn-kapply)
 (require 'conn-expand)
 (require 'conn-dispatch)

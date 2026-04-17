@@ -19,6 +19,7 @@
 
 (require 'eieio)
 (require 'conn-states)
+(require 'conn-read-args)
 (require 'conn-things)
 (require 'conn-jump-ring)
 
