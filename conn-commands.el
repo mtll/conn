@@ -41,6 +41,7 @@
 (autoload 'hi-lock-regexp-okay "hi-lock")
 
 (declare-function outline-insert-heading "outline")
+(declare-function ffap-file-at-point "ffap")
 (declare-function project-files "project")
 (declare-function project-root "project")
 (declare-function rectangle--reset-crutches "rect")
@@ -1024,6 +1025,128 @@ Currently selected window remains selected afterwards."
             (-1 (goto-char beg)))
           (filter-buffer-substring beg end))
          (_ (user-error "No last thing to yank")))))))
+
+;;;;; Dynamic Commands
+
+(defvar conn-dwim-at-point-hook nil)
+
+(defun conn--dwim-at-point-filter (_orig)
+  (run-hook-with-args-until-success 'conn-dwim-at-point-hook))
+
+(defvar conn-dwim-at-point
+  `(menu-item
+    "DWIM at point"
+    nil
+    :filter ,#'conn--dwim-at-point-filter))
+
+(defvar conn-alt-dwim-at-point-hook nil)
+
+(defun conn--alt-dwim-at-point-filter (_orig)
+  (run-hook-with-args-until-success 'conn-alt-dwim-at-point-hook))
+
+(defvar conn-alt-dwim-at-point
+  `(menu-item
+    "Alt DWIM at point"
+    nil
+    :filter ,#'conn--alt-dwim-at-point-filter))
+
+(defun conn-dwim-heading ()
+  (when (and (bound-and-true-p outline-regexp)
+             (bound-and-true-p outline-minor-mode))
+    (let ((beg (line-beginning-position)))
+      (when (save-excursion
+              (goto-char beg)
+              (and (bolp)
+                   (looking-at outline-regexp)))
+        'outline-cycle))))
+
+(defun conn-dwim-alt-heading ()
+  (when (and (bound-and-true-p outline-regexp)
+             (bound-and-true-p outline-minor-mode))
+    (let ((beg (line-beginning-position)))
+      (when (save-excursion
+              (goto-char beg)
+              (and (bolp)
+                   (looking-at outline-regexp)))
+        'conn-outline-state))))
+
+(defun conn-dwim-eval-sexp ()
+  (when (and (derived-mode-p '(emacs-lisp-mode
+                               lisp-interaction-mode))
+             (eql (point)
+                  (cdr (bounds-of-thing-at-point 'sexp))))
+    'pp-eval-last-sexp))
+
+(defun conn-dwim-describe-symbol ()
+  (when (and (derived-mode-p '(emacs-lisp-mode
+                               lisp-interaction-mode))
+             (bounds-of-thing-at-point 'symbol))
+    (when-let* ((sym (intern-soft (thing-at-point 'symbol))))
+      (lambda ()
+        (interactive)
+        (describe-symbol sym)))))
+
+(defun conn-dwim-xref-definitions ()
+  (when (and (derived-mode-p '(emacs-lisp-mode
+                               lisp-interaction-mode))
+             (bounds-of-thing-at-point 'symbol))
+    (when-let* ((sym (intern-soft (thing-at-point 'symbol))))
+      'xref-find-definitions)))
+
+(defun conn-dwim-button ()
+  (cond ((and-let* ((button (button-at (point))))
+           (button-get button 'action))
+         'push-button)
+        ((and (fboundp 'widget-apply)
+              (ignore-errors
+                (widget-apply (get-char-property (point) 'button)
+                              :active)))
+         'widget-button-press)))
+
+;; From embark
+(defun conn-dwim-file ()
+  (require 'ffap)
+  (or (and (derived-mode-p 'dired-mode)
+           (fboundp 'dired-get-filename)
+           (dired-get-filename t 'no-error-if-not-filep)
+           'dired-find-file)
+      (and (derived-mode-p 'image-dired-thumbnail-mode)
+           (fboundp 'image-dired-original-file-name)
+           (image-dired-original-file-name)
+           'image-dired-display-this)
+      (and (ffap-file-at-point)
+           #'find-file-at-point)))
+
+;; From embark
+(defun conn-dwim-alt-file ()
+  (require 'ffap)
+  (and (ffap-file-at-point)
+       #'dired-at-point))
+
+(defun conn--in-regexp-in-line (regexp)
+  (let ((pt (point))
+        result)
+    (save-excursion
+      (with-restriction (line-beginning-position) (line-end-position)
+        (goto-char (point-min))
+        (while (and (re-search-forward regexp nil t)
+                    (not result))
+          (when (and (<= (match-beginning 0) pt)
+                     (<= pt (point)))
+            (setq result (propertize
+                          (match-string 0)
+                          'match-data (match-data)))))))
+    result))
+
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -20)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -10)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-eval-sexp 0)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-heading 20)
+
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -20)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol 0)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-heading 20)
 
 ;;;; Thing Commands
 

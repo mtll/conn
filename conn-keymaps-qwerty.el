@@ -275,6 +275,9 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "P" 'conn-other-place-prefix
+  "TAB" conn-dwim-at-point
+  "M-TAB" conn-alt-dwim-at-point
   "SPC" 'conn-one-emacs-state
   "R" 'conn-rectangle-mark
   "V" 'conn-previous-mark-command
