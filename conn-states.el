@@ -1953,7 +1953,6 @@ This skips executing the body of the `conn-read-args' form entirely."
              ('reference
               (apply #'conn-quick-reference
                      reference
-                     conn-read-args-reference-page
                      (mapcar #'conn-argument-get-reference
                              arguments)))
              ((or 'describe-key 'conn-describe-key)

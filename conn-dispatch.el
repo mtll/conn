@@ -1410,10 +1410,6 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
                  (&aux
                   (reference conn-dispatch-command-reference)))))
 
-(cl-defmethod conn-argument-get-reference ((_arg conn-read-args-command-handler))
-  (list conn-dispatch-command-reference
-        (cl-call-next-method)))
-
 (conn-define-argument-command ((arg conn-dispatch-command-handler)
                                (cmd (eql conn-dispatch-cycle-ring-next)))
   "Cycle the dispatch ring to the next most recent dispatch."
@@ -5231,8 +5227,7 @@ for the dispatch."
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
                    :prompt "Bounds of Dispatch"
-                   :reference (list conn-dispatch-command-reference
-                                    conn-dispatch-thing-reference))
+                   :reference (list conn-dispatch-thing-reference))
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat
