@@ -316,6 +316,51 @@ themselves once the selection process has concluded."
                          current)
                      (setq partial t))))))))
 
+(eval-and-compile
+  (defun conn--expand-dispatch-handler (tag body)
+    (cl-with-gensyms (self)
+      `(push (cons (conn-dispatch-read-char-handler
+                    ,(pcase (alist-get :update body)
+                       (`(,args . ,update-body)
+                        (macroexpand-all
+                         `(lambda ,(cons self args)
+                            (ignore ,self)
+                            ,@update-body)
+                         `((:return
+                            . ,(lambda (&optional value)
+                                 `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
+                                         ,value)))))))
+                    ,(if-let* ((v (alist-get :predicate body)))
+                         `(lambda ,@v)
+                       '#'ignore)
+                    :reference ,(car (alist-get :reference body))
+                    :display ,(if-let* ((v (alist-get :display body)))
+                                  `(lambda ,@v)
+                                '#'ignore)
+                    :annotation ,(if-let* ((v (alist-get :annotation body)))
+                                     `(lambda ,@v)
+                                   '#'ignore)
+                    :documentation ,(if-let* ((v (alist-get :documentation body)))
+                                        `(lambda ,@v)
+                                      '#'ignore)
+                    :keymap ,(car (alist-get :keymap body)))
+                   (cons ,(or (car (alist-get :depth body)) 0) ',tag))
+             conn--dispatch-read-char-handlers))))
+
+(defmacro conn-with-dispatch-handlers (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (tag)
+    (macroexpand-all
+     `(let ((conn--dispatch-read-char-handlers
+             conn--dispatch-read-char-handlers))
+        (catch ',tag ,@body))
+     `((:handler . ,(lambda (&rest body)
+                      (conn--expand-dispatch-handler tag body)))
+       (:with . ,(cl-function
+                  (lambda (exp &key depth)
+                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
+                           conn--dispatch-read-char-handlers))))))))
+
 ;;;;; Window Header-line Labels
 
 (defface conn-window-label-face
@@ -573,8 +618,8 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-read-char-handler)
                                                    value)
-  (when-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
-              (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
+  (and-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
+             (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
     (funcall ann value)))
 
 (cl-defmethod conn-argument-get-reference ((arg conn-dispatch-read-char-handler))
@@ -582,55 +627,10 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
                                                    cmd)
-  (when (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
-    (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
+  (and (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
+       (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
 
 (defvar conn--dispatch-read-char-handlers nil)
-
-(eval-and-compile
-  (defun conn--expand-dispatch-handler (tag body)
-    (cl-with-gensyms (self)
-      `(push (cons (conn-dispatch-read-char-handler
-                    ,(pcase (alist-get :update body)
-                       (`(,args . ,update-body)
-                        (macroexpand-all
-                         `(lambda ,(cons self args)
-                            (ignore ,self)
-                            ,@update-body)
-                         `((:return
-                            . ,(lambda (&optional value)
-                                 `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
-                                         ,value)))))))
-                    ,(if-let* ((v (alist-get :predicate body)))
-                         `(lambda ,@v)
-                       '#'ignore)
-                    :reference ,(car (alist-get :reference body))
-                    :display ,(if-let* ((v (alist-get :display body)))
-                                  `(lambda ,@v)
-                                '#'ignore)
-                    :annotation ,(if-let* ((v (alist-get :annotation body)))
-                                     `(lambda ,@v)
-                                   '#'ignore)
-                    :documentation ,(if-let* ((v (alist-get :documentation body)))
-                                        `(lambda ,@v)
-                                      '#'ignore)
-                    :keymap ,(car (alist-get :keymap body)))
-                   (cons ,(or (car (alist-get :depth body)) 0) ',tag))
-             conn--dispatch-read-char-handlers))))
-
-(defmacro conn-with-dispatch-handlers (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (tag)
-    (macroexpand-all
-     `(let ((conn--dispatch-read-char-handlers
-             conn--dispatch-read-char-handlers))
-        (catch ',tag ,@body))
-     `((:handler . ,(lambda (&rest body)
-                      (conn--expand-dispatch-handler tag body)))
-       (:with . ,(cl-function
-                  (lambda (exp &key depth)
-                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
-                           conn--dispatch-read-char-handlers))))))))
 
 ;;;; Dispatch State
 
@@ -2570,6 +2570,9 @@ the meaning of depth."
 
 (defvar conn-dispatch-read-char-pre-functions nil)
 
+(conn-define-state conn-dispatch-read-char-state ()
+  :lighter "SELECT")
+
 (defun conn-dispatch-read-char (&optional
                                 prompt
                                 use-input-method
@@ -2593,7 +2596,7 @@ the meaning of depth."
             (cond ((eql ev (car (last (current-input-mode))))
                    (signal 'quit nil))
                   ((characterp ev) ev))))
-      (conn-read-args (nil
+      (conn-read-args (conn-dispatch-read-char-state
                        :prompt prompt
                        :command-handler (conn-dispatch-read-char-handlers)
                        :display-handler message-fn

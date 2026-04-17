@@ -743,15 +743,11 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Execute BODY in a recursive stack with STATE as the base state."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (s handle)
-    `(let ((,handle nil))
-       (when-let* ((,s ,state)
-                   (_ (not (eq ,s '_))))
-         (setq ,handle (conn-enter-recursive-stack ,s)))
+  (cl-with-gensyms (handle)
+    `(let ((,handle (conn-enter-recursive-stack ,state)))
        (unwind-protect
            ,(macroexp-progn body)
-         (when ,handle
-           (conn-exit-recursive-stack ,handle))))))
+         (conn-exit-recursive-stack ,handle)))))
 
 ;;;;; Cl-Generic Specializers
 
@@ -1630,9 +1626,6 @@ command was a prefix command.")
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
-(defvar conn-reading-args nil
-  "Non-nil during `conn-read-args'.")
-
 (defvar conn-read-args-last-prefix nil)
 
 (defvar conn--read-args-prefix-mag nil)
@@ -1922,11 +1915,13 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (when break (throw 'break t))))))
          (read-command ()
            (let (partial-keymap cmd reading)
-             (setq keyseq (let ((inhibit-quit t))
-                            (read-key-sequence nil))
-                   cmd (key-binding keyseq t))
-             (while (arrayp cmd) ; keyboard macro
-               (setq cmd (key-binding cmd t)))
+             (let ((conn-wincontrol-mode nil)
+                   (conn-wincontrol-one-command-mode nil))
+               (setq keyseq (let ((inhibit-quit t))
+                              (read-key-sequence nil))
+                     cmd (key-binding keyseq t))
+               (while (arrayp cmd) ; keyboard macro
+                 (setq cmd (key-binding cmd t))))
              (cond ((eql (aref keyseq 0) quit-event)
                     (setq cmd 'keyboard-quit))
                    ((and (null cmd)
@@ -1985,7 +1980,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (conn->f emulation-mode-map-alists
              (delq maps)
              (cons maps)))
-         (cont ()
+         (loop ()
            (conn-with-recursive-stack state
              (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
                    (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
@@ -1993,9 +1988,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (conn--read-args-error-flag nil)
                    (conn--read-args-message nil)
                    (conn--read-args-message-timeout nil)
-                   (conn-reading-args t)
-                   (conn-wincontrol-mode nil)
-                   (conn-wincontrol-one-command-mode nil)
                    (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
@@ -2010,7 +2002,7 @@ This skips executing the body of the `conn-read-args' form entirely."
        (catch 'conn-read-args-return
          (conn--unwind-protect-all
            (let ((conn-read-args-last-prefix nil))
-             (if around (funcall around #'cont) (cont))
+             (if around (funcall around #'loop) (loop))
              (setq argument-values (mapcar #'conn-argument-payload
                                            arglist)))
            (unless argument-values
