@@ -1366,9 +1366,17 @@ command was a prefix command.")
 (defvar conn-emacs-state-preserve-prefix-commands
   '(conn-pop-state
     conn-emacs-state-at-mark
-    conn-emacs-state))
+    conn-emacs-state
+    conn-one-emacs-state))
 
 (cl-defmethod conn-enter-state ((_state (eql conn-emacs-state))
+                                _transition)
+  (when (memq this-command conn-emacs-state-preserve-prefix-commands)
+    (run-hooks 'prefix-command-preserve-state-hook)
+    (prefix-command-update))
+  (cl-call-next-method))
+
+(cl-defmethod conn-enter-state ((_state (eql conn-one-emacs-state))
                                 _transition)
   (when (memq this-command conn-emacs-state-preserve-prefix-commands)
     (run-hooks 'prefix-command-preserve-state-hook)
