@@ -981,19 +981,16 @@ determine which window to display the buffer in."
                 (conn--get-windows nil 'nomini 'visible)))))
   (delete-window window))
 
-(defun conn-throw-buffer ()
+(defun conn-throw-buffer (window)
   "Send current buffer to another window and `switch-to-prev-buffer'."
-  (interactive)
+  (interactive
+   (list (conn-prompt-for-window
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
   (let ((buf (current-buffer)))
-    (switch-to-prev-buffer)
-    (save-selected-window
-      (display-buffer
-       buf
-       (lambda (_ _)
-         (cons (conn-prompt-for-window
-                (delq (selected-window)
-                      (conn--get-windows nil 'nomini)))
-               'reuse))))))
+    (with-selected-window window
+      (switch-to-buffer buf))
+    (switch-to-prev-buffer)))
 
 (defun conn-yank-window (window)
   "Swap selected window and another window.
