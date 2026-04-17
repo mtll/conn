@@ -332,7 +332,8 @@ themselves once the selection process has concluded."
                          `((:return
                             . ,(lambda (&optional value)
                                  `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
-                                         ,value)))))))
+                                         ,value)))
+                           ,@macroexpand-all-environment))))
                     ,(if-let* ((v (alist-get :predicate body)))
                          `(lambda ,@v)
                        '#'ignore)
@@ -509,7 +510,8 @@ themselves once the selection process has concluded."
          . ,(lambda (&optional value)
               `(throw (cdr (alist-get ,handler
                                       conn--dispatch-read-char-handlers))
-                      ,value))))))))
+                      ,value)))
+        ,@macroexpand-all-environment)))))
 
 (defmacro conn-define-dispatch-handler-command (argument-and-command
                                                 docstring
@@ -629,9 +631,10 @@ themselves once the selection process has concluded."
   (conn-dispatch-read-char-handler-reference arg))
 
 (cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
-                                                   cmd)
+                                                   cmd
+                                                   break)
   (and (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
-       (funcall (conn-dispatch-read-char-handler-documentation arg) cmd)))
+       (funcall (conn-dispatch-read-char-handler-documentation arg) cmd break)))
 
 ;;;; Dispatch State
 

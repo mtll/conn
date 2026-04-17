@@ -90,8 +90,10 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
                           (,binding ,@forms))))
          (thread-first
            ,@(mapcar (lambda (form)
-                       (macroexpand-1 form `((:> . ,#'expand-last)
-                                             (:as . ,#'expand-as))))
+                       (pcase form
+                         (`(:as . ,rest) (apply #'expand-as rest))
+                         (`(:> . ,rest) (apply #'expand-last rest))
+                         (_ form)))
                      forms))))))
 
 (defmacro conn-<f (&rest forms)
@@ -106,8 +108,10 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
                           (,binding ,@forms))))
          (cl-callf thread-first
              ,@(mapcar (lambda (form)
-                         (macroexpand-1 form `((:> . ,#'expand-last)
-                                               (:as . ,#'expand-as))))
+                         (pcase form
+                           (`(:as . ,rest) (apply #'expand-as rest))
+                           (`(:> . ,rest) (apply #'expand-last rest))
+                           (_ form)))
                        forms))))))
 
 (defmacro conn-> (&rest forms)
@@ -124,8 +128,10 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
                           (,binding ,@forms))))
          (thread-last
            ,@(mapcar (lambda (form)
-                       (macroexpand-1 form `((:< . ,#'expand-first)
-                                             (:as . ,#'expand-as))))
+                       (pcase form
+                         (`(:as . ,rest) (apply #'expand-as rest))
+                         (`(:< . ,rest) (apply #'expand-first rest))
+                         (_ form)))
                      forms))))))
 
 (defmacro conn->f (&rest forms)
@@ -142,8 +148,10 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
                           (,binding ,@forms))))
          (cl-callf thread-last
              ,@(mapcar (lambda (form)
-                         (macroexpand-1 form `((:< . ,#'expand-first)
-                                               (:as . ,#'expand-as))))
+                         (pcase form
+                           (`(:as . ,rest) (apply #'expand-as rest))
+                           (`(:< . ,rest) (apply #'expand-first rest))
+                           (_ form)))
                        forms))))))
 
 (defmacro conn--compat-callf (func place &rest args)

@@ -626,7 +626,8 @@ be displayed in the echo area during `conn-read-args'."
                         (conn--argument-expand-method
                          'conn-argument-predicate
                          argument-and-command
-                         body)))))))
+                         body)))
+       ,@macroexpand-all-environment))))
 
 (defmacro conn-define-argument-command (argument-and-command
                                         docstring
@@ -717,8 +718,9 @@ be displayed in the echo area during `conn-read-args'."
   (conn-anonymous-argument-reference arg))
 
 (cl-defmethod conn-argument-command-documentation ((arg conn-anonymous-argument)
-                                                   cmd)
-  (conn-anonymous-argument-documentation arg cmd))
+                                                   cmd
+                                                   break)
+  (funcall break (conn-anonymous-argument-documentation arg cmd)))
 
 ;;;;; Composite Argument
 
