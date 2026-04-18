@@ -363,7 +363,8 @@ themselves once the selection process has concluded."
        (:with . ,(cl-function
                   (lambda (exp &key depth)
                     `(push (cons ,exp (cons ,(or depth 0) ',tag))
-                           conn--dispatch-read-char-handlers))))))))
+                           conn--dispatch-read-char-handlers))))
+       ,@macroexpand-all-environment))))
 
 ;;;;; Window Header-line Labels
 
