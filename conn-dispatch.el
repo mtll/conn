@@ -5145,50 +5145,17 @@ for the dispatch."
   ( :update-method (state)
     (conn-dispatch-call-update-handlers state))
   ( :default-update-handler (state)
-    (let* ((matches nil)
-           (thing (conn-anonymous-thing
-                    '(region)
-                    :bounds-op ( :method (_self arg)
-                                 (when-let* ((bd (assq (point) matches)))
-                                   (conn-make-bounds 'region arg bd)))))
-           (screen-lines (ceiling (* 2 (window-screen-lines)))))
-      (cl-flet ((collect ()
-                  (cl-loop
-                   with bound = (if isearch-forward
-                                    (point-max)
-                                  (point-min))
-                   with case-fold-search = isearch-case-fold-search
-                   with count = 1
-                   with line = (if isearch-forward (pos-eol) (pos-bol))
-                   while (and (< count screen-lines)
-                              (isearch-search-string isearch-string bound t))
-                   when (funcall isearch-filter-predicate
-                                 (match-beginning 0)
-                                 (match-end 0))
-                   do (progn
-                        (cond ((and isearch-forward
-                                    (> (point) line))
-                               (setq line (pos-eol))
-                               (cl-incf count))
-                              ((and (not isearch-forward)
-                                    (< (point) line))
-                               (setq line (pos-bol))
-                               (cl-incf count)))
-                        (push (cons (match-beginning 0) (match-end 0))
-                              matches)
-                        (conn-make-target-overlay
-                         (match-beginning 0)
-                         (- (match-end 0) (match-beginning 0))
-                         :thing thing))
-                   when (and (= (match-beginning 0) (match-end 0))
-                             (not (if isearch-forward (eobp) (bobp))))
-                   do (forward-char (if isearch-forward 1 -1)))))
-        (save-excursion
-          (let ((isearch-forward t))
-            (collect)))
-        (save-excursion
-          (let (isearch-forward)
-            (collect)))))))
+    (with-restriction (window-start) (window-end)
+      (let* ((matches (conn--isearch-matches))
+             (thing (conn-anonymous-thing
+                      '(region)
+                      :bounds-op ( :method (_self arg)
+                                   (when-let* ((bd (assq (point) matches)))
+                                     (conn-make-bounds 'region arg bd))))))
+        (cl-loop for (beg . end) in matches
+                 do (conn-make-target-overlay
+                     beg (- end beg)
+                     :thing thing))))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
