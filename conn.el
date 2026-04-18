@@ -55,8 +55,7 @@
   (conn--run-exit-fns (conn-stack-transition conn-stack-clone))
   (while conn--state-stack
     (conn--pop-state-1 'clone))
-  (or (run-hook-with-args-until-success 'conn-setup-state-functions)
-      (conn-push-state 'conn-emacs-state)))
+  (conn-setup-state-for-buffer t))
 
 (defun conn--setup-keymaps ()
   (if conn-mode

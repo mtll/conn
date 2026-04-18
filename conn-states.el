@@ -1582,8 +1582,16 @@ command was a prefix command.")
   (unless no-major-mode-maps
     (setq conn--active-major-mode-maps
           (conn--derived-mode-all-parents major-mode)))
-  (or (run-hook-with-args-until-success 'conn-setup-state-functions)
-      (conn-push-state 'conn-emacs-state)))
+  (condition-case err
+      (or (run-hook-with-args-until-success 'conn-setup-state-functions)
+          (conn-push-state 'conn-emacs-state))
+    (error
+     (conn-local-mode -1)
+     (error "Error in conn-setup-state-functions: %s"
+            (error-message-string err)))
+    ((debug quit)
+     (conn-local-mode -1)
+     (signal err))))
 
 (defun conn-setup-commit-state ()
   "Set the base state to `conn-emacs-state' in commit message buffers."

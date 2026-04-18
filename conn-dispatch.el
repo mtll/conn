@@ -773,7 +773,7 @@ buffer is a valid target.")
                      (conn-dispatch-in-progress nil))
            (message nil)
            ,@body
-           (conn-dispatch-redisplay))
+           (ignore-errors (conn-dispatch-redisplay)))
        (conn--mark-targets 'conn-old-target))))
 
 (define-inline conn-dispatch-other-end-p ()
