@@ -5141,11 +5141,8 @@ for the dispatch."
                       (conn-dispatch-button-targets)))
    nil nil))
 
-(conn-define-target-finder conn-isearch-targets
-    (conn-dispatch-focus-mixin)
-    ()
+(conn-define-target-finder conn-isearch-targets () ()
   ( :update-method (state)
-    (conn-focus-targets-remove-overlays state)
     (conn-dispatch-call-update-handlers state))
   ( :default-update-handler (state)
     (let* ((matches nil)
@@ -5214,8 +5211,7 @@ for the dispatch."
             :target-finder ( :method (_self &rest _)
                              (conn-isearch-targets
                               :window-predicate (let ((owin (selected-window)))
-                                                  (lambda (win) (eq win owin)))
-                              :context-lines (ceiling (window-screen-lines) 2.5))))
+                                                  (lambda (win) (eq win owin))))))
           nil nil
           :repeat nil
           :restrict-windows t
