@@ -3995,34 +3995,36 @@ contain targets."
 
 (conn-define-target-finder conn-dispatch-column-targets
     ()
-    ((window-predicate
+    ((goal-column :initform nil)
+     (window-predicate
       :initform (lambda (win) (eq win (selected-window)))))
-  ( :default-update-handler (_state)
-    (let ((col-width nil))
-      ;; From `line-move-visual'
-      (let ((posn (posn-at-point))
-            (lnum-width (line-number-display-width t))
-            x-pos)
-        (cond
-         ;; Handle the `overflow-newline-into-fringe' case
-         ;; (left-fringe is for the R2L case):
-         ((memq (nth 1 posn) '(right-fringe left-fringe))
-          (setq col-width (window-width)))
-         ((car (posn-x-y posn))
-          (setq x-pos (- (car (posn-x-y posn)) lnum-width))
-          ;; In R2L lines, the X pixel coordinate is measured from the
-          ;; left edge of the window, but columns are still counted
-          ;; from the logical-order beginning of the line, i.e. from
-          ;; the right edge in this case.  We need to adjust for that.
-          (if (eq (current-bidi-paragraph-direction) 'right-to-left)
-              (setq x-pos (- (window-body-width nil t) 1 x-pos)))
-          (setq col-width (/ (float x-pos)
-                             (frame-char-width))))))
+  ( :default-update-handler (state)
+    (let ((goal-col
+           (with-memoization (oref state goal-column)
+             ;; From `line-move-visual'
+             (let ((posn (posn-at-point))
+                   (lnum-width (line-number-display-width t))
+                   x-pos)
+               (cond
+                ;; Handle the `overflow-newline-into-fringe' case
+                ;; (left-fringe is for the R2L case):
+                ((memq (nth 1 posn) '(right-fringe left-fringe))
+                 (window-width))
+                ((car (posn-x-y posn))
+                 (setq x-pos (- (car (posn-x-y posn)) lnum-width))
+                 ;; In R2L lines, the X pixel coordinate is measured from the
+                 ;; left edge of the window, but columns are still counted
+                 ;; from the logical-order beginning of the line, i.e. from
+                 ;; the right edge in this case.  We need to adjust for that.
+                 (if (eq (current-bidi-paragraph-direction) 'right-to-left)
+                     (setq x-pos (- (window-body-width nil t) 1 x-pos)))
+                 (/ (float x-pos)
+                    (frame-char-width))))))))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-min))
           (while (/= (point) (point-max))
-            (vertical-motion (cons col-width 0))
+            (vertical-motion (cons goal-col 0))
             (unless (and (eolp) (= (point) (point-min)))
               (conn-make-target-overlay
                (point) 0

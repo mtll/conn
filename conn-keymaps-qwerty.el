@@ -278,6 +278,8 @@
   "P" 'conn-other-place-prefix
   "TAB" conn-dwim-at-point
   "M-TAB" conn-alt-dwim-at-point
+  "<tab>" conn-dwim-at-point
+  "M-<tab>" conn-alt-dwim-at-point
   "SPC" 'conn-one-emacs-state
   "R" 'conn-rectangle-mark
   "V" 'conn-previous-mark-command

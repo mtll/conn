@@ -77,7 +77,7 @@
 (add-hook 'conn-setup-state-functions 'conn-org-setup-capture-state)
 
 ;;;###autoload
-(defun conn-org-heading-state ()
+(defun conn-org-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
   (conn-push-state 'conn-org-state))
@@ -296,7 +296,7 @@
 
 (conn-register-thing-commands
  '(org-heading) 'conn-continuous-thing-other-end-handler
- 'conn-org-heading-state-up-heading
+ 'conn-org-state-up-heading
  'org-next-visible-heading
  'org-previous-visible-heading
  'org-forward-heading-same-level
@@ -439,6 +439,14 @@
            'org-open-at-point
          'org-open-at-point-global)))
 
+(defun conn-dwim-alt-org-heading ()
+  (and (derived-mode-p 'org-mode)
+       (save-excursion
+         (goto-char (line-beginning-position))
+         (looking-at-p org-outline-regexp-bol))
+       #'conn-org-state))
+
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-org-link -71)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-org-heading 5)
 
 (provide 'conn-org)
