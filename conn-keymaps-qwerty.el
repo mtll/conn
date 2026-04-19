@@ -355,6 +355,10 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   "TAB" 'repeat-dispatch
+  "M-j" (conn-anonymous-thing
+          '(point)
+          :pretty-print ( :method (_) "jump-ring")
+          :target-finder (:method (_self &rest _) (conn-dispatch-jump-ring)))
   "o" (conn-anonymous-thing
         '(forward-word)
         :pretty-print (:method (_self) "all-words")
@@ -478,16 +482,14 @@
                                           (lambda (&rest _)
                                             (conn-push-state 'conn-emacs-state)))
                             jump))
-        :target-finder (:method (_self &rest _) (conn-dispatch-previous-emacs-state)))
+        :target-finder ( :method (_self &rest _)
+                         (conn-dispatch-previous-emacs-state)))
   "j" 'point
-  "S-SPC" (conn-anonymous-thing
-            '(point)
-            :pretty-print ( :method (_) "global-mark-ring")
-            :target-finder (:method (_self &rest _) (conn-dispatch-global-mark)))
   "P" (conn-anonymous-thing
         '(point)
         :pretty-print ( :method (_) "position-registers")
-        :target-finder (:method (_self &rest _) (conn-dispatch-mark-register))))
+        :target-finder ( :method (_self &rest _)
+                         (conn-dispatch-mark-register))))
 
 ;;;;; Other States
 
@@ -1040,12 +1042,17 @@
         "<" 'rotate-windows-back
         ">" 'rotate-windows)
 
+      (defvar-keymap conn-window-rotate-repeat-map
+        :repeat t
+        "<" 'rotate-windows-back
+        ">" 'rotate-windows)
+
       (define-keymap
         :keymap conn-window-resize-map
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise)
 
-      (defvar-keymap conn-window-rotate-repeat-map
+      (defvar-keymap conn-window-layout-rotate-repeat-map
         :repeat t
         "<" 'window-layout-rotate-anticlockwise
         ">" 'window-layout-rotate-clockwise)))

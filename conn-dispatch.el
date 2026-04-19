@@ -3756,7 +3756,7 @@ contain targets."
 (conn-define-target-finder conn-dispatch-jump-ring
     (conn-dispatch-focus-mixin)
     ((context-lines
-      :initform 1
+      :initform 2
       :initarg :context-lines)
      (window-predicate
       :initform (lambda (win) (eq win (selected-window))))
@@ -3766,30 +3766,6 @@ contain targets."
       (dolist (pt points)
         (unless (invisible-p pt)
           (conn-make-target-overlay pt 0)))))
-  ( :update-method (state)
-    (unless conn-targets
-      (conn-dispatch-call-update-handlers state))))
-
-(conn-define-target-finder conn-dispatch-global-mark
-    (conn-dispatch-focus-mixin)
-    ((context-lines
-      :initform 1
-      :initarg :context-lines)
-     (other-end :initform :no-other-end)
-     (window-predicate
-      :initform (let ((cache nil))
-                  (lambda (win)
-                    (if-let* ((val (assq win cache)))
-                        (cdr var)
-                      (setf (alist-get win cache)
-                            (cl-loop with buf = (window-buffer win)
-                                     for mk in global-mark-ring
-                                     thereis (eq buf (marker-buffer mk)))))))))
-  ( :default-update-handler (_state)
-    (dolist (mk global-mark-ring)
-      (when (and (eq (current-buffer) (marker-buffer mk))
-                 (not (invisible-p mk)))
-        (conn-make-target-overlay mk 0))))
   ( :update-method (state)
     (unless conn-targets
       (conn-dispatch-call-update-handlers state))))
@@ -5152,10 +5128,10 @@ for the dispatch."
                       :bounds-op ( :method (_self arg)
                                    (when-let* ((bd (assq (point) matches)))
                                      (conn-make-bounds 'region arg bd))))))
-        (cl-loop for (beg . end) in matches
-                 do (conn-make-target-overlay
-                     beg (- end beg)
-                     :thing thing))))))
+        (pcase-dolist (`(,beg . ,end) matches)
+          (conn-make-target-overlay
+           beg (- end beg)
+           :thing thing))))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."

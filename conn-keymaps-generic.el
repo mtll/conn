@@ -445,10 +445,6 @@
                               jump))
           :target-finder (:method (_self &rest _) (conn-dispatch-previous-emacs-state)))
   "b" 'point
-  "S-SPC" (conn-anonymous-thing
-            '(point)
-            :pretty-print ( :method (_) "global-mark-ring")
-            :target-finder (:method (_self &rest _) (conn-dispatch-global-mark)))
   "<" (conn-anonymous-thing
         '(point)
         :pretty-print ( :method (_) "position-registers")

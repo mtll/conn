@@ -290,10 +290,19 @@
       ("prev/next" conn-previous-buffer conn-next-buffer)
       ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
       ("kill buffer" conn-kill-this-buffer)
-      ("zoom in/out/reset"
-       conn-wincontrol-zoom-in
-       conn-wincontrol-zoom-out
-       conn-wincontrol-reset-zoom)))))
+      (:splice (static-if (<= 31 emacs-major-version)
+                   '(("rotate"
+                      rotate-windows
+                      rotate-windows-back)))))
+     (:splice
+      (static-if (<= 31 emacs-major-version)
+          (conn-reference-quote
+            (((:heading "Window Layout:")
+              ("transpose" window-layout-transpose)
+              ("flip ↔" window-layout-flip-leftright)
+              ("flip ↕" window-layout-flip-topdown)
+              ("rotate" window-layout-rotate-clockwise
+               window-layout-rotate-anticlockwise)))))))))
 
 (defvar conn-wincontrol-windows-2
   (conn-reference-page
@@ -312,7 +321,11 @@
       ("tear off window" tear-off-window)
       ("isearch other window forward/back"
        conn-wincontrol-isearch-other-window
-       conn-wincontrol-isearch-other-window-backward)))))
+       conn-wincontrol-isearch-other-window-backward)
+      ("zoom buffer in/out/reset"
+       conn-wincontrol-zoom-in
+       conn-wincontrol-zoom-out
+       conn-wincontrol-reset-zoom)))))
 
 (defvar conn-wincontrol-tabs-and-frames
   (conn-reference-page

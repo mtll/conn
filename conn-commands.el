@@ -2371,7 +2371,8 @@ Exiting the recursive edit will resume the isearch."
             (conn-transform-bounds
              (conn-bounds-of thing arg)
              transform))
-     ((conn-bounds `(,beg . ,end))
+     ((and (conn-bounds `(,beg . ,end))
+           (conn-bounds-thing thing))
       (let ((string (buffer-substring-no-properties beg end)))
         (if (and isearch-case-fold-search
                  (eq 'not-yanks search-upper-case))
@@ -2382,7 +2383,9 @@ Exiting the recursive edit will resume the isearch."
               isearch-new-message (concat isearch-message
                                           (mapconcat 'isearch-text-char-description
                                                      string ""))))
-      (goto-char (if isearch-new-forward beg end))))))
+      (goto-char (if isearch-new-forward beg end))
+      (when (eql thing 'region)
+        (deactivate-mark))))))
 
 ;;;;; Transpose
 
