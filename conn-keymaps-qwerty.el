@@ -231,8 +231,11 @@
 
 ;;;;; Emacs State
 
-(keymap-set (conn-get-state-map 'conn-emacs-state)
-            "<escape>" 'conn-pop-state)
+(define-keymap
+  :keymap (conn-get-state-map 'conn-emacs-state)
+  "<escape>" 'conn-pop-state
+  "<tab>" conn-emacs-state-tab
+  "TAB" conn-emacs-state-tab)
 
 ;;;;; Read Thing State
 

@@ -1148,6 +1148,17 @@ Currently selected window remains selected afterwards."
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol 0)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-heading 20)
 
+(defvar conn-emacs-state-tab-hook nil)
+
+(defun conn--emacs-state-tab-filter (_orig)
+  (run-hook-with-args-until-success 'conn-emacs-state-tab-hook))
+
+(defvar conn-emacs-state-tab
+  `(menu-item
+    "Smart tab"
+    nil
+    :filter ,#'conn--emacs-state-tab-filter))
+
 ;;;; Thing Commands
 
 (defvar-keymap conn-stay-argument-map)
