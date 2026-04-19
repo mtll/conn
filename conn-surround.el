@@ -150,6 +150,13 @@
 (conn-define-state conn-surround-bounds-state (conn-surround-with-state)
   :lighter "SURROUND")
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-surround-bounds-state)
+  ")" "i ("
+  "]" "i ["
+  "}" "i {"
+  ">" "i <")
+
 (conn-register-thing 'conn-surround)
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-surround))

@@ -361,7 +361,8 @@ This skips executing the body of the `conn-read-args' form entirely."
          (execute-command (cmd)
            (when pre (funcall pre cmd))
            (pcase cmd
-             ('keyboard-quit
+             ((or 'keyboard-quit
+                  'keyboard-escape-quit)
               (signal 'quit nil))
              ('reference
               (apply #'conn-quick-reference
@@ -409,7 +410,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (setup-keymaps)
                    (display-message)
                    (execute-command (read-command))))
-               (setq conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
+               (setq unread-command-events nil ;should this be smarter?
+                     conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
        (catch 'conn-read-args-return
          (conn--unwind-protect-all

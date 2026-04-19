@@ -250,7 +250,8 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 
 See `quail-add-unread-command-events'."
   (if reset (setq unread-command-events nil))
-  (if (characterp key)
+  (if (or (characterp key)
+          (symbolp key))
       (cl-callf2 cons
           (cons 'no-record key)
           unread-command-events)
