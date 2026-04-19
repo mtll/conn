@@ -111,7 +111,7 @@
   :group 'conn
   (progn
     (unless conn-keymaps-defined
-      (require 'conn-keymaps-generic))
+      (require 'conn-keymaps-qwerty))
     (conn--setup-keymaps)
     (if conn-mode
         (progn
@@ -131,8 +131,20 @@
                               (eval-when-compile
                                 (regexp-opt
                                  '("conn-define-state"
-                                   "conn-define-mark-command")
+                                   "conn-define-kapplier"
+                                   "conn-define-target-finder")
                                  t))
                               "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
+                  2)
+            lisp-imenu-generic-expression :test #'equal)
+
+(cl-pushnew (list "Variables"
+                  (concat "^\\s-*("
+                          (eval-when-compile
+                            (regexp-opt
+                             '("conn-define-key-remap"
+                               "conn-define-remap-keymap")
+                             t))
+                          "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
                   2)
             lisp-imenu-generic-expression :test #'equal)

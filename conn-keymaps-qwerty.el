@@ -71,7 +71,7 @@
 (defun conn-setup-isearch-map ()
   (define-keymap
     :keymap isearch-mode-map
-    "C-w" 'conn-isearch-restrict-to-thing
+    "M-z" 'conn-isearch-restrict-to-thing
     "C-t" 'conn-isearch-thing-to-search-string
     "C-z" 'conn-isearch-exit-other-end
     "M-'" 'conn-kapply-on-isearch
