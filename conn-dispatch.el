@@ -4211,12 +4211,12 @@ contain targets."
                (face (overlay-get target 'label-face)))
     (conn-dispatch-undo-case
       (:undo
-       (overlay-put (conn-make-target-overlay
-                     start 0
-                     :window win
-                     :properties `( label-face ,face
-                                    label-string ,string))
-                    'category 'conn-old-target)))
+       (conn-make-target-overlay
+        start 0
+        :window win
+        :properties `( label-face ,face
+                       label-string ,string
+                       category conn-old-target))))
     (list point
           win
           (or (overlay-get target 'thing)
