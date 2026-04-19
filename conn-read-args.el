@@ -245,15 +245,18 @@ The duration of the message display is controlled by
   (let ((cmd (key-binding (let ((inhibit-quit t))
                             (read-key-sequence nil))
                           t)))
-    (while (arrayp cmd) ; keyboard macro
-      (setq cmd (key-binding cmd t)))
-    (catch 'break
-      (dolist (a arguments)
-        (ignore
-         (conn-argument-command-documentation
-          a cmd (lambda (&rest pages)
-                  (apply #'conn-quick-reference pages)
-                  (throw 'break nil))))))))
+    (if (arrayp cmd)
+        (conn-quick-reference
+         (conn-reference-page
+           (:eval (format "Keyboard macro: \"%s\""
+                          (conn--kmacro-display cmd)))))
+      (catch 'break
+        (dolist (a arguments)
+          (ignore
+           (conn-argument-command-documentation
+            a cmd (lambda (&rest pages)
+                    (apply #'conn-quick-reference pages)
+                    (throw 'break nil)))))))))
 
 (defun conn--read-args-describe-symbol (arguments)
   (let ((cmd (conn--read-args-completing-read arguments)))
@@ -321,11 +324,17 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let (partial-keymap cmd reading)
              (dlet ((conn-wincontrol-mode nil)
                     (conn-wincontrol-one-command-mode nil))
-               (setq keyseq (let ((inhibit-quit t))
-                              (read-key-sequence nil))
-                     cmd (key-binding keyseq t))
-               (while (arrayp cmd) ; keyboard macro
-                 (setq cmd (key-binding cmd t))))
+               (cl-loop
+                repeat 10 do
+                (setq keyseq (let ((inhibit-quit t))
+                               (read-key-sequence nil))
+                      cmd (key-binding keyseq t))
+                (if (arrayp cmd)
+                    (conn-add-unread-events cmd)
+                  (cl-return))
+                finally (progn
+                          (discard-input)
+                          (error "Keyboard macro recursion limit exceeded"))))
              (cond ((eql (aref keyseq 0) quit-event)
                     (setq cmd 'keyboard-quit))
                    ((and (null cmd)
@@ -478,13 +487,12 @@ echo area help message.
            (debug (([sexp &rest keywordp form])
                    ([&rest sexp form])
                    def-body)))
-  (pcase-let* (((or `(,state . ,keys) state) state-and-keys)
-               (form `(conn--read-args
-                       ',state
-                       (list ,@(mapcar #'cadr varlist))
-                       (pcase-lambda ,(mapcar #'car varlist) ,@body)
-                       ,@keys)))
-    form))
+  (pcase-let* (((or `(,state . ,keys) state) state-and-keys))
+    `(conn--read-args
+      ',state
+      (list ,@(mapcar #'cadr varlist))
+      (pcase-lambda ,(mapcar #'car varlist) ,@body)
+      ,@keys)))
 
 ;;;; Argument Types
 
