@@ -2787,7 +2787,12 @@ buffer."
              (pt (posn-point posn)))
         (when (and (not (posn-area posn))
                    (funcall conn-target-window-predicate win))
-          (:return (list pt win nil)))))))
+          (:return
+           (list pt
+                 win
+                 (oref conn-dispatch-target-finder thing)
+                 (oref conn-dispatch-target-finder arg)
+                 (oref conn-dispatch-target-finder transform))))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql repeat-dispatch-at-mouse)))
@@ -2800,7 +2805,12 @@ buffer."
              (pt (posn-point posn)))
         (when (and (not (posn-area posn))
                    (funcall conn-target-window-predicate win))
-          (:return (list pt win nil)))))))
+          (:return
+           (list pt
+                 win
+                 (oref conn-dispatch-target-finder thing)
+                 (oref conn-dispatch-target-finder arg)
+                 (oref conn-dispatch-target-finder transform))))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql change-target-finder)))
