@@ -755,7 +755,9 @@ buffer is a valid target.")
                     conn--dispatch-prev-state nil))
       (unwind-protect
           (funcall body)
-        (unless suspend (conn-clear-targets))))))
+        (if suspend
+            (conn--mark-targets 'conn-old-target)
+          (conn-clear-targets))))))
 
 (defmacro conn-with-dispatch (&rest body)
   (declare (indent 0))
@@ -767,13 +769,11 @@ buffer is a valid target.")
   `(progn
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
-     (unwind-protect
-         (conn--with-dispatch
-          (lambda ()
-            (message nil)
-            ,@body)
-          'suspend)
-       (conn--mark-targets 'conn-old-target))
+     (conn--with-dispatch
+      (lambda ()
+        (message nil)
+        ,@body)
+      'suspend)
      (ignore-errors (conn-dispatch-redisplay))))
 
 (define-inline conn-dispatch-other-end-p ()
