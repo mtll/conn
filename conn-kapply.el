@@ -631,17 +631,19 @@ Possibilities: \\<query-replace-map>
                      (`[,beg ,end ,_]
                       (recenter nil)
                       (move-overlay hl beg end (current-buffer))
-                      (pcase (car (read-multiple-choice
-                                   "Record here?"
-                                   '((?y "yes")
-                                     (?n "no")
-                                     (?N "No and skip to next buffer"))))
-                        (?y (cl-return val))
-                        (?N (funcall iterator :exit-current))))
+                      (let (eldoc-mode)
+                        (pcase (car (read-multiple-choice
+                                     "Record here?"
+                                     '((?y "yes")
+                                       (?n "no")
+                                       (?N "No and skip to next buffer"))))
+                          (?y (cl-return val))
+                          (?N (funcall iterator :exit-current)))))
                      (_ (cl-return val))))
                 (delete-overlay hl)))))
          (:next
-          (let ((res (funcall iterator state)))
+          (let ((res (funcall iterator state))
+                eldoc-mode)
             (if conn--kapply-automatic-flag res
               (save-window-excursion
                 (cl-loop
@@ -1072,35 +1074,23 @@ When kapply finishes restore the restrictions in each buffer."
    `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region))))
 
-(defun conn-kapply-with-state (iterator &optional conn-state)
+(defun conn-kapply-with-state (iterator conn-state)
   "Begin each macro iteration in a recursive stack containing CONN-STATE."
   (declare (important-return-value t)
            (side-effect-free t))
-  (unless conn-state
-    (cl-loop for state in conn--state-stack
-             when (and state
-                       (not (conn-substate-p state 'conn-autopop-state)))
-             return (setq conn-state state))
-    (when (null conn-state)
-      (error "Could not determine a state to kapply in")))
   (when (conn-substate-p conn-state 'conn-autopop-state)
     (error "Cannot kapply in an autopop state"))
   (add-function
    :around (var iterator)
-   (let (buffer-stacks)
+   (let (prev)
      (lambda (iterator state)
+       (when prev (conn-exit-recursive-stack prev))
        (let ((ret (funcall iterator state)))
-         (pcase state
-           (:cleanup
-            (pcase-dolist (`(,_buf . ,handle) buffer-stacks)
-              (conn-exit-recursive-stack handle)))
-           ((and (or :record :next)
-                 (guard ret))
-            (when conn-local-mode
-              (when-let* ((handle (alist-get (current-buffer) buffer-stacks)))
-                (conn-exit-recursive-stack handle))
-              (setf (alist-get (current-buffer) buffer-stacks)
-                    (conn-enter-recursive-stack conn-state)))))
+         (when (and ret
+                    conn-local-mode
+                    (or (eq state :record)
+                        (eq state :next)))
+           (setq prev (conn-enter-recursive-stack conn-state)))
          ret)))
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))

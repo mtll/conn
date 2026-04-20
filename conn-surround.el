@@ -108,7 +108,11 @@
 
 (defvar-keymap conn-surround-property-argument-map
   "w" :whole
-  "i" :inner)
+  "i" :inner
+  ")" "i ("
+  "]" "i ["
+  "}" "i {"
+  ">" "i <")
 
 (cl-defstruct (conn-surround-property-argument
                (:include conn-argument)
@@ -149,13 +153,6 @@
 
 (conn-define-state conn-surround-bounds-state (conn-surround-with-state)
   :lighter "SURROUND")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-surround-bounds-state)
-  ")" "i ("
-  "]" "i ["
-  "}" "i {"
-  ">" "i <")
 
 (conn-register-thing 'conn-surround)
 
