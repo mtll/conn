@@ -1138,6 +1138,7 @@ can only be changed by redefining a state and are not inherited.
                     [&optional stringp]
                     [&rest symbolp form]))
            (indent 2))
+  (cl-check-type parents list)
   (let ((docstring (or (and (stringp (car properties))
                             (pop properties))
                        (format "Non-nil when `%s' is active." name))))

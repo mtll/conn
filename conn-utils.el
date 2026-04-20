@@ -81,78 +81,62 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 (defmacro conn-< (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (as)
-    (cl-flet ((expand-last (&rest forms)
-                `(thread-last ,@forms))
-              (expand-as (binding &rest forms)
-                `(,as ,binding ,forms)))
-      `(cl-macrolet ((,as (val binding forms)
-                       `(pcase-exhaustive ,val
-                          (,binding ,@forms))))
-         (thread-first
-           ,@(mapcar (lambda (form)
-                       (pcase form
-                         (`(:as . ,rest) (apply #'expand-as rest))
-                         (`(:> . ,rest) (apply #'expand-last rest))
-                         (_ form)))
-                     forms))))))
+    `(cl-macrolet ((,as (val binding forms)
+                     `(pcase-exhaustive ,val
+                        (,binding ,@forms))))
+       (thread-first
+         ,@(mapcar (lambda (form)
+                     (pcase form
+                       (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                       (`(:> . ,forms) `(thread-last ,@forms))
+                       (_ form)))
+                   forms)))))
 
 (defmacro conn-<f (&rest forms)
   (declare (indent 1))
   (cl-with-gensyms (as)
-    (cl-flet ((expand-last (&rest forms)
-                `(thread-last ,@forms))
-              (expand-as (binding &rest forms)
-                `(,as ,binding ,forms)))
-      `(cl-macrolet ((,as (val binding forms)
-                       `(pcase-exhaustive ,val
-                          (,binding ,@forms))))
-         (cl-callf thread-first
-             ,@(mapcar (lambda (form)
-                         (pcase form
-                           (`(:as . ,rest) (apply #'expand-as rest))
-                           (`(:> . ,rest) (apply #'expand-last rest))
-                           (_ form)))
-                       forms))))))
+    `(cl-macrolet ((,as (val binding forms)
+                     `(pcase-exhaustive ,val
+                        (,binding ,@forms))))
+       (cl-callf thread-first
+           ,@(mapcar (lambda (form)
+                       (pcase form
+                         (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                         (`(:> . ,forms) `(thread-last ,@forms))
+                         (_ form)))
+                     forms)))))
 
 (defmacro conn-> (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (first as)
-    (cl-flet ((expand-first (&rest forms)
-                `(,first ,forms))
-              (expand-as (binding &rest forms)
-                `(,as ,binding ,forms)))
-      `(cl-macrolet ((,first (forms val)
-                       `(thread-first ,val ,@forms))
-                     (,as (binding forms val)
-                       `(pcase-exhaustive ,val
-                          (,binding ,@forms))))
-         (thread-last
-           ,@(mapcar (lambda (form)
-                       (pcase form
-                         (`(:as . ,rest) (apply #'expand-as rest))
-                         (`(:< . ,rest) (apply #'expand-first rest))
-                         (_ form)))
-                     forms))))))
+    `(cl-macrolet ((,first (forms val)
+                     `(thread-first ,val ,@forms))
+                   (,as (binding forms val)
+                     `(pcase-exhaustive ,val
+                        (,binding ,@forms))))
+       (thread-last
+         ,@(mapcar (lambda (form)
+                     (pcase form
+                       (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                       (`(:< . ,forms) `(,first ,forms))
+                       (_ form)))
+                   forms)))))
 
 (defmacro conn->f (&rest forms)
   (declare (indent 1))
   (cl-with-gensyms (first as)
-    (cl-flet ((expand-first (&rest args)
-                `(,first ,args))
-              (expand-as (binding &rest forms)
-                `(,as ,binding ,forms)))
-      `(cl-macrolet ((,first (forms val)
-                       `(thread-first ,val ,@forms))
-                     (,as (binding forms val)
-                       `(pcase-exhaustive ,val
-                          (,binding ,@forms))))
-         (cl-callf thread-last
-             ,@(mapcar (lambda (form)
-                         (pcase form
-                           (`(:as . ,rest) (apply #'expand-as rest))
-                           (`(:< . ,rest) (apply #'expand-first rest))
-                           (_ form)))
-                       forms))))))
+    `(cl-macrolet ((,first (forms val)
+                     `(thread-first ,val ,@forms))
+                   (,as (binding forms val)
+                     `(pcase-exhaustive ,val
+                        (,binding ,@forms))))
+       (cl-callf thread-last
+           ,@(mapcar (lambda (form)
+                       (pcase form
+                         (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                         (`(:< . ,forms) `(,first ,forms))
+                         (_ form)))
+                     forms)))))
 
 (defmacro conn--compat-callf (func place &rest args)
   (declare (indent 2)
