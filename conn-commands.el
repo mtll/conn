@@ -1263,7 +1263,8 @@ Currently selected window remains selected afterwards."
                                     (nconc dtform transform))
               (conn-dispatch-goto-char beg)
               (push-mark end t t))
-             (_ (user-error "No %s found" thing))))))
+             (_ (user-error "No %s found"
+                            (conn-thing-pretty-print thing)))))))
      thing arg dtform
      :repeat repeat
      :other-end other-end
@@ -1286,7 +1287,8 @@ Currently selected window remains selected afterwards."
                                   (nconc dtform transform))
             (conn-dispatch-goto-char beg)
             (push-mark end t t))
-           (_ (user-error "No %s found" thing))))))
+           (_ (user-error "No %s found"
+                          (conn-thing-pretty-print thing)))))))
    (conn-anonymous-thing
      '(expansion)
      :pretty-print ( :method (_) "expansion")
@@ -3369,7 +3371,8 @@ hook, which see."
                        (conn-dispatch-undo-pulse beg end))
                       (:cancel
                        (pop strings))))
-                   (_ (user-error "No %s found" thing))))))
+                   (_ (user-error "No %s found"
+                                  (conn-thing-pretty-print thing)))))))
            thing arg dtform
            :repeat repeat
            :other-end other-end
@@ -3440,7 +3443,8 @@ hook, which see."
               (conn--kill-region beg end t append register separator))
             (when reformat
               (funcall conn-kill-reformat-function bounds)))
-           (_ (user-error "No %s found" thing)))))
+           (_ (user-error "No %s found"
+                          (conn-thing-pretty-print thing))))))
      thing arg nil
      :other-end :no-other-end)
     (conn-push-command-history
@@ -3833,7 +3837,8 @@ that place."
                        (conn-dispatch-undo-pulse beg end))
                       (:cancel
                        (pop strings))))
-                   (_ (user-error "No %s found" thing)))))))
+                   (_ (user-error "No %s found"
+                                  (conn-thing-pretty-print thing))))))))
          thing arg transform
          :repeat repeat
          :other-end :no-other-end

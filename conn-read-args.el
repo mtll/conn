@@ -490,6 +490,7 @@ echo area help message.
                    ([&rest sexp form])
                    def-body)))
   (pcase-let* (((or `(,state . ,keys) state) state-and-keys))
+    (cl-check-type state symbol)
     `(conn--read-args
       ',state
       (list ,@(mapcar #'cadr varlist))

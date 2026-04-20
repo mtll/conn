@@ -674,10 +674,8 @@ command moves over."
                   :properties (list ,@properties))))))
   (conn--make-bounds
    :thing (pcase thing
-            ((pred conn-bounds-p)
-             (conn-bounds-thing thing))
-            ((pred conn-thing-p)
-             thing)
+            ((pred conn-bounds-p) (conn-bounds-thing thing))
+            ((pred conn-thing-p) thing)
             (_ (error "Not a valid thing: %s" thing)))
    :arg arg
    :whole whole

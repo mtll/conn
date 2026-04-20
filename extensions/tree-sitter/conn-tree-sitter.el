@@ -520,9 +520,8 @@
                                (length> (alist-get (overlay-start target) bounds-alist)
                                         1))
               :bounds-op ( :method (_self _arg)
-                           (conn-with-dispatch-suspended
-                             (conn-multi-thing-select
-                              (alist-get (point) bounds-alist))))))
+                           (conn-multi-thing-select
+                            (alist-get (point) bounds-alist)))))
            (bounds-thing
             (conn-anonymous-thing
               '(conn-ts-thing)
@@ -548,7 +547,8 @@
                         (let ((th (conn--copy-anonymous-thing bounds-thing)))
                           (setf (conn-thing-get th :types) ,types)
                           th)
-                        nil ,bounds)))
+                        nil
+                        ,bounds)))
         (pcase-dolist (`(,vbeg . ,vend)
                        (conn--visible-regions (window-start)
                                               (window-end)))
@@ -599,9 +599,8 @@
                                (length> (alist-get (overlay-start target) bounds-alist)
                                         1))
               :bounds-op ( :method (self _arg)
-                           (conn-with-dispatch-suspended
-                             (conn-multi-thing-select
-                              (alist-get (point) bounds-alist)))))))
+                           (conn-multi-thing-select
+                            (alist-get (point) bounds-alist))))))
       (cl-flet ((make-bounds (bounds parent-thing type)
                   (conn-make-bounds
                    (conn-anonymous-thing

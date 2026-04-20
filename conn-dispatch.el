@@ -707,6 +707,9 @@ buffer is a valid target.")
 
 (defvar conn--current-dispatch-buffers nil)
 
+(defvar conn-dispatch-label-function)
+(defvar conn-dispatch-action-reference)
+
 (defun conn--with-dispatch (body &optional suspend)
   (when suspend
     (conn-target-finder-suspend conn-dispatch-target-finder)
@@ -983,8 +986,8 @@ buffer is a valid target.")
   (repeat nil :read-only t)
   (description (lambda (&rest _) "") :type function :read-only t)
   (reference #'ignore :type function :read-only t)
-  (window-predicate nil :type function :read-only t)
-  (target-predicate nil :type function :read-only t))
+  (window-predicate #'always :type function :read-only t)
+  (target-predicate #'always :type function :read-only t))
 
 (defalias 'conn-action-function 'conn-action--function)
 (defalias 'conn-action-repeat 'conn-action--repeat)
@@ -1155,6 +1158,12 @@ buffer is a valid target.")
       (pcase-dolist (`(,_ . ,undo-fn) undo)
         (funcall undo-fn :accept)))
     (conn-action-accept conn-dispatch-action))
+  (add-function :after-while conn-target-window-predicate
+                (conn-action-window-predicate action)
+                '((name . action-predicate)))
+  (add-function :after-while conn-target-predicate
+                (conn-action-target-predicate action)
+                '((name . action-predicate)))
   (setq conn-dispatch-action action)
   (setq conn-dispatch-repeating
         (and repeat (conn-action-repeatable-p action))))
@@ -1459,7 +1468,8 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
 
 ;;;;; Bounds of Dispatch
 
-(cl-defgeneric conn-bounds-of-dispatch (thing arg location))
+(cl-defgeneric conn-bounds-of-dispatch (thing arg location)
+  (declare (conn-anonymous-thing-property :bounds-of-dispatch)))
 
 (cl-defmethod conn-bounds-of-dispatch (thing arg location)
   (when-let* ((bounds (save-excursion
@@ -4313,7 +4323,8 @@ contain targets."
                  ((conn-bounds `(,beg . ,end) ftransform)
                   (conn-dispatch-action-pulse beg end)
                   (filter-buffer-substring beg end))
-                 (_ (user-error "No %s found" (conn-thing-pretty-print fthing))))))
+                 (_ (user-error "No %s found"
+                                (conn-thing-pretty-print fthing))))))
       (conn-action ((replace-and-separator
                      (conn-dispatch-to-how-argument)))
         (:description "Copy To")
@@ -4866,54 +4877,50 @@ it.")
          (conn-previous-dispatch-action prev-dispatch))
     (error "Action stale"))
   (conn-with-dispatch
-   (pcase-let (((cl-struct conn-previous-dispatch
-                           action
-                           (other-end conn-dispatch-other-end)
-                           repeat
-                           target-finder
-                           restrict-windows)
-                prev-dispatch))
-     (unwind-protect
-         (conn-with-dispatch-handlers
-           (:handler
-            (:depth -99)
-            ( :display ()
-              (when-let* ((desc (conn-action-description conn-dispatch-action)))
-                (propertize desc 'face 'conn-argument-active-face))))
-           ( :with (conn-dispatch-prefix-arg)
-             :depth -97)
-           ( :with (conn-read-char-input-method)
-             :depth -96)
-           (conn-with-dispatch-input-buffer
-             (let ((conn-dispatch-in-progress t))
-               (let ((im (or current-input-method
-                             conn--input-method)))
-                 (with-current-buffer conn-dispatch-input-buffer
-                   (activate-input-method im)))
-               (conn-target-finder-setup target-finder)
-               (conn-action-setup action (xor repeat invert-repeat))
-               (when-let* ((predicate (conn-action-window-predicate action)))
-                 (add-function :after-while conn-target-window-predicate predicate))
-               (when-let* ((predicate (conn-action-target-predicate action)))
-                 (add-function :after-while conn-target-predicate predicate))
-               (when restrict-windows
-                 (add-function :after-while conn-target-window-predicate
-                               'conn--dispatch-restrict-windows
-                               '((name . restrict-windows))))
-               (conn--dispatch-loop)
-               (conn-action-accept conn-dispatch-action)
-               (setf (conn-previous-dispatch-repeat prev-dispatch)
-                     conn-dispatch-repeating)
-               (setf (conn-previous-dispatch-other-end prev-dispatch)
-                     conn-dispatch-other-end)
-               (setf (conn-previous-dispatch-target-finder prev-dispatch)
-                     conn-dispatch-target-finder)
-               (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
-                     (advice-function-member-p
-                      'restrict-windows
-                      conn-target-window-predicate))
-               (conn-dispatch-push-history prev-dispatch))))
-       (conn-clear-targets)))))
+    (pcase-let (((cl-struct conn-previous-dispatch
+                            action
+                            (other-end conn-dispatch-other-end)
+                            repeat
+                            target-finder
+                            restrict-windows)
+                 prev-dispatch))
+      (unwind-protect
+          (conn-with-dispatch-handlers
+            (:handler
+             (:depth -99)
+             ( :display ()
+               (when-let* ((desc (conn-action-description conn-dispatch-action)))
+                 (propertize desc 'face 'conn-argument-active-face))))
+            ( :with (conn-dispatch-prefix-arg)
+              :depth -97)
+            ( :with (conn-read-char-input-method)
+              :depth -96)
+            (conn-with-dispatch-input-buffer
+              (let ((conn-dispatch-in-progress t))
+                (let ((im (or current-input-method
+                              conn--input-method)))
+                  (with-current-buffer conn-dispatch-input-buffer
+                    (activate-input-method im)))
+                (conn-target-finder-setup target-finder)
+                (conn-action-setup action (xor repeat invert-repeat))
+                (when restrict-windows
+                  (add-function :after-while conn-target-window-predicate
+                                'conn--dispatch-restrict-windows
+                                '((name . restrict-windows))))
+                (conn--dispatch-loop)
+                (conn-action-accept conn-dispatch-action)
+                (setf (conn-previous-dispatch-repeat prev-dispatch)
+                      conn-dispatch-repeating)
+                (setf (conn-previous-dispatch-other-end prev-dispatch)
+                      conn-dispatch-other-end)
+                (setf (conn-previous-dispatch-target-finder prev-dispatch)
+                      conn-dispatch-target-finder)
+                (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
+                      (advice-function-member-p
+                       'restrict-windows
+                       conn-target-window-predicate))
+                (conn-dispatch-push-history prev-dispatch))))
+        (conn-clear-targets)))))
 
 ;;;;; Dispatch Commands
 
@@ -4928,45 +4935,41 @@ it.")
   (when (null action)
     (setq action (conn-get-default-action thing)))
   (conn-with-dispatch
-   (setq conn-dispatch-other-end (pcase other-end
-                                   (:no-other-end (lambda (&rest _) 0))
-                                   ('t #'-)
-                                   ('nil #'+)))
-   (unwind-protect
-       (conn-with-dispatch-handlers
-         (:handler
-          (:depth -99)
-          ( :display ()
-            (when-let* ((desc (conn-action-description conn-dispatch-action)))
-              (propertize desc 'face 'conn-argument-active-face))))
-         ( :with (conn-dispatch-prefix-arg)
-           :depth -97)
-         ( :with (conn-read-char-input-method)
-           :depth -96)
-         (conn-with-dispatch-input-buffer
-           (conn-action-setup (or action (conn-get-default-action thing))
-                              repeat)
-           (conn-target-finder-setup
-            (conn-get-target-finder thing arg transform))
-           (let ((im (or current-input-method
-                         conn--input-method)))
-             (with-current-buffer conn-dispatch-input-buffer
-               (activate-input-method im)))
-           (when-let* ((predicate (conn-action-window-predicate action)))
-             (add-function :after-while conn-target-window-predicate predicate))
-           (when-let* ((predicate (conn-action-target-predicate action)))
-             (add-function :after-while conn-target-predicate predicate))
-           (when restrict-windows
-             (add-function :after-while conn-target-window-predicate
-                           'conn--dispatch-restrict-windows
-                           '((name . restrict-windows))))
-           (conn--dispatch-loop)
-           (conn-action-accept conn-dispatch-action)
-           (unless (conn-action-no-history action)
-             (let ((prev (conn-make-dispatch action)))
-               (conn-dispatch-push-history prev)
-               (conn-push-command-history 'conn-dispatch-setup-previous prev)))))
-     (conn-clear-targets))))
+    (setq conn-dispatch-other-end (pcase other-end
+                                    (:no-other-end (lambda (&rest _) 0))
+                                    ('t #'-)
+                                    ('nil #'+)))
+    (unwind-protect
+        (conn-with-dispatch-handlers
+          (:handler
+           (:depth -99)
+           ( :display ()
+             (when-let* ((desc (conn-action-description conn-dispatch-action)))
+               (propertize desc 'face 'conn-argument-active-face))))
+          ( :with (conn-dispatch-prefix-arg)
+            :depth -97)
+          ( :with (conn-read-char-input-method)
+            :depth -96)
+          (conn-with-dispatch-input-buffer
+            (conn-action-setup (or action (conn-get-default-action thing))
+                               repeat)
+            (conn-target-finder-setup
+             (conn-get-target-finder thing arg transform))
+            (let ((im (or current-input-method
+                          conn--input-method)))
+              (with-current-buffer conn-dispatch-input-buffer
+                (activate-input-method im)))
+            (when restrict-windows
+              (add-function :after-while conn-target-window-predicate
+                            'conn--dispatch-restrict-windows
+                            '((name . restrict-windows))))
+            (conn--dispatch-loop)
+            (conn-action-accept conn-dispatch-action)
+            (unless (conn-action-no-history action)
+              (let ((prev (conn-make-dispatch action)))
+                (conn-dispatch-push-history prev)
+                (conn-push-command-history 'conn-dispatch-setup-previous prev)))))
+      (conn-clear-targets))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)
@@ -5222,7 +5225,8 @@ for the dispatch."
                         ((or :cancel :undo)
                          (pop subregions))))
                      (_
-                      (user-error "No %s found at point" thing))))))
+                      (user-error "No %s found at point"
+                                  (conn-thing-pretty-print thing)))))))
              thing arg transform
              :repeat repeat
              :other-end :no-other-end)
