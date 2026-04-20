@@ -212,6 +212,8 @@ See also `conn-kapply-consume-region'."
     (overlay-put ov 'face 'conn-kapply-region-face)
     ov))
 
+(defconst conn--kapply-region (make-vector 3 nil))
+
 (defun conn-kapply-consume-region (ov)
   "Consume overlay OV and return a region for kapply pipeline functions.
 
@@ -221,10 +223,11 @@ This deletes the overlay OV.
 
 See also `conn-kapply-make-region'."
   (when ov
-    (prog1 (vector (overlay-start ov)
-                   (overlay-end ov)
-                   (overlay-buffer ov))
-      (delete-overlay ov))))
+    (setf (aref conn--kapply-region 0) (overlay-start ov)
+          (aref conn--kapply-region 1) (overlay-end ov)
+          (aref conn--kapply-region 2) (overlay-buffer ov))
+    (delete-overlay ov)
+    conn--kapply-region))
 
 (defun conn-kapply-macro (applier iterator pipeline)
   "Apply a keyboard macro on a set of regions.
@@ -1694,7 +1697,7 @@ finishing showing the buffers that were visited."))
                                    ibuffer
                                    excursions
                                    (restrictions t)
-                                   (windows t)
+                                   windows
                                    applier)
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply"
@@ -1905,7 +1908,7 @@ finishing showing the buffers that were visited."))
                   (list (conn-kapply-query-argument)
                         (conn-kapply-excursions-argument t)
                         (conn-kapply-restrictions-argument t)
-                        (conn-kapply-window-conf-argument t)
+                        (conn-kapply-window-conf-argument)
                         (conn-kapply-undo-argument))))
        (applier (conn-kapply-macro-argument)))
     (conn-kapply-macro
@@ -1992,7 +1995,7 @@ finishing showing the buffers that were visited."))
                                  (conn-kapply-query-argument)
                                  (conn-kapply-excursions-argument t)
                                  (conn-kapply-restrictions-argument t)
-                                 (conn-kapply-window-conf-argument t)
+                                 (conn-kapply-window-conf-argument)
                                  (conn-kapply-undo-argument))))
                 (applier (conn-kapply-macro-argument)))
              (setq restrict rst)
@@ -2155,7 +2158,7 @@ finishing showing the buffers that were visited."))
       ((pipeline
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)
-               (conn-kapply-window-conf-argument t)
+               (conn-kapply-window-conf-argument)
                (conn-kapply-state-argument)
                (lambda (it) (conn-kapply-save-excursion it t))
                #'conn-kapply-relocate-to-region
