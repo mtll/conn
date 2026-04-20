@@ -196,8 +196,8 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 
 (defalias 'conn--with-work-buffer
   (static-if (<= 31 emacs-major-version)
-      'with-temp-buffer
-    'with-work-buffer))
+      'with-work-buffer
+    'with-temp-buffer))
 
 (defun conn--open-invisible (beg end)
   (catch 'return
