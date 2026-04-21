@@ -721,7 +721,8 @@ buffer is a valid target.")
          (conn--dispatch-prev-state
           (list conn-target-window-predicate
                 conn-target-predicate
-                conn-target-sort-function))
+                conn-target-sort-function
+                inhibit-message))
          (conn-dispatch-hide-labels nil)
          (conn-dispatch-quit-flag nil)
          (conn-target-window-predicate conn-target-window-predicate)
@@ -732,10 +733,6 @@ buffer is a valid target.")
          (conn-dispatch-action-reference nil)
          (conn-targets nil)
          (conn-target-count nil)
-         ( conn-dispatch-action nil
-           (when (and (not suspend)
-                      conn-dispatch-action)
-             (conn-action-cancel conn-dispatch-action)))
          (conn-dispatch-repeating nil)
          (conn-dispatch-iteration-count 0)
          (conn-dispatch-target-finder nil)
@@ -745,12 +742,16 @@ buffer is a valid target.")
           (and (not suspend)
                (make-hash-table :test 'eq)))
          (conn-dispatch-in-progress (not suspend))
-         (inhibit-message (and (not suspend)
-                               inhibit-message)))
+         (inhibit-message t)
+         ( conn-dispatch-action nil
+           (when (and (not suspend)
+                      conn-dispatch-action)
+             (conn-action-cancel conn-dispatch-action))))
       (when suspend
         (pcase-setq `(,conn-target-window-predicate
                       ,conn-target-predicate
-                      ,conn-target-sort-function)
+                      ,conn-target-sort-function
+                      ,inhibit-message)
                     prev
                     conn--dispatch-prev-state nil))
       (unwind-protect
