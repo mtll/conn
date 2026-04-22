@@ -1094,10 +1094,7 @@ Currently selected window remains selected afterwards."
       'xref-find-definitions)))
 
 (defun conn-dwim-button ()
-  (cond ((and-let* ((button (button-at (point))))
-           (button-get button 'action))
-         'push-button)
-        ((and (fboundp 'widget-apply)
+  (cond ((and (fboundp 'widget-apply)
               (ignore-errors
                 (widget-apply (get-char-property (point) 'button)
                               :active)))

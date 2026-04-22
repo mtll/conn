@@ -154,7 +154,6 @@ strings have `conn-dispatch-label-face'."
          (i 0))
     (setf (aref buckets i) (thread-last
                              (take count conn-simple-label-characters)
-                             (copy-sequence)
                              (mapcar #'copy-sequence)
                              (nreverse)))
     (cl-loop
@@ -714,51 +713,53 @@ buffer is a valid target.")
   (when suspend
     (conn-target-finder-suspend conn-dispatch-target-finder)
     (funcall conn--dispatch-suspend-labels))
-  (conn-protected-let*
-      ((prev conn--dispatch-prev-state)
-       (conn-wincontrol-mode nil)
-       (conn-wincontrol-one-command-mode nil)
-       (conn--dispatch-prev-state
-        (list conn-target-window-predicate
-              conn-target-predicate
-              conn-target-sort-function
-              inhibit-message))
-       (conn-dispatch-hide-labels nil)
-       (conn-dispatch-quit-flag nil)
-       (conn-target-window-predicate conn-target-window-predicate)
-       (conn-target-predicate conn-target-predicate)
-       (conn-target-sort-function conn-target-sort-function)
-       (conn-dispatch-label-function conn-dispatch-label-function)
-       (conn-dispatch-other-end (and (not suspend) #'+))
-       (conn-dispatch-action-reference nil)
-       (conn-targets nil)
-       (conn-target-count nil)
-       (conn-dispatch-repeating nil)
-       (conn-dispatch-iteration-count 0)
-       (conn-dispatch-target-finder nil)
-       (conn--dispatch-label-state nil)
-       (conn--dispatch-change-groups nil)
-       (conn--current-dispatch-buffers
-        (and (not suspend)
-             (make-hash-table :test 'eq)))
-       (conn-dispatch-in-progress (not suspend))
-       (inhibit-message t)
-       ( conn-dispatch-action nil
-         (when (and (not suspend)
-                    conn-dispatch-action)
-           (conn-action-cancel conn-dispatch-action))))
+  (unwind-protect
+      (conn-protected-let*
+          ((prev conn--dispatch-prev-state)
+           (conn-wincontrol-mode nil)
+           (conn-wincontrol-one-command-mode nil)
+           (conn--dispatch-prev-state
+            (list conn-target-window-predicate
+                  conn-target-predicate
+                  conn-target-sort-function
+                  inhibit-message))
+           (conn-dispatch-hide-labels nil)
+           (conn-dispatch-quit-flag nil)
+           (conn-target-window-predicate conn-target-window-predicate)
+           (conn-target-predicate conn-target-predicate)
+           (conn-target-sort-function conn-target-sort-function)
+           (conn-dispatch-label-function conn-dispatch-label-function)
+           (conn-dispatch-other-end (and (not suspend) #'+))
+           (conn-dispatch-action-reference nil)
+           (conn-targets nil)
+           (conn-target-count nil)
+           (conn-dispatch-repeating nil)
+           (conn-dispatch-iteration-count 0)
+           (conn-dispatch-target-finder nil)
+           (conn--dispatch-label-state nil)
+           (conn--dispatch-change-groups nil)
+           (conn--current-dispatch-buffers
+            (and (not suspend)
+                 (make-hash-table :test 'eq)))
+           (conn-dispatch-in-progress (not suspend))
+           (inhibit-message t)
+           ( conn-dispatch-action nil
+             (when (and (not suspend)
+                        conn-dispatch-action)
+               (conn-action-cancel conn-dispatch-action))))
+        (when suspend
+          (pcase-setq `(,conn-target-window-predicate
+                        ,conn-target-predicate
+                        ,conn-target-sort-function
+                        ,inhibit-message)
+                      prev
+                      conn--dispatch-prev-state nil))
+        (unwind-protect
+            (funcall body)
+          (unless suspend
+            (conn-clear-targets))))
     (when suspend
-      (pcase-setq `(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function
-                    ,inhibit-message)
-                  prev
-                  conn--dispatch-prev-state nil))
-    (unwind-protect
-        (funcall body)
-      (if suspend
-          (conn--mark-targets 'conn-old-target)
-        (conn-clear-targets)))))
+      (conn--mark-targets 'conn-old-target))))
 
 (defmacro conn-with-dispatch (&rest body)
   (declare (indent 0))
