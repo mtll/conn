@@ -29,23 +29,22 @@
 
 (defconst conn--key-missing (gensym "key-missing"))
 
-(eval-and-compile
-  (defun conn--protected-let* (varlist body)
-    (cl-with-gensyms (success)
-      (named-let protect ((binding (car (last varlist)))
-                          (rest (reverse (cons success (butlast varlist))))
-                          (body `(prog1 ,(macroexp-progn body)
-                                   (setq ,success t))))
-        (pcase binding
-          ('nil body)
-          (`(,var ,val ,cleanup)
-           (protect (car rest) (cdr rest)
-                    `(let* ((,var ,val))
-                       (unwind-protect
-                           ,body
-                         (unless ,success ,cleanup)))))
-          (_ (protect (car rest) (cdr rest)
-                      (macroexp-let* (list binding) body))))))))
+(defun conn--protected-let* (varlist body)
+  (cl-with-gensyms (success)
+    (named-let protect ((binding (car (last varlist)))
+                        (rest (reverse (cons success (butlast varlist))))
+                        (body `(prog1 ,(macroexp-progn body)
+                                 (setq ,success t))))
+      (pcase binding
+        ('nil body)
+        (`(,var ,val ,cleanup)
+         (protect (car rest) (cdr rest)
+                  `(let* ((,var ,val))
+                     (unwind-protect
+                         ,body
+                       (unless ,success ,cleanup)))))
+        (_ (protect (car rest) (cdr rest)
+                    (macroexp-let* (list binding) body)))))))
 
 (defmacro conn-protected-let* (varlist &rest body)
   "Bind variables according to VARLIST then eval body as in `let*'.
