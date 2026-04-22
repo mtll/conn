@@ -68,11 +68,10 @@
   (conn-reference-page
     :depth 80
     (:heading "Read Args")
-    "Interactively reading arguments for a command."
-    (((:keymap conn-read-args-map)
-      ("backward delete arg" backward-delete-arg)
-      ("reset arg" reset-arg)
-      ("available commands with completion" help)))))
+    ((("backward delete arg" backward-delete-arg))
+     (("reset arg" reset-arg)))
+    ((("available commands with completion"
+       execute-extended-command)))))
 
 (defun conn-read-args-prefix-arg ()
   "Return the value of the current prefix argument during `conn-read-args'."

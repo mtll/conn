@@ -1627,7 +1627,6 @@ selected by dispatch with it.")
 
 (defvar conn-replace-reference
   (list (conn-reference-page
-          "Replace instances of a pattern in a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-replace-special-ref 2))
@@ -2123,7 +2122,6 @@ For more information about how the replacement is carried out see
 
 (defvar conn-isearch-reference
   (list (conn-reference-page
-          "Isearch within a thing."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-isearch-special-ref 2))
@@ -2406,7 +2404,6 @@ Exiting the recursive edit will resume the isearch."
 
 (defvar conn-transpose-reference
   (list (conn-reference-page
-          "Transpose two things."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-transpose-special-ref 3)))))
@@ -2675,10 +2672,6 @@ region after a `recursive-edit'."
 
 (defvar conn-kill-reference
   (list (conn-reference-page
-          "Kill some things.
-If append is set to COLLECT then the first invocation sets the place
-which is being killed to and further invocations with `conn-repeat'
-append to that place."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-kill-special-ref 3))
@@ -3534,10 +3527,6 @@ hook, which see."
 
 (defvar conn-copy-reference
   (list (conn-reference-page
-          "Copy some things.
-If append is set to COLLECT then the first invocation sets the place
-which is being copied to and further invocations with `conn-repeat'
-append to that place."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-copy-special-ref 3))
@@ -3860,7 +3849,6 @@ that place."
 
 (defvar conn-how-many-reference
   (list (conn-reference-page
-          "Count the number of matches within a thing."
           (:splice (when conn-how-many-special-ref
                      (conn-reference-quote
                        ((:heading "Special Bindings")
@@ -3929,7 +3917,6 @@ The regexp is read interactively."
 
 (defvar conn-comment-reference
   (list (conn-reference-page
-          "Comment a thing."
           (:splice (when conn-comment-special-ref
                      (conn-reference-quote
                        ((:heading "Special Bindings")
@@ -3990,7 +3977,6 @@ For how they are used to define the region see `conn-bounds-of' and
 
 (defvar conn-duplicate-reference
   (list (conn-reference-page
-          "Duplicate a thing."
           (:splice (when conn-duplicate-special-ref
                      (conn-reference-quote
                        ((:heading "Special Bindings")
@@ -4419,7 +4405,6 @@ Interactively REPEAT is given by the prefix argument."
 
 (defvar conn-change-reference
   (list (conn-reference-page
-          "Change some things."
           (:heading "Special Bindings")
           (:eval (conn-quick-ref-to-cols
                   conn-change-special-ref 3))
@@ -4877,7 +4862,6 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 
 (defvar conn-indent-reference
   (list (conn-reference-page
-          "Indent some thing."
           (:splice (when conn-indent-special-ref
                      (conn-reference-quote
                        ((:heading "Special Bindings")

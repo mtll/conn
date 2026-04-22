@@ -4933,10 +4933,13 @@ it.")
                                &key
                                repeat
                                restrict-windows
-                               other-end)
+                               other-end
+                               must-prompt)
   (when (null action)
     (setq action (conn-get-default-action thing)))
   (conn-with-dispatch
+    (when must-prompt
+      (setq conn-dispatch-always-prompt t))
     (setq conn-dispatch-other-end (pcase other-end
                                     (:no-other-end (lambda (&rest _) 0))
                                     ('t #'-)
@@ -5127,7 +5130,8 @@ for the dispatch."
      :pretty-print ( :method (_self) "all-buttons")
      :target-finder ( :method (_self &rest _)
                       (conn-dispatch-button-targets)))
-   nil nil))
+   nil nil
+   :must-prompt t))
 
 (conn-define-target-finder conn-isearch-targets () ()
   ( :update-method (state)

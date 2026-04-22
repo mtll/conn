@@ -1706,10 +1706,8 @@ words."))
   (conn-reference-page
     :depth 70
     (:heading "Reformat")
-    (:eval (substitute-command-keys "Attempt to reformat the buffer around the killed region.  If toggled
-with a prefix argument then set the default value of reformat in the
-current buffer.
-\\[set-reformat] toggle and set the buffer local value of reformat."))))
+    ((("toggle" reformat))
+     (("toggle and set buffer locally" set-reformat)))))
 
 (defvar-keymap conn-reformat-argument-map)
 
@@ -1772,10 +1770,8 @@ not be delete.  The the value returned by each function is ignored.")
   (conn-reference-page
     :depth 70
     (:heading "Check Bounds Argument")
-    "Toggle running `conn-check-bounds-functions' to ensure that the region
-being killed is valid.  With a prefix argument set the default value for
-check bounds in the current buffer.
-\\[set-check-bounds] toggle and set buffer local value of check-bounds."))
+    ((("toggle" check-bounds))
+     (("toggle and set buffer locally" set-check-bounds)))))
 
 (defvar-keymap conn-check-bounds-argument-map)
 

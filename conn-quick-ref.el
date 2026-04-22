@@ -172,7 +172,7 @@
                       (dolist (key (nreverse keys))
                         (insert key ", "))
                       (delete-char -2)
-                      (insert ": ")
+                      (insert " ")
                       (let ((col (current-column)))
                         (save-excursion
                           (insert description))
