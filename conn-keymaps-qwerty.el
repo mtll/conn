@@ -360,6 +360,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
   "TAB" 'repeat-dispatch
+  "<tab>" 'repeat-dispatch
   "M-j" (conn-anonymous-thing
           '(point)
           :pretty-print ( :method (_) "jump-ring")
@@ -581,6 +582,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
   "TAB" 'repeat-dispatch
+  "<tab>" 'repeat-dispatch
   "C-w" 'restrict-windows
   "SPC" 'scroll-up-command
   "DEL" 'scroll-down-command
