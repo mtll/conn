@@ -276,6 +276,8 @@ This skips executing the body of the `conn-read-args' form entirely."
   `(throw 'conn-read-args-return
           (list (lambda () ,@body))))
 
+(defvar conn-read-args-message-delay 0)
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -297,13 +299,14 @@ This skips executing the body of the `conn-read-args' form entirely."
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
         (maps nil)
-        (keyseq nil))
+        (keyseq nil)
+        (timer nil))
     (cl-labels
         ((continue-p ()
            (cl-loop for arg in arguments
                     thereis (conn-argument-required-p arg)))
          (display-message ()
-           (unless executing-kbd-macro
+           (unless (or executing-kbd-macro timer)
              (when (and conn--read-args-message-timeout
                         (time-less-p conn--read-args-message-timeout nil))
                (setq conn--read-args-message nil
@@ -412,21 +415,32 @@ This skips executing the body of the `conn-read-args' form entirely."
                (setq unread-command-events nil ;should this be smarter?
                      conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
-       (catch 'conn-read-args-return
-         (conn--unwind-protect-all
-           (let ((conn-read-args-last-prefix nil))
-             (if around (funcall around #'loop) (loop))
-             (setq argument-values (mapcar #'conn-argument-payload
-                                           arglist)))
-           (unless argument-values
-             (mapc #'conn-argument-cancel arguments))
-           (unless executing-kbd-macro
-             (let ((inhibit-message conn-read-args-inhibit-message)
-                   (message-log-max nil)
-                   (scroll-conservatively 100))
-               (message nil))))
-         (mapc #'conn-argument-accept arguments)
-         (cons callback argument-values))))))
+       (unwind-protect
+           (catch 'conn-read-args-return
+             (when (and conn-read-args-message-delay
+                        (not executing-kbd-macro)
+                        (> conn-read-args-message-delay 0))
+               (setq timer (run-with-idle-timer
+                            conn-read-args-message-delay
+                            nil (lambda ()
+                                  (setq timer nil)
+                                  (display-message)))))
+             (conn--unwind-protect-all
+               (let ((conn-read-args-last-prefix nil))
+                 (if around (funcall around #'loop) (loop))
+                 (setq argument-values (mapcar #'conn-argument-payload
+                                               arglist)))
+               (unless argument-values
+                 (mapc #'conn-argument-cancel arguments))
+               (unless executing-kbd-macro
+                 (let ((inhibit-message conn-read-args-inhibit-message)
+                       (message-log-max nil)
+                       (scroll-conservatively 100))
+                   (message nil))))
+             (mapc #'conn-argument-accept arguments)
+             (cons callback argument-values))
+         (when timer
+           (cancel-timer timer)))))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.

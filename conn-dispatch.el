@@ -2607,16 +2607,17 @@ the meaning of depth."
             (cond ((eql ev (car (last (current-input-mode))))
                    (signal 'quit nil))
                   ((characterp ev) ev))))
-      (conn-read-args (conn-dispatch-read-char-state
-                       :prompt prompt
-                       :command-handler (conn-dispatch-read-char-handlers)
-                       :display-handler message-fn
-                       :pre (lambda (cmd)
-                              (run-hook-with-args
-                               'conn-dispatch-read-char-pre-functions
-                               cmd)))
-          ((char (conn-dispatch-char-argument use-input-method)))
-        char))))
+      (let (conn-read-args-message-delay)
+        (conn-read-args (conn-dispatch-read-char-state
+                         :prompt prompt
+                         :command-handler (conn-dispatch-read-char-handlers)
+                         :display-handler message-fn
+                         :pre (lambda (cmd)
+                                (run-hook-with-args
+                                 'conn-dispatch-read-char-pre-functions
+                                 cmd)))
+            ((char (conn-dispatch-char-argument use-input-method)))
+          char)))))
 
 (cl-defstruct (conn-dispatch-read-char-handlers
                (:include conn-composite-argument)
