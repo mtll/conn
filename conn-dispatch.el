@@ -845,12 +845,11 @@ buffer is a valid target.")
      (if (or (stringp val)
              (eq 'default val))
          nil
-       (let ((s (with-current-buffer conn-dispatch-input-buffer
-                  (read-string "Separator (RET for default): " nil
-                               'conn-separator-history nil t))))
+       (let ((s (read-string "Separator (RET for default): " nil
+                             'conn-separator-history nil t)))
          (if (equal s "") 'default s))))
    :value initial-value
-   :documentation "Read a separator to be inserted each string."))
+   :documentation "Read a separator to be inserted between each string."))
 
 (defvar-keymap conn-dispatch-replace-argument-map)
 
@@ -887,10 +886,12 @@ buffer is a valid target.")
 
 (cl-defstruct (conn-dispatch-marker-argument
                (:include conn-argument)
-               (:constructor conn-dispatch-marker-argument ())))
+               (:constructor conn-dispatch-marker-argument
+                             (&optional type)))
+  (type nil :type boolean :read-only t))
 
-(cl-defmethod conn-argument-payload ((_arg conn-dispatch-marker-argument))
-  (copy-marker (point) t))
+(cl-defmethod conn-argument-payload ((arg conn-dispatch-marker-argument))
+  (copy-marker (point) (conn-dispatch-marker-argument-type arg)))
 
 ;;;;;; Dispatch Quick Ref
 
@@ -1034,11 +1035,11 @@ buffer is a valid target.")
                  (value
                   &key
                   read
-                  (copy #'identity)
-                  (stale #'ignore)
-                  (cleanup #'ignore)
-                  (accept #'ignore)
-                  (cancel #'ignore)
+                  copy
+                  stale
+                  cleanup
+                  accept
+                  cancel
                   stay-live
                   &aux
                   (live (not read)))))
@@ -1049,7 +1050,7 @@ buffer is a valid target.")
   (stale #'ignore :type function :read-only t)
   (cleanup #'ignore :type function :read-only t)
   (copy #'identity :type function :read-only t)
-  (accept #'ignore :type function :read-only t)
+  (accept #'identity :type function :read-only t)
   (cancel #'ignore :type function :read-only t))
 
 (eval-and-compile
@@ -1131,30 +1132,29 @@ buffer is a valid target.")
 (defun conn-action-cleanup (action)
   (dolist (slot (conn-action--slots action))
     (when (conn-action-slot--live slot)
-      (when-let* ((dtor (conn-action-slot--cleanup slot)))
-        (funcall dtor (conn-action-slot--value slot)))
-      (setf (conn-action-slot--live slot) nil
-            (conn-action-slot--value slot) nil))))
+      (funcall (conn-action-slot--cleanup slot)
+               (conn-action-slot--value slot)))
+    (setf (conn-action-slot--live slot) nil
+          (conn-action-slot--value slot) nil)))
 
 (defun conn-action-cancel (action)
   (dolist (slot (conn-action--slots action))
-    (cond ((conn-action-slot--live slot)
-           (when-let* ((cancel (conn-action-slot--cancel slot)))
-             (funcall cancel (conn-action-slot--value slot)))
-           (setf (conn-action-slot--live slot) nil))
-          ((conn-action-slot--read slot)
+    (cond ((conn-action-slot--read slot)
            (conn-argument-cancel (conn-action-slot--value slot))
-           (setf (conn-action-slot--read slot) nil)))
-    (unless (conn-action-slot--stay-live slot)
-      (setf (conn-action-slot--live slot) nil
-            (conn-action-slot--value slot) nil))))
+           (setf (conn-action-slot--read slot) nil))
+          ((conn-action-slot--live slot)
+           (setf (conn-action-slot--value slot)
+                 (funcall (conn-action-slot--cancel slot)
+                          (conn-action-slot--value slot)))
+           (unless (conn-action-slot--stay-live slot)
+             (setf (conn-action-slot--live slot) nil))))))
 
 (defun conn-action-accept (action)
   (dolist (slot (conn-action--slots action))
     (when (conn-action-slot--live slot)
-      (when-let* ((accept (conn-action-slot--accept slot)))
-        (setf (conn-action-slot--value slot)
-              (funcall accept (conn-action-slot--value slot))))
+      (setf (conn-action-slot--value slot)
+            (funcall (conn-action-slot--accept slot)
+                     (conn-action-slot--value slot)))
       (unless (conn-action-slot--stay-live slot)
         (setf (conn-action-slot--live slot) nil)))))
 
@@ -1214,7 +1214,7 @@ buffer is a valid target.")
                     :cancel #'conn--action-cancel-change-group))
 
 (defun conn-action-marker ()
-  (conn-action-slot (conn-dispatch-marker-argument)
+  (conn-action-slot (conn-dispatch-marker-argument t)
                     :read t
                     :stale (lambda (mk) (buffer-live-p (marker-buffer mk)))
                     :cleanup (lambda (mk) (set-marker mk nil))
@@ -4545,9 +4545,7 @@ it.")
         (init nil))
     (conn-action ((cg (conn-action-replace))
                   (opoint (conn-action-marker))
-                  (separator (conn-action-slot
-                              (conn-separator-argument)
-                              :read t)))
+                  (separator (conn-action-separator)))
       (:description "Copy From")
       (:reference
        "Replace current region with text in region selected by dispatch.")
@@ -4816,8 +4814,7 @@ it.")
   (declare (important-return-value t))
   (let ((copy (conn--copy-previous-dispatch dispatch)))
     (cl-callf clone (conn-previous-dispatch-target-finder copy))
-    (setf (conn-previous-dispatch-action copy)
-          (conn-action-copy (conn-previous-dispatch-action dispatch)))
+    (cl-callf conn-action-copy (conn-previous-dispatch-action copy))
     copy))
 
 (defun conn-dispatch-ring--cleanup (dispatch)
@@ -4850,10 +4847,7 @@ it.")
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
-  (unless (conn-action-no-history (conn-previous-dispatch-action dispatch))
-    (add-to-history 'command-history `(conn-dispatch-setup-previous
-                                       ,(conn-previous-dispatch-copy dispatch)))
-    (conn-ring-insert-front conn-dispatch-ring dispatch)))
+  (conn-ring-insert-front conn-dispatch-ring dispatch))
 
 (defun conn-dispatch-ring-remove-stale ()
   (cl-loop for dispatch in (conn-ring-list conn-dispatch-ring)
@@ -4971,7 +4965,8 @@ it.")
         (unless (conn-action-no-history action)
           (let ((prev (conn-make-dispatch action)))
             (conn-dispatch-push-history prev)
-            (conn-push-command-history 'conn-dispatch-setup-previous prev)))))))
+            (conn-push-command-history 'conn-dispatch-setup-previous
+                                       (conn-previous-dispatch-copy prev))))))))
 
 (defvar-keymap conn-restrict-windows-argument-map
   "C-w" 'restrict-windows)
