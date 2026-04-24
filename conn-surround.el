@@ -314,7 +314,7 @@
           (conn-read-argument "register"
                               'register
                               conn-register-argument-map
-                              (lambda (_) (register-read-with-preview "Register:"))
+                              (lambda (_) (register-read-with-preview "Register: "))
                               :formatter #'conn-argument-format-register
                               :value register)))
       (conn-kill-surround thing arg transform delete register property))))

@@ -666,9 +666,9 @@ for the meaning of prefix ARG."
                    "register"
                    'register
                    conn-register-argument-map
-                   (lambda (_) (register-read-with-preview "Register:"))
+                   (lambda (_) (register-read-with-preview "Register: "))
                    :formatter #'conn-argument-format-register
-                   :value (register-read-with-preview "Register:"))))
+                   :value (register-read-with-preview "Register: "))))
      (list thing arg transform register)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -1601,7 +1601,7 @@ selected by dispatch with it.")
                    "register"
                    'register
                    conn-register-argument-map
-                   (lambda (_) (register-read-with-preview "Register:"))
+                   (lambda (_) (register-read-with-preview "Register: "))
                    :formatter #'conn-argument-format-register))
         (check-bounds (conn-check-bounds-argument)))
      (list thing arg transform swap register check-bounds)))
@@ -2752,7 +2752,7 @@ region after a `recursive-edit'."
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
-                       (lambda (_) (register-read-with-preview "Register:"))
+                       (lambda (_) (register-read-with-preview "Register: "))
                        :formatter #'conn-argument-format-register
                        :value register)
    (conn-separator-argument separator)))
@@ -3560,7 +3560,7 @@ hook, which see."
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
-                       (lambda (_) (register-read-with-preview "Register:"))
+                       (lambda (_) (register-read-with-preview "Register: "))
                        :formatter #'conn-argument-format-register
                        :value register)
    (conn-separator-argument separator)))
@@ -4757,7 +4757,7 @@ Interactively REPEAT is given by the prefix argument."
                   "register"
                   'register
                   conn-register-argument-map
-                  (lambda (_) (register-read-with-preview "Register:"))
+                  (lambda (_) (register-read-with-preview "Register: "))
                   :formatter #'conn-argument-format-register))
        (check-bounds (conn-check-bounds-argument check-bounds)))
     (conn-yank-replace thing

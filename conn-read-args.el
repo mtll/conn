@@ -320,11 +320,16 @@ This skips executing the body of the `conn-read-args' form entirely."
                (funcall display-handler prompt (if timer nil arguments))))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
-           (catch 'break
-             (let ((break nil))
-               (dolist (a arguments)
-                 (conn-argument-update a cmd (lambda () (setq break t)))
-                 (when break (throw 'break t))))))
+           (when (timerp timer)
+             (timer-set-idle-time timer most-positive-fixnum))
+           (unwind-protect
+               (catch 'break
+                 (let ((break nil))
+                   (dolist (a arguments)
+                     (conn-argument-update a cmd (lambda () (setq break t)))
+                     (when break (throw 'break t)))))
+             (when (timerp timer)
+               (timer-set-idle-time timer conn-read-args-message-delay))))
          (read-command ()
            (let (partial-keymap cmd reading)
              (dlet ((conn-wincontrol-mode nil)

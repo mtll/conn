@@ -4990,6 +4990,7 @@ INITIAL-ARG is the initial value of the prefix argument during
                    :prefix current-prefix-arg
                    :prompt "Dispatch"
                    :reference (conn-dispatch-reference)
+                   :display-handler (conn-read-args-display-columns 5 3)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
