@@ -194,7 +194,12 @@ current.")
   `(let ((conn-dispatch-input-buffer
           (generate-new-buffer " *conn-dispatch-input*" t)))
      (unwind-protect
-         ,(macroexp-progn body)
+         (progn
+           (let ((im (or current-input-method
+                         conn--input-method)))
+             (with-current-buffer conn-dispatch-input-buffer
+               (activate-input-method im)))
+           ,@body)
        (when (buffer-live-p conn-dispatch-input-buffer)
          (kill-buffer conn-dispatch-input-buffer)))))
 
@@ -2582,7 +2587,8 @@ the meaning of depth."
 
 (conn-define-state conn-dispatch-read-char-state ()
   "State for reading label characters during dispatch."
-  :lighter "SELECT")
+  :lighter "SELECT"
+  :suppress-input-method t)
 
 (defun conn-dispatch-read-char (&optional
                                 prompt
@@ -4901,10 +4907,6 @@ it.")
           :depth -96)
         (conn-with-dispatch-input-buffer
           (let ((conn-dispatch-in-progress t))
-            (let ((im (or current-input-method
-                          conn--input-method)))
-              (with-current-buffer conn-dispatch-input-buffer
-                (activate-input-method im)))
             (conn-target-finder-setup target-finder)
             (conn-action-setup action (xor repeat invert-repeat))
             (when restrict-windows
@@ -4960,10 +4962,6 @@ it.")
                            repeat)
         (conn-target-finder-setup
          (conn-get-target-finder thing arg transform))
-        (let ((im (or current-input-method
-                      conn--input-method)))
-          (with-current-buffer conn-dispatch-input-buffer
-            (activate-input-method im)))
         (when restrict-windows
           (add-function :after-while conn-target-window-predicate
                         'conn--dispatch-restrict-windows

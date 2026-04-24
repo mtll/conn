@@ -161,14 +161,17 @@ The duration of the message display is controlled by
            (prompt-line (conn-read-args-prompt-line prompt)))
        (if (length> to-display column-count)
            (conn--with-work-buffer
-             (insert prompt-line "\n")
-             (conn-to-vtable to-display
-                             column-count
-                             (current-buffer)
-                             :separator-width separator-width
-                             :use-header-line nil)
-             (buffer-substring (point-min) (1- (point-max))))
-         (concat prompt-line "\n"
+             (insert prompt-line)
+             (when to-display
+               (insert "\n")
+               (conn-to-vtable to-display
+                               column-count
+                               (current-buffer)
+                               :separator-width separator-width
+                               :use-header-line nil)
+               (buffer-substring (point-min) (1- (point-max)))))
+         (concat prompt-line
+                 (when to-display "\n")
                  (string-join to-display
                               (make-string separator-width ?\ ))))))))
 
@@ -306,7 +309,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (cl-loop for arg in arguments
                     thereis (conn-argument-required-p arg)))
          (display-message ()
-           (unless (or executing-kbd-macro timer)
+           (unless executing-kbd-macro
              (when (and conn--read-args-message-timeout
                         (time-less-p conn--read-args-message-timeout nil))
                (setq conn--read-args-message nil
@@ -314,7 +317,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              (let ((inhibit-message conn-read-args-inhibit-message)
                    (message-log-max nil)
                    (scroll-conservatively 100))
-               (funcall display-handler prompt arguments)))
+               (funcall display-handler prompt (if timer nil arguments))))
            (setf conn--read-args-error-message ""))
          (update-args (cmd)
            (catch 'break
@@ -439,7 +442,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (message nil))))
              (mapc #'conn-argument-accept arguments)
              (cons callback argument-values))
-         (when timer
+         (when (timerp timer)
            (cancel-timer timer)))))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
