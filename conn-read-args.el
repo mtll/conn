@@ -334,7 +334,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            (let (partial-keymap cmd reading)
              (dlet ((conn-wincontrol-mode nil)
                     (conn-wincontrol-one-command-mode nil))
-               (when (timerp timer)
+               (when timer
                  (timer-set-function timer #'timer-function)
                  (timer-set-idle-time timer conn-read-args-message-delay)
                  (timer-activate-when-idle timer t))
@@ -349,7 +349,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                 finally (progn
                           (discard-input)
                           (error "Keyboard macro recursion limit exceeded")))
-               (when (timerp timer)
+               (when timer
                  (cancel-timer timer)))
              (cond ((eql (aref keyseq 0) quit-event)
                     (setq cmd 'keyboard-quit))
@@ -446,8 +446,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (message-log-max nil)
                    (scroll-conservatively 100))
                (message nil)))
-           (when (timerp timer)
-             (cancel-timer timer)))
+           (when timer (cancel-timer timer)))
          (mapc #'conn-argument-accept arguments)
          (cons callback argument-values))))))
 

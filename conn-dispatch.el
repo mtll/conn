@@ -5147,6 +5147,10 @@ for the dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
+  (when (string-empty-p isearch-string)
+    (let (search-nonincremental-instead)
+      (isearch-exit))
+    (user-error "Isearch empty"))
   (unwind-protect
       (let ((regexp-search-ring
              (if isearch-regexp
