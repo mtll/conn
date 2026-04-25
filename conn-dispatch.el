@@ -5151,9 +5151,12 @@ for the dispatch."
   (when (equal isearch-string "")
     (if (null (if isearch-regexp regexp-search-ring search-ring))
         (error "No previous search string")
-      (isearch-repeat (if isearch-forward 'forward 'backward))))
+      (setq isearch-string
+	    (car (if isearch-regexp regexp-search-ring search-ring))
+	    isearch-case-fold-search isearch-last-case-fold-search)))
   (unwind-protect
-      (let ((regexp-search-ring
+      (let ((conn-dispatch-always-prompt t)
+            (regexp-search-ring
              (if isearch-regexp
                  (cons isearch-string regexp-search-ring)
                regexp-search-ring))
