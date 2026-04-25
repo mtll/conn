@@ -1,6 +1,5 @@
 ;;; conn.el --- A modal keybinding mode -*- lexical-binding: t -*-
 ;;
-;; Filename: conn.el
 ;; Description: A modal keybinding mode
 ;; Author: David Feller
 ;; Keywords: convenience, editing

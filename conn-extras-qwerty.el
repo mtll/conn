@@ -26,7 +26,11 @@
   "M-J" 'conn-command-state
   "w" 'conn-wincontrol-one-command
   ";" 'conn-wincontrol
-  "`" 'conn-wincontrol-mru-window)
+  "`" 'conn-wincontrol-mru-window
+  "TAB" conn-dwim-at-point
+  "M-TAB" conn-alt-dwim-at-point
+  "<tab>" conn-dwim-at-point
+  "M-<tab>" conn-alt-dwim-at-point)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
