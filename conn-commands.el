@@ -1120,21 +1120,6 @@ Currently selected window remains selected afterwards."
   (and (ffap-file-at-point)
        #'dired-at-point))
 
-(defun conn--in-regexp-in-line (regexp)
-  (let ((pt (point))
-        result)
-    (save-excursion
-      (with-restriction (line-beginning-position) (line-end-position)
-        (goto-char (point-min))
-        (while (and (re-search-forward regexp nil t)
-                    (not result))
-          (when (and (<= (match-beginning 0) pt)
-                     (<= pt (point)))
-            (setq result (propertize
-                          (match-string 0)
-                          'match-data (match-data)))))))
-    result))
-
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -10)

@@ -464,6 +464,8 @@
         (select-window window)
       (user-error "No other windows available to select"))))
 
+(defvar conn-wincontrol-mru-window-timeout 2.5)
+
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
@@ -489,7 +491,8 @@
                       do (window-bump-use-time win))))
          (format "Repeat with %s"
                  (propertize (key-description key)
-                             'face 'read-multiple-choice-face)))))))
+                             'face 'read-multiple-choice-face))
+         conn-wincontrol-mru-window-timeout)))))
 
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
   "`quit-window' in `other-window-for-scrolling'."
