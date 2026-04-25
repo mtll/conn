@@ -469,9 +469,10 @@
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
   (interactive)
-  (let* ((windows (sort (conn--get-windows)
-                        :key #'window-use-time
-                        :reverse t))
+  (let* ((windows (compat-call
+                   sort (conn--get-windows)
+                   :key #'window-use-time
+                   :reverse t))
          (len (length windows))
          (idx 1))
     (when (> len 1)

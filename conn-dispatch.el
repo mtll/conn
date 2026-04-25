@@ -438,7 +438,7 @@ themselves once the selection process has concluded."
                     win (window-parameter win 'conn-label-string))))
 
 ;; From ace-window
-(defun conn--dispatch-window-predicate (window &optional dedicated)
+(defun conn--dispatch-window-predicate (window &optional ignore-dedicated)
   (not (or ;; ignore child frames
         (and (fboundp 'frame-parent)
              (frame-parent (window-frame window)))
@@ -447,16 +447,17 @@ themselves once the selection process has concluded."
         ;; `no-delete-other-windows' parameter is non-nil.
         (unless ignore-window-parameters
           (window-parameter window 'no-other-window))
-        (and (null dedicated) (window-dedicated-p window)))))
+        (and ignore-dedicated
+             (window-dedicated-p window)))))
 
 (defun conn--get-windows (&optional window
                                     minibuffer
                                     all-frames
-                                    dedicated
+                                    ignore-dedicated
                                     predicate)
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
-           when (and (conn--dispatch-window-predicate win dedicated)
+           when (and (conn--dispatch-window-predicate win ignore-dedicated)
                      (or (null predicate) (funcall predicate win)))
            collect win))
 
