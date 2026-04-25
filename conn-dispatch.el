@@ -1089,7 +1089,9 @@ buffer is a valid target.")
                   options)
                 (pop body))))
       `(make-conn-action
-        :slots (list ,@(mapcar #'cadr slots))
+        :slots (cl-loop for slot in (list ,@(mapcar #'cadr slots))
+                        if (conn-action-slot-p slot) collect slot
+                        else collect (conn-action-slot slot))
         :function (lambda (,@syms)
                     (ignore ,@ignore)
                     (cl-symbol-macrolet ,bindings

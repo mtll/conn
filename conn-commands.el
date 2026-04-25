@@ -1031,7 +1031,9 @@ Currently selected window remains selected afterwards."
 (defvar conn-dwim-at-point-hook nil)
 
 (defun conn--dwim-at-point-filter (_orig)
-  (run-hook-with-args-until-success 'conn-dwim-at-point-hook))
+  (pcase (run-hook-with-args-until-success 'conn-dwim-at-point-hook)
+    (:punt nil)
+    (cmd cmd)))
 
 (defvar conn-dwim-at-point
   `(menu-item
@@ -1042,7 +1044,9 @@ Currently selected window remains selected afterwards."
 (defvar conn-alt-dwim-at-point-hook nil)
 
 (defun conn--alt-dwim-at-point-filter (_orig)
-  (run-hook-with-args-until-success 'conn-alt-dwim-at-point-hook))
+  (pcase (run-hook-with-args-until-success 'conn-alt-dwim-at-point-hook)
+    (:punt nil)
+    (cmd cmd)))
 
 (defvar conn-alt-dwim-at-point
   `(menu-item
@@ -1087,11 +1091,10 @@ Currently selected window remains selected afterwards."
         (describe-symbol sym)))))
 
 (defun conn-dwim-xref-definitions ()
-  (when (and (derived-mode-p '(emacs-lisp-mode
-                               lisp-interaction-mode))
-             (bounds-of-thing-at-point 'symbol))
-    (when-let* ((sym (intern-soft (thing-at-point 'symbol))))
-      'xref-find-definitions)))
+  (and-let* ((_ (derived-mode-p 'prog-mode))
+             (bounds (bounds-of-thing-at-point 'symbol))
+             (_ (<= (car bounds) (point) (cdr bounds))))
+    'xref-find-definitions))
 
 (defun conn-dwim-button ()
   (cond ((and (fboundp 'widget-apply)
@@ -1114,6 +1117,10 @@ Currently selected window remains selected afterwards."
       (and (ffap-file-at-point)
            #'find-file-at-point)))
 
+(defun conn-dwim-hs ()
+  (when (bound-and-true-p hs-minor-mode)
+    'hs-toggle-hiding))
+
 ;; From embark
 (defun conn-dwim-alt-file ()
   (require 'ffap)
@@ -1125,6 +1132,7 @@ Currently selected window remains selected afterwards."
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -10)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-eval-sexp 0)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-heading 20)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-hs 80)
 
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -20)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol 0)
