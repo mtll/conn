@@ -99,14 +99,21 @@
   "Function to label windows for `conn-prompt-for-window'.
 
 The function should accept a single argument, the list of windows to be
-labeled and it should return a list of structs for `conn-label-select',
+labeled, and it should return a list of structs for `conn-label-select',
 which see.")
 
-(defvar conn-dispatch-label-input-method nil)
+(defvar conn-dispatch-label-input-method nil
+  "Input method to use when reading labels during `conn-label-select'.
+
+This variable should be set by the labeling function.")
 
 (defvar conn-target-window-predicate)
 
-(defvar conn-dispatch-all-frames 'visible)
+(defvar conn-dispatch-all-frames 'visible
+  "What frames to consider during dispatch.
+
+The value of this variable will be passed as the ALL-FRAMES argument to
+`conn-get-windows', which see.")
 
 (defvar conn--dispatch-redisplay-prompt-flag nil)
 
@@ -135,18 +142,17 @@ which see.")
   (window nil :type window)
   (state nil :type list))
 
-(defun conn--get-target-windows ()
+(defun conn-get-dispatch-windows ()
+  "Return the list of windows for the current dispatch."
   (declare (important-return-value t))
-  (if conn-target-window-predicate
-      (conn--get-windows nil nil conn-dispatch-all-frames
-                         nil conn-target-window-predicate)
-    (list (selected-window))))
+  (conn-get-windows nil nil conn-dispatch-all-frames
+                    nil conn-target-window-predicate))
 
 (defun conn-simple-labels (count)
   "Return a list of label strings of length COUNT.
 
-If FACE is non-nil set label string face to FACE.  Otherwise label
-strings have `conn-dispatch-label-face'."
+Label strings are constructed by concatenating elements of
+`conn-simple-label-characters'."
   (declare (side-effect-free t)
            (important-return-value t))
   (let* ((blen (floor (1+ (log count (length conn-simple-label-characters)))))
@@ -181,15 +187,14 @@ strings have `conn-dispatch-label-face'."
          (cl-return (cl-loop for bucket across buckets
                              nconc bucket)))))))
 
-(defvar conn-dispatch-hide-labels nil)
+(defvar conn-dispatch-hide-labels nil
+  "When non-nil hide dispatch labels.")
 
 (defvar conn-dispatch-input-buffer nil
-  "Buffer that was current when dispatch began.
-
-All events read by `conn-dispatch-read-char' are read with this buffer
-current.")
+  "Buffer in which to read input events during dispatch.")
 
 (defmacro conn-with-dispatch-input-buffer (&rest body)
+  "Execute body with `conn-dispatch-input-buffer' bound."
   (declare (indent 0))
   `(let ((conn-dispatch-input-buffer
           (generate-new-buffer " *conn-dispatch-input*" t)))
@@ -207,7 +212,7 @@ current.")
   "Delete the label LABEL.
 
 This function is called on each label after a label has been selected
-and allow labels to clean up after themselves."
+and so that labels can clean up after themselves."
   (:method (_label) "Noop" nil))
 
 (cl-defgeneric conn-label-narrow (label prefix)
@@ -392,7 +397,7 @@ themselves once the selection process has concluded."
 
 (defun conn--simple-window-labels ()
   (setq conn-dispatch-label-input-method conn-simple-label-input-method)
-  (let* ((windows (conn--get-windows nil 'nomini t))
+  (let* ((windows (conn-get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (or (null conn--window-label-pool)
               (length< conn--window-label-pool window-count))
@@ -450,15 +455,27 @@ themselves once the selection process has concluded."
         (and ignore-dedicated
              (window-dedicated-p window)))))
 
-(defun conn--get-windows (&optional window
-                                    minibuffer
-                                    all-frames
-                                    ignore-dedicated
-                                    predicate)
+(defun conn-get-windows (&optional window
+                                   minibuffer
+                                   all-frames
+                                   ignore-dedicated
+                                   predicate)
+  "Return a list of windows.
+
+Arguments WINDOW, MINIBUFFER, and ALL-FRAMES have the same meaning as in
+`window-list-1', which see.
+
+If IGNORE-DEDICATED is non-nil then ignored windows for which
+`window-dedicated-p' returns non-nil.
+
+If PREDICATE is non-nil then it should be a function of one argument, a
+window, and should return non-nil if that window should be considered
+for dispatch."
   (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
            when (and (conn--dispatch-window-predicate win ignore-dedicated)
-                     (or (null predicate) (funcall predicate win)))
+                     (or (null predicate)
+                         (funcall predicate win)))
            collect win))
 
 (defmacro conn-with-window-labels (binder &rest body)
@@ -2307,7 +2324,7 @@ Target overlays may override this default by setting the
            ( :update (_cmd _break)
              (cl-callf not conn-dispatch-hide-labels)
              (conn-dispatch-redisplay)))
-          (dolist (window (conn--get-target-windows))
+          (dolist (window (conn-get-dispatch-windows))
             (ignore (conn--dispatch-window-lines window)))
           (let ((conn--dispatch-suspend-labels
                  (lambda ()
@@ -2467,7 +2484,7 @@ depths will be sorted before greater depths.
 Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
   (unwind-protect
       (progn
-        (dolist (win (conn--get-target-windows))
+        (dolist (win (conn-get-dispatch-windows))
           (with-selected-window win
             (add-to-invisibility-spec 'conn-dispatch-invisible)
             (when-let* ((line (conn-dispatch-get-display-line)))
@@ -2479,7 +2496,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
                 (conn-target-finder-select conn-dispatch-target-finder))
              (conn-target-finder-step conn-dispatch-target-finder)))
          (redisplay)))
-    (dolist (win (conn--get-target-windows))
+    (dolist (win (conn-get-dispatch-windows))
       (with-selected-window win
         (remove-from-invisibility-spec 'conn-dispatch-invisible)))))
 
@@ -2599,7 +2616,7 @@ the meaning of depth."
                                 seconds
                                 prompt-suffix)
   (declare (important-return-value t))
-  (let ((message-fn (lambda (prompt arguments)
+  (let ((message-fn (lambda (prompt arguments &optional _elide)
                       (conn--dispatch-read-char-prefix
                        arguments
                        prompt
@@ -2992,7 +3009,7 @@ buffer."
                                     conn-target-window-predicate))
                                (remove-function conn-target-window-predicate
                                                 'restrict-windows)
-                               (conn--get-target-windows)))))
+                               (conn-get-dispatch-windows)))))
         (progn
           (conn-dispatch-select-window (conn-prompt-for-window windows))
           (conn-dispatch-redisplay 'maybe-dont-prompt))
@@ -3146,7 +3163,7 @@ buffer."
   (let ((ufns (oref target-finder current-update-handlers))
         (default nil)
         (handler-ctors nil))
-    (dolist (win (nreverse (conn--get-target-windows)))
+    (dolist (win (nreverse (conn-get-dispatch-windows)))
       (with-selected-window win
         (apply
          (with-memoization (alist-get (current-buffer) ufns)

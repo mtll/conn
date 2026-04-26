@@ -117,7 +117,7 @@ The duration of the message display is controlled by
                           'face 'error))))
     (unless (equal msg "") msg)))
 
-(defun conn-read-args-prompt-line (prompt)
+(defun conn-read-args-prompt-line (prompt &optional elided)
   (substitute-command-keys
    (concat
     (propertize prompt 'face 'minibuffer-prompt)
@@ -132,14 +132,16 @@ The duration of the message display is controlled by
      'face 'read-multiple-choice-face)
     "; \\[reference] reference"
     ")"
+    (when elided (truncate-string-ellipsis))
     (when-let* ((msg (conn--read-args-get-message)))
-      (concat ": " msg)))))
+      (concat " " msg)))))
 
-(defun conn--read-args-prompt (prompt arguments)
+(defun conn--read-args-prompt (prompt arguments &optional elide)
   (message "%s"
            (concat
-            (conn-read-args-prompt-line prompt)
-            (when-let* ((args (flatten-tree
+            (conn-read-args-prompt-line prompt elide)
+            (when-let* ((_ (not elide))
+                        (args (flatten-tree
                                (mapcar #'conn-argument-display arguments))))
               (conn-<
                 (compat-call
@@ -151,14 +153,15 @@ The duration of the message display is controlled by
                 (:> (concat "\n")))))))
 
 (defun conn-read-args-display-columns (column-count separator-width)
-  (lambda (prompt arguments)
+  (lambda (prompt arguments &optional elide)
     (message
      "%s"
      (let ((to-display
-            (flatten-tree
-             (cl-loop for arg in arguments
-                      collect (conn-argument-display arg))))
-           (prompt-line (conn-read-args-prompt-line prompt)))
+            (unless elide
+              (flatten-tree
+               (cl-loop for arg in arguments
+                        collect (conn-argument-display arg)))))
+           (prompt-line (conn-read-args-prompt-line prompt elide)))
        (if (length> to-display column-count)
            (conn--with-work-buffer
              (insert prompt-line)
@@ -315,15 +318,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                     thereis (conn-argument-required-p arg)))
          (display-message ()
            (unless executing-kbd-macro
-             (when (and conn--read-args-message-timeout
-                        (time-less-p conn--read-args-message-timeout nil))
-               (setq conn--read-args-message nil
-                     conn--read-args-message-timeout nil))
              (let ((inhibit-message conn-read-args-inhibit-message)
                    (message-log-max nil)
                    (scroll-conservatively 100))
-               (funcall display-handler prompt (if timer nil arguments))))
-           (setf conn--read-args-error-message ""))
+               (funcall display-handler prompt arguments (and timer t)))))
          (update-args (cmd)
            (catch 'break
              (let ((break nil))
@@ -360,6 +358,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                    ((and (symbolp cmd)
                          (autoloadp (symbol-function cmd)))
                     (autoload-do-load (symbol-function cmd))))
+             (setf conn--read-args-error-message "")
+             (when (and conn--read-args-message-timeout
+                        (time-less-p conn--read-args-message-timeout nil))
+               (setq conn--read-args-message nil
+                     conn--read-args-message-timeout nil))
              (while (eq cmd 'execute-extended-command)
                (setq cmd (conn--read-args-completing-read arguments
                                                           partial-keymap)
@@ -420,19 +423,23 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (emulation-mode-map-alists emulation-mode-map-alists)
                    (inhibit-message t)
                    (minibuffer-message-clear-timeout nil))
-               (setq maps `((,conn-current-state . nil)))
+               (setq maps `((,state . nil)))
                (while (continue-p)
                  (catch 'conn-read-args-error
                    (setup-keymaps)
                    (display-message)
-                   (execute-command (read-command))))
+                   (execute-command
+                    (prog1 (read-command)
+                      (cl-callf2 delq maps emulation-mode-map-alists)))))
                (setq unread-command-events nil ;should this be smarter?
                      conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
       (apply
        (catch 'conn-read-args-return
          (when (and (not executing-kbd-macro)
                     conn-read-args-message-delay
-                    (> conn-read-args-message-delay 0))
+                    (> conn-read-args-message-delay 0)
+                    (cl-loop for arg in arguments
+                             thereis (conn-argument-display arg)))
            (setq timer conn--read-args-timer))
          (conn--unwind-protect-all
            (let ((conn-read-args-last-prefix nil))
@@ -930,13 +937,12 @@ be displayed in the echo area during `conn-read-args'."
                  (conn-cycling-argument-value arg))))
     (concat
      (substitute-command-keys
-      (concat
-       (string-join
-        (cl-loop for cmd in (ensure-list
-                             (conn-cycling-argument-cycling-commands arg))
-                 collect (format "\\[%s]" cmd))
-        ", ")
-       " "))
+      (string-join
+       (cl-loop for cmd in (ensure-list
+                            (conn-cycling-argument-cycling-commands arg))
+                collect (format "\\[%s]" cmd))
+       ", "))
+     " "
      (cond
       ((>= (seq-count #'identity choices) 3)
        (if value

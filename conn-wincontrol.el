@@ -457,7 +457,7 @@
   "Prompt for a window and then select it."
   (interactive)
   (let ((windows (delq (selected-window)
-                       (conn--get-windows
+                       (conn-get-windows
                         nil 'nomini
                         (if current-prefix-arg 'visible)))))
     (if-let* ((window (conn-prompt-for-window windows)))
@@ -470,7 +470,7 @@
   "Select most recently used window."
   (interactive)
   (let* ((windows (compat-call
-                   sort (conn--get-windows)
+                   sort (conn-get-windows)
                    :key #'window-use-time
                    :reverse t))
          (len (length windows))

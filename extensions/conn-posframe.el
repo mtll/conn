@@ -343,27 +343,33 @@
 
 (defun conn-posframe--kmacro-ring-display-subr ()
   (require 'kmacro)
-  (let ((header (propertize (format " %s Kmacro Ring\n"
-                                    (or (if defining-kbd-macro
-                                            kmacro-counter
-                                          kmacro-initial-counter-value)
-                                        (format "[%s]" kmacro-counter)))
-                            'face 'conn-posframe-header))
-        (prev (mapconcat
-               (lambda (km)
-                 (conn--kmacro-display (kmacro--keys km)))
-               (reverse (take (min 4 (floor (length kmacro-ring) 2))
-                              (reverse kmacro-ring)))
-               "\n"))
-        (current (propertize (concat (conn--kmacro-display last-kbd-macro)
-                                     "\n")
-                             'face 'conn-posframe-highlight))
-        (next (mapconcat
-               (lambda (km)
-                 (conn--kmacro-display (kmacro--keys km)))
-               (take (min 4 (ceiling (length kmacro-ring) 2))
-                     kmacro-ring)
-               "\n")))
+  (let ((header
+         (propertize (format " %s Kmacro Ring\n"
+                             (or (if defining-kbd-macro
+                                     kmacro-counter
+                                   kmacro-initial-counter-value)
+                                 (format "[%s]" kmacro-counter)))
+                     'face 'conn-posframe-header))
+        (prev
+         (mapconcat
+          (lambda (km)
+            (conn--kmacro-display (kmacro--keys km)))
+          (reverse (take (min 4 (floor (length kmacro-ring) 2))
+                         (reverse kmacro-ring)))
+          "\n"))
+        (current
+         (propertize (concat (conn--kmacro-display last-kbd-macro
+                                                   nil
+                                                   "Kmacro ring emtpy")
+                             "\n")
+                     'face 'conn-posframe-highlight))
+        (next
+         (mapconcat
+          (lambda (km)
+            (conn--kmacro-display (kmacro--keys km)))
+          (take (min 4 (ceiling (length kmacro-ring) 2))
+                kmacro-ring)
+          "\n")))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat header

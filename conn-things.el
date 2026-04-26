@@ -2053,11 +2053,14 @@ Only the background color is used."
                                           (< (cdr a) (cdr b))
                                         (> (car a) (car b))))))
         (display-handler
-         (lambda (prompt args)
+         (lambda (prompt args &optional elide)
            (message
+            "%s"
             (concat
              (propertize prompt 'face 'minibuffer-prompt)
-             (mapconcat #'conn-argument-display args))))))
+             (if elide
+                 (truncate-string-ellipsis)
+               (mapconcat #'conn-argument-display args)))))))
     (pcase bounds
       ('nil (user-error "No things found at point"))
       (`(,bound . nil) bound)
@@ -2066,12 +2069,13 @@ Only the background color is used."
          (goto-char end)
          (push-mark beg t t)
          (activate-mark)
-         (conn-read-args (conn-multi-thing-select-state
-                          :prompt "Thing"
-                          :display-handler display-handler
-                          :command-handler nil)
-             ((bound (conn-multi-thing-argument bounds)))
-           bound))))))
+         (let (conn-read-args-message-delay)
+           (conn-read-args (conn-multi-thing-select-state
+                            :prompt "Thing"
+                            :display-handler display-handler
+                            :command-handler nil)
+               ((bound (conn-multi-thing-argument bounds)))
+             bound)))))))
 
 ;;;; Thing Definitions
 
