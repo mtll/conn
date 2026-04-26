@@ -1,37 +1,37 @@
 * Command State Map
 
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
-┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _        │ +        │ Backspace    ┃
-┃          │          │          │          │          │          │          │  MRU     │          │ ←up list │ →up list │          │          │              ┃
-┃          │          │          │          │          │          │          │  buffer  │          │          │          │          │          │  ←delete     ┃
+┃ ESC      │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _        │ +        │ Backspace    ┃
+┃ pop state│          │  kmacro  │  kmacro  │          │          │          │  MRU     │          │ ←up list │ →up list │          │          │              ┃
+┃          │          │  start   │  end     │          │          │          │  buffer  │          │          │          │          │          │  ←delete     ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
-┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ = repeat │              ┃
-┃  MRU     │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  complex │              ┃
-┃  window  │          │          │          │          │          │          │          │          │          │          │          │  command │              ┃
+┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
+┃  MRU     │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │          │              ┃
+┃  window  │          │          │          │          │          │          │          │          │          │          │          │          │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
-┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │          │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │          │ ←inner   │ →inner   │   shell  ┃
-┃              │          │          │          │          │          │   read   │          │          │          │          │  list    │  list    │   cmd    ┃
-┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
-┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
-┃              │   yank   │   copy   │  emacs   │  replace │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ←down   │  →down   │          ┃
-┃              │  replace │          │  state   │          │          │          │          │          │          │   prefix │   list   │   list   │          ┃
+┃ M-TAB        │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P other  │ {        │ }        │ |        ┃
+┃   alt DWIM   │          │  widen   │  expand  │ rectangle│          │   yank   │  ←symbol │  ↑para   │  →symbol │   place  │ ←inner   │ →inner   │   shell  ┃
+┃              │          │          │          │  mark    │          │   read   │          │          │          │   prefix │  list    │  list    │   cmd    ┃
+┠─┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
+┃ TAB          │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p other  │ [        │ ]        │ \        ┃
+┃    DWIM      │ duplicate│  winctl  │  emacs   │  replace │ transpose│   yank   │  ←word   │  ↑column │  →word   │   window │  ←down   │  →down   │          ┃
+┃              │          │  one cmd │  state   │          │          │          │          │          │          │   prefix │   list   │   list   │          ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │ surround │ duplicate│          │  adjust  │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │          │          │          │ surround │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │   M-X    │ surround │          │          │  adjust  │ highlight│  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │          │          │          │ surround │          │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
-┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
-┃                │          │          │          │          │          │  1 cmd   │          │          │          │   mode   │          │                   ┃
+┃                │   M-x    │   M-s    │   kill   │ dispatch │   M-g    │ edit map │  ←char   │  ↓column │  →char   │  winctl  │  kapply  │                   ┃
+┃                │          │          │          │          │          │          │          │          │          │   mode   │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
-┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │  exchange │  narrow  │  raise   │          │          │ ←defun   │ →defun   │ point to │          │   redo   │                       ┃
-┃                      │  and mark │  prefix  │          │          │          │          │          │ register │          │          │                       ┃
+┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >  reg   │ ?        │                       ┃
+┃                      │  exchange │  narrow  │          │   prev   │          │ ←defun   │ →defun   │ point to │ load and │   redo   │                       ┃
+┃                      │    mark   │  prefix  │          │   mark   │          │          │          │ register │ replace  │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
-┃                      │ z         │ x        │ c        │ v mark   │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │  exchange │   C-x    │   C-c    │   last   │ set mark │  ←sexp   │  →sexp   │ edit map │ register │   undo   │                       ┃
-┃                      │    mark   │          │          │   thing  │          │          │          │          │   load   │          │                       ┃
+┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │   yank    │   C-x    │   C-c    │   mark   │  repeat  │  ←sexp   │  →sexp   │   thing  │ register │   undo   │                       ┃
+┃                      │  replace  │          │          │   thing  │          │          │          │   map    │   load   │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                                           ┃
