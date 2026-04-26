@@ -4142,7 +4142,7 @@ contain targets."
         (goto-char (point-max))
         (while (let ((pt (point)))
                  (forward-line -1)
-                 (conn-beginning-of-inner-line)
+                 (back-to-indentation)
                  (/= (point) pt))
           (unless (= (pos-bol) (pos-eol))
             (conn-make-target-overlay

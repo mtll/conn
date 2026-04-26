@@ -274,13 +274,16 @@ Pulses line that was the last visible line before scrolling."
                            (comment-search-backward
                             (line-beginning-position) t)))))
       (goto-char cs))
-    (skip-chars-backward " \t" (line-beginning-position))
-    (when (bolp) (goto-char end))))
+    (skip-chars-backward " \t" (line-beginning-position))))
 
 (defun conn-forward-inner-line (N)
-  "Move forward by inner lines.
+  "Move to the last non-whitespace, non-comment character in current line.
 
-Behaves as `thingatpt' expects a \\='forward-op to behave."
+If point is already at or after the last non-whitespace, non-comment
+character in the current line then move to the end of the next inner
+line.
+
+Empty lines are skipped."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
@@ -306,12 +309,28 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
            (back-to-indentation)))))
 
 (defun conn-backward-inner-line (N)
-  "Inverse of `conn-forward-inner-line'."
+  "Move to the first non-whitespace character in current line.
+
+If point is already at or before the first non-whitespace character
+in the current line then move to the beginning of the previous inner
+line.
+
+Repeat N times.
+
+Empty lines are skipped."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (conn-forward-inner-line (- N)))
 
 (defun conn-forward-inner-line-dwim (N)
+  "Move to the first non-whitespace character in current line.
+
+If the point is already at the first non-whitespace character in the
+current line then move to the beginning of the previous inner line.
+
+Repeat N times.
+
+Empty lines are skipped."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
@@ -324,6 +343,15 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
          (conn-backward-inner-line-dwim (abs N)))))
 
 (defun conn-backward-inner-line-dwim (N)
+  "Move to the last non-whitespace, non-comment character in current line.
+
+If the point is already at the last non-whitespace, non-comment
+character in the current line then move to the end of the next inner
+line.
+
+Repeat N times.
+
+Empty lines are skipped."
   (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (cond ((> N 0)
@@ -336,6 +364,15 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
          (conn-forward-inner-line-dwim (abs N)))))
 
 (defun conn-forward-outer-line (&optional N)
+  "Move to the end of the current line.
+
+If already at the end of the current line, move to the end of the next
+line.
+
+With argument N not nil or 1 move to the Nth line end position from
+point.
+
+Line beginning positions are determined by `move-end-of-line'."
   (declare (conn-thing-command outer-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (< N 0)
@@ -343,30 +380,20 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
     (move-end-of-line (+ N (if (eolp) 1 0)))))
 
 (defun conn-backward-outer-line (&optional N)
+  "Move to the beginning of the current line.
+
+If already at the beginning of the current line, move to the beginning
+of the next line.
+
+With argument N not nil or 1 move to the Nth line beginning position
+from point.
+
+Line beginning positions are determined by `move-beginning-of-line'."
   (declare (conn-thing-command outer-line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (if (< N 0)
       (conn-forward-outer-line (abs N))
     (move-beginning-of-line (- 2 (+ N (if (bolp) 1 0))))))
-
-(defun conn-beginning-of-inner-line (&optional N)
-  "Move point to the first non-whitespace character in line.
-
-Immediately repeating this command goes to the point at beginning
-of line proper."
-  (declare (conn-thing-command inner-line #'conn-continuous-thing-other-end-handler))
-  (interactive "P")
-  (if (null N)
-      (let ((point (point))
-            (mark (mark t)))
-        (back-to-indentation)
-        (when (and (= point (point))
-                   (or (= mark (save-excursion
-                                 (conn--end-of-inner-line-1)
-                                 (point)))
-                       (region-active-p)))
-          (goto-char (line-beginning-position))))
-    (forward-line (- N))))
 
 (defun conn-end-of-inner-list ()
   "Move point to the end of the enclosing list."
