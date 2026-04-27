@@ -394,11 +394,16 @@
                            (memq (conn--reference-page-name page) names))
                          (lookup-key keymap [conn-quick-ref]))))))
 
-;; (defun conn-remove-keymap-reference (keymap reference)
-;;   (define-key keymap
-;;               [conn-quick-ref]
-;;               (cons reference
-;;                     (lookup-key keymap [conn-quick-ref]))))
+(defun conn-remove-keymap-reference (keymap reference)
+  (let ((name (if (conn--reference-page-p reference)
+                  (conn--reference-page-name reference)
+                reference)))
+    (define-key keymap
+                [conn-quick-ref]
+                (seq-remove
+                 (lambda (page)
+                   (eq name (conn--reference-page-name page)))
+                 (lookup-key keymap [conn-quick-ref])))))
 
 (defun conn-quick-ref-to-cols (list col-count)
   (cl-loop with cols = (make-list col-count nil)
