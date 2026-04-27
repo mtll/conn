@@ -227,22 +227,20 @@ returned."
 
 (cl-defgeneric conn-label-completed-p (label))
 
-(cl-defgeneric conn-label-display (label)
-  "Redisplay LABEL."
-  (:method (_) "Noop" nil))
-
 (cl-defgeneric conn-label-clear (label)
-  "Redisplay LABEL."
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-label-setup (label)
-  "Redisplay LABEL."
+  (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-label-display (label)
   (:method (_) "Noop" nil))
 
 (defun conn-redisplay-labels (labels)
   (mapc #'conn-label-clear labels)
-  (mapc #'conn-label-setup labels)
-  (mapc #'conn-label-display labels))
+  (unless conn-dispatch-hide-labels
+    (mapc #'conn-label-setup labels)
+    (mapc #'conn-label-display labels)))
 
 (cl-defgeneric conn-label-reset (label)
   "Reset LABEL to its initial state.")
@@ -4297,8 +4295,7 @@ contain targets."
                           narrowed-string
                           setup-function)
                label))
-    (unless (or conn-dispatch-hide-labels
-                (length< narrowed-string 1))
+    (unless (length< narrowed-string 1)
       (overlay-put target 'face 'conn-target-overlay-face)
       (with-selected-window (overlay-get overlay 'window)
         (funcall setup-function label)))))

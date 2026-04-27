@@ -25,7 +25,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "s" 'conn-surround
+  "<" 'conn-surround
   "h" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
@@ -182,6 +182,8 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "<" 'conn-to-char-backward
+  ">" 'conn-to-char-forward
   "e" 'previous-line
   "d" 'next-line
   "," conn-thing-inner-remap
@@ -249,6 +251,34 @@
   "<conn-thing-map> (" 'list
   "<conn-thing-map> )" 'forward-list
   "<conn-inner-thing-map> (" 'inner-list
+  "s" (conn-anonymous-thing
+        '(conn-to-char-forward)
+        :bounds-op ( :method (self arg)
+                     (let* ((count (prefix-numeric-value arg))
+                            (char (with-memoization
+                                      (conn-thing-get self :char)
+                                    (read-char "Char: " t)))
+                            (pt (save-excursion
+                                  (conn-to-char-forward char count)
+                                  (point))))
+                       (conn-make-bounds
+                        self count (cons (min pt (point))
+                                         (max pt (point)))
+                        :direction (if (> (point) pt) -1 1)))))
+  "r" (conn-anonymous-thing
+        '(conn-to-char-backward)
+        :bounds-op ( :method (self arg)
+                     (let* ((count (prefix-numeric-value arg))
+                            (char (with-memoization
+                                      (conn-thing-get self :char)
+                                    (read-char "Char: " t)))
+                            (pt (save-excursion
+                                  (conn-to-char-backward char count)
+                                  (point))))
+                       (conn-make-bounds
+                        self count (cons (min pt (point))
+                                         (max pt (point)))
+                        :direction (if (> (point) pt) -1 1)))))
   "e" (conn-anonymous-thing
         '(expansion)
         :pretty-print ( :method (_) "expansion")
@@ -811,8 +841,8 @@
   "a" 'conn-dispatch-bounds-anchored
   "B" 'conn-dispatch-bounds-between
   "^" 'conn-bounds-trim
-  ">" 'conn-bounds-untrim-right
-  "<" 'conn-bounds-untrim-left
+  "C->" 'conn-bounds-untrim-right
+  "C-<" 'conn-bounds-untrim-left
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
@@ -827,11 +857,11 @@
 
 (define-keymap
   :keymap conn-recursive-edit-thing-map
-  "R" 'recursive-edit)
+  "T" 'recursive-edit)
 
 (define-keymap
   :keymap conn-recursive-edit-mark-thing-map
-  "r" 'recursive-edit-mark)
+  "t" 'recursive-edit-mark)
 
 (define-keymap
   :keymap conn-subregions-argument-map
@@ -850,8 +880,8 @@
 (define-keymap
   :keymap conn-transform-map
   "^" 'conn-bounds-trim
-  "<" 'conn-bounds-untrim-left
-  ">" 'conn-bounds-untrim-right
+  "C-<" 'conn-bounds-untrim-left
+  "C->" 'conn-bounds-untrim-right
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point

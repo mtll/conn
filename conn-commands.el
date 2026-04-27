@@ -113,7 +113,8 @@ execution."
                                  (unless (or executing-kbd-macro
                                              defining-kbd-macro)
                                    cmd))))
-        (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
+        (message "Keyboard macro bound to %s"
+                 (format-kbd-macro key-seq))))))
 
 (defun conn-repeat-try-next () nil)
 
@@ -136,6 +137,36 @@ execution."
     (apply #'funcall-interactively cmd)))
 
 ;;;;; Movement
+
+(defun conn-to-char-forward (char count)
+  (declare (conn-thing-command to-char))
+  (interactive "cChar: \np")
+  (if (< count 0)
+      (conn-to-char-backward char (abs count))
+    (conn-protected-let*
+        ((case-fold-search (or (char-uppercase-p char)
+                               case-fold-search))
+         (str (char-to-string char))
+         (beg (point) (goto-char beg)))
+      (while (and (> count 0)
+                  (search-forward str)
+                  (conn--region-visible-p (1- (point)) (point)))
+        (cl-decf count)))))
+
+(defun conn-to-char-backward (char count)
+  (declare (conn-thing-command to-char))
+  (interactive "cChar: \np")
+  (if (< count 0)
+      (conn-to-char-forward char (abs count))
+    (conn-protected-let*
+        ((case-fold-search (or (char-uppercase-p char)
+                               case-fold-search))
+         (str (char-to-string char))
+         (beg (point) (goto-char beg)))
+      (while (and (> count 0)
+                  (search-backward str)
+                  (conn--region-visible-p (point) (1+ (point))))
+        (cl-decf count)))))
 
 (defun conn-forward-up-list (arg)
   (interactive "p")
@@ -267,14 +298,14 @@ Pulses line that was the last visible line before scrolling."
   (forward-whitespace (- N)))
 
 (defun conn--end-of-inner-line-1 ()
-  (let ((end (goto-char (line-end-position))))
-    (when-let* ((cs (and comment-start-skip
-                         (conn--point-in-comment-p)
-                         (save-excursion
-                           (comment-search-backward
-                            (line-beginning-position) t)))))
-      (goto-char cs))
-    (skip-chars-backward " \t" (line-beginning-position))))
+  (goto-char (line-end-position))
+  (when-let* ((cs (and comment-start-skip
+                       (conn--point-in-comment-p)
+                       (save-excursion
+                         (comment-search-backward
+                          (line-beginning-position) t)))))
+    (goto-char cs))
+  (skip-chars-backward " \t" (line-beginning-position)))
 
 (defun conn-forward-inner-line (N)
   "Move to the last non-whitespace, non-comment character in current line.
@@ -3055,7 +3086,7 @@ hook, which see."
     ((and 'nil
           (guard (and conn-repeating-command
                       (eq last-command this-command))))
-     (setq append 'append
+     (setq append (if (<= end (point)) 'prepend 'append)
            separator (or separator t))))
   (if register
       (pcase append

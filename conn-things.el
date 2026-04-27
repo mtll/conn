@@ -24,6 +24,8 @@
 (eval-when-compile
   (require 'cl-lib))
 
+(declare-function conn-to-char-forward "conn-commands")
+(declare-function conn-to-char-backward "conn-commands")
 (declare-function conn--end-of-inner-line-1 "conn-commands")
 (declare-function conn-exchange-mark-command "conn-command")
 (declare-function conn-mark-thing-do "conn-commands")
@@ -1561,12 +1563,14 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-argument-payload ((arg conn-thing-argument))
   (pcase (conn-thing-argument-value arg)
-    ((and val `(,cmd ,prefix))
+    (`(,cmd ,prefix)
      (when-let* ((fundef (and (symbolp cmd)
                               (fboundp cmd)
                               (symbol-function cmd)))
                  (_ (autoloadp fundef)))
        (autoload-do-load fundef cmd))
+     (when (conn-anonymous-thing-p cmd)
+       (cl-callf conn--copy-anonymous-thing cmd))
      (if (conn-thing-argument-in-region arg)
          (list (conn-anonymous-thing
                  '(conn-things-in-region)
@@ -1575,7 +1579,7 @@ Returns a `conn-bounds' struct."
                                 (conn-get-things-in-region
                                  cmd arg nil bounds))))
                prefix)
-       val))))
+       (list cmd prefix)))))
 
 ;;;;;; Thing With Subregions Argument
 
@@ -2386,5 +2390,53 @@ Only the background color is used."
 (conn-register-thing-commands
  '(expansion) nil
  'conn-expand 'conn-contract)
+
+(conn-register-thing 'to-char :parents '(char))
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-to-char-forward))
+                              arg
+                              &key char)
+  (let* ((arg (prefix-numeric-value arg))
+         (char (or char (read-char "Char: " t)))
+         (pt (save-excursion
+               (conn-to-char-forward char arg)
+               (point))))
+    (conn-make-bounds
+     (if (conn-anonymous-thing-p cmd) cmd
+       (conn-anonymous-thing
+         (list cmd)
+         :bounds-op ( :method (self count)
+                      (cl-call-next-method self count :char char))))
+     arg (cons (min pt (point))
+               (max pt (point)))
+     :direction (if (> (point) pt) -1 1))))
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-to-char-backward))
+                              arg
+                              &key char)
+  (let* ((arg (prefix-numeric-value arg))
+         (char (or char (read-char "Char: " t)))
+         (pt (save-excursion
+               (conn-to-char-backward char arg)
+               (point))))
+    (conn-make-bounds
+     (if (conn-anonymous-thing-p cmd) cmd
+       (conn-anonymous-thing
+         (list cmd)
+         :bounds-op ( :method (self count)
+                      (cl-call-next-method self count :char char))))
+     arg (cons (min pt (point))
+               (max pt (point)))
+     :direction (if (> (point) pt) -1 1))))
+
+(cl-defmethod conn-bounds-upto-next ((bounds (conn-thing to-char)))
+  (pcase bounds
+    ((conn-bounds `(,beg . ,end))
+     (conn-make-transformed-bounds
+      'conn-bounds-upto-next
+      bounds
+      (pcase (conn-bounds-get bounds :direction)
+        (1 (cons beg (1- end)))
+        (-1 (cons (1+ beg) end)))))))
 
 (provide 'conn-things)
