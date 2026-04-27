@@ -1686,6 +1686,8 @@ selected by dispatch with it.")
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-replace-state)
  (conn-reference-page
+   :name conn-replace
+   :depth -10
    ((("As diff" as-diff)
      ("Multi file as diff" multi-file-as-diff)
      ("As diff in project" as-diff-in-project))
@@ -2169,6 +2171,8 @@ For more information about how the replacement is carried out see
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-isearch-state)
  (conn-reference-page
+   :name conn-isearch
+   :depth -10
    (("In multiple file" multi-file))
    (("In multiple buffers" multi-buffer))
    (("In current project" project))))
@@ -2441,6 +2445,8 @@ Exiting the recursive edit will resume the isearch."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-transpose-state)
  (conn-reference-page
+   :name conn-transpose
+   :depth -10
    (("line" conn-backward-line forward-line))
    (("symbol" forward-symbol))))
 
@@ -2460,6 +2466,7 @@ Exiting the recursive edit will resume the isearch."
 (conn-add-keymap-reference
  conn-transpose-repeat-map
  (conn-reference-page
+   :name conn-transpose-repeat
    ((("Repeat transposition" conn-transpose-repeat))
     (("Repeat transposition in opposite direction" conn-transpose-repeat-inverse))
     (("Recenter" recenter-top-bottom)))
@@ -2696,6 +2703,7 @@ region after a `recursive-edit'."
  (conn-get-state-map 'conn-kill-state)
  (conn-reference-page
    :name conn-kill
+   :depth -10
    ((("copy filename" buffer-filename)
      ("kill matching lines" kill-matching-lines))
     (("keep matching lines" keep-lines)
@@ -3539,6 +3547,7 @@ hook, which see."
  (conn-get-state-map 'conn-copy-state)
  (conn-reference-page
    :name conn-copy
+   :depth -10
    ((("copy filename" buffer-filename)
      ("kill matching lines" copy-matching-lines)))))
 
@@ -3957,6 +3966,7 @@ For how they are used to define the region see `conn-bounds-of' and
  conn-duplicate-repeat-map
  (conn-reference-page
    :name conn-duplicate-repeat
+   :depth -10
    ((("Repeat duplicate" conn-duplicate-repeat)
      ("Delete previous duplicate" conn-duplicate-repeat-delete)
      ("Apply a keyboard macro at each duplicate.
@@ -4367,6 +4377,8 @@ Interactively REPEAT is given by the prefix argument."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-change-state)
  (conn-reference-page
+   :name conn-change
+   :depth -10
    ((("quoted-insert" quoted-insert))
     (("emacs-state-overwrite" conn-emacs-state-overwrite))
     (("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary)))))
@@ -4913,6 +4925,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 (conn-add-keymap-reference
  conn-indent-thing-rigidly-map
  (conn-reference-page
+   :name conn-indent-rigidly
    (:heading "Indent")
    ((("left/to tab stop"
       conn-indent-left

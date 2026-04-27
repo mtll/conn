@@ -241,6 +241,7 @@
 
 (defvar conn-wincontrol-windows-1
   (conn-reference-page
+    :name conn-windows-1
     (:heading "Window:")
     ((("switch window" conn-goto-window)
       ("quit win" quit-window)
@@ -306,6 +307,7 @@
 
 (defvar conn-wincontrol-windows-2
   (conn-reference-page
+    :name conn-windows-2
     (((:heading "Windmove")
       ("up/down/left/right"
        windmove-up
@@ -329,6 +331,7 @@
 
 (defvar conn-wincontrol-tabs-and-frames
   (conn-reference-page
+    :name conn-tabs-and-frames
     (((:heading "Tabs:")))
     ((("next/prev" tab-next tab-previous)
       ("new" tab-new)

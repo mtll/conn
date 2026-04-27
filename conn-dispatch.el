@@ -905,12 +905,6 @@ buffer is a valid target.")
 
 ;;;;;; Dispatch Quick Ref
 
-(defvar conn-dispatch-thing-reference-list
-  (conn-reference-quote
-    (("symbol" forward-symbol)
-     ("line" forward-line)
-     ("column" next-line))))
-
 (defvar conn-dispatch-transforms-ref-list
   (conn-reference-quote
     (("anchored" conn-dispatch-bounds-anchored)
@@ -922,9 +916,10 @@ buffer is a valid target.")
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-targets-state)
  (conn-reference-page
-   (:heading "Extra Thing Bindings")
-   ((:splice (conn-quick-ref-to-cols
-              conn-dispatch-thing-reference-list 3)))))
+   :name conn-targets
+   ((("symbol" forward-symbol)
+     ("line" forward-line)
+     ("column" next-line)))))
 
 (defvar conn-dispatch-other-end-documentation
   "Operate with point at the other end of the target.")
@@ -1255,6 +1250,7 @@ that slot's value and otherwise performs a shallow copy."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-state)
  (conn-reference-page
+   :name conn-dispatch-actions
    :depth -50
    ((("copy from" conn-dispatch-copy-from)
      ("send" conn-dispatch-send)
@@ -1392,6 +1388,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
 (conn-add-keymap-reference
  conn-dispatch-command-handler-map
  (conn-reference-page
+   :name conn-dispatch-commands
    (((:heading "History:")
      ("previous dispatch" conn-dispatch-cycle-ring-previous)
      ("next dispatch" conn-dispatch-cycle-ring-next))
@@ -2574,6 +2571,7 @@ the meaning of depth."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-read-char-state)
  (conn-reference-page
+   :name conn-dispatch-action-commands
    (((:heading "Action Commands")
      ("toggle repeat" repeat-dispatch)
      ("undo" undo))
@@ -2584,6 +2582,7 @@ the meaning of depth."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-read-char-state)
  (conn-reference-page
+   :name conn-dispatch-read-char-commands
    :depth 50
    (:heading "Miscellaneous Commands")
    ((("isearch forward" isearch-forward)

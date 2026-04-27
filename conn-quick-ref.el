@@ -324,21 +324,7 @@
       (if keymap
           (bindings keymap)
         (mapc #'bindings (current-active-maps t)))
-      (seq-uniq (flatten-tree (nreverse result))
-                (lambda (a b)
-                  (eq (conn--reference-page-name a)
-                      (conn--reference-page-name b)))))))
-
-(defun conn--quick-ref-parse-pages (pages)
-  (cl-loop for p in pages
-           append (pcase p
-                    ((pred listp) p)
-                    ((pred conn--reference-page-p) (list p))
-                    ((pred functionp) (ensure-list (funcall p))))
-           into result
-           finally return (compat-call
-                           sort result
-                           :key #'conn--reference-page-depth)))
+      (flatten-tree (nreverse result)))))
 
 (defun conn--quick-ref-loop (pages)
   (let* ((buf (get-buffer-create " *conn-quick-ref*"))
@@ -386,10 +372,14 @@
       (funcall display-function buf state t))))
 
 (defun conn-quick-reference (pages)
-  (interactive
-   (list (conn-get-quick-ref-pages)))
-  (if-let* ((pages (conn--quick-ref-parse-pages
-                    (flatten-tree pages))))
+  (interactive (list (conn-get-quick-ref-pages)))
+  (if-let* ((pages (compat-call
+                    sort
+                    (seq-uniq (flatten-tree pages)
+                              (lambda (a b)
+                                (eq (conn--reference-page-name a)
+                                    (conn--reference-page-name b))))
+                    :key #'conn--reference-page-depth)))
       (conn--quick-ref-loop pages)
     (user-error "No quick reference pages")))
 

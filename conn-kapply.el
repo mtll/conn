@@ -1739,6 +1739,8 @@ finishing showing the buffers that were visited."))
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-kapply-matches-state)
  (conn-reference-page
+   :name conn-kapply-matches
+   :depth -10
    "Replace instances of a pattern in a thing."
    ((("In project" project)
      ("In files" multi-file)))))

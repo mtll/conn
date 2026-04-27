@@ -35,6 +35,8 @@
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-sort-state)
  (conn-reference-page
+   :name conn-sort
+   :depth -10
    ((("Columns" sort-columns)
      ("Regexp fields" sort-regexp-fields))
     (("Numeric fields" sort-numeric-fields)

@@ -850,6 +850,7 @@
 (conn-add-keymap-reference
  conn-dispatch-transform-argument-map
  (conn-reference-page
+   :name conn-dispatch-transform
    (:heading "Transforms")
    ((:splice (conn-quick-ref-to-cols
               conn-dispatch-transforms-ref-list 3)))))
@@ -899,6 +900,7 @@
 (conn-add-keymap-reference
  conn-transform-map
  (conn-reference-page
+   :name conn-transform
    (:heading "Transformations")
    (:eval (conn-quick-ref-to-cols
            conn-transformations-quick-ref 3))))

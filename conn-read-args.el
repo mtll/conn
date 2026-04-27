@@ -67,6 +67,7 @@
 (conn-add-keymap-reference
  conn-read-args-map
  (conn-reference-page
+   :name conn-read-args
    :depth 80
    (:heading "Read Args")
    ((("backward delete arg" backward-delete-arg))

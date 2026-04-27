@@ -171,6 +171,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'dired-mode)
  (conn-reference-page
+   :name conn-dired
    (:heading "Dired")
    ((("next/prev" dired-next-line dired-previous-line)
      ("next/prev dirline" dired-next-dirline dired-prev-dirline)
@@ -377,6 +378,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
  (conn-reference-page
+   :name conn-magit
    (:heading "Magit")
    ((("section forward/back" magit-section-forward magit-section-backward)
      ("delete thing" magit-delete-thing)
