@@ -64,14 +64,15 @@
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
 
-(defvar conn-read-args-reference-page
-  (conn-reference-page
-    :depth 80
-    (:heading "Read Args")
-    ((("backward delete arg" backward-delete-arg))
-     (("reset arg" reset-arg)))
-    ((("available commands with completion"
-       execute-extended-command)))))
+(conn-add-keymap-reference
+ conn-read-args-map
+ (conn-reference-page
+   :depth 80
+   (:heading "Read Args")
+   ((("backward delete arg" backward-delete-arg))
+    (("reset arg" reset-arg)))
+   ((("available commands with completion"
+      execute-extended-command)))))
 
 (defun conn-read-args-prefix-arg ()
   "Return the value of the current prefix argument during `conn-read-args'."
@@ -133,16 +134,16 @@ The duration of the message display is controlled by
     "; \\[reference] reference"
     ")"
     (when elided (truncate-string-ellipsis))
-    (when-let* ((msg (conn--read-args-get-message)))
+    (and-let* ((msg (conn--read-args-get-message)))
       (concat " " msg)))))
 
 (defun conn--read-args-prompt (prompt arguments &optional elide)
   (message "%s"
            (concat
             (conn-read-args-prompt-line prompt elide)
-            (when-let* ((_ (not elide))
-                        (args (flatten-tree
-                               (mapcar #'conn-argument-display arguments))))
+            (and-let* ((_ (not elide))
+                       (args (flatten-tree
+                              (mapcar #'conn-argument-display arguments))))
               (conn-<
                 (compat-call
                  sort args
@@ -162,6 +163,10 @@ The duration of the message display is controlled by
                (cl-loop for arg in arguments
                         collect (conn-argument-display arg)))))
            (prompt-line (conn-read-args-prompt-line prompt elide)))
+       (cl-callf nconc
+           to-display
+         (make-list (mod (- (length to-display)) column-count)
+                    ""))
        (if (length> to-display column-count)
            (conn--with-work-buffer
              (insert prompt-line)
@@ -297,8 +302,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            prompt
                            prefix
                            pre
-                           post
-                           reference)
+                           post)
   (let ((arguments (if command-handler
                        (cons command-handler arglist)
                      arglist))
@@ -309,153 +313,158 @@ This skips executing the body of the `conn-read-args' form entirely."
         (maps nil)
         (keyseq nil)
         (timer nil))
-    (cl-labels
-        ((timer-function ()
-           (setq timer nil)
-           (display-message))
-         (continue-p ()
-           (cl-loop for arg in arguments
-                    thereis (conn-argument-required-p arg)))
-         (display-message ()
-           (unless executing-kbd-macro
-             (let ((inhibit-message conn-read-args-inhibit-message)
-                   (message-log-max nil)
-                   (scroll-conservatively 100))
-               (funcall display-handler prompt arguments (and timer t)))))
-         (update-args (cmd)
-           (catch 'break
-             (let ((break nil))
-               (dolist (a arguments)
-                 (conn-argument-update a cmd (lambda () (setq break t)))
-                 (when break (throw 'break t))))))
-         (read-command ()
-           (let (partial-keymap cmd reading)
-             (dlet ((conn-wincontrol-mode nil)
-                    (conn-wincontrol-one-command-mode nil))
-               (when timer
-                 (timer-set-function timer #'timer-function)
-                 (timer-set-idle-time timer conn-read-args-message-delay)
-                 (timer-activate-when-idle timer t))
-               (cl-loop
-                repeat 10 do
-                (setq keyseq (let ((inhibit-quit t))
-                               (read-key-sequence nil))
-                      cmd (key-binding keyseq t))
-                (if (arrayp cmd)
-                    (conn-add-unread-events cmd)
-                  (cl-return))
-                finally (progn
-                          (discard-input)
-                          (error "Keyboard macro recursion limit exceeded")))
-               (when timer
-                 (cancel-timer timer)))
-             (cond ((eql (aref keyseq 0) quit-event)
-                    (setq cmd 'keyboard-quit))
-                   ((and (null cmd)
-                         (eql help-char (aref keyseq (1- (length keyseq)))))
-                    (setq cmd 'execute-extended-command
-                          partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
-                   ((and (symbolp cmd)
-                         (autoloadp (symbol-function cmd)))
-                    (autoload-do-load (symbol-function cmd))))
-             (setf conn--read-args-error-message "")
-             (when (and conn--read-args-message-timeout
-                        (time-less-p conn--read-args-message-timeout nil))
-               (setq conn--read-args-message nil
-                     conn--read-args-message-timeout nil))
-             (while (eq cmd 'execute-extended-command)
-               (setq cmd (conn--read-args-completing-read arguments
-                                                          partial-keymap)
-                     reading t))
-             (if (or (eq cmd 'undefined)
-                     (null cmd))
-                 (progn
-                   (conn-read-args-error (if reading "Quit" "%s is undefined")
-                                         (key-description keyseq))
-                   (read-command))
-               cmd)))
-         (set-error-message (cstr &rest args)
-           (setf conn--read-args-error-message
-                 (apply #'format cstr args)))
-         (execute-command (cmd)
-           (when pre (funcall pre cmd))
-           (pcase cmd
-             ((or 'keyboard-quit
-                  'keyboard-escape-quit)
-              (signal 'quit nil))
-             ('reference
-              (apply #'conn-quick-reference
-                     reference
-                     (mapcar #'conn-argument-get-reference
-                             arguments)))
-             ((or 'describe-key 'conn-describe-key)
-              (conn--read-args-describe-key
-               arguments
-               (lambda (str)
-                 (let ((conn--read-args-error-message str))
-                   (display-message)))))
-             ((or 'describe-symbol 'conn-describe-symbol)
-              (conn--read-args-describe-symbol arguments))
-             ((pred identity)
-              (or (update-args cmd)
-                  (set-error-message "Invalid command: %s <%s>"
-                                     (if (symbolp cmd) cmd "_")
-                                     (key-description keyseq)))))
-           (when post (funcall post cmd)))
-         (setup-keymaps ()
-           (setf (cdar maps)
-                 (thread-last
-                   (mapcar #'conn-argument-compose-keymap arguments)
-                   (cons overriding-map)
-                   (delq nil)
-                   (make-composed-keymap)))
-           (conn->f emulation-mode-map-alists
-             (delq maps)
-             (cons maps)))
-         (loop ()
-           (conn-with-recursive-stack state
-             (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
-                   (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
-                   (conn--read-args-error-message "")
-                   (conn--read-args-error-flag nil)
-                   (conn--read-args-message nil)
-                   (conn--read-args-message-timeout nil)
-                   (emulation-mode-map-alists emulation-mode-map-alists)
-                   (inhibit-message t)
-                   (minibuffer-message-clear-timeout nil))
-               (setq maps `((,state . nil)))
-               (while (continue-p)
-                 (catch 'conn-read-args-error
-                   (setup-keymaps)
-                   (display-message)
-                   (execute-command
-                    (prog1 (read-command)
-                      (cl-callf2 delq maps emulation-mode-map-alists)))))
-               (setq unread-command-events nil ;should this be smarter?
-                     conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
-      (apply
-       (catch 'conn-read-args-return
-         (when (and (not executing-kbd-macro)
-                    conn-read-args-message-delay
-                    (> conn-read-args-message-delay 0)
-                    (cl-loop for arg in arguments
-                             thereis (conn-argument-display arg)))
-           (setq timer conn--read-args-timer))
-         (conn--unwind-protect-all
-           (let ((conn-read-args-last-prefix nil))
-             (if around (funcall around #'loop) (loop))
-             (setq argument-values (mapcar #'conn-argument-payload
-                                           arglist)))
-           (unless argument-values
-             (mapc #'conn-argument-cancel arguments))
-           (unless executing-kbd-macro
-             (let ((inhibit-message conn-read-args-inhibit-message)
-                   (message-log-max nil)
-                   (scroll-conservatively 100))
-               (message nil)))
-           (when timer (cancel-timer timer)))
-         (mapc #'conn-argument-accept arguments)
-         (cons callback argument-values))))))
+    (cl-macrolet ((with-keymaps (&rest body)
+                    `(prog1
+                         (progn
+                           (setf (cdar maps)
+                                 (thread-last
+                                   (mapcar #'conn-argument-compose-keymap
+                                           arguments)
+                                   (cons overriding-map)
+                                   (delq nil)
+                                   (make-composed-keymap)))
+                           (conn->f emulation-mode-map-alists
+                             (delq maps)
+                             (cons maps))
+                           ,@body)
+                       (cl-callf2 delq maps emulation-mode-map-alists))))
+      (cl-labels
+          ((timer-function ()
+             (setq timer nil)
+             (display-message))
+           (continue-p ()
+             (cl-loop for arg in arguments
+                      thereis (conn-argument-required-p arg)))
+           (display-message ()
+             (unless executing-kbd-macro
+               (let ((inhibit-message conn-read-args-inhibit-message)
+                     (message-log-max nil)
+                     (scroll-conservatively 100))
+                 (funcall display-handler prompt arguments (and timer t)))))
+           (update-args (cmd)
+             (catch 'break
+               (let ((break nil))
+                 (dolist (a arguments)
+                   (conn-argument-update a cmd (lambda () (setq break t)))
+                   (when break (throw 'break t))))))
+           (read-command ()
+             (let (partial-keymap cmd reading)
+               (dlet ((conn-wincontrol-mode nil)
+                      (conn-wincontrol-one-command-mode nil))
+                 (when timer
+                   (timer-set-function timer #'timer-function)
+                   (timer-set-idle-time timer conn-read-args-message-delay)
+                   (timer-activate-when-idle timer t))
+                 (cl-loop
+                  repeat 10 do
+                  (setq keyseq (let ((inhibit-quit t))
+                                 (read-key-sequence nil))
+                        cmd (key-binding keyseq t))
+                  (if (arrayp cmd)
+                      (conn-add-unread-events cmd)
+                    (cl-return))
+                  finally (progn
+                            (discard-input)
+                            (error "Keyboard macro recursion limit exceeded")))
+                 (when timer
+                   (cancel-timer timer)))
+               (cond ((eql (aref keyseq 0) quit-event)
+                      (setq cmd 'keyboard-quit))
+                     ((and (null cmd)
+                           (eql help-char (aref keyseq (1- (length keyseq)))))
+                      (setq cmd 'execute-extended-command
+                            partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
+                     ((and (symbolp cmd)
+                           (autoloadp (symbol-function cmd)))
+                      (autoload-do-load (symbol-function cmd))))
+               (setf conn--read-args-error-message "")
+               (when (and conn--read-args-message-timeout
+                          (time-less-p conn--read-args-message-timeout nil))
+                 (setq conn--read-args-message nil
+                       conn--read-args-message-timeout nil))
+               (while (eq cmd 'execute-extended-command)
+                 (setq cmd (conn--read-args-completing-read arguments
+                                                            partial-keymap)
+                       reading t))
+               (if (or (eq cmd 'undefined)
+                       (null cmd))
+                   (progn
+                     (conn-read-args-error (if reading "Quit" "%s is undefined")
+                                           (key-description keyseq))
+                     (read-command))
+                 cmd)))
+           (set-error-message (cstr &rest args)
+             (setf conn--read-args-error-message
+                   (apply #'format cstr args)))
+           (execute-command (cmd)
+             (when pre (funcall pre cmd))
+             (pcase cmd
+               ((or 'keyboard-quit
+                    'keyboard-escape-quit)
+                (signal 'quit nil))
+               ('reference
+                (with-keymaps
+                 (conn-quick-reference
+                  (conn-get-quick-ref-pages))))
+               ((or 'describe-key 'conn-describe-key)
+                (with-keymaps
+                 (conn--read-args-describe-key
+                  arguments
+                  (lambda (str)
+                    (let ((conn--read-args-error-message str))
+                      (display-message))))))
+               ((or 'describe-symbol 'conn-describe-symbol)
+                (with-keymaps
+                 (conn--read-args-describe-symbol arguments)))
+               ((pred identity)
+                (or (update-args cmd)
+                    (set-error-message "Invalid command: %s <%s>"
+                                       (if (symbolp cmd) cmd "_")
+                                       (key-description keyseq)))))
+             (when post (funcall post cmd)))
+           (loop ()
+             (conn-with-recursive-stack state
+               (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
+                     (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
+                     (conn--read-args-error-message "")
+                     (conn--read-args-error-flag nil)
+                     (conn--read-args-message nil)
+                     (conn--read-args-message-timeout nil)
+                     (emulation-mode-map-alists emulation-mode-map-alists)
+                     (inhibit-message t)
+                     (minibuffer-message-clear-timeout nil))
+                 (setq maps `((,state . nil)))
+                 (while (continue-p)
+                   (catch 'conn-read-args-error
+                     (execute-command
+                      (with-keymaps
+                       (display-message)
+                       (read-command)))))
+                 (setq unread-command-events nil ;should this be smarter?
+                       conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
+        (apply
+         (catch 'conn-read-args-return
+           (when (and (not executing-kbd-macro)
+                      conn-read-args-message-delay
+                      (> conn-read-args-message-delay 0)
+                      (cl-loop for arg in arguments
+                               thereis (conn-argument-display arg)))
+             (setq timer conn--read-args-timer))
+           (conn--unwind-protect-all
+             (let ((conn-read-args-last-prefix nil))
+               (if around (funcall around #'loop) (loop))
+               (setq argument-values (mapcar #'conn-argument-payload
+                                             arglist)))
+             (unless argument-values
+               (mapc #'conn-argument-cancel arguments))
+             (unless executing-kbd-macro
+               (let ((inhibit-message conn-read-args-inhibit-message)
+                     (message-log-max nil)
+                     (scroll-conservatively 100))
+                 (message nil)))
+             (when timer (cancel-timer timer)))
+           (mapc #'conn-argument-accept arguments)
+           (cons callback argument-values)))))))
 
 (defmacro conn-read-args (state-and-keys varlist &rest body)
   "Eval BODY with value in VARLIST read in STATE.
@@ -536,7 +545,9 @@ echo area help message.
   (name nil :type (or string function nil) :read-only t)
   (annotation nil :type (or nil string function) :read-only t)
   (keymap nil :type keymap :read-only t)
-  (reference nil :type (or list conn--reference-page)))
+  (documentation nil
+                 :type (or function string conn--reference-page)
+                 :read-only t))
 
 (cl-defgeneric conn-argument-cancel (argument)
   ( :method (_arg) nil))
@@ -596,8 +607,8 @@ be displayed in the echo area during `conn-read-args'."
            (side-effect-free t))
   (:method (&rest _) nil)
   ( :method ((arg conn-argument) value)
-    (when-let* ((ann (conn-argument-annotation arg))
-                (_ (conn-argument-predicate arg value)))
+    (and-let* ((ann (conn-argument-annotation arg))
+               (_ (conn-argument-predicate arg value)))
       (pcase ann
         ((and (pred stringp) str)
          (concat " (" str ")"))
@@ -606,16 +617,19 @@ be displayed in the echo area during `conn-read-args'."
                 (funcall fn arg)))
          (concat " (" str ")"))))))
 
-(cl-defgeneric conn-argument-get-reference (arg)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (:method (_arg) nil)
-  ( :method ((arg conn-argument))
-    (conn-argument-reference arg)))
-
 (cl-defgeneric conn-argument-command-documentation (arg command break)
   (declare (side-effect-free t))
   (:method (_arg _cmd _break) nil))
+
+(cl-defmethod conn-argument-command-documentation ((arg conn-argument)
+                                                   cmd
+                                                   break)
+  (and-let* ((doc (conn-argument-documentation arg))
+             (_ (conn-argument-predicate arg cmd)))
+    (cl-typecase doc
+      (string (funcall break (conn-reference-page (:eval doc))))
+      (function (funcall doc cmd break))
+      (conn--reference-page (funcall break doc)))))
 
 (eval-and-compile
   (defun conn--argument-expand-method (method fixed-args body)
@@ -689,7 +703,7 @@ be displayed in the echo area during `conn-read-args'."
   (annotation :type (or nil string function))
   (keymap :type keymap)
   (reference :type (or list conn--reference-page))
-  (documentation :type function))
+  (documentation :type conn--reference-page))
 
 (defalias 'conn-anonymous-argument-name
   'conn-anonymous-argument--name)
@@ -705,9 +719,6 @@ be displayed in the echo area during `conn-read-args'."
 
 (defalias 'conn-anonymous-argument-keymap
   'conn-anonymous-argument--keymap)
-
-(defalias 'conn-anonymous-argument-reference
-  'conn-anonymous-argument--reference)
 
 (defalias 'conn-anonymous-argument-documentation
   'conn-anonymous-argument--documentation)
@@ -738,13 +749,13 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-predicate ((arg conn-anonymous-argument)
                                        cmd)
-  (when-let* ((pred (conn-anonymous-argument--predicate arg)))
+  (and-let* ((pred (conn-anonymous-argument--predicate arg)))
     (funcall pred cmd)))
 
 (cl-defmethod conn-argument-completion-annotation ((arg conn-anonymous-argument)
                                                    value)
-  (when-let* ((ann (conn-anonymous-argument--annotation arg))
-              (_ (funcall (conn-anonymous-argument--predicate arg) value)))
+  (and-let* ((ann (conn-anonymous-argument--annotation arg))
+             (_ (funcall (conn-anonymous-argument--predicate arg) value)))
     (pcase ann
       ((and (pred stringp) str)
        (concat " (" str ")"))
@@ -752,9 +763,6 @@ be displayed in the echo area during `conn-read-args'."
             (let (and str (pred stringp))
               (funcall fn arg)))
        (concat " (" str ")")))))
-
-(cl-defmethod conn-argument-get-reference ((arg conn-anonymous-argument))
-  (conn-anonymous-argument-reference arg))
 
 (cl-defmethod conn-argument-command-documentation ((arg conn-anonymous-argument)
                                                    cmd
@@ -788,8 +796,8 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-compose-keymap ((arg conn-composite-argument))
   (make-composed-keymap
    (cl-loop for a in (conn-composite-argument-value arg)
-            for map = (conn-argument-compose-keymap a)
-            when map collect map)))
+            when (conn-argument-compose-keymap a)
+            collect it)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-composite-argument)
                                        cmd)
@@ -800,10 +808,6 @@ be displayed in the echo area during `conn-read-args'."
                                                    value)
   (cl-loop for a in (conn-composite-argument-value arg)
            thereis (conn-argument-completion-annotation a value)))
-
-(cl-defmethod conn-argument-get-reference ((arg conn-composite-argument))
-  (mapcar #'conn-argument-get-reference
-          (conn-composite-argument-value arg)))
 
 (cl-defmethod conn-argument-accept ((arg conn-composite-argument))
   (mapc #'conn-argument-accept
@@ -831,10 +835,8 @@ be displayed in the echo area during `conn-read-args'."
                   &key
                   value
                   annotation
-                  reference
                   documentation)))
-  (toggle-command nil :type (or symbol list) :read-only t)
-  (documentation nil :type (or string function nil) :read-only t))
+  (toggle-command nil :type (or symbol list) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
                                     cmd
@@ -857,7 +859,7 @@ be displayed in the echo area during `conn-read-args'."
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
         (function (funcall doc cmd break))
-        (conn--reference-page doc)))))
+        (conn--reference-page (funcall break doc))))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -894,7 +896,6 @@ be displayed in the echo area during `conn-read-args'."
                   (formatter #'conn-format-cycling-argument)
                   required
                   annotation
-                  reference
                   display-prefix
                   (value (car choices))
                   &aux
@@ -903,8 +904,7 @@ be displayed in the echo area during `conn-read-args'."
   (choices nil :type list :read-only t)
   (cycling-commands nil :type list :read-only t)
   (formatter #'conn-format-cycling-argument
-             :type function :read-only t)
-  (documentation nil :type (or string function nil) :read-only t))
+             :type function :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-cycling-argument)
                                     cmd
@@ -981,7 +981,7 @@ be displayed in the echo area during `conn-read-args'."
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
         (function (funcall doc cmd break))
-        (conn--reference-page doc)))))
+        (conn--reference-page (funcall break doc))))))
 
 ;;;;; Read Argument
 
@@ -995,15 +995,13 @@ be displayed in the echo area during `conn-read-args'."
                   &key
                   formatter
                   value
-                  reference
                   annotation
                   always-read
                   documentation)))
   (reader nil :type function :read-only t)
   (formatter nil :type function :read-only t)
   (toggle-command nil :type (or symbol list) :read-only t)
-  (always-read nil :type boolean :read-only t)
-  (documentation nil :type (or string function nil) :read-only t))
+  (always-read nil :type boolean :read-only t))
 
 (cl-defmethod conn-argument-command-documentation ((arg conn-read-argument)
                                                    cmd
@@ -1016,7 +1014,7 @@ be displayed in the echo area during `conn-read-args'."
       (cl-typecase doc
         (string (funcall break (conn-reference-page (:eval doc))))
         (function (funcall doc cmd break))
-        (conn--reference-page doc)))))
+        (conn--reference-page (funcall break doc))))))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd
@@ -1069,9 +1067,6 @@ be displayed in the echo area during `conn-read-args'."
                                                    value)
   (when (conn-argument-predicate arg value)
     " (command)"))
-
-(cl-defmethod conn-argument-get-reference ((_arg conn-read-args-command-handler))
-  (list conn-read-args-reference-page))
 
 (cl-defmethod conn-argument-compose-keymap ((_arg conn-read-args-command-handler))
   conn-read-args-map)

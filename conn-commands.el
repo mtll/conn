@@ -514,9 +514,9 @@ The command to be stored is read from `command-history'."
                                      _arg)
   (princ (format "Tab:  %s"
                  (if (eq (selected-frame) (conn-tab-register-frame val))
-                     (when-let* ((index (conn--get-tab-index-by-cookie
-                                         (conn-tab-register-cookie val)))
-                                 (tab (nth index (funcall tab-bar-tabs-function))))
+                     (and-let* ((index (conn--get-tab-index-by-cookie
+                                        (conn-tab-register-cookie val)))
+                                (tab (nth index (funcall tab-bar-tabs-function))))
                        (if (eq (car tab) 'current-tab)
                            (propertize "*CURRENT TAB*" 'face 'error)
                          (alist-get 'name tab)))
@@ -1124,30 +1124,33 @@ Currently selected window remains selected afterwards."
         'outline-cycle))))
 
 (defun conn-dwim-alt-heading ()
-  (when (and (bound-and-true-p outline-regexp)
-             (bound-and-true-p outline-minor-mode))
-    (let ((beg (line-beginning-position)))
-      (when (save-excursion
-              (goto-char beg)
-              (and (bolp)
-                   (looking-at outline-regexp)))
-        'conn-outline-state))))
+  (and (bound-and-true-p outline-regexp)
+       (bound-and-true-p outline-minor-mode)
+       (let ((beg (line-beginning-position)))
+         (save-excursion
+           (goto-char beg)
+           (and (bolp)
+                (looking-at outline-regexp))))
+       'conn-outline-state))
 
 (defun conn-dwim-eval-sexp ()
-  (when (and (derived-mode-p '(emacs-lisp-mode
-                               lisp-interaction-mode))
-             (eql (point)
-                  (cdr (bounds-of-thing-at-point 'sexp))))
-    'pp-eval-last-sexp))
+  (and (derived-mode-p '(emacs-lisp-mode
+                         lisp-interaction-mode))
+       (eql (point)
+            (cdr (bounds-of-thing-at-point 'sexp)))
+       'pp-eval-last-sexp))
+
+(defun conn-describe-symbol-at-point ()
+  (interactive)
+  (if-let* ((sym (intern-soft (thing-at-point 'symbol))))
+      (describe-symbol sym)
+    (user-error "No symbol at point")))
 
 (defun conn-dwim-describe-symbol ()
-  (when (and (derived-mode-p '(emacs-lisp-mode
-                               lisp-interaction-mode))
-             (bounds-of-thing-at-point 'symbol))
-    (when-let* ((sym (intern-soft (thing-at-point 'symbol))))
-      (lambda ()
-        (interactive)
-        (describe-symbol sym)))))
+  (and-let* ((_ (derived-mode-p '(emacs-lisp-mode
+                                  lisp-interaction-mode)))
+             (sym (intern-soft (thing-at-point 'symbol))))
+    #'conn-describe-symbol-at-point))
 
 (defun conn-dwim-xref-definitions ()
   (and-let* ((_ (derived-mode-p 'prog-mode))
@@ -1156,11 +1159,18 @@ Currently selected window remains selected afterwards."
     'xref-find-definitions))
 
 (defun conn-dwim-button ()
-  (cond ((and (fboundp 'widget-apply)
-              (ignore-errors
-                (widget-apply (get-char-property (point) 'button)
-                              :active)))
-         'widget-button-press)))
+  (and (fboundp 'widget-apply)
+       (ignore-errors
+         (widget-apply (get-char-property (point) 'button)
+                       :active))
+       'forward-button))
+
+(defun conn-dwim-alt-button ()
+  (and (fboundp 'widget-apply)
+       (ignore-errors
+         (widget-apply (get-char-property (point) 'button)
+                       :active))
+       'backward-button))
 
 ;; From embark
 (defun conn-dwim-file ()
@@ -1177,8 +1187,8 @@ Currently selected window remains selected afterwards."
            #'find-file-at-point)))
 
 (defun conn-dwim-hs ()
-  (when (bound-and-true-p hs-minor-mode)
-    'hs-toggle-hiding))
+  (and (bound-and-true-p hs-minor-mode)
+       'hs-toggle-hiding))
 
 ;; From embark
 (defun conn-dwim-alt-file ()
@@ -1193,6 +1203,7 @@ Currently selected window remains selected afterwards."
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-heading 20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-hs 80)
 
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-button -70)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -20)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol 0)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-heading 20)
@@ -1280,7 +1291,6 @@ Currently selected window remains selected afterwards."
                                   transform)
   (conn-read-args (conn-mark-dispatch-state
                    :prefix arg
-                   :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
@@ -1364,11 +1374,14 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-swap-argument-map)
 
 (defun conn-yank-replace-subr (beg end)
-  (let ((cg (prepare-change-group))
-        (ad-sym (make-symbol "yank-advice")))
+  (conn-protected-let* ((cg (prepare-change-group)
+                            (cancel-change-group cg))
+                        (ad-sym (make-symbol "yank-advice")))
+    (activate-change-group cg)
     (fset ad-sym (lambda (&rest app)
                    (cancel-change-group cg)
                    (setf cg (prepare-change-group))
+                   (activate-change-group cg)
                    (delete-region beg end)
                    (let ((yank-undo-function #'ignore))
                      (apply app))))
@@ -1491,8 +1504,7 @@ Currently selected window remains selected afterwards."
                                     check-bounds)
   (conn-read-args (conn-yank-replace-dispatch-state
                    :prefix arg
-                   :prompt "Yank and Replace"
-                   :reference (list conn-dispatch-thing-reference))
+                   :prompt "Yank and Replace")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (read-from-kill-ring
@@ -1548,7 +1560,7 @@ Currently selected window remains selected afterwards."
               (not
                (buffer-local-value 'buffer-read-only
                                    (window-buffer win)))))
-           (:reference
+           (:documentation
             "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it.")
            (:description "Yank and Replace To")
@@ -1608,7 +1620,7 @@ selected by dispatch with it.")
           (not
            (buffer-local-value 'buffer-read-only
                                (window-buffer win)))))
-       (:reference
+       (:documentation
         "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it.")
        (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
@@ -1666,30 +1678,19 @@ selected by dispatch with it.")
 
 ;;;;; Replace
 
-(defvar conn-replace-special-ref
-  (append
-   (conn-reference-quote
-     (("In project" project)
-      ("In files" multi-file)))
-   (static-if (<= 30 emacs-major-version)
-       (conn-reference-quote
-         (("As diff" as-diff)
-          ("Multi file as diff" multi-file-as-diff)
-          ("As diff in project" as-diff-in-project))))))
-
-(defvar conn-replace-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-replace-special-ref 2))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (defvar conn--replace-bounds nil)
 
 (conn-define-state conn-replace-state (conn-read-thing-state)
   :lighter "REPLACE")
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-replace-state)
+ (conn-reference-page
+   ((("As diff" as-diff)
+     ("Multi file as diff" multi-file-as-diff)
+     ("As diff in project" as-diff-in-project))
+    (("In project" project)
+     ("In files" multi-file)))))
 
 (defvar-keymap conn-replace-thing-argument-map)
 
@@ -1749,7 +1750,7 @@ selected by dispatch with it.")
        :case-fold case-fold-search
        :filter (lambda (mb me)
                  (cl-loop for (beg . end) in regions
-                          when (<= beg mb me end) return t))
+                          thereis (<= beg mb me end)))
        :highlight query-replace-lazy-highlight
        :regexp regexp-flag
        :regexp-function (or replace-regexp-function
@@ -1971,8 +1972,6 @@ selected by dispatch with it.")
   (without-restriction
     (cl-call-next-method)))
 
-(defvar conn-change-reference)
-
 (conn-define-argument-command ((arg conn-replace-thing-argument)
                                (cmd (eql conn-emacs-state)))
   "Call `conn-change-thing'.")
@@ -1983,8 +1982,7 @@ selected by dispatch with it.")
                                &rest _)
   (conn-read-args (conn-change-state
                    :prefix arg
-                   :prompt "Thing"
-                   :reference conn-change-reference)
+                   :prompt "Thing")
       ((`(,thing ,arg) (conn-change-thing-argument))
        (transform (conn-transform-argument transform)))
     (conn-change-thing thing arg transform)))
@@ -2128,7 +2126,6 @@ For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
   (interactive
    (conn-read-args (conn-replace-state
-                    :reference conn-replace-reference
                     :prompt "Replace in Thing")
        ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
         (transform (conn-transform-argument))
@@ -2166,23 +2163,15 @@ For more information about how the replacement is carried out see
 
 ;;;;; Isearch
 
-(defvar conn-isearch-special-ref
-  (conn-reference-quote
-    (("In multiple file" multi-file)
-     ("In multiple buffers" multi-buffer)
-     ("In current project" project))))
-
-(defvar conn-isearch-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-isearch-special-ref 2))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (conn-define-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-isearch-state)
+ (conn-reference-page
+   (("In multiple file" multi-file))
+   (("In multiple buffers" multi-buffer))
+   (("In current project" project))))
 
 (defvar-keymap conn-isearch-thing-map)
 
@@ -2230,7 +2219,7 @@ Exiting the recursive edit will resume the isearch."
           (if-let* ((sr (and subregions
                              (conn-bounds-get bounds :subregions transform))))
               (conn--merge-overlapping-regions
-               (cl-loop for bound in sr collect (conn-bounds bound))
+               (mapcar #'conn-bounds sr)
                t)
             (list (conn-bounds bounds transform))))
          (regions
@@ -2273,8 +2262,7 @@ Exiting the recursive edit will resume the isearch."
         search-ring)
     (with-isearch-suspended
      (conn-read-args (conn-isearch-state
-                      :prompt "Isearch in Thing"
-                      :reference conn-isearch-reference)
+                      :prompt "Isearch in Thing")
          ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
           (transform (conn-transform-argument)))
        (conn-isearch-restrict-to-thing-subr thing
@@ -2358,8 +2346,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Isearch in Thing"
-                    :reference conn-isearch-reference)
+                    :prompt "Isearch in Thing")
        ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument "regexp"
@@ -2389,8 +2376,7 @@ Exiting the recursive edit will resume the isearch."
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-read-args (conn-isearch-state
-                    :prompt "Isearch in Thing"
-                    :reference conn-isearch-reference)
+                    :prompt "Isearch in Thing")
        ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument
@@ -2449,39 +2435,17 @@ Exiting the recursive edit will resume the isearch."
 
 ;;;;; Transpose
 
-(defvar conn-transpose-special-ref
-  (conn-reference-quote
-    (("line" conn-backward-line forward-line)
-     ("symbol" forward-symbol))))
-
-(defvar conn-transpose-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transpose-special-ref 3)))))
-
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
 
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-transpose-state)
+ (conn-reference-page
+   (("line" conn-backward-line forward-line))
+   (("symbol" forward-symbol))))
+
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
-
-(defvar conn-transpose-repeat-commands-ref
-  (conn-reference-quote
-    (("Repeat transposition" conn-transpose-repeat)
-     ("Repeat transposition in opposite direction" conn-transpose-repeat-inverse)
-     ("Recenter" recenter-top-bottom))))
-
-(defvar conn-transpose-repeat-reference
-  (list (conn-reference-page
-          (:eval (conn-quick-ref-to-cols
-                  conn-transpose-repeat-commands-ref 1))
-          "Any other non-prefix command ends repeating.")))
-
-(defun conn-transpose-repeat-help ()
-  "Display `conn-duplicate-repeat-reference' help during dispatch repeat."
-  (interactive)
-  (conn-quick-reference conn-transpose-repeat-reference))
 
 (defun conn-transpose-repeat ()
   (interactive)
@@ -2492,6 +2456,14 @@ Exiting the recursive edit will resume the isearch."
   (user-error "Not repeating transpose"))
 
 (defvar-keymap conn-transpose-repeat-map)
+
+(conn-add-keymap-reference
+ conn-transpose-repeat-map
+ (conn-reference-page
+   ((("Repeat transposition" conn-transpose-repeat))
+    (("Repeat transposition in opposite direction" conn-transpose-repeat-inverse))
+    (("Recenter" recenter-top-bottom)))
+   "Any other non-prefix command ends repeating."))
 
 (defun conn-transpose-setup-repeat-map (repeat repeat-inverse)
   (advice-add 'conn-transpose-repeat :override repeat)
@@ -2521,16 +2493,16 @@ Exiting the recursive edit will resume the isearch."
                                  (list conn-transpose-repeat-map)
                                  t))
              'face 'help-key-binding))
-    (when-let* ((key (where-is-internal 'conn-transpose-repeat-inverse
-                                        (list conn-transpose-repeat-map)
-                                        t)))
+    (and-let* ((key (where-is-internal 'conn-transpose-repeat-inverse
+                                       (list conn-transpose-repeat-map)
+                                       t)))
       (format "; %s other direction"
               (propertize
                (key-description key)
                'face 'help-key-binding)))
-    (when-let* ((key (where-is-internal 'conn-transpose-repeat-help
-                                        (list conn-transpose-repeat-map)
-                                        t)))
+    (and-let* ((key (where-is-internal 'conn-transpose-repeat-help
+                                       (list conn-transpose-repeat-map)
+                                       t)))
       (format "; %s help"
               (propertize
                (key-description key)
@@ -2560,8 +2532,8 @@ Exiting the recursive edit will resume the isearch."
                   (conn-bounds-of thing arg)))
        (transpose-regions beg1 end1 beg2 end2)))
     ((and (let (and thing (pred identity))
-            (cl-loop for th in (conn-thing-all-parents thing)
-                     when (conn-simple-thing-p th) return th))
+            (seq-find #'conn-simple-thing-p
+                      (conn-thing-all-parents thing)))
           (let arg (prefix-numeric-value arg)))
      (deactivate-mark)
      (transpose-subr (lambda (N) (forward-thing thing N)) arg)
@@ -2618,8 +2590,7 @@ Exiting the recursive edit will resume the isearch."
                                  (:method (_self _arg) bounds))))))
     (conn-read-args (conn-transpose-dispatch-state
                      :prompt "Transpose Dispatch"
-                     :prefix arg
-                     :reference (list conn-dispatch-thing-reference))
+                     :prefix arg)
         ((`(,thing ,arg) (conn-dispatch-thing-argument t))
          (restrict-windows
           (conn-boolean-argument "this-win"
@@ -2698,8 +2669,7 @@ region after a `recursive-edit'."
   (interactive
    (conn-read-args (conn-transpose-state
                     :prompt "Transpose"
-                    :prefix current-prefix-arg
-                    :reference conn-transpose-reference)
+                    :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-transpose-thing-argument t))
         (at-point-and-mark (conn-boolean-argument
                             "transpose at point and mark"
@@ -2715,28 +2685,21 @@ region after a `recursive-edit'."
 
 ;;;;; Kill
 
-(defvar conn-kill-special-ref
-  (conn-reference-quote
-    (("copy filename" buffer-filename)
-     ("kill matching lines" kill-matching-lines)
-     ("keep matching lines" keep-lines)
-     ("outer line" move-end-of-line))))
-
-(defvar conn-kill-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-kill-special-ref 3))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (defvar conn-kill-reformat-default t)
 
 (conn-define-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
 (defvar-keymap conn-kill-append-argument-map)
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-kill-state)
+ (conn-reference-page
+   :name conn-kill
+   ((("copy filename" buffer-filename)
+     ("kill matching lines" kill-matching-lines))
+    (("keep matching lines" keep-lines)
+     ("outer line" move-end-of-line)))))
 
 (cl-defstruct (conn-kill-append-argument
                (:include conn-cycling-argument)
@@ -2746,7 +2709,6 @@ region after a `recursive-edit'."
                   (formatter #'conn-format-cycling-argument)
                   required
                   annotation
-                  reference
                   display-prefix
                   &aux
                   (name "append")
@@ -2964,7 +2926,6 @@ hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Thing"
-                    :reference conn-kill-reference
                     :display-handler (conn-read-args-display-columns 5 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,reformat) (conn-transform-and-fixup-argument))
@@ -3310,7 +3271,6 @@ hook, which see."
       (conn-read-args (conn-kill-dispatch-state
                        :prefix arg
                        :prompt "Kill"
-                       :reference (list conn-dispatch-thing-reference)
                        :display-handler (conn-read-args-display-columns 3 3))
           ((`(,thing ,arg) (conn-dispatch-thing-argument t))
            (repeat
@@ -3572,22 +3532,15 @@ hook, which see."
 
 ;;;;; Copy
 
-(defvar conn-copy-special-ref
-  (conn-reference-quote
-    (("copy filename" buffer-filename)
-     ("kill matching lines" copy-matching-lines))))
-
-(defvar conn-copy-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-copy-special-ref 3))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (conn-define-state conn-copy-state (conn-read-thing-state)
   :lighter "COPY")
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-copy-state)
+ (conn-reference-page
+   :name conn-copy
+   ((("copy filename" buffer-filename)
+     ("kill matching lines" copy-matching-lines)))))
 
 (cl-defstruct (conn-copy-how-argument
                (:include conn-composite-argument)
@@ -3677,8 +3630,7 @@ being copied to and further invocations with `conn-repeat' append to
 that place."
   (interactive
    (conn-read-args (conn-copy-state
-                    :prompt "Thing"
-                    :reference conn-copy-reference)
+                    :prompt "Thing")
        ((`(,thing ,arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
         (`(,append ,register ,separator) (conn-copy-how-argument)))
@@ -3812,8 +3764,7 @@ that place."
                                   separator)
   (conn-read-args (conn-copy-dispatch-state
                    :prefix arg
-                   :prompt "Copy"
-                   :reference (list conn-dispatch-thing-reference))
+                   :prompt "Copy")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat
@@ -3897,19 +3848,6 @@ that place."
 
 ;;;;; How Many
 
-(defvar conn-how-many-special-ref nil)
-
-(defvar conn-how-many-reference
-  (list (conn-reference-page
-          (:splice (when conn-how-many-special-ref
-                     (conn-reference-quote
-                       ((:heading "Special Bindings")
-                        (:eval (conn-quick-ref-to-cols
-                                conn-how-many-special-ref 3))))))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (conn-define-state conn-how-many-state (conn-read-thing-state)
   :lighter "HOW-MANY")
 
@@ -3937,7 +3875,6 @@ TRANSFORM.  For how they are used to define the region see
 The regexp is read interactively."
   (interactive
    (conn-read-args (conn-how-many-state
-                    :reference conn-how-many-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
         (transform (conn-transform-argument)))
@@ -3964,19 +3901,6 @@ The regexp is read interactively."
     (_ (user-error "No thing found"))))
 
 ;;;;; Comment
-
-(defvar conn-comment-special-ref nil)
-
-(defvar conn-comment-reference
-  (list (conn-reference-page
-          (:splice (when conn-comment-special-ref
-                     (conn-reference-quote
-                       ((:heading "Special Bindings")
-                        (:eval (conn-quick-ref-to-cols
-                                conn-comment-special-ref 3))))))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
 
 (conn-define-state conn-comment-state (conn-read-thing-state)
   :lighter "COMMENT")
@@ -4016,7 +3940,6 @@ For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-comment-state
-                    :reference conn-comment-reference
                     :prompt "Thing")
        ((`(,thing ,arg) (conn-comment-thing-argument t))
         (transform (conn-transform-argument)))
@@ -4025,47 +3948,33 @@ For how they are used to define the region see `conn-bounds-of' and
 
 ;;;;; Duplicate
 
-(defvar conn-duplicate-special-ref nil)
-
-(defvar conn-duplicate-reference
-  (list (conn-reference-page
-          (:splice (when conn-duplicate-special-ref
-                     (conn-reference-quote
-                       ((:heading "Special Bindings")
-                        (:eval (conn-quick-ref-to-cols
-                                conn-duplicate-special-ref 3))))))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
-(defvar conn-duplicate-repeat-commands-ref
-  (conn-reference-quote
-    (("Repeat duplicate" conn-duplicate-repeat)
-     ("Delete previous duplicate" conn-duplicate-repeat-delete)
-     ("Indent each duplicate" conn-duplicate-repeat-indent)
-     ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
-     ("Comment or uncomment each duplicate" conn-duplicate-repeat-comment)
-     ("Apply a keyboard macro at each duplicate.
-With a prefix argument include the original."
-      conn-duplicate-repeat-kapply)
-     ("Recenter" recenter-top-bottom))))
-
-(defvar conn-duplicate-repeat-reference
-  (list (conn-reference-page
-          (:eval (conn-quick-ref-to-cols
-                  conn-duplicate-repeat-commands-ref 1))
-          "Any other non-prefix command ends repeating.")))
-
-(defun conn-duplicate-repeat-help ()
-  "Display `conn-duplicate-repeat-reference' help during dispatch repeat."
-  (interactive)
-  (conn-quick-reference conn-duplicate-repeat-reference))
-
 (conn-define-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
 
 (defvar-keymap conn-duplicate-repeat-map)
+
+(conn-add-keymap-reference
+ conn-duplicate-repeat-map
+ (conn-reference-page
+   :name conn-duplicate-repeat
+   ((("Repeat duplicate" conn-duplicate-repeat)
+     ("Delete previous duplicate" conn-duplicate-repeat-delete)
+     ("Apply a keyboard macro at each duplicate.
+With a prefix argument include the original."
+      conn-duplicate-repeat-kapply)
+     ("Recenter" recenter-top-bottom)))
+   "Any other non-prefix command ends repeating."))
+
 (defvar-keymap conn-duplicate-repeat-padding-map)
+
+(conn-add-keymap-reference
+ conn-duplicate-repeat-padding-map
+ (conn-reference-page
+   :name conn-duplicate-repeat-padding
+   :depth -10
+   ((("Indent each duplicate" conn-duplicate-repeat-indent)
+     ("Toggle newline padding" conn-duplicate-repeat-toggle-padding)
+     ("Comment or uncomment each duplicate" conn-duplicate-repeat-comment)))))
 
 (defun conn-duplicate-repeat ()
   "Repeat the previous duplicate.
@@ -4116,7 +4025,7 @@ Only available during repeating duplicate."
                     'face 'help-key-binding)))
     (conn--with-work-buffer
       (insert (format "Repeat duplicate (%s reference):\n"
-                      (key-desc 'conn-duplicate-repeat-help)))
+                      (key-desc 'conn-quick-reference)))
       (conn-to-vtable
        (cl-loop for (d c) on desc-and-commands by #'cddr
                 collect (format "%s %s" (key-desc c) d))
@@ -4151,6 +4060,7 @@ Only available during repeating duplicate."
        (regexp (if block "\n" "[\t ]"))
        (commented nil)
        (exit-fn nil))
+    (activate-change-group cg)
     (set-marker-insertion-type m2 t)
     (cl-labels
         ((dup ()
@@ -4359,13 +4269,16 @@ Only available during repeating duplicate."
                                        repeat)
   (if (and (bound-and-true-p rectangle-mark-mode)
            (fboundp 'rectangle--duplicate-right))
-      (let ((cgs (list (prepare-change-group)))
-            (exit-fn nil))
+      (conn-protected-let* ((cgs (list (prepare-change-group))
+                                 (mapc #'cancel-change-group cgs))
+                            (exit-fn nil))
+        (activate-change-group (car cgs))
         (cl-flet
             ((dup ()
                (interactive)
                (let ((inhibit-message t))
                  (push (prepare-change-group) cgs)
+                 (activate-change-group (car cgs))
                  (rectangle--duplicate-right 1 0)))
              (delete ()
                (interactive)
@@ -4439,8 +4352,7 @@ If REPEAT is non-nil then duplicate the region REPEAT times.
 Interactively REPEAT is given by the prefix argument."
   (interactive
    (conn-read-args (conn-duplicate-state
-                    :prompt "Thing"
-                    :reference conn-duplicate-reference)
+                    :prompt "Thing")
        ((`(,thing ,arg) (conn-duplicate-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform
@@ -4449,23 +4361,15 @@ Interactively REPEAT is given by the prefix argument."
 
 ;;;;; Change
 
-(defvar conn-change-special-ref
-  (conn-reference-quote
-    (("quoted-insert" quoted-insert)
-     ("emacs-state-overwrite" conn-emacs-state-overwrite)
-     ("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary))))
-
-(defvar conn-change-reference
-  (list (conn-reference-page
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-change-special-ref 3))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (conn-define-state conn-change-state (conn-kill-state)
   :lighter "CHANGE")
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-change-state)
+ (conn-reference-page
+   ((("quoted-insert" quoted-insert))
+    (("emacs-state-overwrite" conn-emacs-state-overwrite))
+    (("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary)))))
 
 (defvar-keymap conn-change-thing-argument-map)
 
@@ -4527,39 +4431,45 @@ Interactively REPEAT is given by the prefix argument."
                       (append transform
                               (list 'conn-check-bounds))
                     transform))
-     (let ((cg (prepare-change-group)))
-       (atomic-change-group
-         (goto-char beg)
-         (delete-region beg end)
-         (cl-macrolet ((push-hist (item)
-                         `(conn-push-command-history
-                           'conn-change-thing-do
-                           thing
-                           arg
-                           transform
-                           check-bounds
-                           ,item)))
-           (cond ((stringp with)
-                  (insert with))
-                 (kbd-macro-query
-                  (let (executing-kbd-macro
-                        defining-kbd-macro)
-                    (push-hist
-                     (if (and (= (abs (- end beg)) 1)
-                              (or (conn-subthing-p thing 'char)
-                                  (conn-subthing-p thing 'point)))
-                         (conn-record-one-insertion)
-                       (conn-record-insertion t cg)))))
-                 (t
-                  (if (and (= (abs (- end beg)) 1)
-                           (or (conn-subthing-p thing 'char)
-                               (conn-subthing-p thing 'point)))
-                      (push-hist (conn-record-one-insertion))
-                    (conn-record-insertion nil cg)
-                    (conn-state-unwind clone
-                      (when (not clone)
-                        (when-let* ((text (conn-insertion-recording-text)))
-                          (push-hist text)))))))))))
+     (conn-protected-let* ((cg (prepare-change-group)
+                               (cancel-change-group cg))
+                           (pt (point)))
+       (activate-change-group cg)
+       (delete-region beg end)
+       (goto-char beg)
+       (cl-macrolet ((push-hist (item)
+                       `(conn-push-command-history
+                         'conn-change-thing-do
+                         thing
+                         arg
+                         transform
+                         check-bounds
+                         ,item)))
+         (cond ((stringp with)
+                (insert with))
+               (kbd-macro-query
+                (let (executing-kbd-macro
+                      defining-kbd-macro)
+                  (push-hist
+                   (if (and (= (abs (- end beg)) 1)
+                            (or (conn-subthing-p thing 'char)
+                                (conn-subthing-p thing 'point)))
+                       (unwind-protect
+                           (conn-record-one-insertion)
+                         (accept-change-group cg))
+                     (conn-record-insertion t cg pt)))))
+               (t
+                (if (and (= (abs (- end beg)) 1)
+                         (or (conn-subthing-p thing 'char)
+                             (conn-subthing-p thing 'point)))
+                    (push-hist (unwind-protect
+                                   (conn-record-one-insertion)
+                                 (accept-change-group cg)))
+                  (conn-record-insertion nil cg pt)
+                  (conn-state-unwind clone
+                    (when (not clone)
+                      (when-let* ((text (conn-insertion-recording-text)))
+                        (push-hist text))))))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-record-insert))
@@ -4630,7 +4540,6 @@ Interactively REPEAT is given by the prefix argument."
                                     _kbd-macro-query)
   (conn-read-args (conn-dispatch-change-state
                    :prefix arg
-                   :reference (list conn-dispatch-thing-reference)
                    :prompt "Thing")
       ((`(,dthing ,darg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
@@ -4707,7 +4616,8 @@ Interactively REPEAT is given by the prefix argument."
                                     with
                                     _kbd-macro-query)
   (conn-protected-let* ((cg (prepare-change-group)
-                            (cancel-change-group cg)))
+                            (cancel-change-group cg))
+                        (pt (point)))
     (activate-change-group cg)
     (with-undo-amalgamate
       (conn-dispatch-setup
@@ -4731,7 +4641,7 @@ Interactively REPEAT is given by the prefix argument."
           (progn
             (insert with)
             (accept-change-group cg))
-        (conn-record-insertion nil cg)
+        (conn-record-insertion nil cg pt)
         (conn-state-unwind clone
           (unless clone
             (setq with (conn-insertion-recording-text)))))))
@@ -4740,7 +4650,8 @@ Interactively REPEAT is given by the prefix argument."
                 (conn-ring-head conn-dispatch-ring))))
      (lambda ()
        (conn-protected-let* ((cg (prepare-change-group)
-                                 (cancel-change-group cg)))
+                                 (cancel-change-group cg))
+                             (pt (point)))
          (activate-change-group cg)
          (with-undo-amalgamate
            (conn-dispatch-setup-previous prev)
@@ -4748,7 +4659,7 @@ Interactively REPEAT is given by the prefix argument."
                (progn
                  (insert with)
                  (accept-change-group cg))
-             (conn-record-insertion nil cg)
+             (conn-record-insertion nil cg pt)
              (conn-state-unwind clone
                (unless clone
                  (setq with (conn-insertion-recording-text)))))))))))
@@ -4762,7 +4673,6 @@ Interactively REPEAT is given by the prefix argument."
                                     _kbd-macro-query)
   (conn-read-args (conn-replace-state
                    :prefix arg
-                   :reference conn-replace-reference
                    :prompt "Replace in Thing")
       ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
        (transform (conn-transform-argument transform))
@@ -4831,8 +4741,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 `conn-bounds-of' and `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-change-state
-                    :prompt "Thing"
-                    :reference conn-change-reference)
+                    :prompt "Thing")
        ((`(,thing ,arg) (conn-change-thing-argument))
         (transform (conn-transform-argument))
         (check-bounds (conn-check-bounds-argument))
@@ -4894,6 +4803,8 @@ For how the region is determined using THING, ARG, and TRANSFORM see
   (interactive)
   (when conn-record-emacs-state
     (cancel-change-group (cl-shiftf conn--insertion-recording-change-group nil))
+    (when conn--insertion-recording-start-point
+      (goto-char conn--insertion-recording-start-point))
     (when (markerp conn-insertion-recording-other-end)
       (set-marker (cl-shiftf conn-insertion-recording-other-end nil)
                   nil))
@@ -4909,19 +4820,6 @@ For how the region is determined using THING, ARG, and TRANSFORM see
     (conn-pop-state)))
 
 ;;;;; Indent
-
-(defvar conn-indent-special-ref nil)
-
-(defvar conn-indent-reference
-  (list (conn-reference-page
-          (:splice (when conn-indent-special-ref
-                     (conn-reference-quote
-                       ((:heading "Special Bindings")
-                        (:eval (conn-quick-ref-to-cols
-                                conn-indent-special-ref 3))))))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
 
 (conn-define-state conn-indent-state (conn-read-thing-state)
   :lighter "INDENT")
@@ -4982,8 +4880,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 `whitespace-cleanup-region' on the region."
   (interactive
    (conn-read-args (conn-indent-state
-                    :prompt "Thing"
-                    :reference conn-indent-reference)
+                    :prompt "Thing")
        ((`(,thing ,arg) (conn-indent-thing-argument))
         (transform (conn-transform-argument))
         (cleanup-whitespace
@@ -5010,28 +4907,24 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (interactive)
   (user-error "Not currently indenting"))
 
-(defvar-keymap conn-indent-thing-rigidly-map)
+(defvar-keymap conn-indent-thing-rigidly-map
+  "M-?" 'conn-quick-reference)
 
-(defvar conn-indent-thing-rigidly-reference
-  (conn-reference-page
-    (:heading "Indent")
-    ((:keymap conn-indent-thing-rigidly-map)
-     (("left/to tab stop"
-       conn-indent-left
-       conn-indent-left-to-tab-stop))
-     (("right/to tab stop"
-       conn-indent-right
-       conn-indent-right-to-tab-stop)))))
-
-(defun conn-indent-rigidly-reference ()
-  (interactive)
-  (conn-quick-reference conn-indent-thing-rigidly-reference))
+(conn-add-keymap-reference
+ conn-indent-thing-rigidly-map
+ (conn-reference-page
+   (:heading "Indent")
+   ((("left/to tab stop"
+      conn-indent-left
+      conn-indent-left-to-tab-stop))
+    (("right/to tab stop"
+      conn-indent-right
+      conn-indent-right-to-tab-stop)))))
 
 (defun conn-indent-thing-rigidly (thing arg transform)
   (interactive
    (conn-read-args (conn-indent-state
-                    :prompt "Thing"
-                    :reference conn-indent-reference)
+                    :prompt "Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))

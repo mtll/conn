@@ -182,8 +182,6 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "<" 'conn-to-char-backward
-  ">" 'conn-to-char-forward
   "e" 'previous-line
   "d" 'next-line
   "," conn-thing-inner-remap
@@ -772,7 +770,7 @@
 
 (define-keymap
   :keymap conn-transpose-repeat-map
-  "?" 'conn-transpose-repeat-help
+  "?" 'conn-quick-reference
   "t" 'conn-transpose-repeat
   "T" 'conn-transpose-repeat-inverse)
 
@@ -782,7 +780,7 @@
 
 (define-keymap
   :keymap conn-duplicate-repeat-map
-  "?" 'conn-duplicate-repeat-help
+  "?" 'conn-quick-reference
   "DEL" 'conn-duplicate-repeat-delete
   "<backspace>" 'conn-duplicate-repeat-delete
   "q" 'conn-duplicate-repeat
@@ -807,7 +805,7 @@
   "j" #'conn-indent-left
   "L" #'conn-indent-right-to-tab-stop
   "J" #'conn-indent-left-to-tab-stop
-  "?" #'conn-indent-rigidly-reference)
+  "?" #'conn-quick-reference)
 
 (define-keymap
   :keymap conn-indirect-map
@@ -848,6 +846,13 @@
   "g" 'conn-bounds-upto-next
   "G" 'conn-bounds-upto-next
   "SPC" 'conn-bounds-last)
+
+(conn-add-keymap-reference
+ conn-dispatch-transform-argument-map
+ (conn-reference-page
+   (:heading "Transforms")
+   ((:splice (conn-quick-ref-to-cols
+              conn-dispatch-transforms-ref-list 3)))))
 
 (define-keymap
   :keymap conn-dispatch-replace-argument-map
@@ -890,6 +895,13 @@
   "g" 'conn-bounds-upto-next
   "G" 'conn-bounds-upto-previous
   "C-t" 'conn-transform-reset)
+
+(conn-add-keymap-reference
+ conn-transform-map
+ (conn-reference-page
+   (:heading "Transformations")
+   (:eval (conn-quick-ref-to-cols
+           conn-transformations-quick-ref 3))))
 
 ;;;; Wincontrol
 
@@ -969,7 +981,7 @@
 (define-keymap
   :keymap conn-wincontrol-map
   "=" 'balance-windows
-  "M-?" 'conn-wincontrol-quick-ref
+  "M-?" 'conn-quick-reference
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
   "0" 'conn-wincontrol-digit-argument

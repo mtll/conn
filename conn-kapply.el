@@ -372,7 +372,7 @@ of highlighting."
          :filter (lambda (mb me)
                    (or (null bounds)
                        (cl-loop for (beg . end) in bounds
-                                when (<= beg mb me end) return t)))
+                                thereis (<= beg mb me end))))
          :highlight query-replace-lazy-highlight
          :regexp regexp-flag
          :regexp-function (or replace-regexp-function
@@ -523,7 +523,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                       (conn-bounds-get :subregions
                                        transform
                                        (and sr (pred identity))))
-                 (cl-loop for reg in sr collect (conn-bounds reg)))
+                 (mapcar #'conn-bounds sr))
                 ((conn-bounds whole transform)
                  (list whole)))
             (deactivate-mark)))
@@ -1233,49 +1233,39 @@ The iterator must be the first argument in ARGLIST.
 (conn-define-state conn-kapply-state ()
   :lighter "KAPPLY")
 
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-kapply-state)
+ (list
+  (conn-reference-page
+    :name 'conn-kapply-macro
+    :depth -20
+    ((("record a new macro in the current state" record)
+      ("apply the previous macro" apply)
+      ("apply and then append to the previous macro" append)
+      ("apply and append without executing macro first" append-skip-exec)
+      ("step edit the previous macro" step-edit))))
+  (conn-reference-page
+    :name 'conn-kapply-macro-ring
+    :depth -10
+    (:heading "Kmacro Ring")
+    ((("cycle backward" kmacro-cycle-ring-next)
+      ("cycle forward" kmacro-cycle-ring-previous)
+      ("display last-kbd-macro" conn-display-kmacro-ring))
+     (("delete head" kmacro-delete-ring-head)
+      ("swap" kmacro-swap-ring))))))
+
 ;;;;; Applier Argument
-
-(defvar conn-kapply-appliers-ref-list
-  (conn-reference-quote
-    (("record a new macro in the current state" record)
-     ("apply the previous macro" apply)
-     ("apply and then append to the previous macro" append)
-     ("apply and append without executing macro first" append-skip-exec)
-     ("step edit the previous macro" step-edit))))
-
-(defvar conn-kapply-ring-command-list
-  (conn-reference-quote
-    (("cycle backward" kmacro-cycle-ring-next)
-     ("cycle forward" kmacro-cycle-ring-previous)
-     ("display last-kbd-macro" conn-display-kmacro-ring)
-     ("delete head" kmacro-delete-ring-head)
-     ("swap" kmacro-swap-ring))))
-
-(defvar conn-kapply-macro-reference
-  (list
-   (conn-reference-page
-     (:heading "Keyboard Macro")
-     "What keyboard macro to use and how to use it"
-     (:eval (conn-quick-ref-to-cols
-             conn-kapply-appliers-ref-list 1)))
-   (conn-reference-page
-     (:heading "Kmacro Ring Commands")
-     (:eval (conn-quick-ref-to-cols
-             conn-kapply-ring-command-list
-             2)))))
 
 (cl-defstruct (conn-kapply-macro-argument
                (:include conn-argument)
                ( :constructor conn-kapply-macro-argument
-                 (&aux
-                  (required t)
-                  (reference conn-kapply-macro-reference))))
+                 (&aux (required t))))
   (register nil :type (or integer nil)))
 
 (cl-defmethod conn-argument-display ((arg conn-kapply-macro-argument))
   (concat (substitute-command-keys
            "\\[register] register ")
-          (when-let* ((reg (conn-kapply-macro-argument-register arg)))
+          (and-let* ((reg (conn-kapply-macro-argument-register arg)))
             (propertize (format "<%c>" reg)
                         'face 'conn-argument-active-face))))
 
@@ -1449,7 +1439,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;;; Ibuffer Argument
 
-(defvar conn-kapply-ibuffer-reference
+(defvar conn-kapply-ibuffer-documentation
   (conn-reference-page
     :depth 70
     (:heading "Ibuffer Overview")
@@ -1467,7 +1457,7 @@ finishing showing the buffers that were visited."))
                   (name "ibuffer")
                   (toggle-command 'kapply-ibuffer)
                   (keymap conn-kapply-ibuffer-argument-map)
-                  (reference conn-kapply-ibuffer-reference)))))
+                  (documentation conn-kapply-ibuffer-documentation)))))
 
 (cl-defmethod conn-argument-payload ((arg conn-kapply-ibuffer-argument))
   (and (conn-argument-value arg)
@@ -1503,7 +1493,7 @@ finishing showing the buffers that were visited."))
   (apply #'concat
          (conn-key-bind-string 'kapply-undo)
          " merge undo"
-         (when-let* ((val (conn-argument-value arg)))
+         (and-let* ((val (conn-argument-value arg)))
            (list " "
                  (propertize "(" 'face 'shadow)
                  (propertize (format "%s" val)
@@ -1801,7 +1791,6 @@ finishing showing the buffers that were visited."))
                                _from
                                _to)
   (conn-read-args (conn-kapply-matches-state
-                   :reference conn-kapply-matches-reference
                    :prompt "Kapply in Thing")
       ((`(,thing ,arg ,subregions-p)
         (conn-kapply-matches-thing-argument subregions-p))
@@ -2015,7 +2004,6 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-on-symbol ()
   (interactive)
   (conn-read-args (conn-kapply-matches-state
-                   :reference conn-kapply-matches-reference
                    :prompt "Kapply in Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument)))
@@ -2029,7 +2017,6 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-on-word ()
   (interactive)
   (conn-read-args (conn-kapply-matches-state
-                   :reference conn-kapply-matches-reference
                    :prompt "Kapply in Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument)))

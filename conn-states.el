@@ -243,8 +243,7 @@ DEFAULT is a value to return if PROPERTY is not found."
                  default)
     (cl-loop for parent in (conn-state-all-parents state)
              for table = (conn-state--properties (conn--find-state parent))
-             for prop = (assq property table)
-             when prop return (cdr prop)
+             when (assq property table) return (cdr it)
              finally return default)))
 
 (define-inline conn-state-set (state property value)
@@ -301,15 +300,14 @@ Called when the inheritance hierarchy for STATE changes."
       (when-let* ((state-map (gethash state conn--composed-state-maps)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
-                       for pmap = (conn-get-state-map pstate t)
-                       when pmap collect pmap)))
+                       when (conn-get-state-map pstate t) collect it)))
       (let (to-remove)
         (pcase-dolist ((and `(,mode . ,map) cons)
                        (cdr (conn-state--minor-mode-maps state-obj)))
           (setf (cdr map)
                 (cl-loop for parent in parents
-                         for pmap = (conn-get-minor-mode-map parent mode t)
-                         when pmap collect pmap))
+                         when (conn-get-minor-mode-map parent mode t)
+                         collect it))
           (unless (cdr map)
             (push cons to-remove)))
         (cl-callf seq-difference (cdr (conn-state--minor-mode-maps state-obj))
@@ -318,8 +316,8 @@ Called when the inheritance hierarchy for STATE changes."
        (lambda (mode map)
          (setf (cdr map)
                (cl-loop for pstate in parents
-                        for pmap = (conn-get-major-mode-map pstate mode t)
-                        when pmap collect pmap)))
+                        when (conn-get-major-mode-map pstate mode t)
+                        collect it)))
        (conn-state--major-mode-maps state-obj)))))
 
 ;;;;;; State Maps
@@ -332,8 +330,8 @@ Called when the inheritance hierarchy for STATE changes."
                nil "%s :no-keymap property is non-nil" conn-current-state)
     (make-composed-keymap
      (cl-loop for pstate in (conn-state-all-keymap-parents conn-current-state)
-              for pmap = (conn-state--keymap (conn--find-state pstate))
-              when pmap collect pmap))))
+              when (conn-state--keymap (conn--find-state pstate))
+              collect it))))
 
 (defun conn-set-state-map (state map)
   "Set STATE's keymap to MAP."
@@ -342,8 +340,8 @@ Called when the inheritance hierarchy for STATE changes."
   (dolist (child (cons state (conn-state-all-children state)) map)
     (when-let* ((map (gethash child conn--composed-state-maps)))
       (cl-loop for parent in (conn-state-all-keymap-parents child)
-               for pmap = (conn-get-state-map parent t)
-               when pmap collect pmap into pmaps
+               when (conn-get-state-map parent t)
+               collect it into pmaps
                finally (setf (cdr map) pmaps)))))
 
 (gv-define-simple-setter conn-get-state-map conn-set-state-map)
@@ -383,8 +381,7 @@ exist."
                                   (conn--find-state ,state))))
                 (parent-maps (state)
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
+                            when (get-map parent) collect it)))
     (or (get-composed-map state)
         (setf (get-composed-map state)
               (make-composed-keymap (parent-maps state))))))
@@ -402,8 +399,7 @@ exist."
                                   (conn--find-state ,state))))
                 (parent-maps (state)
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
+                            when (get-map parent) collect it)))
     (setf (get-map state) map)
     (setf (get-composed-map state)
           (make-composed-keymap (parent-maps state)))
@@ -520,8 +516,7 @@ depth value.  Depth should be an integer between -100 and 100."
                   `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                 (parent-maps (state)
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
+                            when (get-map parent) collect it)))
     (setf (get-map state) map)
     (setf (get-composed-map state)
           (make-composed-keymap (parent-maps state)))
@@ -556,8 +551,7 @@ then an error is signaled."
                   `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                 (parent-maps (state)
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                            for pmap = (get-map parent)
-                            when pmap collect pmap)))
+                            when (get-map parent) collect it)))
     (unless (conn-state-get state :no-keymap)
       (setf (get-composed-map state)
             (make-composed-keymap (parent-maps state)))
@@ -1400,6 +1394,7 @@ command was a prefix command.")
 (defvar conn-insertion-recording-last-insertion nil)
 (defvar-local conn--insertion-recording-overlay nil)
 (defvar-local conn--insertion-recording-change-group nil)
+(defvar-local conn--insertion-recording-start-point nil)
 
 (defun conn--update-record-insertion-region (window)
   (when (eq window (selected-window))
@@ -1422,13 +1417,15 @@ command was a prefix command.")
     (setq conn--insertion-recording-overlay (make-overlay (point) (point))
           conn-insertion-recording-other-end (point-marker))
     (unless conn--insertion-recording-change-group
-      (setq conn--insertion-recording-change-group (prepare-change-group)))
+      (setq conn--insertion-recording-change-group (prepare-change-group))
+      (activate-change-group conn--insertion-recording-change-group))
     (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
     (overlay-put conn--insertion-recording-overlay 'category 'conn-recording-region)
     (add-hook 'pre-redisplay-functions
               #'conn--update-record-insertion-region
               nil 'local)
     (conn-state-unwind clone
+      (setq conn--insertion-recording-start-point nil)
       (remove-hook 'pre-redisplay-functions
                    #'conn--update-record-insertion-region
                    'local)
@@ -1460,10 +1457,12 @@ command was a prefix command.")
 (defvar-keymap conn-record-insertion-transient-map)
 (defvar-keymap conn-record-insertion-recursive-transient-map)
 
-(defun conn-record-insertion (&optional recursive-edit change-group)
+(defun conn-record-insertion (&optional recursive-edit change-group init-point)
   (require 'diff-mode)
   (when (conn-insertion-recording-p)
     (error "Already recording"))
+  (setq conn--insertion-recording-start-point
+        (or init-point (point)))
   (when change-group
     (setq conn--insertion-recording-change-group change-group))
   (if (not recursive-edit)

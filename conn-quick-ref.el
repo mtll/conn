@@ -59,7 +59,8 @@
 
 (cl-defstruct (conn--reference-page
                ( :constructor conn--make-reference-page
-                 (depth definition)))
+                 (name depth definition)))
+  (name nil :type symbol :read-only t)
   (depth 0 :type integer :read-only t)
   (definition nil :type list :read-only t))
 
@@ -67,7 +68,7 @@
   (declare (indent 0))
   (cl-labels ((process-definition (def)
                 (pcase def
-                  (`(,(and (or :eval :splice :keymap :heading)
+                  (`(,(and (or :eval :splice :heading)
                            type)
                      . ,form)
                    `(cons ,type (lambda () ,@form)))
@@ -81,13 +82,20 @@
 
 (defmacro conn-reference-page (&rest definition)
   (declare (indent 0))
-  (let ((depth (or (when (eq :depth (car definition))
-                     (pop definition)
-                     (pop definition))
-                   0)))
+  (let (depth name)
+    (while (pcase definition
+             (`(:depth ,n . ,_def)
+              (cl-callf2 drop 2 definition)
+              (setq depth n)
+              t)
+             (`(:name ,n . ,_def)
+              (cl-callf2 drop 2 definition)
+              (setq name n)
+              t)))
+    (unless depth (setq depth 0))
     (cl-labels ((process-definition (def)
                   (pcase def
-                    (`(,(and (or :eval :splice :keymap :heading)
+                    (`(,(and (or :eval :splice :heading)
                              type)
                        . ,form)
                      `(cons ,type (lambda () ,@form)))
@@ -95,12 +103,12 @@
                      `(list ,@(mapcar #'process-definition def)))
                     (_ `(quote ,def)))))
       `(conn--make-reference-page
+        ',(or name (make-symbol "anonymous-page"))
         ,depth
         (list ,@(cl-loop for row in definition
                          if (listp row)
                          collect (process-definition row)
-                         else
-                         collect row))))))
+                         else collect row))))))
 
 (defun conn-quick-ref-find-remap (remap &optional keymap)
   (let (result)
@@ -135,9 +143,9 @@
                       (cl-loop for col in curr
                                collect (or (car col) "") into row
                                collect (cdr col) into next
-                               finally do (progn
-                                            (push row rows)
-                                            (setq curr next))))
+                               finally do
+                               (push row rows)
+                               (setq curr next)))
                     (nreverse rows)))
                 (check-advertised (bind)
                   (when-let* ((_(symbolp bind))
@@ -145,29 +153,26 @@
                               (desc (key-description adv))
                               (_(eq bind (key-binding adv))))
                     adv))
-                (get-key (bind keymap)
-                  (if-let* ((key (if keymap
-                                     (where-is-internal bind keymap t)
-                                   (or (check-advertised bind)
-                                       (when overriding-terminal-local-map
-                                         (where-is-internal
-                                          bind
-                                          (list overriding-terminal-local-map)
-                                          t))
-                                       (where-is-internal bind nil t)))))
+                (get-key (bind)
+                  (if-let* ((key (or (check-advertised bind)
+                                     (when overriding-terminal-local-map
+                                       (where-is-internal
+                                        bind
+                                        (list overriding-terminal-local-map)
+                                        t))
+                                     (where-is-internal bind nil t))))
                       (propertize (key-description key) 'face 'help-key-binding)
                     conn--quick-ref-unbound))
-                (process-bindings (description bindings keymap)
+                (process-bindings (description bindings)
                   (let (keys)
                     (while bindings
                       (pcase (pop bindings)
                         ('nil)
-                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) bindings))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
                         ((and str (pred stringp))
                          (push str keys))
-                        (bind (push (get-key bind keymap) keys))))
+                        (bind (push (get-key bind) keys))))
                     (conn--with-work-buffer
                       (dolist (key (nreverse keys))
                         (insert key ", "))
@@ -179,12 +184,11 @@
                         (while (= 0 (forward-line))
                           (indent-to col))
                         (buffer-string)))))
-                (process-col (col keymap)
+                (process-col (col)
                   (let ((result nil))
                     (while col
                       (pcase (pop col)
                         ('nil)
-                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) col))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) col))
                         (`(:heading . ,fn)
@@ -193,12 +197,11 @@
                                  result)))
                         ((and str (pred stringp)) (push str result))
                         (`(,desc . ,bindings)
-                         (push (process-bindings desc bindings keymap)
+                         (push (process-bindings desc bindings)
                                result))))
                     (nreverse result)))
                 (process-row (row)
-                  (let (keymap
-                        result)
+                  (let (result)
                     (while row
                       (pcase (pop row)
                         ('nil)
@@ -206,11 +209,10 @@
                          (when-let* ((str (funcall fn)))
                            (push (list (propertize str 'face 'conn-quick-ref-heading-face))
                                  result)))
-                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) row))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) row))
                         ((and (pred consp) col)
-                         (push (process-col col keymap) result))))
+                         (push (process-col col) result))))
                     (nreverse result)))
                 (insert-ref-string (str)
                   (let (beg)
@@ -308,6 +310,25 @@
       (forward-page -1))
     (narrow-to-page)))
 
+(defun conn-get-quick-ref-pages (&optional keymap)
+  (let ((result nil))
+    (cl-labels ((bindings (keymap)
+                  (map-keymap
+                   (lambda (key def)
+                     (pcase (keymap--menu-item-binding def)
+                       ((and def (guard (eq key 'conn-quick-ref)))
+                        (push def result))
+                       ((and def (pred keymapp))
+                        (bindings def))))
+                   keymap)))
+      (if keymap
+          (bindings keymap)
+        (mapc #'bindings (current-active-maps t)))
+      (seq-uniq (flatten-tree (nreverse result))
+                (lambda (a b)
+                  (eq (conn--reference-page-name a)
+                      (conn--reference-page-name b)))))))
+
 (defun conn--quick-ref-parse-pages (pages)
   (cl-loop for p in pages
            append (pcase p
@@ -319,51 +340,75 @@
                            sort result
                            :key #'conn--reference-page-depth)))
 
-(defun conn-quick-reference (&rest pages)
-  (when-let* ((pages (conn--quick-ref-parse-pages
-                      (flatten-tree pages))))
-    (let* ((buf (get-buffer-create " *conn-quick-ref*"))
-           (display-function conn-quick-ref-display-function)
-           (inhibit-message t)
-           (state nil)
-           (header
-            (substitute-command-keys
-             (concat " \\<conn-quick-ref-map>"
-                     (propertize "[%s/%s] " 'face 'minibuffer-prompt)
-                     (propertize "Quick Reference" 'face 'bold)
-                     " — \\[next] Next; \\[previous] Previous; \\[close] Close "
-                     "\n"))))
-      (add-face-text-property 0 (length header)
-                              'conn-quick-ref-page-header-face
-                              t header)
-      (with-current-buffer buf
-        (widen)
-        (special-mode)
-        (setq-local page-delimiter "")
-        (with-silent-modifications
-          (delete-region (point-min) (point-max))))
-      (conn-quick-ref-insert-pages pages buf header)
-      (conn->f state (funcall display-function buf))
-      (unwind-protect
-          (conn-with-overriding-map conn-quick-ref-map
-            (cl-loop
-             (let ((keys (let ((inhibit-quit t))
-                           (read-key-sequence nil))))
-               (when (eql (aref keys 0) (car (last (current-input-mode))))
-                 (signal 'quit nil))
-               (pcase (key-binding keys)
-                 ('close (cl-return))
-                 ('next
-                  (conn-quick-ref-next-page buf)
-                  (conn->f state (funcall display-function buf)))
-                 ('previous
-                  (conn-quick-ref-previous-page buf)
-                  (conn->f state (funcall display-function buf)))
-                 ((or 'quit 'keyboard-quit)
-                  (signal 'quit nil))
-                 (_ (conn-add-unread-events (this-single-command-raw-keys))
-                    (cl-return))))))
-        (funcall display-function buf state t)))))
+(defun conn--quick-ref-loop (pages)
+  (let* ((buf (get-buffer-create " *conn-quick-ref*"))
+         (display-function conn-quick-ref-display-function)
+         (inhibit-message t)
+         (state nil)
+         (header
+          (substitute-command-keys
+           (concat " \\<conn-quick-ref-map>"
+                   (propertize "[%s/%s] " 'face 'minibuffer-prompt)
+                   (propertize "Quick Reference" 'face 'bold)
+                   " — \\[next] Next; \\[previous] Previous; \\[close] Close "
+                   "\n"))))
+    (add-face-text-property 0 (length header)
+                            'conn-quick-ref-page-header-face
+                            t header)
+    (with-current-buffer buf
+      (widen)
+      (special-mode)
+      (setq-local page-delimiter "")
+      (with-silent-modifications
+        (delete-region (point-min) (point-max))))
+    (conn-quick-ref-insert-pages pages buf header)
+    (conn->f state (funcall display-function buf))
+    (unwind-protect
+        (conn-with-overriding-map conn-quick-ref-map
+          (cl-loop
+           (let ((keys (let ((inhibit-quit t))
+                         (read-key-sequence nil))))
+             (when (eql (aref keys 0) (car (last (current-input-mode))))
+               (signal 'quit nil))
+             (pcase (key-binding keys)
+               ('close (cl-return))
+               ('next
+                (conn-quick-ref-next-page buf)
+                (conn->f state (funcall display-function buf)))
+               ('previous
+                (conn-quick-ref-previous-page buf)
+                (conn->f state (funcall display-function buf)))
+               ((or 'quit 'keyboard-quit)
+                (signal 'quit nil))
+               (_ (conn-add-unread-events
+                   (this-single-command-raw-keys))
+                  (cl-return))))))
+      (funcall display-function buf state t))))
+
+(defun conn-quick-reference (pages)
+  (interactive
+   (list (conn-get-quick-ref-pages)))
+  (if-let* ((pages (conn--quick-ref-parse-pages
+                    (flatten-tree pages))))
+      (conn--quick-ref-loop pages)
+    (user-error "No quick reference pages")))
+
+(defun conn-add-keymap-reference (keymap references)
+  (let* ((pages (flatten-tree (ensure-list references)))
+         (names (mapcar #'conn--reference-page-name pages)))
+    (define-key keymap
+                [conn-quick-ref]
+                (append pages
+                        (seq-remove
+                         (lambda (page)
+                           (memq (conn--reference-page-name page) names))
+                         (lookup-key keymap [conn-quick-ref]))))))
+
+;; (defun conn-remove-keymap-reference (keymap reference)
+;;   (define-key keymap
+;;               [conn-quick-ref]
+;;               (cons reference
+;;                     (lookup-key keymap [conn-quick-ref]))))
 
 (defun conn-quick-ref-to-cols (list col-count)
   (cl-loop with cols = (make-list col-count nil)

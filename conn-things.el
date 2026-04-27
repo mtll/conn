@@ -58,8 +58,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-continuous-thing-other-end-handler (thing beg arg)
   "Mark the things which have been moved over."
-  (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
-                        when (conn-simple-thing-p th) return th)))
+  (let ((thing (seq-find #'conn-simple-thing-p
+                         (conn-thing-all-parents thing))))
     (ignore-errors
       (cond ((= 0 (prefix-numeric-value arg)))
             ((= (point) beg)
@@ -79,8 +79,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-nestable-thing-other-end-handler (thing beg _arg)
   "Mark the things which have been moved over."
-  (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
-                        when (conn-simple-thing-p th) return th)))
+  (let ((thing (seq-find #'conn-simple-thing-p
+                         (conn-thing-all-parents thing))))
     (ignore-errors
       (cond ((< beg (point))
              (let ((obeg (save-excursion
@@ -106,8 +106,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-discrete-thing-other-end-handler (thing _beg _arg)
   "Mark the thing at point."
-  (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
-                        when (conn-simple-thing-p th) return th)))
+  (let ((thing (seq-find #'conn-simple-thing-p
+                         (conn-thing-all-parents thing))))
     (pcase (ignore-errors (bounds-of-thing-at-point thing))
       (`(,beg . ,end)
        (if (= (point) end) beg end)))))
@@ -380,8 +380,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                          nil)))
                  (get ,thing ,property)))
         `(cl-loop for p in (conn-thing-all-parents ,thing)
-                  for v = (get p ,property)
-                  when v return v
+                  when (get p ,property) return it
                   finally return ,default)))
      ((and (macroexp-const-p property)
            (conn-property-static-p (if (consp property)
@@ -1605,7 +1604,6 @@ words."))
                   (subregions in-region)
                   &aux
                   (subregions-explicit-flag subregions)
-                  (reference conn-subregions-argument-reference)
                   (required t)))
                ( :constructor conn-thing-with-subregions-argument-dwim
                  (&optional
@@ -1615,7 +1613,6 @@ words."))
                                   in-region))
                   &aux
                   (subregions-explicit-flag subregions)
-                  (reference conn-subregions-argument-reference)
                   (required t)
                   (value (when (use-region-p)
                            (list 'region nil)))
@@ -1629,7 +1626,6 @@ words."))
                             (bound-and-true-p rectangle-mark-mode))
                        in-region))
                   &aux
-                  (reference conn-subregions-argument-reference)
                   (required t)
                   (subregions-explicit-flag subregions)
                   (value
@@ -1723,8 +1719,7 @@ words."))
                  (&optional
                   value
                   &aux
-                  (keymap conn-reformat-argument-map)
-                  (reference conn-fixup-whitepace-argument-reference)))))
+                  (keymap conn-reformat-argument-map)))))
 
 (define-inline conn-reformat-argument (&optional value)
   (inline-letevals (value)
@@ -1789,8 +1784,7 @@ not be delete.  The the value returned by each function is ignored.")
                   &aux
                   (name "check bounds")
                   (toggle-command (list 'check-bounds 'set-check-bounds))
-                  (keymap conn-check-bounds-argument-map)
-                  (reference conn-check-bounds-argument-reference)))))
+                  (keymap conn-check-bounds-argument-map)))))
 
 (define-inline conn-check-bounds-argument (&optional value)
   (inline-quote
@@ -1848,16 +1842,6 @@ not be delete.  The the value returned by each function is ignored.")
           (insert doc "\n")))
       (when (buffer-modified-p)
         (substring (buffer-string) 0 -1)))))
-
-(cl-defmethod conn-argument-get-reference ((arg conn-transform-argument))
-  (when-let* ((tforms (conn-argument-value arg))
-              (ref (conn--transforms-get-references tforms)))
-    (conn-reference-page
-      :depth -50
-      (:eval ref)
-      (:heading "Transform Bindings")
-      (:eval (conn-quick-ref-to-cols
-              conn-transformations-quick-ref 3)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd
@@ -1960,13 +1944,14 @@ Only the background color is used."
                        (pips (conn-multi-thing-argument-pips arg)))
     (substitute-command-keys
      (concat
+      " "
       (if (> size 4)
-          (propertize (format " [%s/%s]" (1+ curr) size)
+          (propertize (format "[%s/%s]" (1+ curr) size)
                       'face 'minibuffer-prompt)
         (cl-loop for i below size
-                 concat " "
-                 if (= i curr) concat (car pips)
-                 else concat (cdr pips)))
+                 if (= i curr) collect (car pips) into strs
+                 else collect (cdr pips) into strs
+                 finally return (string-join strs " ")))
       " ("
       (let* ((desc (conn-thing-pretty-print
                     (conn-bounds-thing (nth curr bounds)))))
@@ -2250,8 +2235,8 @@ Only the background color is used."
  'forward-list 'backward-list)
 
 (defun conn-up-list-other-end-handler (thing beg _arg)
-  (let ((thing (cl-loop for th in (conn-thing-all-parents thing)
-                        when (conn-simple-thing-p th) return th)))
+  (let ((thing (seq-find #'conn-simple-thing-p
+                         (conn-thing-all-parents thing))))
     (condition-case _err
         (cond ((> (point) beg)
                (save-excursion

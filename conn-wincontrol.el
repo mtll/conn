@@ -39,7 +39,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[conn-wincontrol-exit] exit; "
-   "\\[conn-wincontrol-quick-ref] help):"))
+   "\\[conn-quick-reference] help):"))
 
 (defvar conn--wincontrol-one-command-help-format
   (concat
@@ -49,7 +49,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[keyboard-quit] exit; "
-   "\\[conn-wincontrol-quick-ref] help):"))
+   "\\[conn-quick-reference] help):"))
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
@@ -226,7 +226,7 @@
         'conn-wincontrol-invert-argument
         'conn-wincontrol-digit-argument
         'conn-wincontrol-universal-arg
-        'conn-wincontrol-quick-ref))
+        'conn-quick-reference))
 
 (defun conn-wincontrol-one-command-stay-p ()
   (memq this-command conn-wincontrol-one-command-stay-command))
@@ -344,15 +344,11 @@
       ("other frame" other-frame)
       ("fullscreen" toggle-frame-fullscreen)))))
 
-(defun conn-wincontrol-quick-ref (&optional page)
-  (interactive "P")
-  (let* ((pages (list conn-wincontrol-windows-1
-                      conn-wincontrol-windows-2
-                      conn-wincontrol-tabs-and-frames))
-         (page (mod (or page 0) (length pages))))
-    (conn-quick-reference
-     (append (drop page pages)
-             (reverse (take page pages))))))
+(conn-add-keymap-reference
+ conn-wincontrol-map
+ (list conn-wincontrol-windows-1
+       conn-wincontrol-windows-2
+       conn-wincontrol-tabs-and-frames))
 
 ;;;;; Wincontrol Prefix Arg
 

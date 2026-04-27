@@ -693,8 +693,7 @@
         (backward-cmd (intern (format "%s-backward" name)))
         (backward-flat-cmd (intern (format "%s-backward-flat" name)))
         (flat-thing (intern (format "%s-flat" name)))
-        (groups (cl-loop for g in (ensure-list group)
-                         collect (intern g))))
+        (groups (mapcar #'intern (ensure-list group))))
     `(progn
        (defun ,forward-cmd (&optional arg)
          (interactive "p")

@@ -45,19 +45,19 @@
 
 ;;;; Grep
 
-(defvar-local conn--grep-edit-stack-cookie nil)
+(defvar-local conn--grep-edit-stack-handle nil)
 
 (with-eval-after-load 'wgrep
   (defun conn--wgrep-cleanup ()
-    (when-let* ((cookie (cl-shiftf conn--grep-edit-stack-cookie nil)))
+    (when-let* ((handle (cl-shiftf conn--grep-edit-stack-handle nil)))
       (conn-set-major-mode-maps
        (conn--derived-mode-all-parents major-mode))
-      (conn-exit-recursive-stack cookie)))
+      (conn-exit-recursive-stack handle)))
   (advice-add 'wgrep-to-original-mode :after 'conn--wgrep-cleanup)
 
   (defun conn--wgrep-setup ()
     (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setq conn--grep-edit-stack-cookie
+    (setq conn--grep-edit-stack-handle
           (conn-enter-recursive-stack 'conn-command-state)))
   (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
 
@@ -333,18 +333,18 @@
           (goto-char pt)
           (dired-kill-subdir))))))
 
-(defvar-local conn--wdired-stack-cookie nil)
+(defvar-local conn--wdired-stack-handle nil)
 
 (with-eval-after-load 'wdired
   (defun conn--wdired-cleanup ()
     (conn-set-major-mode-maps
      (conn--derived-mode-all-parents major-mode))
-    (conn-exit-recursive-stack conn--wdired-stack-cookie))
+    (conn-exit-recursive-stack conn--wdired-stack-handle))
   (advice-add 'wdired-change-to-dired-mode :after 'conn--wdired-cleanup)
 
   (defun conn--wdired-setup ()
     (conn-set-major-mode-maps (list 'wdired-mode))
-    (setq conn--wdired-stack-cookie
+    (setq conn--wdired-stack-handle
           (conn-enter-recursive-stack 'conn-command-state)))
   (add-hook 'wdired-mode-hook 'conn--wdired-setup))
 

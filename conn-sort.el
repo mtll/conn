@@ -215,7 +215,6 @@ Interactively defaults to the current value of `sort-fold-case'."
                     :prompt (if (region-active-p)
                                 "Things in Regions"
                               "Thing")
-                    :reference conn-sort-bindings-ref
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (if (region-active-p)
                             (list 'conn-things-in-region)

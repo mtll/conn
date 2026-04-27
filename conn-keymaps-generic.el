@@ -664,7 +664,7 @@
 
 (define-keymap
   :keymap conn-transpose-repeat-map
-  "?" 'conn-transpose-repeat-help
+  "?" 'conn-quick-reference
   "t" 'conn-transpose-repeat
   "T" 'conn-transpose-repeat-inverse)
 
@@ -699,7 +699,7 @@
   "b" #'conn-indent-left
   "F" #'conn-indent-right-to-tab-stop
   "B" #'conn-indent-left-to-tab-stop
-  "?" #'conn-indent-rigidly-reference)
+  "?" #'conn-quick-reference)
 
 (define-keymap
   :keymap conn-indirect-map
@@ -839,7 +839,7 @@
   "<backspace>" 'conn-wincontrol-scroll-down
   "SPC" 'conn-wincontrol-scroll-up
   "=" 'balance-windows
-  "M-?" 'conn-wincontrol-quick-ref
+  "M-?" 'conn-quick-reference
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
   "0" 'conn-wincontrol-digit-argument

@@ -539,8 +539,8 @@
 (defun conn-posframe-window-labels (windows)
   (conn--simple-window-labels)
   (cl-loop for win in windows
-           for str = (window-parameter win 'conn-label-string)
-           when str collect (conn--setup-posframe-window-label win str)))
+           when (window-parameter win 'conn-label-string)
+           collect (conn--setup-posframe-window-label win it)))
 
 (cl-defmethod conn-label-display ((label conn-posframe-window-label))
   (posframe-refresh (conn-posframe-window-label-bufname label)))

@@ -79,11 +79,13 @@ potential expansions.  Functions may return invalid expansions
       (cl-loop for (beg . end) in conn--current-expansions
                when (> (abs (- end beg))
                        (abs (- (region-end) (region-beginning))))
-               return (progn
-                        (goto-char (if (= (point) (region-beginning)) beg end))
-                        (set-mark (if (= (point) (region-beginning)) end beg))
-                        (unless (region-active-p) (activate-mark)))
-               finally (user-error "No more expansions")))))
+               return
+               (progn
+                 (goto-char (if (= (point) (region-beginning)) beg end))
+                 (set-mark (if (= (point) (region-beginning)) end beg))
+                 (unless (region-active-p) (activate-mark)))
+               finally
+               (user-error "No more expansions")))))
 
 (defun conn-expand (arg)
   "Expend region by semantic units.
@@ -107,11 +109,13 @@ Expansions are provided by functions in `conn-expansion-functions'."
       (cl-loop for (beg . end) in (reverse conn--current-expansions)
                when (or (> beg (region-beginning))
                         (< end (region-end)))
-               return (progn
-                        (goto-char (if (= (point) (region-beginning)) beg end))
-                        (set-mark (if (= (point) (region-end)) beg end))
-                        (unless (region-active-p) (activate-mark)))
-               finally (user-error "No more contractions")))))
+               return
+               (progn
+                 (goto-char (if (= (point) (region-beginning)) beg end))
+                 (set-mark (if (= (point) (region-end)) beg end))
+                 (unless (region-active-p) (activate-mark)))
+               finally
+               (user-error "No more contractions")))))
 
 (defun conn-contract (arg)
   "Contract region by semantic units.

@@ -140,7 +140,7 @@
     (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-surround-property-argument))
-  (when-let* ((val (conn-argument-value arg)))
+  (and-let* ((val (conn-argument-value arg)))
     (propertize (format "%s" val)
                 'face 'conn-argument-active-face)))
 

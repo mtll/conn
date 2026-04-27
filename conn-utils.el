@@ -382,8 +382,8 @@ See `quail-add-unread-command-events'."
                               collect (funcall copier elem)))
            (new-hist (cl-loop with old-list = (conn-ring-list ring)
                               for elem in (conn-ring-history ring)
-                              for pos = (seq-position old-list elem #'eq)
-                              when pos collect (nth pos new-list))))
+                              when (seq-position old-list elem #'eq)
+                              collect (nth it new-list))))
       (setf (conn-ring-list new-ring) new-list
             (conn-ring-history new-ring) new-hist)
       new-ring)))
@@ -411,7 +411,7 @@ See `quail-add-unread-command-events'."
   "Rotate ring forward.
 
 Takes (1 2 3 4) to (2 3 4 1)."
-  (when-let* ((list (conn-ring-list ring)))
+  (and-let* ((list (conn-ring-list ring)))
     (let ((head (car (setf (conn-ring-list ring)
                            (nconc (cdr list) (list (car list)))))))
       (conn-ring--visit ring head)
@@ -421,7 +421,7 @@ Takes (1 2 3 4) to (2 3 4 1)."
   "Rotate ring backward.
 
 Takes (1 2 3 4) to (4 1 2 3)."
-  (when-let* ((list (conn-ring-list ring)))
+  (and-let* ((list (conn-ring-list ring)))
     (let ((head (car (setf (conn-ring-list ring)
                            (nconc (last list) (butlast list))))))
       (conn-ring--visit ring head)
@@ -462,10 +462,10 @@ If ring is (1 2 3 4) 4 would be returned."
            if (funcall pred l elem) collect l into remove
            else collect l into list
            unless (funcall pred h elem) collect h into hist
-           finally (progn
-                     (setf (conn-ring-list ring) list
-                           (conn-ring-history ring) hist)
-                     (mapc (conn-ring-cleanup ring) remove))))
+           finally
+           (setf (conn-ring-list ring) list
+                 (conn-ring-history ring) hist)
+           (mapc (conn-ring-cleanup ring) remove)))
 
 ;;;;; Region Utils
 
@@ -635,14 +635,13 @@ If BUFFER is nil check `current-buffer'."
                          'major-mode
                          (buffer-local-value (or buffer (current-buffer)))
                          (conn--derived-mode-all-parents))
-           for prop = (get mode property)
-           when prop return prop))
+           when (get mode property) return it))
 
 (eval-and-compile
   (defun conn-get-mode-property--cmacro (exp mode property &optional no-inherit default)
     (if (and (macroexp-const-p no-inherit)
              (if (consp no-inherit) (cadr no-inherit) no-inherit))
-        `(when-let* ((table (get ,mode :conn-properties)))
+        `(and-let* ((table (get ,mode :conn-properties)))
            (gethash ,property table ,default))
       exp)))
 
@@ -651,7 +650,7 @@ If BUFFER is nil check `current-buffer'."
            (important-return-value t)
            (compiler-macro conn-get-mode-property--cmacro))
   (if no-inherit
-      (when-let* ((table (get mode :conn-properties)))
+      (and-let* ((table (get mode :conn-properties)))
         (gethash property table default))
     (cl-loop for mode in (conn--derived-mode-all-parents mode)
              for prop = (if-let* ((table (get mode :conn-properties)))
@@ -675,16 +674,17 @@ If BUFFER is nil check `current-buffer'."
 ;;;;; Misc Utils
 
 (defun conn-to-vtable (list max-cols buffer &rest keys)
-  (cl-loop with rows = (ceiling (length list) max-cols)
-           with cols = (ceiling (length list) rows)
-           with objs = (make-list rows nil)
-           for i from 0 below (* rows cols)
-           do (push (or (pop list) "")
-                    (nth (floor i cols) objs))
-           finally (with-current-buffer buffer
-                     (apply #'make-vtable
-                            :objects (mapcar #'nreverse objs)
-                            keys))))
+  (let* ((len (length list))
+         (rows (ceiling len max-cols))
+         (cols (ceiling len rows))
+         (objs (make-list rows nil)))
+    (dotimes (i len)
+      (push (or (pop list) "")
+            (nth (floor i cols) objs)))
+    (with-current-buffer buffer
+      (apply #'make-vtable
+             :objects (mapcar #'nreverse objs)
+             keys))))
 
 (defun conn-key-bind-string (command &optional buffer keymap face)
   (propertize

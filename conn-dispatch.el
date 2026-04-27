@@ -329,7 +329,7 @@ themselves once the selection process has concluded."
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
     (cl-with-gensyms (self)
-      `(push (cons (conn-dispatch-read-char-handler
+      `(push (cons (conn-dispatch-handler
                     ,(pcase (alist-get :update body)
                        (`(,args . ,update-body)
                         (macroexpand-all
@@ -344,7 +344,6 @@ themselves once the selection process has concluded."
                     ,(if-let* ((v (alist-get :predicate body)))
                          `(lambda ,@v)
                        '#'ignore)
-                    :reference ,(car (alist-get :reference body))
                     :display ,(if-let* ((v (alist-get :display body)))
                                   `(lambda ,@v)
                                 '#'ignore)
@@ -409,12 +408,12 @@ themselves once the selection process has concluded."
                         ((member label available)
                          (cl-callf2 delete label available)
                          nil)
-                        ((not
-                          (when-let* ((new (seq-find (lambda (str)
-                                                       (string-prefix-p label str))
-                                                     available)))
-                            (cl-callf2 delq new available)
-                            (set-window-parameter win 'conn-label-string new)))))
+                        ((and-let* ((new (seq-find (lambda (str)
+                                                     (string-prefix-p label str))
+                                                   available)))
+                           (cl-callf2 delq new available)
+                           (not (set-window-parameter
+                                 win 'conn-label-string new)))))
              collect win into unlabeled
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label-string
@@ -609,53 +608,48 @@ for dispatch."
           (conn-argument-set-flag arg) t)
     (funcall break)))
 
-(cl-defstruct (conn-dispatch-read-char-handler
+(cl-defstruct (conn-dispatch-handler
                (:include conn-argument)
-               ( :constructor conn-dispatch-read-char-handler
+               ( :constructor conn-dispatch-handler
                  (update
                   predicate
                   &key
                   keymap
                   annotation
                   documentation
-                  display
-                  reference)))
+                  display)))
   (update #'ignore :type function :read-only t)
   (predicate #'ignore :type function :read-only t)
-  (documentation #'ignore :type function :read-only t)
   (display #'ignore :type function :read-only t))
 
-(cl-defmethod conn-argument-update ((handler conn-dispatch-read-char-handler)
+(cl-defmethod conn-argument-update ((handler conn-dispatch-handler)
                                     cmd
                                     break)
-  (when (funcall (conn-dispatch-read-char-handler-predicate handler) cmd)
-    (funcall (conn-dispatch-read-char-handler-update handler)
+  (when (funcall (conn-dispatch-handler-predicate handler) cmd)
+    (funcall (conn-dispatch-handler-update handler)
              handler cmd break)))
 
-(cl-defmethod conn-argument-display ((arg conn-dispatch-read-char-handler))
-  (funcall (conn-dispatch-read-char-handler-display arg)))
+(cl-defmethod conn-argument-display ((arg conn-dispatch-handler))
+  (funcall (conn-dispatch-handler-display arg)))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-read-char-handler))
-  (conn-dispatch-read-char-handler-keymap arg))
+(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-handler))
+  (conn-dispatch-handler-keymap arg))
 
-(cl-defmethod conn-argument-predicate ((arg conn-dispatch-read-char-handler)
+(cl-defmethod conn-argument-predicate ((arg conn-dispatch-handler)
                                        cmd)
-  (funcall (conn-dispatch-read-char-handler-predicate arg) cmd))
+  (funcall (conn-dispatch-handler-predicate arg) cmd))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-read-char-handler)
+(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-handler)
                                                    value)
-  (and-let* ((ann (conn-dispatch-read-char-handler-annotation arg))
-             (_ (funcall (conn-dispatch-read-char-handler-predicate arg) value)))
+  (and-let* ((ann (conn-dispatch-handler-annotation arg))
+             (_ (funcall (conn-dispatch-handler-predicate arg) value)))
     (funcall ann value)))
 
-(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-read-char-handler))
-  (conn-dispatch-read-char-handler-reference arg))
-
-(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-read-char-handler)
+(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-handler)
                                                    cmd
                                                    break)
-  (and (funcall (conn-dispatch-read-char-handler-predicate arg) cmd)
-       (funcall (conn-dispatch-read-char-handler-documentation arg) cmd break)))
+  (and (funcall (conn-dispatch-handler-predicate arg) cmd)
+       (funcall (conn-dispatch-handler-documentation arg) cmd break)))
 
 ;;;; Dispatch State
 
@@ -917,7 +911,7 @@ buffer is a valid target.")
      ("line" forward-line)
      ("column" next-line))))
 
-(defvar conn-dispatch-thing-transforms-ref-list
+(defvar conn-dispatch-transforms-ref-list
   (conn-reference-quote
     (("anchored" conn-dispatch-bounds-anchored)
      ("between" conn-dispatch-bounds-between)
@@ -925,15 +919,12 @@ buffer is a valid target.")
      ("over" conn-dispatch-bounds-over)
      ("reset" conn-transform-reset))))
 
-(defvar conn-dispatch-thing-reference
-  (conn-reference-page
-    (:heading "Extra Thing Bindings")
-    ((:keymap (list (conn-get-state-map 'conn-dispatch-targets-state)))
-     (:splice (conn-quick-ref-to-cols
-               conn-dispatch-thing-reference-list 3)))
-    (:heading "Transforms")
-    ((:splice (conn-quick-ref-to-cols
-               conn-dispatch-thing-transforms-ref-list 3)))))
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-dispatch-targets-state)
+ (conn-reference-page
+   (:heading "Extra Thing Bindings")
+   ((:splice (conn-quick-ref-to-cols
+              conn-dispatch-thing-reference-list 3)))))
 
 (defvar conn-dispatch-action-reference nil)
 
@@ -973,20 +964,6 @@ buffer is a valid target.")
 (defvar conn-repeat-argument-documentation
   "Perform the current dispatch repeatedly.")
 
-(defun conn-dispatch-reference ()
-  (list conn-dispatch-command-reference
-        conn-dispatch-thing-reference))
-
-(defun conn-dispatch-select-action-reference ()
-  (conn-reference-page
-    (:splice (conn-action-reference conn-dispatch-action))
-    (((:heading "Action Commands")
-      ("toggle repeat" repeat-dispatch)
-      ("undo" undo))
-     (""
-      ("act at mouse click" act)
-      ("toggle other end" other-end)))))
-
 (defvar conn-misc-reference-list
   (conn-reference-quote
     (("isearch forward" isearch-forward)
@@ -996,13 +973,6 @@ buffer is a valid target.")
      ("toggle input method" toggle-input-method)
      ("set input method" set-input-method))))
 
-(defvar conn-dispatch-select-misc-reference
-  (conn-reference-page
-    :depth 50
-    (:heading "Miscellaneous Commands")
-    (:eval (conn-quick-ref-to-cols
-            conn-misc-reference-list 2))))
-
 ;;;;;; Action
 
 (cl-defstruct (conn-action (:conc-name conn-action--))
@@ -1011,7 +981,7 @@ buffer is a valid target.")
   (no-history nil :type boolean :read-only t)
   (repeat nil :read-only t)
   (description (lambda (&rest _) "") :type function :read-only t)
-  (reference #'ignore :type function :read-only t)
+  (documentation #'ignore :type function :read-only t)
   (window-predicate #'always :type function :read-only t)
   (target-predicate #'always :type function :read-only t))
 
@@ -1029,9 +999,9 @@ buffer is a valid target.")
          (string desc)
          (function (apply desc (conn-action--slots ,action))))))))
 
-(defun conn-action-reference (action)
-  (when-let* ((ref (and action
-                        (conn-action--reference action))))
+(defun conn-action-documentation (action)
+  (and-let* ((ref (and action
+                       (conn-action--documentation action))))
     (cl-typecase ref
       (conn--reference-page ref)
       (string
@@ -1059,7 +1029,7 @@ buffer is a valid target.")
                   stay-live
                   &aux
                   (live (not read)))))
-  (value nil)
+  value
   (live nil :type boolean)
   (stay-live nil :type boolean :read-only t)
   (read nil :type boolean)
@@ -1085,7 +1055,7 @@ buffer is a valid target.")
       (cl-callf nreverse ignore)
       (while (pcase (car body)
                (`(,(and (or :description
-                            :reference
+                            :documentation
                             :repeat
                             :no-history
                             :window-predicate
@@ -1094,7 +1064,7 @@ buffer is a valid target.")
                   ,value)
                 (cl-callf append options
                   (if (or (eq key :description)
-                          (eq key :reference))
+                          (eq key :documentation))
                       `(,key
                         (lambda (,@syms)
                           (ignore ,@ignore)
@@ -1114,6 +1084,8 @@ buffer is a valid target.")
         ,@options))))
 
 (defmacro conn-action (slots &rest body)
+  ;; If the body of an action captures then all copies share the same
+  ;; captures.
   (declare (indent 1))
   (conn--dispatch-action slots body))
 
@@ -1131,23 +1103,28 @@ buffer is a valid target.")
                      (error t))))
 
 (defun conn-action-copy (action)
+  "Copy ACTION.
+
+This function copies ACTION's slots by calling each slot's copier on
+that slot's value and otherwise performs a shallow copy."
   (make-conn-action
    :slots (cl-loop for slot in (conn-action--slots action)
-                   when (conn-action-slot--live slot)
-                   do (error "Trying to copy live slot")
+                   do (cl-assert (not (conn-action-slot--live slot))
+                                 nil "Trying to copy live slot")
                    for copy = (copy-conn-action-slot slot)
                    do (cl-callf2 funcall
-                          (conn-action-slot--copy slot)
-                          (conn-action-slot--value slot))
+                          (conn-action-slot--copy copy)
+                          (conn-action-slot--value copy))
                    collect copy)
    :function (conn-action--function action)
    :repeat (conn-action-repeat action)
    :description (conn-action--description action)
    :window-predicate (conn-action-window-predicate action)
    :target-predicate (conn-action-target-predicate action)
-   :reference (conn-action--reference action)))
+   :documentation (conn-action--documentation action)))
 
 (defun conn-action-cleanup (action)
+  "Run ACTION's slots cleanup functions."
   (dolist (slot (conn-action--slots action))
     (when (conn-action-slot--live slot)
       (funcall (conn-action-slot--cleanup slot)
@@ -1156,6 +1133,7 @@ buffer is a valid target.")
           (conn-action-slot--value slot) nil)))
 
 (defun conn-action-cancel (action)
+  "Run ACTION's slots cancel functions."
   (dolist (slot (conn-action--slots action))
     (cond ((conn-action-slot--read slot)
            (conn-argument-cancel (conn-action-slot--value slot))
@@ -1168,6 +1146,7 @@ buffer is a valid target.")
              (setf (conn-action-slot--live slot) nil))))))
 
 (defun conn-action-accept (action)
+  "Run ACTION's slots accept functions."
   (dolist (slot (conn-action--slots action))
     (when (conn-action-slot--live slot)
       (setf (conn-action-slot--value slot)
@@ -1311,15 +1290,12 @@ buffer is a valid target.")
   (make-conn-dispatch-action-argument
    :keymap conn-dispatch-repeat-argument-map))
 
-(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
-  (let* ((action (conn-dispatch-action-argument-value arg))
-         (ref (conn-action-reference action)))
-    (conn-reference-page
-      :depth -50
-      (:splice ref)
-      (:heading (when ref "Action Bindings"))
-      ((:splice (conn-quick-ref-to-cols
-                 conn-dispatch-action-ref-list 3))))))
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-dispatch-state)
+ (conn-reference-page
+   :depth -50
+   ((:splice (conn-quick-ref-to-cols
+              conn-dispatch-action-ref-list 3)))))
 
 (cl-defmethod conn-argument-command-documentation ((_arg conn-dispatch-action-argument)
                                                    cmd
@@ -1424,7 +1400,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
             "repeat"
             'face (when (conn-dispatch-action-argument-repeat arg)
                     'eldoc-highlight-function-argument)))
-   (when-let* ((action (conn-argument-value arg)))
+   (and-let* ((action (conn-argument-value arg)))
      (concat (propertize "Do"
                          'face 'bold
                          'conn-read-args-display-depth -50)
@@ -1440,11 +1416,27 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
 
 ;;;;;; Command Handler
 
+(defvar-keymap conn-dispatch-command-handler-map)
+
+(conn-add-keymap-reference
+ conn-dispatch-command-handler-map
+ (conn-reference-page
+   (((:heading "History:")
+     ("previous dispatch" conn-dispatch-cycle-ring-previous)
+     ("next dispatch" conn-dispatch-cycle-ring-next))
+    ((:heading "Last Dispatch:")
+     ("repeat" conn-repeat-last-dispatch)
+     ("describe" conn-dispatch-ring-describe-head)))
+   (((:heading "Select")
+     ("toggle repeat" repeat-dispatch)
+     ("toggle other end" other-end)
+     ("restrict matches to the selected window" restrict-windows)))))
+
 (cl-defstruct (conn-dispatch-command-handler
                (:include conn-read-args-command-handler)
                ( :constructor conn-dispatch-command-handler
                  (&aux
-                  (reference conn-dispatch-command-reference)))))
+                  (keymap conn-dispatch-command-handler-map)))))
 
 (conn-define-argument-command ((arg conn-dispatch-command-handler)
                                (cmd (eql conn-dispatch-cycle-ring-next)))
@@ -1499,9 +1491,9 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))))
   (declare (conn-anonymous-thing-property :bounds-of-dispatch)))
 
 (cl-defmethod conn-bounds-of-dispatch (thing arg location)
-  (when-let* ((bounds (save-excursion
-                        (goto-char location)
-                        (conn-bounds-of thing arg))))
+  (and-let* ((bounds (save-excursion
+                       (goto-char location)
+                       (conn-bounds-of thing arg))))
     (setf (conn-bounds-get bounds :origin) (point))
     bounds))
 
@@ -2226,9 +2218,9 @@ Target overlays may override this default by setting the
                                 #'conn--dispatch-setup-label-charwise)))
        :padding-function (overlay-get target 'padding-function)
        :string str
-       :prefix (when-let* ((pfx (overlay-get target 'label-prefix)))
+       :prefix (and-let* ((pfx (overlay-get target 'label-prefix)))
                  (propertize pfx 'face face))
-       :suffix (when-let* ((sfx (overlay-get target 'label-suffix)))
+       :suffix (and-let* ((sfx (overlay-get target 'label-suffix)))
                  (propertize sfx 'face face))
        :narrowed-string str
        :overlay ov
@@ -2608,6 +2600,24 @@ the meaning of depth."
   :lighter "SELECT"
   :suppress-input-method t)
 
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-dispatch-read-char-state)
+ (conn-reference-page
+   (((:heading "Action Commands")
+     ("toggle repeat" repeat-dispatch)
+     ("undo" undo))
+    (""
+     ("act at mouse click" act)
+     ("toggle other end" other-end)))))
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-dispatch-read-char-state)
+ (conn-reference-page
+   :depth 50
+   (:heading "Miscellaneous Commands")
+   (:eval (conn-quick-ref-to-cols
+           conn-misc-reference-list 2))))
+
 (defun conn-dispatch-read-char (&optional
                                 prompt
                                 use-input-method
@@ -2722,8 +2732,8 @@ the meaning of depth."
                   (keymap conn-read-char-input-method-map)))))
 
 (cl-defmethod conn-argument-display ((_arg conn-read-char-input-method))
-  (when-let* ((im (buffer-local-value 'current-input-method-title
-                                      conn-dispatch-input-buffer)))
+  (and-let* ((im (buffer-local-value 'current-input-method-title
+                                     conn-dispatch-input-buffer)))
     (propertize im 'face 'read-multiple-choice-face)))
 
 (conn-define-dispatch-handler-command ((arg conn-read-char-input-method)
@@ -2778,8 +2788,8 @@ buffer."
   "C-M-s" 'isearch-regexp-forward
   "C-v" 'scroll-up-command
   "M-v" 'scroll-down-command
-  "M-?" 'help
-  "?" 'help
+  "M-?" 'reference
+  "?" 'reference
   "C-w" 'restrict-windows
   "M-TAB" 'repeat-dispatch
   "M-s" conn-search-remap
@@ -2797,7 +2807,7 @@ buffer."
 
 (cl-defmethod conn-argument-display ((_handler conn-dispatch-select-command-handler))
   (list
-   "\\[help] help"
+   "\\[reference] help"
    (when (conn-dispatch-other-end-p)
      (concat
       "\\[other-end] "
@@ -2827,7 +2837,9 @@ buffer."
                  win
                  (oref conn-dispatch-target-finder thing)
                  (oref conn-dispatch-target-finder arg)
-                 (oref conn-dispatch-target-finder transform))))))))
+                 nil
+                 ;; (oref conn-dispatch-target-finder transform)
+                 )))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql repeat-dispatch-at-mouse)))
@@ -2845,7 +2857,9 @@ buffer."
                  win
                  (oref conn-dispatch-target-finder thing)
                  (oref conn-dispatch-target-finder arg)
-                 (oref conn-dispatch-target-finder transform))))))))
+                 nil
+                 ;; (oref conn-dispatch-target-finder transform)
+                 )))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql change-target-finder)))
@@ -2853,7 +2867,6 @@ buffer."
   ( :update (_break)
     (conn-read-args (conn-dispatch-targets-state
                      :prompt "New Targets"
-                     :reference (list conn-dispatch-thing-reference)
                      :around (lambda (cont)
                                (catch 'dispatch-redisplay
                                  (conn-with-dispatch-suspended
@@ -2884,16 +2897,6 @@ buffer."
             (conn-action-setup action repeat)
             (throw 'dispatch-undo nil))
         (conn-dispatch-redisplay)))))
-
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
-                                       (cmd (eql help)))
-  "Display help."
-  ( :update (break)
-    (conn-quick-reference
-     (conn-dispatch-select-action-reference)
-     (conn-dispatch-select-target-reference)
-     conn-dispatch-select-misc-reference)
-    (funcall break)))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql mwheel-scroll)))
@@ -3277,7 +3280,7 @@ buffer."
               (conn-label-select
                labels
                (concat
-                (when-let* ((prompt (oref conn-dispatch-target-finder prompt)))
+                (and-let* ((prompt (oref conn-dispatch-target-finder prompt)))
                   (concat prompt " "))
                 (cl-loop for (_ . c) in conn-target-count
                          sum c into count
@@ -3738,16 +3741,17 @@ contain targets."
               (cl-loop
                for beg = (point-min) then next-beg
                for (end . next-beg) in regions
-               while end
-               do (let ((ov (make-overlay beg end)))
-                    (push ov hidden)
-                    (overlay-put ov 'invisible 'conn-dispatch-invisible)
-                    (overlay-put ov 'window win)
-                    (overlay-put ov 'before-string fringe-indicator))
-               finally (let ((ov (make-overlay beg (point-max))))
-                         (push ov hidden)
-                         (overlay-put ov 'window win)
-                         (overlay-put ov 'invisible 'conn-dispatch-invisible)))
+               while end do
+               (let ((ov (make-overlay beg end)))
+                 (push ov hidden)
+                 (overlay-put ov 'invisible 'conn-dispatch-invisible)
+                 (overlay-put ov 'window win)
+                 (overlay-put ov 'before-string fringe-indicator))
+               finally
+               (let ((ov (make-overlay beg (point-max))))
+                 (push ov hidden)
+                 (overlay-put ov 'window win)
+                 (overlay-put ov 'invisible 'conn-dispatch-invisible)))
               (setf (alist-get win (oref state hidden))
                     (cons (buffer-chars-modified-tick) hidden))
               (recenter line)))))))
@@ -3773,7 +3777,7 @@ contain targets."
            (thing (conn-anonymous-thing
                     '(region)
                     :bounds-op ( :method (_self _arg)
-                                 (when-let* ((bd (assq (point) matches)))
+                                 (and-let* ((bd (assq (point) matches)))
                                    (conn-make-bounds 'region nil bd))))))
       (save-excursion
         (while (and (< line-count line-height)
@@ -4333,8 +4337,8 @@ contain targets."
            (important-return-value t))
   (conn-action ()
     (:description "Push Button")
+    (:documentation "Push the selected button.")
     (:no-history t)
-    (:reference "Push the selected button.")
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (conn-dispatch-select-window window)
@@ -4361,7 +4365,7 @@ contain targets."
            (not
             (buffer-local-value 'buffer-read-only
                                 (window-buffer win)))))
-        (:reference
+        (:documentation
          "Copy the current region to the region selected by dispatch.  By default
 this action copies the current region before the region selected by
 dispatch but if OTHER-END is non-nil then it copies the current region
@@ -4401,7 +4405,7 @@ after the region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:reference
+      (:documentation
        "Yank the most recent kill to the region selected by dispatch.  By
 default this action inserts the text before the region selected by
 dispatch but if OTHER-END is non-nil then it inserts the text after the
@@ -4441,7 +4445,7 @@ region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:reference
+      (:documentation
        "Select a string from the kill ring and insert it at the region selected
 by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
@@ -4500,7 +4504,7 @@ the string after the region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:reference
+      (:documentation
        "Delete a thing at point and replace a region selected by dispatch with
 it.")
       (pcase-let* ((`(,replace ,separator) replace-and-separator)
@@ -4538,7 +4542,7 @@ it.")
                            conn-dispatch-replace-argument-map)
                           :read t)))
     (:description (format "Register <%c>" register))
-    (:reference
+    (:documentation
      "Replace region selected by dispatch with contents of register.")
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -4564,7 +4568,7 @@ it.")
                   (opoint (conn-action-marker))
                   (separator (conn-action-separator)))
       (:description "Copy From")
-      (:reference
+      (:documentation
        "Replace current region with text in region selected by dispatch.")
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -4603,7 +4607,7 @@ it.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:reference
+      (:documentation
        "Kill the thing selected by dispatch and yank it at point.")
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target))
@@ -4712,7 +4716,7 @@ it.")
      (lambda (win)
        (not (buffer-local-value 'buffer-read-only
                                 (window-buffer win)))))
-    (:reference
+    (:documentation
      "Transpose two things selected by dispatch.")
     (pcase-let* ((conn-dispatch-always-prompt t)
                  (`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
@@ -4910,7 +4914,7 @@ it.")
         (:handler
          (:depth -99)
          ( :display ()
-           (when-let* ((desc (conn-action-description conn-dispatch-action)))
+           (and-let* ((desc (conn-action-description conn-dispatch-action)))
              (propertize desc 'face 'conn-argument-active-face))))
         ( :with (conn-dispatch-prefix-arg)
           :depth -97)
@@ -4962,7 +4966,7 @@ it.")
       (:handler
        (:depth -99)
        ( :display ()
-         (when-let* ((desc (conn-action-description conn-dispatch-action)))
+         (and-let* ((desc (conn-action-description conn-dispatch-action)))
            (propertize desc 'face 'conn-argument-active-face))))
       ( :with (conn-dispatch-prefix-arg)
         :depth -97)
@@ -5001,7 +5005,6 @@ INITIAL-ARG is the initial value of the prefix argument during
                    :command-handler (conn-dispatch-command-handler)
                    :prefix current-prefix-arg
                    :prompt "Dispatch"
-                   :reference (conn-dispatch-reference)
                    :display-handler (conn-read-args-display-columns 5 3)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
@@ -5039,7 +5042,6 @@ INITIAL-ARG is the initial value of the prefix argument during
                      :prefix current-prefix-arg
                      :command-handler (conn-dispatch-command-handler)
                      :prompt "Dispatch"
-                     :reference (conn-dispatch-reference)
                      :pre (lambda (_)
                             (when (and (bound-and-true-p conn-posframe-mode)
                                        (fboundp 'posframe-hide))
@@ -5154,7 +5156,7 @@ for the dispatch."
              (thing (conn-anonymous-thing
                       '(region)
                       :bounds-op ( :method (_self arg)
-                                   (when-let* ((bd (assq (point) matches)))
+                                   (and-let* ((bd (assq (point) matches)))
                                      (conn-make-bounds 'region arg bd))))))
         (pcase-dolist (`(,beg . ,end) matches)
           (conn-make-target-overlay
@@ -5212,8 +5214,7 @@ for the dispatch."
 (defun conn--dispatch-bounds (bounds &optional subregions-p)
   (conn-read-args (conn-dispatch-bounds-state
                    :prefix (conn-bounds-arg bounds)
-                   :prompt "Bounds of Dispatch"
-                   :reference (list conn-dispatch-thing-reference))
+                   :prompt "Bounds of Dispatch")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument))
        (repeat
@@ -5287,7 +5288,7 @@ for the dispatch."
                 (:window-predicate
                  (let ((win (selected-window)))
                    (lambda (window) (eq win window))))
-                (:reference
+                (:documentation
                  "Bounds between the previous region and this region.")
                 (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                               (conn-select-target)))
