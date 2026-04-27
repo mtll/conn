@@ -1237,7 +1237,7 @@ The iterator must be the first argument in ARGLIST.
  (conn-get-state-map 'conn-kapply-state)
  (list
   (conn-reference-page
-    :name 'conn-kapply-macro
+    :name conn-kapply-macro
     :depth -20
     ((("record a new macro in the current state" record)
       ("apply the previous macro" apply)
@@ -1245,7 +1245,7 @@ The iterator must be the first argument in ARGLIST.
       ("apply and append without executing macro first" append-skip-exec)
       ("step edit the previous macro" step-edit))))
   (conn-reference-page
-    :name 'conn-kapply-macro-ring
+    :name conn-kapply-macro-ring
     :depth -10
     (:heading "Kmacro Ring")
     ((("cycle backward" kmacro-cycle-ring-next)
@@ -1481,7 +1481,8 @@ finishing showing the buffers that were visited."))
                   (choices '(buffer-atomic buffer iteration nil))
                   (cycling-commands '(kapply-undo))
                   (keymap conn-kapply-undo-argument-map)
-                  (value (car choices))))))
+                  (value (car choices))
+                  (documentation conn-kapply-undo-reference)))))
 
 (cl-defmethod conn-argument-payload ((arg conn-kapply-undo-argument))
   (pcase (conn-argument-value arg)
@@ -1732,24 +1733,15 @@ finishing showing the buffers that were visited."))
                        (let ((macro (kmacro-ring-head)))
                          (lambda (it) (conn-kmacro-apply it nil macro)))))))
 
-(defvar conn-kapply-matches-special-ref
-  (append
-   (conn-reference-quote
-     (("In project" project)
-      ("In files" multi-file)))))
-
-(defvar conn-kapply-matches-reference
-  (list (conn-reference-page
-          "Replace instances of a pattern in a thing."
-          (:heading "Special Bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-kapply-matches-special-ref 2))
-          (:heading "Transformations")
-          (:eval (conn-quick-ref-to-cols
-                  conn-transformations-quick-ref 3)))))
-
 (conn-define-state conn-kapply-matches-state (conn-read-thing-state)
   :lighter "MATCHES")
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-kapply-matches-state)
+ (conn-reference-page
+   "Replace instances of a pattern in a thing."
+   ((("In project" project)
+     ("In files" multi-file)))))
 
 (cl-defstruct (conn-kapply-matches-thing-argument
                (:include conn-thing-with-subregions-argument)

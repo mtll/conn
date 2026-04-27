@@ -22,6 +22,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-special-state)
   :suppress t
+  "M-?" 'conn-quick-reference
   "h" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state
@@ -85,7 +86,6 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)
-  "M-?" 'conn-dired-quick-ref
   "M-w" 'dired-copy-filename-as-kill
   "/" 'dired-undo
   "C-." 'conn-register-load)

@@ -168,26 +168,25 @@
      :restrict-windows restrict-windows
      :other-end :no-other-end)))
 
-(defvar conn-dired-ref-1
-  (conn-reference-page
-    (:heading "Dired")
-    ((("next/prev" dired-next-line dired-previous-line)
-      ("next/prev dirline" dired-next-dirline dired-prev-dirline)
-      ("next/prev subdir" dired-next-subdir dired-prev-subdir)
-      ("next/prev marked" dired-next-marked-file dired-prev-marked-file))
-     (("dir up" dired-up-directory)
-      ("tree up/down" dired-tree-up dired-tree-down)
-      ("undo" dired-undo)
-      ("find alt" dired-find-alternate-file))
-     (("mark/unmark" dired-mark dired-unmark)
-      ("delete" dired-do-delete)
-      ("copy" dired-do-copy)
-      ("isearch/regexp" dired-do-isearch dired-do-isearch-regexp)
-      ("find/replace regexp" dired-do-find-regexp dired-do-find-regexp-and-replace)))))
-
-(defun conn-dired-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-dired-ref-1)))
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'dired-mode)
+ (conn-reference-page
+   (:heading "Dired")
+   ((("next/prev" dired-next-line dired-previous-line)
+     ("next/prev dirline" dired-next-dirline dired-prev-dirline)
+     ("next/prev subdir" dired-next-subdir dired-prev-subdir)
+     ("next/prev marked" dired-next-marked-file dired-prev-marked-file))
+    (("dir up" dired-up-directory)
+     ("tree up/down" dired-tree-up dired-tree-down)
+     ("undo" dired-undo)
+     ("find alt" dired-find-alternate-file))
+    (("mark/unmark" dired-mark dired-unmark)
+     ("delete" dired-do-delete)
+     ("copy" dired-do-copy)
+     ("isearch/regexp" dired-do-isearch dired-do-isearch-regexp)
+     ("find/replace regexp"
+      dired-do-find-regexp
+      dired-do-find-regexp-and-replace)))))
 
 (defvar dired-subdir-alist)
 (defvar dired-movement-style)
@@ -350,46 +349,41 @@
 
 ;;;; Diff
 
-(defvar conn-diff-ref
-  (conn-reference-page
-    (:heading "Diff")
-    ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
-      ("file next/prev" diff-file-next diff-file-prev)
-      ("apply hunk/buffer" diff-apply-hunk diff-apply-buffer)
-      ("revert hunk" diff-revert-and-kill-hunk)
-      ("next" next-error-follow-minor-mode)
-      ("scroll up/down" conn-scroll-down conn-scroll-up))
-     (("kill ring save" diff-kill-ring-save)
-      ("kill hunk/file" diff-hunk-kill diff-file-kill)
-      ("delete other hunks" diff-delete-other-hunks)
-      ("split hunk" diff-split-hunk)
-      ("test hunk" diff-test-hunk)
-      ("reverse direction" diff-reverse-direction))
-     (("goto source" diff-goto-source)
-      ("narrow/widen" diff-restrict-view widen)
-      ("context->unified" diff-context->unified)
-      ("unified->context" diff-unified->context)
-      ("ignore whitespace" diff-ignore-whitespace-hunk)))))
-
-(defun conn-diff-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-diff-ref)))
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'diff-mode)
+ (conn-reference-page
+   :name conn-diff
+   (:heading "Diff")
+   ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
+     ("file next/prev" diff-file-next diff-file-prev)
+     ("apply hunk/buffer" diff-apply-hunk diff-apply-buffer)
+     ("revert hunk" diff-revert-and-kill-hunk)
+     ("next" next-error-follow-minor-mode)
+     ("scroll up/down" conn-scroll-down conn-scroll-up))
+    (("kill ring save" diff-kill-ring-save)
+     ("kill hunk/file" diff-hunk-kill diff-file-kill)
+     ("delete other hunks" diff-delete-other-hunks)
+     ("split hunk" diff-split-hunk)
+     ("test hunk" diff-test-hunk)
+     ("reverse direction" diff-reverse-direction))
+    (("goto source" diff-goto-source)
+     ("narrow/widen" diff-restrict-view widen)
+     ("context->unified" diff-context->unified)
+     ("unified->context" diff-unified->context)
+     ("ignore whitespace" diff-ignore-whitespace-hunk)))))
 
 ;;;; Magit
 
-(defvar conn-magit-ref
-  (conn-reference-page
-    (:heading "Magit")
-    ((("section forward/back" magit-section-forward magit-section-backward)
-      ("delete thing" magit-delete-thing)
-      ("dispatch" magit-dispatch))
-     (("reset quickly" magit-reset-quickly)
-      ("gitignore" magit-gitignore)
-      ("apply mail" magit-am)))))
-
-(defun conn-magit-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-magit-ref)))
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
+ (conn-reference-page
+   (:heading "Magit")
+   ((("section forward/back" magit-section-forward magit-section-backward)
+     ("delete thing" magit-delete-thing)
+     ("dispatch" magit-dispatch))
+    (("reset quickly" magit-reset-quickly)
+     ("gitignore" magit-gitignore)
+     ("apply mail" magit-am)))))
 
 ;;;; Ibuffer
 
@@ -494,8 +488,11 @@
               (ibuffer-mark-forward nil nil 1)
             (ibuffer-unmark-forward nil nil 1)))))))
 
-(defvar conn-ibuffer-ref
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
+ (list
   (conn-reference-page
+    :name conn-ibuffer
     (:heading "Ibuffer")
     ((("next/prev line" ibuffer-forward-line ibuffer-backward-line)
       ("next/prev group" ibuffer-forward-filter-group ibuffer-backward-filter-group)
@@ -511,10 +508,9 @@
       ("path" ibuffer-do-sort-by-filename/process)
       ("mode" ibuffer-do-sort-by-major-mode)
       ("size" ibuffer-do-sort-by-size)
-      ("recency" ibuffer-do-sort-by-recency)))))
-
-(defvar conn-ibuffer-mark-ref
+      ("recency" ibuffer-do-sort-by-recency))))
   (conn-reference-page
+    :name conn-ibuffer-mark
     (:heading "Ibuffer Mark")
     ((("mark" ibuffer-mark-forward)
       ("unmark next/prev" ibuffer-unmark-forward ibuffer-unmark-backward)
@@ -525,11 +521,7 @@
       ("hide" ibuffer-do-kill-lines)
       ("kill" ibuffer-do-kill-on-deletion-marks)
       ("isearch/regexp" ibuffer-do-isearch ibuffer-do-isearch-regexp)
-      ("occur" ibuffer-do-occur)))))
-
-(defun conn-ibuffer-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-ibuffer-ref conn-ibuffer-mark-ref)))
+      ("occur" ibuffer-do-occur))))))
 
 ;;;; Bookmark Bmenu
 
@@ -574,31 +566,29 @@
                 (bookmark-bmenu-unmark)
               (bookmark-bmenu-mark))))))))
 
-(defvar conn-bookmark-bmenu-ref
-  (conn-reference-page
-    (:heading "Bookmark Menu")
-    ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
-      ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
-      ("annotations/all"
-       bookmark-bmenu-show-annotation
-       bookmark-bmenu-show-all-annotations)
-      ("edit annotation" bookmark-bmenu-edit-annotation)
-      ("this window" bookmark-bmenu-this-window))
-     (("select" bookmark-bmenu-select)
-      ("mark for deletion" bookmark-bmenu-delete)
-      ("execute delete" bookmark-bmenu-execute-deletions)
-      ("save" bookmark-bmenu-save)
-      ("jump" bookmark-jump))
-     (("scroll up/down"
-       scroll-up-command
-       scroll-down-command)
-      ("line next/prev" next-line previous-line)
-      ("revert buffer" revert-buffer)
-      ("locate" bookmark-locate)))))
-
-(defun conn-bookmark-bmenu-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-bookmark-bmenu-ref)))
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
+ (conn-reference-page
+   :name conn-bookmark
+   (:heading "Bookmark Menu")
+   ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
+     ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)
+     ("annotations/all"
+      bookmark-bmenu-show-annotation
+      bookmark-bmenu-show-all-annotations)
+     ("edit annotation" bookmark-bmenu-edit-annotation)
+     ("this window" bookmark-bmenu-this-window))
+    (("select" bookmark-bmenu-select)
+     ("mark for deletion" bookmark-bmenu-delete)
+     ("execute delete" bookmark-bmenu-execute-deletions)
+     ("save" bookmark-bmenu-save)
+     ("jump" bookmark-jump))
+    (("scroll up/down"
+      scroll-up-command
+      scroll-down-command)
+     ("line next/prev" next-line previous-line)
+     ("revert buffer" revert-buffer)
+     ("locate" bookmark-locate)))))
 
 ;;;; Markdown
 
@@ -655,21 +645,19 @@
    :other-end :no-other-end
    :restrict-windows t))
 
-(defvar conn-info-ref
-  (conn-reference-page
-    (:heading "Info")
-    ((("history forward/back" Info-history-forward Info-history-back)
-      ("next/prev" Info-next Info-prev)
-      ("scroll up/down" Info-scroll-up Info-scroll-down))
-     (("node forward/back" Info-forward-node Info-backward-node)
-      ("node up" Info-up)
-      ("menu" Info-menu))
-     (("toc" Info-toc)
-      ("index" Info-index)))))
-
-(defun conn-info-quick-ref ()
-  (interactive)
-  (conn-quick-reference (list conn-info-ref)))
+(conn-add-keymap-reference
+ (conn-get-major-mode-map 'conn-special-state 'Info-mode)
+ (conn-reference-page
+   :name conn-info
+   (:heading "Info")
+   ((("history forward/back" Info-history-forward Info-history-back)
+     ("next/prev" Info-next Info-prev)
+     ("scroll up/down" Info-scroll-up Info-scroll-down))
+    (("node forward/back" Info-forward-node Info-backward-node)
+     ("node up" Info-up)
+     ("menu" Info-menu))
+    (("toc" Info-toc)
+     ("index" Info-index)))))
 
 ;;;; Occur mode
 

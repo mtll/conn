@@ -22,19 +22,6 @@
 (require 'sort)
 (require 'conn)
 
-(defvar conn-sort-special-bindings-ref
-  (conn-reference-quote
-    (("Columns" sort-columns)
-     ("Regexp fields" sort-regexp-fields)
-     ("Numeric fields" sort-numeric-fields)
-     ("Fields" sort-fields))))
-
-(defvar conn-sort-bindings-ref
-  (list (conn-reference-page
-          (:heading "Special bindings")
-          (:eval (conn-quick-ref-to-cols
-                  conn-sort-special-bindings-ref 2)))))
-
 (conn-define-state conn-sort-state (conn-read-thing-state)
   :lighter "SORT")
 
@@ -44,6 +31,14 @@
   "#" 'sort-numeric-fields
   "TAB" 'sort-fields
   "|" 'sort-columns)
+
+(conn-add-keymap-reference
+ (conn-get-state-map 'conn-sort-state)
+ (conn-reference-page
+   ((("Columns" sort-columns)
+     ("Regexp fields" sort-regexp-fields))
+    (("Numeric fields" sort-numeric-fields)
+     ("Fields" sort-fields)))))
 
 (cl-defstruct (conn-sort-things-argument
                (:include conn-thing-argument)

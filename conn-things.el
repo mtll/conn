@@ -1639,6 +1639,11 @@ words."))
   (subregions nil :type boolean)
   (subregions-explicit-flag nil :type boolean))
 
+(cl-defmethod conn-argument-command-documentation ((_arg conn-thing-with-subregions-argument)
+                                                   (_cmd (eql toggle-subregions))
+                                                   break)
+  (funcall break conn-subregions-argument-reference))
+
 (cl-defmethod conn-argument-compose-keymap ((_arg conn-thing-with-subregions-argument))
   (make-composed-keymap conn-subregions-argument-map (cl-call-next-method)))
 
@@ -1684,10 +1689,6 @@ words."))
                      (conn-subregions-argument-default (car (conn-argument-value arg)))))
              (funcall break))))))
 
-(conn-define-argument-command ((arg conn-thing-with-subregions-argument)
-                               (cmd (eql toggle-subregions)))
-  "Whether to act on the subregions of the thing.")
-
 (cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
   (cons (concat
          (substitute-command-keys "\\[toggle-subregions] ")
@@ -1702,14 +1703,15 @@ words."))
 
 ;;;;; Reformat Argument
 
-(defvar conn-fixup-whitepace-argument-reference
-  (conn-reference-page
-    :depth 70
-    (:heading "Reformat")
-    ((("toggle" reformat))
-     (("toggle and set buffer locally" set-reformat)))))
-
 (defvar-keymap conn-reformat-argument-map)
+
+(conn-add-keymap-reference
+ conn-reformat-argument-map
+ (conn-reference-page
+   :depth 70
+   (:heading "Reformat")
+   ((("toggle" reformat))
+    (("toggle and set buffer locally" set-reformat)))))
 
 (defvar conn-reformat-default t)
 
@@ -1765,14 +1767,15 @@ Each function in the hook is called with a single argument, a
 `conn-bounds' struct, and should signal an error if the region should
 not be delete.  The the value returned by each function is ignored.")
 
-(defvar conn-check-bounds-argument-reference
-  (conn-reference-page
-    :depth 70
-    (:heading "Check Bounds Argument")
-    ((("toggle" check-bounds))
-     (("toggle and set buffer locally" set-check-bounds)))))
-
 (defvar-keymap conn-check-bounds-argument-map)
+
+(conn-add-keymap-reference
+ conn-check-bounds-argument-map
+ (conn-reference-page
+   :depth 70
+   (:heading "Check Bounds Argument")
+   ((("toggle" check-bounds))
+    (("toggle and set buffer locally" set-check-bounds)))))
 
 (defvar conn-check-bounds-default t)
 

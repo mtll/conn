@@ -926,35 +926,6 @@ buffer is a valid target.")
    ((:splice (conn-quick-ref-to-cols
               conn-dispatch-thing-reference-list 3)))))
 
-(defvar conn-dispatch-action-reference nil)
-
-(defvar conn-dispatch-action-ref-list
-  (conn-reference-quote
-    (("copy from" conn-dispatch-copy-from)
-     ("send" conn-dispatch-send)
-     ("kapply" conn-dispatch-kapply)
-     ("yank to/read"
-      conn-dispatch-yank-to
-      conn-dispatch-reading-yank-to)
-     ("copy to" conn-dispatch-copy-to)
-     ("transpose" conn-dispatch-transpose)
-     ("register load" conn-dispatch-register-load)
-     ("repeat command at" conn-dispatch-repeat-command)
-     ("take" conn-dispatch-take))))
-
-(defvar conn-dispatch-command-reference
-  (conn-reference-page
-    (((:heading "History:")
-      ("previous dispatch" conn-dispatch-cycle-ring-previous)
-      ("next dispatch" conn-dispatch-cycle-ring-next))
-     ((:heading "Last Dispatch:")
-      ("repeat" conn-repeat-last-dispatch)
-      ("describe" conn-dispatch-ring-describe-head)))
-    (((:heading "Select")
-      ("toggle repeat" repeat-dispatch)
-      ("toggle other end" other-end)
-      ("restrict matches to the selected window" restrict-windows)))))
-
 (defvar conn-dispatch-other-end-documentation
   "Operate with point at the other end of the target.")
 
@@ -963,15 +934,6 @@ buffer is a valid target.")
 
 (defvar conn-repeat-argument-documentation
   "Perform the current dispatch repeatedly.")
-
-(defvar conn-misc-reference-list
-  (conn-reference-quote
-    (("isearch forward" isearch-forward)
-     ("isearch forward regexp" isearch-forward-regexp)
-     ("recursive edit" recursive-edit)
-     ("quoted insert" quoted-insert)
-     ("toggle input method" toggle-input-method)
-     ("set input method" set-input-method))))
 
 ;;;;;; Action
 
@@ -1294,8 +1256,17 @@ that slot's value and otherwise performs a shallow copy."
  (conn-get-state-map 'conn-dispatch-state)
  (conn-reference-page
    :depth -50
-   ((:splice (conn-quick-ref-to-cols
-              conn-dispatch-action-ref-list 3)))))
+   ((("copy from" conn-dispatch-copy-from)
+     ("send" conn-dispatch-send)
+     ("kapply" conn-dispatch-kapply))
+    (("yank to/read"
+      conn-dispatch-yank-to
+      conn-dispatch-reading-yank-to)
+     ("copy to" conn-dispatch-copy-to)
+     ("transpose" conn-dispatch-transpose))
+    (("register load" conn-dispatch-register-load)
+     ("repeat command at" conn-dispatch-repeat-command)
+     ("take" conn-dispatch-take)))))
 
 (cl-defmethod conn-argument-command-documentation ((_arg conn-dispatch-action-argument)
                                                    cmd
@@ -2615,8 +2586,12 @@ the meaning of depth."
  (conn-reference-page
    :depth 50
    (:heading "Miscellaneous Commands")
-   (:eval (conn-quick-ref-to-cols
-           conn-misc-reference-list 2))))
+   ((("isearch forward" isearch-forward)
+     ("isearch forward regexp" isearch-forward-regexp)
+     ("recursive edit" recursive-edit))
+    (("quoted insert" quoted-insert)
+     ("toggle input method" toggle-input-method)
+     ("set input method" set-input-method)))))
 
 (defun conn-dispatch-read-char (&optional
                                 prompt
@@ -2837,9 +2812,7 @@ buffer."
                  win
                  (oref conn-dispatch-target-finder thing)
                  (oref conn-dispatch-target-finder arg)
-                 nil
-                 ;; (oref conn-dispatch-target-finder transform)
-                 )))))))
+                 (oref conn-dispatch-target-finder transform))))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql repeat-dispatch-at-mouse)))
@@ -2857,9 +2830,7 @@ buffer."
                  win
                  (oref conn-dispatch-target-finder thing)
                  (oref conn-dispatch-target-finder arg)
-                 nil
-                 ;; (oref conn-dispatch-target-finder transform)
-                 )))))))
+                 (oref conn-dispatch-target-finder transform))))))))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql change-target-finder)))
@@ -4220,25 +4191,6 @@ contain targets."
                             (conn--flush-left-padding ov width nil)))
        (when (eobp) (cl-return nil))
        (vertical-motion 1)))))
-
-;;;;;; Target Finder Reference
-
-(defun conn-dispatch-select-target-reference ()
-  (conn-reference-page
-    (:splice (oref conn-dispatch-target-finder reference))
-    (((:heading "Targeting Commands")
-      (:splice (when (cl-typep conn-dispatch-target-finder
-                               'conn-dispatch-retargetable-mixin)
-                 '(("retarget" retarget)
-                   ("always retarget" always-retarget))))
-      ("change target finder" change-target-finder)
-      (:keymap conn-toggle-label-argument-map)
-      ("toggle hide labels" toggle-labels))
-     ((:heading "Window Commands")
-      ("goto window" conn-goto-window)
-      ("scroll up" scroll-up-command)
-      ("scroll down" scroll-down-command)
-      ("restrict to selected" restrict-windows)))))
 
 ;;;;; Dispatch Labels
 
