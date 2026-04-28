@@ -274,13 +274,16 @@ The duration of the message display is controlled by
 
 (defun conn--read-args-describe-symbol (arguments)
   (let ((cmd (conn--read-args-completing-read arguments)))
-    (catch 'break
-      (dolist (a arguments)
-        (ignore
-         (conn-argument-command-documentation
-          a cmd (lambda (&rest pages)
-                  (apply #'conn-quick-reference pages)
-                  (throw 'break nil))))))))
+    (cl-with-gensyms (break)
+      (condition-case err
+          (conn-quick-reference
+           (catch break
+             (dolist (a arguments)
+               (ignore
+                (conn-argument-command-documentation
+                 a cmd (lambda (&rest pages) (throw break pages)))))))
+        (user-error
+         (conn-read-args-error (error-message-string err)))))))
 
 (defmacro conn-read-args-return (&rest body)
   "Evaluate body and return the result from the current `conn-read-args'.
