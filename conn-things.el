@@ -1815,9 +1815,10 @@ not be delete.  The the value returned by each function is ignored.")
       conn-bounds-after-point
       conn-bounds-after-point-exclusive)
      ("trim" conn-bounds-trim)
-     ("last/butlast"
-      conn-bounds-last
-      conn-bounds-upto-next)
+     ("last" conn-bounds-last)
+     ("upto next/prev"
+      conn-bounds-upto-next
+      conn-bounds-upto-previous)
      ("before point/exclusive"
       conn-bounds-before-point
       conn-bounds-before-point-exclusive)

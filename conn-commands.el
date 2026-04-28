@@ -2447,8 +2447,7 @@ Exiting the recursive edit will resume the isearch."
  (conn-reference-page
    :name conn-transpose
    :depth -10
-   (("line" conn-backward-line forward-line))
-   (("symbol" forward-symbol))))
+   ((("symbol" forward-symbol)))))
 
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
@@ -2702,7 +2701,7 @@ region after a `recursive-edit'."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-kill-state)
  (conn-reference-page
-   :name conn-kill
+   :name conn-special
    :depth -10
    ((("copy filename" buffer-filename)
      ("kill matching lines" kill-matching-lines))
@@ -4371,13 +4370,13 @@ Interactively REPEAT is given by the prefix argument."
 
 ;;;;; Change
 
-(conn-define-state conn-change-state (conn-kill-state)
+(conn-define-state conn-change-state (conn-read-thing-state)
   :lighter "CHANGE")
 
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-change-state)
  (conn-reference-page
-   :name conn-change
+   :name conn-special
    :depth -10
    ((("quoted-insert" quoted-insert))
     (("emacs-state-overwrite" conn-emacs-state-overwrite))

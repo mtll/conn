@@ -261,13 +261,16 @@ The duration of the message display is controlled by
          (conn-reference-page
            (:eval (format "Keyboard macro: \"%s\""
                           (conn--kmacro-display cmd)))))
-      (catch 'break
-        (dolist (a arguments)
-          (ignore
-           (conn-argument-command-documentation
-            a cmd (lambda (&rest pages)
-                    (apply #'conn-quick-reference pages)
-                    (throw 'break nil)))))))))
+      (condition-case err
+          (conn-quick-reference
+           (cl-with-gensyms (break)
+             (catch break
+               (dolist (a arguments)
+                 (ignore
+                  (conn-argument-command-documentation
+                   a cmd (lambda (&rest pages) (throw break pages))))))))
+        (user-error
+         (conn-read-args-error (error-message-string err)))))))
 
 (defun conn--read-args-describe-symbol (arguments)
   (let ((cmd (conn--read-args-completing-read arguments)))
@@ -405,8 +408,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (signal 'quit nil))
                ('reference
                 (with-keymaps
-                 (conn-quick-reference
-                  (conn-get-quick-ref-pages))))
+                 (condition-case err
+                     (conn-quick-reference
+                      (conn-get-quick-ref-pages))
+                   (user-error
+                    (set-error-message (error-message-string err))))))
                ((or 'describe-key 'conn-describe-key)
                 (with-keymaps
                  (conn--read-args-describe-key
