@@ -3890,7 +3890,8 @@ contain targets."
                     (/= (point) (progn
                                   (forward-thing thing -1)
                                   (point))))
-          (conn-make-target-overlay (point) 0))))))
+          (when (thing-at-point thing)
+            (conn-make-target-overlay (point) 0)))))))
 
 (conn-define-target-finder conn-dispatch-button-targets
     ()

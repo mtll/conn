@@ -852,8 +852,11 @@
  (conn-reference-page
    :name conn-dispatch-transform
    (:heading "Transforms")
-   ((:splice (conn-quick-ref-to-cols
-              conn-dispatch-transforms-ref-list 3)))))
+   ((("anchored" conn-dispatch-bounds-anchored)
+     ("between" conn-dispatch-bounds-between)
+     ("trim" conn-bounds-trim))
+    (("over" conn-dispatch-bounds-over)
+     ("reset" conn-transform-reset)))))
 
 (define-keymap
   :keymap conn-dispatch-replace-argument-map

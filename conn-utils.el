@@ -732,20 +732,20 @@ be restricted to those before or after the current match inclusive."
   (cl-loop for char across string always (eql char (downcase char))))
 
 (defun conn--visible-regions (beg end &optional backward)
-  (while (and (invisible-p beg)
-              (/= end (setq beg (next-single-char-property-change
-                                 beg 'invisible nil end)))))
-  (let ((next beg)
+  (while (and (or (invisible-p beg)
+                  (get-text-property beg 'display))
+              (/= end (setq beg (next-char-property-change beg end)))))
+  (let ((prev beg)
         visible)
     (while (/= end beg)
-      (while (and (/= end (setq next (next-single-char-property-change
-                                      next 'invisible nil end)))
-                  (not (invisible-p next))))
-      (push (cons beg next) visible)
-      (while (and (/= end (setq next (next-single-char-property-change
-                                      next 'invisible nil end)))
-                  (invisible-p next)))
-      (setq beg next))
+      (while (and (/= end (setq beg (next-char-property-change beg end)))
+                  (not (or (invisible-p beg)
+                           (get-text-property beg 'display)))))
+      (push (cons prev beg) visible)
+      (while (and (/= end (setq beg (next-char-property-change beg end)))
+                  (or (invisible-p beg)
+                      (get-text-property beg 'display))))
+      (setq prev beg))
     (if backward visible (nreverse visible))))
 
 (defmacro conn-for-each-visible (beg end &rest body)
