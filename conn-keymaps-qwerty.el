@@ -45,10 +45,12 @@
 ;;;; Mode Keymaps
 
 (defvar-keymap conn-error-repeat-map
-  :repeat (:exit (ignore))
-  "e" 'ignore
+  :repeat (:continue (conn-repeat
+                      kmacro-end-or-call-macro))
   "i" 'previous-error
   "k" 'next-error)
+(keymap-set conn-error-repeat-map "b" 'conn-repeat)
+(keymap-set conn-error-repeat-map "#" 'kmacro-end-or-call-macro)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
