@@ -1196,7 +1196,12 @@ Currently selected window remains selected afterwards."
   (and (ffap-file-at-point)
        #'dired-at-point))
 
+(defun conn-dwim-url ()
+  (and (thing-at-point 'url t)
+       'browse-url-at-point))
+
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-url -50)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -10)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-eval-sexp 0)
@@ -2719,6 +2724,14 @@ region after a `recursive-edit'."
                   display-prefix
                   &aux
                   (name "append")
+                  (documentation
+                   (conn-reference-page
+                     "If APPEND is non-nil then append the killed region to the previous kill.
+If killing to a registers then append to the register.  If APPEND is
+'prepend then prepend to the previous kill or register instead.  If
+APPEND is 'repeat then the first invocation sets the place which is
+being killed to and repeat invocations with `conn-repeat' append to
+that place."))
                   (choices '(nil append prepend repeat))
                   (cycling-commands '(append append-on-repeat))
                   (keymap conn-kill-append-argument-map)))))
@@ -2737,7 +2750,10 @@ region after a `recursive-edit'."
 
 (conn-define-argument-command ((arg conn-kill-append-argument)
                                (cmd (eql append-on-repeat)))
-  "Append each kill after the first.")
+  "Set APPEND to 'repeat.
+If APPEND is 'repeat then the first invocation sets the place which is
+being killed to and repeat invocations with `conn-repeat' append to
+that place.")
 
 (defvar-keymap conn-delete-argument-map)
 
@@ -2768,14 +2784,15 @@ region after a `recursive-edit'."
                           'delete
                           conn-delete-argument-map
                           :value delete
-                          :documentation "Delete the thing without added it the the kill-ring.")
+                          :documentation "Delete the thing without adding it the the kill-ring.")
    (conn-kill-append-argument :value append)
    (conn-read-argument "register"
                        'register
                        conn-register-argument-map
                        (lambda (_) (register-read-with-preview "Register: "))
                        :formatter #'conn-argument-format-register
-                       :value register)
+                       :value register
+                       :documentation "Kill the thing to a register.")
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)

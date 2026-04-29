@@ -5004,11 +5004,13 @@ INITIAL-ARG is the initial value of the prefix argument during
          (other-end
           (conn-boolean-argument "other-end"
                                  'other-end
-                                 conn-other-end-argument-map))
+                                 conn-other-end-argument-map
+                                 :documentation conn-dispatch-other-end-documentation))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
-                                 conn-restrict-windows-argument-map)))
+                                 conn-restrict-windows-argument-map
+                                 :documentation conn-this-win-argument-documentation)))
       (conn-dispatch-setup
        action
        (conn-anonymous-thing

@@ -291,10 +291,11 @@
       ("prev/next" conn-previous-buffer conn-next-buffer)
       ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
       ("kill buffer" conn-kill-this-buffer)
-      (:splice (static-if (<= 31 emacs-major-version)
-                   '(("rotate"
-                      rotate-windows
-                      rotate-windows-back)))))
+      (:splice
+       (static-if (<= 31 emacs-major-version)
+           '(("rotate"
+              rotate-windows
+              rotate-windows-back)))))
      (:splice
       (static-if (<= 31 emacs-major-version)
           (conn-reference-quote

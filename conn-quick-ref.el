@@ -68,7 +68,7 @@
   (declare (indent 0))
   (cl-labels ((process-definition (def)
                 (pcase def
-                  (`(,(and (or :eval :splice :heading)
+                  (`(,(and (or :eval :splice :keymap :heading)
                            type)
                      . ,form)
                    `(cons ,type (lambda () ,@form)))
@@ -95,7 +95,7 @@
     (unless depth (setq depth 0))
     (cl-labels ((process-definition (def)
                   (pcase def
-                    (`(,(and (or :eval :splice :heading)
+                    (`(,(and (or :eval :splice :keymap :heading)
                              type)
                        . ,form)
                      `(cons ,type (lambda () ,@form)))
@@ -153,26 +153,29 @@
                               (desc (key-description adv))
                               (_(eq bind (key-binding adv))))
                     adv))
-                (get-key (bind)
-                  (if-let* ((key (or (check-advertised bind)
-                                     (when overriding-terminal-local-map
-                                       (where-is-internal
-                                        bind
-                                        (list overriding-terminal-local-map)
-                                        t))
-                                     (where-is-internal bind nil t))))
+                (get-key (bind keymap)
+                  (if-let* ((key (if keymap
+                                     (where-is-internal bind keymap t)
+                                   (or (check-advertised bind)
+                                       (when overriding-terminal-local-map
+                                         (where-is-internal
+                                          bind
+                                          (list overriding-terminal-local-map)
+                                          t))
+                                       (where-is-internal bind nil t)))))
                       (propertize (key-description key) 'face 'help-key-binding)
                     conn--quick-ref-unbound))
-                (process-bindings (description bindings)
+                (process-bindings (description bindings keymap)
                   (let (keys)
                     (while bindings
                       (pcase (pop bindings)
                         ('nil)
+                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) bindings))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
                         ((and str (pred stringp))
                          (push str keys))
-                        (bind (push (get-key bind) keys))))
+                        (bind (push (get-key bind keymap) keys))))
                     (conn--with-work-buffer
                       (dolist (key (nreverse keys))
                         (insert key ", "))
@@ -184,11 +187,12 @@
                         (while (= 0 (forward-line))
                           (indent-to col))
                         (buffer-string)))))
-                (process-col (col)
+                (process-col (col keymap)
                   (let ((result nil))
                     (while col
                       (pcase (pop col)
                         ('nil)
+                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) col))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) col))
                         (`(:heading . ,fn)
@@ -197,11 +201,11 @@
                                  result)))
                         ((and str (pred stringp)) (push str result))
                         (`(,desc . ,bindings)
-                         (push (process-bindings desc bindings)
+                         (push (process-bindings desc bindings keymap)
                                result))))
                     (nreverse result)))
                 (process-row (row)
-                  (let (result)
+                  (let (keymap result)
                     (while row
                       (pcase (pop row)
                         ('nil)
@@ -209,10 +213,11 @@
                          (when-let* ((str (funcall fn)))
                            (push (list (propertize str 'face 'conn-quick-ref-heading-face))
                                  result)))
+                        (`(:keymap . ,fn) (setf keymap (funcall fn)))
                         (`(:eval . ,fn) (push (funcall fn) row))
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) row))
                         ((and (pred consp) col)
-                         (push (process-col col) result))))
+                         (push (process-col col keymap) result))))
                     (nreverse result)))
                 (insert-ref-string (str)
                   (let (beg)
