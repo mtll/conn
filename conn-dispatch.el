@@ -350,9 +350,9 @@ themselves once the selection process has concluded."
                     :annotation ,(if-let* ((v (alist-get :annotation body)))
                                      `(lambda ,@v)
                                    '#'ignore)
-                    :documentation ,(if-let* ((v (alist-get :documentation body)))
-                                        `(lambda ,@v)
-                                      '#'ignore)
+                    :reference ,(if-let* ((v (alist-get :reference body)))
+                                    `(lambda ,@v)
+                                  '#'ignore)
                     :keymap ,(car (alist-get :keymap body)))
                    (cons ,(or (car (alist-get :depth body)) 0) ',tag))
              conn--dispatch-read-char-handlers))))
@@ -616,7 +616,7 @@ for dispatch."
                   &key
                   keymap
                   annotation
-                  documentation
+                  reference
                   display)))
   (update #'ignore :type function :read-only t)
   (predicate #'ignore :type function :read-only t)
@@ -645,11 +645,11 @@ for dispatch."
              (_ (funcall (conn-dispatch-handler-predicate arg) value)))
     (funcall ann value)))
 
-(cl-defmethod conn-argument-command-documentation ((arg conn-dispatch-handler)
-                                                   cmd
-                                                   break)
+(cl-defmethod conn-argument-command-reference ((arg conn-dispatch-handler)
+                                               cmd
+                                               break)
   (and (funcall (conn-dispatch-handler-predicate arg) cmd)
-       (funcall (conn-dispatch-handler-documentation arg) cmd break)))
+       (funcall (conn-dispatch-handler-reference arg) cmd break)))
 
 ;;;; Dispatch State
 
@@ -828,6 +828,17 @@ buffer is a valid target.")
 
 (defvar-keymap conn-dispatch-transform-argument-map)
 
+(conn-add-keymap-reference
+ conn-dispatch-transform-argument-map
+ (conn-reference-page
+   :name conn-dispatch-transform
+   (:heading "Transforms")
+   ((("anchored" conn-dispatch-bounds-anchored)
+     ("between" conn-dispatch-bounds-between)
+     ("trim" conn-bounds-trim))
+    (("over" conn-dispatch-bounds-over)
+     ("reset" conn-transform-reset)))))
+
 (defun conn-dispatch-transform-argument (&optional value)
   (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))
 
@@ -859,7 +870,7 @@ buffer is a valid target.")
                              'conn-separator-history nil t)))
          (if (equal s "") 'default s))))
    :value initial-value
-   :documentation "Read a separator to be inserted between each string."))
+   :reference "Read a separator to be inserted between each string."))
 
 (defvar-keymap conn-dispatch-replace-argument-map)
 
@@ -905,14 +916,6 @@ buffer is a valid target.")
 
 ;;;;;; Dispatch Quick Ref
 
-(defvar conn-dispatch-transforms-ref-list
-  (conn-reference-quote
-    (("anchored" conn-dispatch-bounds-anchored)
-     ("between" conn-dispatch-bounds-between)
-     ("trim" conn-bounds-trim)
-     ("over" conn-dispatch-bounds-over)
-     ("reset" conn-transform-reset))))
-
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-targets-state)
  (conn-reference-page
@@ -921,13 +924,13 @@ buffer is a valid target.")
      ("line" forward-line)
      ("column" next-line)))))
 
-(defvar conn-dispatch-other-end-documentation
+(defvar conn-dispatch-other-end-reference
   "Operate with point at the other end of the target.")
 
-(defvar conn-this-win-argument-documentation
+(defvar conn-this-win-argument-reference
   "Restrict dispatch matches to the selected window.")
 
-(defvar conn-repeat-argument-documentation
+(defvar conn-repeat-argument-reference
   "Perform the current dispatch repeatedly.")
 
 ;;;;;; Action
@@ -938,7 +941,7 @@ buffer is a valid target.")
   (no-history nil :type boolean :read-only t)
   (repeat nil :read-only t)
   (description (lambda (&rest _) "") :type function :read-only t)
-  (documentation #'ignore :type function :read-only t)
+  (reference #'ignore :type function :read-only t)
   (window-predicate #'always :type function :read-only t)
   (target-predicate #'always :type function :read-only t))
 
@@ -956,9 +959,9 @@ buffer is a valid target.")
          (string desc)
          (function (apply desc (conn-action--slots ,action))))))))
 
-(defun conn-action-documentation (action)
+(defun conn-action-reference (action)
   (and-let* ((ref (and action
-                       (conn-action--documentation action))))
+                       (conn-action--reference action))))
     (cl-typecase ref
       (conn--reference-page ref)
       (string
@@ -1012,7 +1015,7 @@ buffer is a valid target.")
       (cl-callf nreverse ignore)
       (while (pcase (car body)
                (`(,(and (or :description
-                            :documentation
+                            :reference
                             :repeat
                             :no-history
                             :window-predicate
@@ -1021,7 +1024,7 @@ buffer is a valid target.")
                   ,value)
                 (cl-callf append options
                   (if (or (eq key :description)
-                          (eq key :documentation))
+                          (eq key :reference))
                       `(,key
                         (lambda (,@syms)
                           (ignore ,@ignore)
@@ -1078,7 +1081,7 @@ that slot's value and otherwise performs a shallow copy."
    :description (conn-action--description action)
    :window-predicate (conn-action-window-predicate action)
    :target-predicate (conn-action-target-predicate action)
-   :documentation (conn-action--documentation action)))
+   :reference (conn-action--reference action)))
 
 (defun conn-action-cleanup (action)
   "Run ACTION's slots cleanup functions."
@@ -1264,9 +1267,9 @@ that slot's value and otherwise performs a shallow copy."
      ("repeat command at" conn-dispatch-repeat-command)
      ("take" conn-dispatch-take)))))
 
-(cl-defmethod conn-argument-command-documentation ((_arg conn-dispatch-action-argument)
-                                                   cmd
-                                                   break)
+(cl-defmethod conn-argument-command-reference ((_arg conn-dispatch-action-argument)
+                                               cmd
+                                               break)
   (pcase cmd
     ('repeat-dispatch
      (funcall break
@@ -2270,6 +2273,10 @@ Target overlays may override this default by setting the
     (unwind-protect
         (conn-with-dispatch-handlers
           (:handler
+           ( :reference (cmd break)
+             (when (eq cmd 'toggle-labels)
+               (funcall break (conn-reference-page
+                                "Toggle display of labels."))))
            (:predicate (cmd) (eq cmd 'toggle-labels))
            (:keymap conn-toggle-label-argument-map)
            ( :display ()
@@ -2764,6 +2771,9 @@ buffer."
   "M-v" 'scroll-down-command
   "M-?" 'reference
   "?" 'reference
+  "C-h k" 'conn-describe-key
+  "C-h c" 'conn-describe-key
+  "C-h o" 'conn-describe-symbol
   "C-w" 'restrict-windows
   "M-TAB" 'repeat-dispatch
   "M-s" conn-search-remap
@@ -4289,7 +4299,7 @@ contain targets."
            (important-return-value t))
   (conn-action ()
     (:description "Push Button")
-    (:documentation "Push the selected button.")
+    (:reference "Push the selected button.")
     (:no-history t)
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
@@ -4317,7 +4327,7 @@ contain targets."
            (not
             (buffer-local-value 'buffer-read-only
                                 (window-buffer win)))))
-        (:documentation
+        (:reference
          "Copy the current region to the region selected by dispatch.  By default
 this action copies the current region before the region selected by
 dispatch but if OTHER-END is non-nil then it copies the current region
@@ -4357,7 +4367,7 @@ after the region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:documentation
+      (:reference
        "Yank the most recent kill to the region selected by dispatch.  By
 default this action inserts the text before the region selected by
 dispatch but if OTHER-END is non-nil then it inserts the text after the
@@ -4397,7 +4407,7 @@ region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:documentation
+      (:reference
        "Select a string from the kill ring and insert it at the region selected
 by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
@@ -4456,7 +4466,7 @@ the string after the region selected by dispatch.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:documentation
+      (:reference
        "Delete a thing at point and replace a region selected by dispatch with
 it.")
       (pcase-let* ((`(,replace ,separator) replace-and-separator)
@@ -4494,7 +4504,7 @@ it.")
                            conn-dispatch-replace-argument-map)
                           :read t)))
     (:description (format "Register <%c>" register))
-    (:documentation
+    (:reference
      "Replace region selected by dispatch with contents of register.")
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
@@ -4520,7 +4530,7 @@ it.")
                   (opoint (conn-action-marker))
                   (separator (conn-action-separator)))
       (:description "Copy From")
-      (:documentation
+      (:reference
        "Replace current region with text in region selected by dispatch.")
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target)))
@@ -4559,7 +4569,7 @@ it.")
          (not
           (buffer-local-value 'buffer-read-only
                               (window-buffer win)))))
-      (:documentation
+      (:reference
        "Kill the thing selected by dispatch and yank it at point.")
       (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                     (conn-select-target))
@@ -4668,7 +4678,7 @@ it.")
      (lambda (win)
        (not (buffer-local-value 'buffer-read-only
                                 (window-buffer win)))))
-    (:documentation
+    (:reference
      "Transpose two things selected by dispatch.")
     (pcase-let* ((conn-dispatch-always-prompt t)
                  (`(,pt1 ,win1 ,thing1 ,arg1 ,transform1)
@@ -5005,12 +5015,12 @@ INITIAL-ARG is the initial value of the prefix argument during
           (conn-boolean-argument "other-end"
                                  'other-end
                                  conn-other-end-argument-map
-                                 :documentation conn-dispatch-other-end-documentation))
+                                 :reference conn-dispatch-other-end-reference))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
                                  conn-restrict-windows-argument-map
-                                 :documentation conn-this-win-argument-documentation)))
+                                 :reference conn-this-win-argument-reference)))
       (conn-dispatch-setup
        action
        (conn-anonymous-thing
@@ -5242,7 +5252,7 @@ for the dispatch."
                 (:window-predicate
                  (let ((win (selected-window)))
                    (lambda (window) (eq win window))))
-                (:documentation
+                (:reference
                  "Bounds between the previous region and this region.")
                 (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                               (conn-select-target)))

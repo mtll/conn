@@ -1467,7 +1467,7 @@ Returns a `conn-bounds' struct."
 
 (conn-define-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing t)))
-  ( :documentation (break)
+  ( :reference (break)
     (let ((doc (format "Operate on %s." (conn-thing-pretty-print cmd))))
       (funcall break (conn-reference-page (:eval doc))))))
 
@@ -1639,9 +1639,9 @@ words."))
   (subregions nil :type boolean)
   (subregions-explicit-flag nil :type boolean))
 
-(cl-defmethod conn-argument-command-documentation ((_arg conn-thing-with-subregions-argument)
-                                                   (_cmd (eql toggle-subregions))
-                                                   break)
+(cl-defmethod conn-argument-command-reference ((_arg conn-thing-with-subregions-argument)
+                                               (_cmd (eql toggle-subregions))
+                                               break)
   (funcall break conn-subregions-argument-reference))
 
 (cl-defmethod conn-argument-compose-keymap ((_arg conn-thing-with-subregions-argument))
@@ -1809,22 +1809,25 @@ not be delete.  The the value returned by each function is ignored.")
 
 ;;;;; Thing Transform Argument
 
-(defvar conn-transformations-quick-ref
-  (conn-reference-quote
-    (("after point/exclusive"
+(defvar-keymap conn-transform-map)
+
+(conn-add-keymap-reference
+ conn-transform-map
+ (conn-reference-page
+   :name conn-transform
+   (:heading "Transformations")
+   ((("after point/exclusive"
       conn-bounds-after-point
       conn-bounds-after-point-exclusive)
-     ("trim" conn-bounds-trim)
-     ("last" conn-bounds-last)
-     ("upto next/prev"
-      conn-bounds-upto-next
-      conn-bounds-upto-previous)
      ("before point/exclusive"
       conn-bounds-before-point
-      conn-bounds-before-point-exclusive)
-     ("reset" conn-transform-reset))))
-
-(defvar-keymap conn-transform-map)
+      conn-bounds-before-point-exclusive))
+    (("last" conn-bounds-last)
+     ("trim" conn-bounds-trim))
+    (("reset" conn-transform-reset)
+     ("upto next/prev"
+      conn-bounds-upto-next
+      conn-bounds-upto-previous)))))
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)

@@ -847,17 +847,6 @@
   "G" 'conn-bounds-upto-next
   "SPC" 'conn-bounds-last)
 
-(conn-add-keymap-reference
- conn-dispatch-transform-argument-map
- (conn-reference-page
-   :name conn-dispatch-transform
-   (:heading "Transforms")
-   ((("anchored" conn-dispatch-bounds-anchored)
-     ("between" conn-dispatch-bounds-between)
-     ("trim" conn-bounds-trim))
-    (("over" conn-dispatch-bounds-over)
-     ("reset" conn-transform-reset)))))
-
 (define-keymap
   :keymap conn-dispatch-replace-argument-map
   "r" 'dispatch-replace)
@@ -899,14 +888,6 @@
   "g" 'conn-bounds-upto-next
   "G" 'conn-bounds-upto-previous
   "C-t" 'conn-transform-reset)
-
-(conn-add-keymap-reference
- conn-transform-map
- (conn-reference-page
-   :name conn-transform
-   (:heading "Transformations")
-   (:eval (conn-quick-ref-to-cols
-           conn-transformations-quick-ref 3))))
 
 ;;;; Wincontrol
 

@@ -336,7 +336,7 @@
 
 (conn-define-argument-command ((arg conn-surround-with-argument)
                                cmd)
-  ( :documentation :extra "conn-org" (break)
+  ( :reference :extra "conn-org" (break)
     (when (memq cmd '(org-quote
                       org-center
                       org-comment
@@ -439,14 +439,25 @@
            'org-open-at-point
          'org-open-at-point-global)))
 
+;; (defun conn-dwim-todo ()
+;;   (when (eq major-mode 'org-mode)
+;;     (save-excursion
+;;       (org-back-to-heading t)
+;;       (and (when (looking-at org-outline-regexp) (goto-char (1- (match-end 0))))
+;;            (or (looking-at (concat " +" org-todo-regexp "\\( +\\|[ \t]*$\\)"))
+;;                ;; (looking-at "\\(?: *\\|[ \t]*$\\)")
+;;                )
+;;            'org-todo))))
+
 (defun conn-dwim-alt-org-heading ()
   (and (derived-mode-p 'org-mode)
        (save-excursion
          (goto-char (line-beginning-position))
-         (looking-at-p org-outline-regexp-bol))
-       #'conn-org-state))
+         (or (looking-at (concat " +" org-todo-regexp "\\( +\\|[ \t]*$\\)"))
+             (looking-at "\\(?: *\\|[ \t]*$\\)")))
+       #'org-todo))
 
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-org-link -71)
-(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-org-heading 5)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-org-heading)
 
 (provide 'conn-org)

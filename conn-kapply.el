@@ -1439,7 +1439,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;;; Ibuffer Argument
 
-(defvar conn-kapply-ibuffer-documentation
+(defvar conn-kapply-ibuffer-reference
   (conn-reference-page
     :depth 70
     (:heading "Ibuffer Overview")
@@ -1457,7 +1457,7 @@ finishing showing the buffers that were visited."))
                   (name "ibuffer")
                   (toggle-command 'kapply-ibuffer)
                   (keymap conn-kapply-ibuffer-argument-map)
-                  (documentation conn-kapply-ibuffer-documentation)))))
+                  (reference conn-kapply-ibuffer-reference)))))
 
 (cl-defmethod conn-argument-payload ((arg conn-kapply-ibuffer-argument))
   (and (conn-argument-value arg)
@@ -1482,7 +1482,7 @@ finishing showing the buffers that were visited."))
                   (cycling-commands '(kapply-undo))
                   (keymap conn-kapply-undo-argument-map)
                   (value (car choices))
-                  (documentation conn-kapply-undo-reference)))))
+                  (reference conn-kapply-undo-reference)))))
 
 (cl-defmethod conn-argument-payload ((arg conn-kapply-undo-argument))
   (pcase (conn-argument-value arg)
@@ -2131,7 +2131,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
                    :command-handler (conn-kapply-command-handler)
-                   :display-handler (conn-read-args-display-columns 3 3)
+                   :display-handler (conn-read-args-display-columns 2 3)
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
