@@ -920,9 +920,11 @@ buffer is a valid target.")
  (conn-get-state-map 'conn-dispatch-targets-state)
  (conn-reference-page
    :name conn-targets
-   ((("symbol" forward-symbol)
-     ("line" forward-line)
-     ("column" next-line)))))
+   :depth -10
+   (:heading "Special Target Bindings")
+   ((("symbol" forward-symbol))
+    (("line" forward-line))
+    (("column" next-line)))))
 
 (defvar conn-dispatch-other-end-reference
   "Operate with point at the other end of the target.")
@@ -1255,6 +1257,7 @@ that slot's value and otherwise performs a shallow copy."
  (conn-reference-page
    :name conn-dispatch-actions
    :depth -50
+   (:heading "Actions")
    ((("copy from" conn-dispatch-copy-from)
      ("send" conn-dispatch-send)
      ("kapply" conn-dispatch-kapply))

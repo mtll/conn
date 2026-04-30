@@ -489,9 +489,7 @@
                     '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-next :after
                     'conn-posframe--dispatch-ring-display
-                    '((name . conn-list-posframe)))
-        (defvar conn-quick-ref-display-function)
-        (setq conn-quick-ref-display-function 'conn--quick-ref-posframe))
+                    '((name . conn-list-posframe))))
     (advice-remove 'kmacro-cycle-ring-next 'conn-list-posframe)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-list-posframe)
     (advice-remove 'previous-buffer 'conn-list-posframe)
@@ -503,9 +501,7 @@
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-list-posframe)
     (advice-remove 'tab-bar-duplicate-tab 'conn-list-posframe)
-    (advice-remove 'tab-bar-close-tab 'conn-list-posframe)
-    (defvar conn-quick-ref-display-function)
-    (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
+    (advice-remove 'tab-bar-close-tab 'conn-list-posframe)))
 
 ;;;; Posframe window labels
 

@@ -44,10 +44,7 @@
   "Face for quick ref header."
   :group 'conn-quick-ref)
 
-(defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
-
-(defvar conn-quick-ref-text-scale 0.95
-  "Text scale to use for text in the quick ref buffer.")
+(defvar conn-quick-ref-display-function 'conn--quick-ref-buffer)
 
 (defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))
@@ -109,30 +106,6 @@
                          if (listp row)
                          collect (process-definition row)
                          else collect row))))))
-
-(defun conn-quick-ref-find-remap (remap &optional keymap)
-  (let (result)
-    (cl-labels ((find-keys (keymap remap prefix)
-                  (map-keymap
-                   (lambda (key def)
-                     (let ((all-keys (vconcat prefix (vector key))))
-                       (pcase def
-                         ((and (pred keymapp) sub-keymap)
-                          (find-keys sub-keymap remap all-keys))
-                         ((guard (and (equal def remap)
-                                      (eq (keymap--menu-item-binding remap)
-                                          (lookup-key keymap all-keys))))
-                          (push all-keys result)))))
-                   keymap)))
-      (find-keys (pcase keymap
-                   ('nil (make-composed-keymap (current-active-maps)))
-                   ((pred keymapp) keymap)
-                   (_ (make-composed-keymap keymap)))
-                 remap []))
-    (if-let* ((keys (car (sort result :key 'length))))
-        (propertize (key-description keys)
-                    'face 'help-key-binding)
-      conn--quick-ref-unbound)))
 
 (defun conn--format-ref-page (definition keymap-buffer)
   (let ((ref-buffer (current-buffer)))
@@ -251,8 +224,6 @@
                  (with-current-buffer ref-buffer
                    (let ((beg (point)))
                      (make-vtable
-                      :face `( :inherit default
-                               :height ,conn-quick-ref-text-scale)
                       :divider-width 2
                       :use-header-line nil
                       :objects objs)
@@ -265,21 +236,25 @@
 (defun conn-quick-ref-insert-pages (pages buffer header)
   (let ((page-count 1)
         (keymap-buffer (current-buffer))
-        (page-lines (max 10 (ceiling (frame-height) 3))))
+        (page-lines (min 10 (ceiling (frame-height) 3)))
+        (face '(:background "black" :extend t)))
     (with-current-buffer buffer
       (with-silent-modifications
-        (cl-loop with beg = (point)
-                 for page in pages do
-                 (let ((prev (point)))
-                   (conn--format-ref-page
-                    (conn--reference-page-definition page)
-                    keymap-buffer)
-                   (when (> (count-lines beg (point)) page-lines)
-                     (cl-incf page-count)
-                     (save-excursion
-                       (goto-char prev)
-                       (insert " "))
-                     (setq beg prev))))
+        (let ((beg (point)))
+          (dolist (page pages)
+            (let ((prev (point)))
+              (conn--format-ref-page
+               (conn--reference-page-definition page)
+               keymap-buffer)
+              (when (> (count-lines beg (point)) page-lines)
+                (cl-incf page-count)
+                (save-excursion
+                  (goto-char prev)
+                  (insert
+                   (propertize "__" 'face face 'display '(space :height (1)))
+                   (propertize "\n" 'face face 'line-height t)
+                   " "))
+                (setq beg prev)))))
         (goto-char (point-min))
         (let ((current-page 1))
           (insert (format header current-page page-count))
@@ -290,17 +265,17 @@
                 (delete-char -1)))
             (cl-incf current-page)
             (insert (format header current-page page-count))))
-        (add-face-text-property (point-min)
-                                (point-max)
-                                `(:height ,conn-quick-ref-text-scale)
-                                t)
+        (goto-char (point-max))
+        (insert
+         (propertize "__" 'face face 'display '(space :height (1)))
+         (propertize "\n" 'face face 'line-height t))
         (goto-char (point-min))
         (narrow-to-page)))))
 
 (defun conn-quick-ref-next-page (buffer)
   (with-current-buffer buffer
     (widen)
-    (forward-page)
+    (forward-page 1)
     (when (= (point) (point-max))
       (goto-char (point-min)))
     (narrow-to-page)))
@@ -308,11 +283,9 @@
 (defun conn-quick-ref-previous-page (buffer)
   (with-current-buffer buffer
     (widen)
-    (if (= (point) (point-min))
-        (progn
-          (goto-char (point-max))
-          (forward-page -1))
-      (forward-page -1))
+    (when (= (point) (point-min))
+      (goto-char (point-max)))
+    (backward-page 1)
     (narrow-to-page)))
 
 (defun conn-get-quick-ref-pages (&optional keymap)
@@ -331,7 +304,7 @@
         (mapc #'bindings (current-active-maps t)))
       (flatten-tree (nreverse result)))))
 
-(defun conn--quick-ref-loop (pages)
+(defun conn--quick-ref-loop (pages loop-fn)
   (let* ((buf (get-buffer-create " *conn-quick-ref*"))
          (display-function conn-quick-ref-display-function)
          (inhibit-message t)
@@ -349,10 +322,14 @@
     (with-current-buffer buf
       (widen)
       (special-mode)
-      (setq-local page-delimiter "")
-      (with-silent-modifications
-        (delete-region (point-min) (point-max))))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (delete-all-overlays))
+      (setq-local page-delimiter ""
+                  cursor-type nil
+                  mode-line-format nil))
     (conn-quick-ref-insert-pages pages buf header)
+    (when loop-fn (funcall loop-fn))
     (conn->f state (funcall display-function buf))
     (unwind-protect
         (conn-with-overriding-map conn-quick-ref-map
@@ -365,9 +342,11 @@
                ('close (cl-return))
                ('next
                 (conn-quick-ref-next-page buf)
+                (when loop-fn (funcall loop-fn))
                 (conn->f state (funcall display-function buf)))
                ('previous
                 (conn-quick-ref-previous-page buf)
+                (when loop-fn (funcall loop-fn))
                 (conn->f state (funcall display-function buf)))
                ((or 'quit 'keyboard-quit)
                 (signal 'quit nil))
@@ -376,8 +355,8 @@
                   (cl-return))))))
       (funcall display-function buf state t))))
 
-(defun conn-quick-reference (pages)
-  (interactive (list (conn-get-quick-ref-pages)))
+(defun conn-quick-reference (pages &optional loop-fn)
+  (interactive (list (conn-get-quick-ref-pages keymap)))
   (if-let* ((pages (compat-call
                     sort
                     (seq-uniq (flatten-tree pages)
@@ -385,7 +364,7 @@
                                 (eq (conn--reference-page-name a)
                                     (conn--reference-page-name b))))
                     :key #'conn--reference-page-depth)))
-      (conn--quick-ref-loop pages)
+      (conn--quick-ref-loop pages loop-fn)
     (user-error "No quick reference pages")))
 
 (defun conn-add-keymap-reference (keymap references)
@@ -417,23 +396,16 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-minibuffer (buffer &optional state teardown)
-  (let (inhibit-message
-        message-log-max)
-    (if teardown
-        (when state (funcall state))
-      (prog1
-          (or state
-              (let ((mh max-mini-window-height)
-                    (rs resize-mini-windows))
-                (setq max-mini-window-height 1.0
-                      resize-mini-windows t)
-                (lambda ()
-                  (setq max-mini-window-height mh
-                        resize-mini-windows rs)
-                  (message nil))))
+(defun conn--quick-ref-buffer (buffer &optional state teardown)
+  (if teardown
+      (when state (set-window-configuration state))
+    (prog1 (or state (current-window-configuration))
+      (unless (get-buffer-window buffer)
+        (display-buffer buffer '((display-buffer-in-side-window (side . bottom))
+                                 (window-height . fit-window-to-buffer))))
+      (when-let* ((win (get-buffer-window buffer)))
         (with-current-buffer buffer
-          (message "%s" (buffer-substring (point-min)
-                                          (1- (point-max)))))))))
+          (set-window-point win (point)))
+        (fit-window-to-buffer win)))))
 
 (provide 'conn-quick-ref)

@@ -410,10 +410,14 @@ This skips executing the body of the `conn-read-args' form entirely."
                     'keyboard-escape-quit)
                 (signal 'quit nil))
                ('reference
+                (when timer
+                  (cancel-timer timer)
+                  (setq timer nil))
                 (with-keymaps
                  (condition-case err
                      (conn-quick-reference
-                      (conn-get-quick-ref-pages))
+                      (conn-get-quick-ref-pages)
+                      #'display-message)
                    (user-error
                     (set-error-message (error-message-string err))))))
                ((or 'describe-key 'conn-describe-key)
