@@ -554,13 +554,18 @@ remove whatever the function has added to the mode-line.")
 
 (defun conn-wincontrol-quick-ref ()
   (interactive)
-  (save-window-excursion
-    (conn-quick-reference
-     (conn-get-quick-ref-pages)
-     (lambda ()
-       (let ((inhibit-message nil)
-             (message-log-max nil))
-         (message "%s" (conn--wincontrol-message)))))))
+  (condition-case _
+      (save-window-excursion
+        (conn-quick-reference
+         (conn-get-quick-ref-pages)
+         (lambda ()
+           (let ((inhibit-message nil)
+                 (message-log-max nil))
+             (message "%s" (conn--wincontrol-message))))))
+    (quit
+     (when conn-wincontrol-one-command-mode
+       (conn-wincontrol-mode -1))
+     (message "Quit"))))
 
 (defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
