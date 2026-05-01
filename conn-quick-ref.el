@@ -69,6 +69,7 @@
                            type)
                      . ,form)
                    `(cons ,type (lambda () ,@form)))
+                  (`(,'\, ,def) def)
                   ((pred consp)
                    `(list ,@(mapcar #'process-definition def)))
                   (_ `(quote ,def)))))
@@ -96,6 +97,7 @@
                              type)
                        . ,form)
                      `(cons ,type (lambda () ,@form)))
+                    (`(,'\, ,exp) exp)
                     ((pred consp)
                      `(list ,@(mapcar #'process-definition def)))
                     (_ `(quote ,def)))))
@@ -126,18 +128,20 @@
                               (desc (key-description adv))
                               (_(eq bind (key-binding adv))))
                     adv))
-                (get-key (bind keymap)
-                  (if-let* ((key (if keymap
-                                     (where-is-internal bind keymap t)
-                                   (or (check-advertised bind)
-                                       (when overriding-terminal-local-map
-                                         (where-is-internal
-                                          bind
-                                          (list overriding-terminal-local-map)
-                                          t))
-                                       (where-is-internal bind nil t)))))
-                      (propertize (key-description key) 'face 'help-key-binding)
-                    conn--quick-ref-unbound))
+                (get-key (bind keymap &rest options)
+                  (let ((noindirect (memq :noindirect options))
+                        (no-remap (memq :no-remap options)))
+                    (if-let* ((key (if keymap
+                                       (where-is-internal bind keymap t noindirect no-remap)
+                                     (or (check-advertised bind)
+                                         (when overriding-terminal-local-map
+                                           (where-is-internal
+                                            bind
+                                            (list overriding-terminal-local-map)
+                                            t noindirect no-remap))
+                                         (where-is-internal bind nil t noindirect no-remap)))))
+                        (propertize (key-description key) 'face 'help-key-binding)
+                      conn--quick-ref-unbound)))
                 (process-bindings (description bindings keymap)
                   (let (keys)
                     (while bindings
@@ -148,7 +152,9 @@
                         (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
                         ((and str (pred stringp))
                          (push str keys))
-                        (bind (push (get-key bind keymap) keys))))
+                        ((or `(,bind . ,options)
+                             bind)
+                         (push (apply #'get-key bind keymap options) keys))))
                     (conn--with-work-buffer
                       (dolist (key (nreverse keys))
                         (insert key ", "))
@@ -322,7 +328,7 @@
                          (read-key-sequence nil))))
              (when (eql (aref keys 0) (car (last (current-input-mode))))
                (signal 'quit nil))
-             (pcase (key-binding keys)
+             (pcase (key-binding keys 'accept-default)
                ('close (cl-return))
                ('next
                 (conn-quick-ref-next-page buf)
@@ -334,9 +340,14 @@
                 (conn->f state (funcall display-function buf)))
                ((or 'quit 'keyboard-quit)
                 (signal 'quit nil))
-               (_ (conn-add-unread-events
+               (binding
+                (cl-block continue
+                  (when loop-fn
+                    (funcall loop-fn binding
+                             (lambda () (cl-return-from continue))))
+                  (conn-add-unread-events
                    (this-single-command-raw-keys))
-                  (cl-return))))))
+                  (cl-return)))))))
       (funcall display-function buf state t))))
 
 (defun conn-quick-reference (pages &optional loop-fn)
@@ -350,6 +361,50 @@
                     :key #'conn--reference-page-depth)))
       (conn--quick-ref-loop pages loop-fn)
     (user-error "No quick reference pages")))
+
+(defun conn-quick-reference-keymap ()
+  (interactive)
+  (if-let* ((keys (this-command-keys-vector))
+            (prefix (seq-take keys (1- (length keys))))
+            (keymap (key-binding prefix 'accept-default))
+            (pages (compat-call
+                    sort
+                    (seq-uniq
+                     (flatten-tree (conn-get-quick-ref-pages keymap))
+                     (lambda (a b)
+                       (eq (conn--reference-page-name a)
+                           (conn--reference-page-name b))))
+                    :key #'conn--reference-page-depth)))
+      (funcall
+       (catch 'end-loop
+         (conn-with-overriding-map (make-composed-keymap
+                                    (list (define-keymap "C-h" prefix-help-command)
+                                          keymap
+                                          (define-keymap "<t>" #'ignore)))
+           (conn--quick-ref-loop
+            pages
+            (lambda (&optional binding continue)
+              (let (inhibit-message message-log-max)
+                (message "References for keymaps under %s"
+                         (key-description prefix)))
+              (pcase binding
+                ('nil)
+                ('ignore
+                 (let (inhibit-message)
+                   (message "%s not bound in keymaps"
+                            (key-description (this-command-keys-vector))))
+                 (funcall continue))
+                (_
+                 (let (inhibit-message) (message nil))
+                 (throw 'end-loop
+                        (lambda ()
+                          (conn->
+                            (this-command-keys-vector)
+                            (vconcat prefix)
+                            (command-execute binding nil)))))))))
+         #'ignore))
+    (command-execute prefix-help-command nil
+                     (vconcat prefix (key-parse "C-h")))))
 
 (defun conn-add-keymap-reference (keymap references)
   (let* ((pages (flatten-tree (ensure-list references)))
@@ -380,7 +435,7 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-buffer (buffer &optional state teardown)
+(defun conn--quick-ref-buffer (buffer &optional _state teardown)
   (if teardown
       (when-let* ((win (get-buffer-window buffer)))
         (delete-window win))
@@ -390,6 +445,7 @@
     (when-let* ((win (get-buffer-window buffer)))
       (with-current-buffer buffer
         (set-window-point win (point)))
-      (fit-window-to-buffer win))))
+      (let ((window-min-height 2))
+        (fit-window-to-buffer win)))))
 
 (provide 'conn-quick-ref)

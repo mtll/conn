@@ -349,7 +349,7 @@
                       org-example))
       (funcall break
                (conn-reference-page
-                 (:eval (format "Operate on a %s" cmd))))))
+                 ,(format "Operate on a %s" cmd)))))
   ( :predicate :extra "conn-org" ()
     (or (memq cmd '(org-quote
                     org-center

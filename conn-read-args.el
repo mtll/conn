@@ -255,12 +255,12 @@ The duration of the message display is controlled by
   (funcall message-function "Key Sequence...")
   (let ((cmd (key-binding (let ((inhibit-quit t))
                             (read-key-sequence nil))
-                          t)))
+                          'accept-default)))
     (if (arrayp cmd)
         (conn-quick-reference
          (conn-reference-page
-           (:eval (format "Keyboard macro: \"%s\""
-                          (conn--kmacro-display cmd)))))
+           ,(format "Keyboard macro: \"%s\""
+                    (conn--kmacro-display cmd))))
       (condition-case err
           (conn-quick-reference
            (cl-with-gensyms (break)
@@ -366,7 +366,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                   repeat 10 do
                   (setq keyseq (let ((inhibit-quit t))
                                  (read-key-sequence nil))
-                        cmd (key-binding keyseq t))
+                        cmd (key-binding keyseq 'accept-default))
                   (if (arrayp cmd)
                       (conn-add-unread-events cmd)
                     (cl-return))
@@ -641,7 +641,7 @@ be displayed in the echo area during `conn-read-args'."
   (and-let* ((doc (conn-argument-reference arg))
              (_ (conn-argument-predicate arg cmd)))
     (cl-typecase doc
-      (string (funcall break (conn-reference-page (:eval doc))))
+      (string (funcall break (conn-reference-page ,doc)))
       (function (funcall doc cmd break))
       (conn--reference-page (funcall break doc)))))
 
@@ -782,7 +782,7 @@ be displayed in the echo area during `conn-read-args'."
                                                break)
   (when-let* ((ref (conn-anonymous-argument-reference arg cmd)))
     (cl-typecase ref
-      (string (funcall break (conn-reference-page (:eval ref))))
+      (string (funcall break (conn-reference-page ,ref)))
       (function (funcall ref cmd break))
       (conn--reference-page (funcall break ref)))))
 
@@ -874,7 +874,7 @@ be displayed in the echo area during `conn-read-args'."
               (memq cmd toggles)
             (eq cmd toggles))
       (cl-typecase doc
-        (string (funcall break (conn-reference-page (:eval doc))))
+        (string (funcall break (conn-reference-page ,doc)))
         (function (funcall doc cmd break))
         (conn--reference-page (funcall break doc))))))
 
@@ -996,7 +996,7 @@ be displayed in the echo area during `conn-read-args'."
         (doc (conn-cycling-argument-reference arg)))
     (when (memq cmd commands)
       (cl-typecase doc
-        (string (funcall break (conn-reference-page (:eval doc))))
+        (string (funcall break (conn-reference-page ,doc)))
         (function (funcall doc cmd break))
         (conn--reference-page (funcall break doc))))))
 
@@ -1029,7 +1029,7 @@ be displayed in the echo area during `conn-read-args'."
               (memq cmd toggles)
             (eq cmd toggles))
       (cl-typecase doc
-        (string (funcall break (conn-reference-page (:eval doc))))
+        (string (funcall break (conn-reference-page ,doc)))
         (function (funcall doc cmd break))
         (conn--reference-page (funcall break doc))))))
 

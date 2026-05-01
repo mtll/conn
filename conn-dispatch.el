@@ -969,7 +969,7 @@ buffer is a valid target.")
       (string
        (conn-reference-quote
          ((:heading (concat "Action: " (conn-action-description action)))
-          (:eval ref)))))))
+          ,ref))))))
 
 (define-inline conn-call-action (action)
   (inline-letevals (action)
@@ -1277,16 +1277,15 @@ that slot's value and otherwise performs a shallow copy."
     ('repeat-dispatch
      (funcall break
               (conn-reference-page
-                (:eval
-                 (substitute-command-keys
+                ,(substitute-command-keys
                   "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
 Complete the loop with \\[finish].
-Abort the loop and undo all changes with \\[keyboard-quit].")))))
+Abort the loop and undo all changes with \\[keyboard-quit]."))))
     ((and (guard (function-get cmd :conn-dispatch-action)))
      (if-let* ((docstring (documentation cmd)))
-         (funcall break (conn-reference-page (:eval docstring)))
+         (funcall break (conn-reference-page ,docstring))
        (funcall break (conn-reference-page
-                        (:eval (format "Action `%s'." cmd))))))))
+                        ,(format "Action `%s'." cmd)))))))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd
@@ -3952,10 +3951,10 @@ contain targets."
                      (= beg tbeg)))))
    :reference (conn-reference-quote
                 ((:heading "Thing With Prefix")
-                 (:eval (string-fill
-                         (format "Read a prefix string of %s characters for a %s target."
-                                 prefix-length thing)
-                         72))))))
+                 ,(string-fill
+                   (format "Read a prefix string of %s characters for a %s target."
+                           prefix-length thing)
+                   80)))))
 
 (conn-define-target-finder conn-dispatch-things-with-prefix-targets
     ()

@@ -1469,7 +1469,7 @@ Returns a `conn-bounds' struct."
                                (cmd (conn-thing t)))
   ( :reference (break)
     (let ((doc (format "Operate on %s." (conn-thing-pretty-print cmd))))
-      (funcall break (conn-reference-page (:eval doc))))))
+      (funcall break (conn-reference-page ,doc)))))
 
 (conn-define-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing dispatch)))
