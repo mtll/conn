@@ -382,14 +382,14 @@
 
 (defun conn--quick-ref-buffer (buffer &optional state teardown)
   (if teardown
-      (when state (set-window-configuration state))
-    (prog1 (or state (current-window-configuration))
-      (unless (get-buffer-window buffer)
-        (display-buffer buffer '((display-buffer-in-side-window (side . bottom))
-                                 (window-height . fit-window-to-buffer))))
       (when-let* ((win (get-buffer-window buffer)))
-        (with-current-buffer buffer
-          (set-window-point win (point)))
-        (fit-window-to-buffer win)))))
+        (delete-window win))
+    (unless (get-buffer-window buffer)
+      (display-buffer buffer '((display-buffer-in-side-window (side . bottom))
+                               (window-height . fit-window-to-buffer))))
+    (when-let* ((win (get-buffer-window buffer)))
+      (with-current-buffer buffer
+        (set-window-point win (point)))
+      (fit-window-to-buffer win))))
 
 (provide 'conn-quick-ref)
