@@ -39,7 +39,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[conn-wincontrol-exit] exit; "
-   "\\[conn-quick-reference] help):"))
+   "\\[conn-wincontrol-quick-ref] help):"))
 
 (defvar conn--wincontrol-one-command-help-format
   (concat
@@ -49,7 +49,7 @@
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[keyboard-quit] exit; "
-   "\\[conn-quick-reference] help):"))
+   "\\[conn-wincontrol-quick-ref] help):"))
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
@@ -226,7 +226,7 @@
         'conn-wincontrol-invert-argument
         'conn-wincontrol-digit-argument
         'conn-wincontrol-universal-arg
-        'conn-quick-reference))
+        'conn-wincontrol-quick-ref))
 
 (defun conn-wincontrol-one-command-stay-p ()
   (memq this-command conn-wincontrol-one-command-stay-command))
@@ -551,6 +551,15 @@ remove whatever the function has added to the mode-line.")
   :group 'conn)
 
 ;;;;; Window Scroll Commands
+
+(defun conn-wincontrol-quick-ref ()
+  (interactive)
+  (conn-quick-reference
+   (conn-get-quick-ref-pages)
+   (lambda ()
+     (let ((inhibit-message nil)
+           (message-log-max nil))
+       (message "%s" (conn--wincontrol-message))))))
 
 (defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."

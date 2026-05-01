@@ -969,7 +969,7 @@
 (define-keymap
   :keymap conn-wincontrol-map
   "=" 'balance-windows
-  "M-?" 'conn-quick-reference
+  "M-?" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "-" 'conn-wincontrol-invert-argument
   "0" 'conn-wincontrol-digit-argument

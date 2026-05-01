@@ -193,16 +193,9 @@
                          (push (process-col col keymap) result))))
                     (nreverse result)))
                 (insert-ref-string (str)
-                  (let (beg)
-                    (with-current-buffer ref-buffer
-                      (with-silent-modifications
-                        (setq beg (point))
-                        (insert str "\n")
-                        (add-text-properties beg (point) '(line-prefix " "))
-                        (save-excursion
-                          (goto-char beg)
-                          (while (search-forward "\n" nil 'move-to-end)
-                            (replace-match " \n"))))))))
+                  (with-current-buffer ref-buffer
+                    (with-silent-modifications
+                      (insert str "\n")))))
       (with-current-buffer keymap-buffer
         (conn--where-is-with-remaps
           (while definition
@@ -222,22 +215,17 @@
                (let ((objs (or (transpose (process-row row))
                                (list "-"))))
                  (with-current-buffer ref-buffer
-                   (let ((beg (point)))
-                     (make-vtable
-                      :divider-width 2
-                      :use-header-line nil
-                      :objects objs)
-                     (goto-char beg)
-                     (while (search-forward "\n" nil 'move-to-end)
-                       (replace-match " \n"))
-                     (add-text-properties beg (point-max)
-                                          '(line-prefix " ")))))))))))))
+                   (make-vtable
+                    :divider-width 2
+                    :use-header-line nil
+                    :objects objs)
+                   (goto-char (point-max))))))))))))
 
 (defun conn-quick-ref-insert-pages (pages buffer header)
   (let ((page-count 1)
         (keymap-buffer (current-buffer))
-        (page-lines (min 10 (ceiling (frame-height) 3)))
-        (face '(:background "black" :extend t)))
+        (page-lines (max 10 (ceiling (frame-height) 3.5)))
+        (face `(:background ,(face-foreground 'default) :extend t)))
     (with-current-buffer buffer
       (with-silent-modifications
         (let ((beg (point)))
@@ -246,23 +234,20 @@
               (conn--format-ref-page
                (conn--reference-page-definition page)
                keymap-buffer)
-              (when (> (count-lines beg (point)) page-lines)
+              (when (and (> (count-lines beg (point)) page-lines)
+                         (/= prev beg))
                 (cl-incf page-count)
                 (save-excursion
                   (goto-char prev)
                   (insert
                    (propertize "__" 'face face 'display '(space :height (1)))
                    (propertize "\n" 'face face 'line-height t)
-                   " "))
+                   ""))
                 (setq beg prev)))))
         (goto-char (point-min))
         (let ((current-page 1))
           (insert (format header current-page page-count))
           (while (search-forward "" nil t)
-            (save-excursion
-              (forward-line -1)
-              (when (looking-at-p "^\n")
-                (delete-char -1)))
             (cl-incf current-page)
             (insert (format header current-page page-count))))
         (goto-char (point-max))
@@ -311,7 +296,7 @@
          (state nil)
          (header
           (substitute-command-keys
-           (concat " \\<conn-quick-ref-map>"
+           (concat "\\<conn-quick-ref-map>"
                    (propertize "[%s/%s] " 'face 'minibuffer-prompt)
                    (propertize "Quick Reference" 'face 'bold)
                    " — \\[next] Next; \\[previous] Previous; \\[close] Close "
@@ -320,7 +305,6 @@
                             'conn-quick-ref-page-header-face
                             t header)
     (with-current-buffer buf
-      (widen)
       (special-mode)
       (let ((inhibit-read-only t))
         (erase-buffer)
@@ -356,7 +340,7 @@
       (funcall display-function buf state t))))
 
 (defun conn-quick-reference (pages &optional loop-fn)
-  (interactive (list (conn-get-quick-ref-pages keymap)))
+  (interactive (list (conn-get-quick-ref-pages)))
   (if-let* ((pages (compat-call
                     sort
                     (seq-uniq (flatten-tree pages)
