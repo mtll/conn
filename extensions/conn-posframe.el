@@ -580,7 +580,7 @@
 
 ;;;; Quick Ref
 
-(defun conn--quick-ref-posframe (buffer &optional _state teardown)
+(defun conn-quick-ref-posframe (buffer &optional _state teardown)
   (if teardown
       (posframe-hide buffer)
     (posframe-show buffer

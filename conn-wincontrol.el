@@ -243,6 +243,7 @@
   (list
    (conn-reference-page
      :name conn-windows-1
+     :depth -30
      (:heading "Window:")
      ((("switch window" conn-goto-window)
        ("quit win" quit-window)
@@ -269,6 +270,7 @@
        ("fit win" shrink-window-if-larger-than-buffer))))
    (conn-reference-page
      :name conn-windows-2
+     :depth -20
      (((:keymap conn-window-resize-map)
        (:eval (concat
                (propertize "Resize Map:"
@@ -310,6 +312,7 @@
                 window-layout-rotate-anticlockwise))))))))
    (conn-reference-page
      :name conn-windows-3
+     :depth -10
      (((:heading "Windmove")
        ("up/down/left/right"
         windmove-up
@@ -348,11 +351,6 @@
      (("next/prev" tab-next tab-previous)
       ("other frame" other-frame)
       ("fullscreen" toggle-frame-fullscreen)))))
-
-(conn-add-keymap-reference
- conn-wincontrol-map
- (list conn-wincontrol-windows-reference
-       conn-wincontrol-tabs-and-frames-reference))
 
 ;;;;; Wincontrol Prefix Arg
 
@@ -553,11 +551,13 @@ remove whatever the function has added to the mode-line.")
 ;;;;; Window Scroll Commands
 
 (defun conn-wincontrol-quick-ref ()
+  "Quick reference for `conn-wincontrol-mode' commands."
   (interactive)
   (condition-case _
       (save-window-excursion
         (conn-quick-reference
-         (conn-get-quick-ref-pages)
+         (list conn-wincontrol-windows-reference
+               conn-wincontrol-tabs-and-frames-reference)
          (lambda ()
            (let ((inhibit-message nil)
                  (message-log-max nil))
@@ -613,51 +613,68 @@ remove whatever the function has added to the mode-line.")
 
 ;;;;; Window Configuration Commands
 
-(defun conn-wincontrol-zoom-in ()
-  (interactive)
-  (conn->
-    (conn-wincontrol-consume-prefix-arg)
-    (prefix-numeric-value)
-    (text-scale-increase)))
+(defun conn-wincontrol-zoom-in (inc)
+  "Increase the font size of the default face in current buffer by INC steps.
 
-(defun conn-wincontrol-zoom-out ()
-  (interactive)
-  (conn->
-    (conn-wincontrol-consume-prefix-arg)
-    (prefix-numeric-value)
-    (text-scale-decrease)))
+See `text-scale-increase'."
+  (interactive
+   (list (prefix-numeric-value
+          (conn-wincontrol-consume-prefix-arg))))
+  (text-scale-increase inc))
+
+(defun conn-wincontrol-zoom-out (dec)
+  "Decrease the font size of the default face in the current buffer by DEC steps.
+
+See `text-scale-decrease'."
+  (interactive
+   (list (prefix-numeric-value
+          (conn-wincontrol-consume-prefix-arg))))
+  (text-scale-decrease dec))
 
 (defun conn-wincontrol-reset-zoom ()
+  "Reset font size of the default face in the current buffer."
   (interactive)
   (text-scale-set 0))
 
-(defun conn-wincontrol-widen-window ()
-  (interactive)
-  (enlarge-window-horizontally
-   (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+(defun conn-wincontrol-widen-window (delta)
+  "Make selected window DELTA columns wider.
 
-(defun conn-wincontrol-narrow-window ()
-  (interactive)
-  (shrink-window-horizontally
-   (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+See `enlarge-window-horizontally'."
+  (interactive (list (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+  (enlarge-window-horizontally delta))
 
-(defun conn-wincontrol-heighten-window ()
-  (interactive)
-  (enlarge-window (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+(defun conn-wincontrol-narrow-window (delta)
+  "Make selected window DELTA columns narrower.
 
-(defun conn-wincontrol-shorten-window ()
-  (interactive)
-  (shrink-window (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+See `shrink-window-horizontally'."
+  (interactive (list (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+  (shrink-window-horizontally delta))
+
+(defun conn-wincontrol-heighten-window (delta)
+  "Make the selected window DELTA lines taller.
+
+See `enlarge-window'."
+  (interactive (list (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+  (enlarge-window delta))
+
+(defun conn-wincontrol-shorten-window (delta)
+  "Make the selected window DELTA lines smaller.
+
+See `shrink-window'."
+  (interactive (list (or (conn-wincontrol-prefix-arg-and-keep) 1)))
+  (shrink-window delta))
 
 (defun conn-wincontrol-split-vertically ()
-  "Split window vertically.
-Uses `split-window-vertically'."
+  "Split window vertically and select the new window.
+
+See `split-window-vertically'."
   (interactive)
   (select-window (split-window-vertically)))
 
 (defun conn-wincontrol-split-right ()
-  "Split window vertically.
-Uses `split-window-right'."
+  "Split window vertically and select the new window.
+
+See `split-window-right'."
   (interactive)
   (select-window (split-window-right)))
 
@@ -690,6 +707,9 @@ Operates with the selected windows parent window."
 (defvar-keymap conn-kill-buffer-repeat-map)
 
 (defun conn-kill-this-buffer ()
+  "Kill the current buffer.
+
+Activates the `conn-kill-buffer-repeat-map' transient map."
   (interactive)
   (kill-buffer)
   (set-transient-map conn-kill-buffer-repeat-map t nil t))

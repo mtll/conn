@@ -176,4 +176,8 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
 (conn-set-jump-command 'forward-paragraph #'conn-ignore-repeat-jump-handler)
 (conn-set-jump-command 'backward-paragraph #'conn-ignore-repeat-jump-handler)
 
+(conn-set-jump-command 'undo #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'undo-only #'conn-ignore-repeat-jump-handler)
+(conn-set-jump-command 'undo-redo #'conn-ignore-repeat-jump-handler)
+
 (provide 'conn-jump-ring)

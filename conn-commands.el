@@ -1253,7 +1253,7 @@ Currently selected window remains selected afterwards."
 
 (conn-define-argument-command ((arg conn-mark-thing-argument)
                                (cmd (eql conn-exchange-mark-command)))
-  "Activate the mark and exhange the point and mark.")
+  "Activate the mark and exchange the point and mark.")
 
 (cl-defgeneric conn-mark-thing-do (thing arg transform)
   (declare (conn-anonymous-thing-property :mark-op)))
@@ -1374,6 +1374,7 @@ Currently selected window remains selected afterwards."
 ;;;;; Yank Replace
 
 (conn-define-state conn-yank-replace-state (conn-read-thing-state)
+  "State for `conn-yank-replace'."
   :lighter "YANK-REPLACE")
 
 (defvar-keymap conn-swap-argument-map)
@@ -1660,6 +1661,16 @@ selected by dispatch with it.")
                           swap
                           register
                           check-bounds)
+  "Replace region defined by THING ARG and TRANSFORM with the last kill.
+
+If SWAP is non-nil then swap then insert the region being replaced into
+the kill ring or REGISTER.
+
+If REGISTER is non-nil then insert the contents of REGISTER instead of
+the head of the kill ring.
+
+if non-nil check-bounds checks the bounds of the region to be deleted
+with `conn-check-bounds' before deleting."
   (interactive
    (conn-read-args (conn-yank-replace-state
                     :prompt "Thing")
@@ -1686,6 +1697,7 @@ selected by dispatch with it.")
 (defvar conn--replace-bounds nil)
 
 (conn-define-state conn-replace-state (conn-read-thing-state)
+  "State for `conn-replace'."
   :lighter "REPLACE")
 
 (conn-add-keymap-reference
@@ -2848,7 +2860,12 @@ that place.")
 
 (conn-define-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql buffer-filename)))
-  "Copy buffer filename.")
+  "Copy buffer filename.
+
+Some transforms have special meaning with this thing
+conn-bounds-after-point:  file name without directory component
+conn-bounds-before-point: only the directory component of file name
+conn-bounds-trim:         file name sans extension")
 
 (conn-define-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql project-filename)))

@@ -22,7 +22,8 @@
 (defvar conn-special-state-modes
   (list 'special-mode
         'dired-mode
-        'messages-buffer-mode))
+        'messages-buffer-mode
+        'grep-mode))
 
 (conn-define-state conn-special-state ()
   :lighter "S")

@@ -44,7 +44,10 @@
   "Face for quick ref header."
   :group 'conn-quick-ref)
 
-(defvar conn-quick-ref-display-function 'conn--quick-ref-buffer)
+(define-derived-mode conn-quick-ref-mode special-mode "Quick-Ref"
+  "Mode for conn quick reference buffers.")
+
+(defvar conn-quick-ref-display-function 'conn-quick-ref-buffer)
 
 (defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))
@@ -221,10 +224,9 @@
                (let ((objs (or (transpose (process-row row))
                                (list "-"))))
                  (with-current-buffer ref-buffer
-                   (make-vtable
-                    :divider-width 2
-                    :use-header-line nil
-                    :objects objs)
+                   (make-vtable :divider-width 2
+                                :use-header-line nil
+                                :objects objs)
                    (goto-char (point-max))))))))))))
 
 (defun conn-quick-ref-insert-pages (pages buffer header)
@@ -311,7 +313,7 @@
                             'conn-quick-ref-page-header-face
                             t header)
     (with-current-buffer buf
-      (special-mode)
+      (conn-quick-ref-mode)
       (let ((inhibit-read-only t))
         (erase-buffer)
         (delete-all-overlays))
@@ -435,7 +437,7 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn--quick-ref-buffer (buffer &optional _state teardown)
+(defun conn-quick-ref-buffer (buffer &optional _state teardown)
   (if teardown
       (when-let* ((win (get-buffer-window buffer)))
         (delete-window win))

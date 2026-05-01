@@ -268,7 +268,8 @@ The duration of the message display is controlled by
                (dolist (a arguments)
                  (ignore
                   (conn-argument-command-reference
-                   a cmd (lambda (&rest pages) (throw break pages))))))))
+                   a cmd (lambda (&rest pages) (throw break pages)))))))
+           (lambda () (funcall message-function)))
         (user-error
          (conn-read-args-error (error-message-string err)))))))
 
@@ -417,15 +418,15 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (condition-case err
                      (conn-quick-reference
                       (conn-get-quick-ref-pages)
-                      #'display-message)
+                      (lambda (&rest _) (display-message)))
                    (user-error
                     (set-error-message (error-message-string err))))))
                ((or 'describe-key 'conn-describe-key)
                 (with-keymaps
                  (conn--read-args-describe-key
                   arguments
-                  (lambda (str)
-                    (let ((conn--read-args-error-message str))
+                  (lambda (&optional str)
+                    (let ((conn--read-args-error-message (or str "")))
                       (display-message))))))
                ((or 'describe-symbol 'conn-describe-symbol)
                 (with-keymaps
@@ -668,8 +669,9 @@ be displayed in the echo area during `conn-read-args'."
     (cond ((stringp docstring)
            (setf (alist-get :reference body)
                  `((break)
-                   (funcall break (conn-reference-page
-                                    (:eval (substitute-command-keys ,docstring)))))))
+                   (funcall break
+                            (conn-reference-page
+                              (:eval (substitute-command-keys ,docstring)))))))
           ((eq :reference (car-safe docstring))
            (push docstring body)))
     (macroexpand-all
