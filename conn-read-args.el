@@ -263,28 +263,27 @@ The duration of the message display is controlled by
                     (conn--kmacro-display cmd))))
       (condition-case err
           (conn-quick-reference
-           (cl-with-gensyms (break)
-             (catch break
-               (dolist (a arguments)
-                 (ignore
-                  (conn-argument-command-reference
-                   a cmd (lambda (&rest pages) (throw break pages)))))))
-           (lambda () (funcall message-function)))
-        (user-error
-         (conn-read-args-error (error-message-string err)))))))
-
-(defun conn--read-args-describe-symbol (arguments)
-  (let ((cmd (conn--read-args-completing-read arguments)))
-    (cl-with-gensyms (break)
-      (condition-case err
-          (conn-quick-reference
-           (catch break
+           (cl-block nil
              (dolist (a arguments)
                (ignore
                 (conn-argument-command-reference
-                 a cmd (lambda (&rest pages) (throw break pages)))))))
+                 a cmd (lambda (&rest pages) (cl-return pages))))))
+           (lambda (&rest _) (funcall message-function)))
         (user-error
          (conn-read-args-error (error-message-string err)))))))
+
+(defun conn--read-args-describe-symbol (arguments message-function)
+  (let ((cmd (conn--read-args-completing-read arguments)))
+    (condition-case err
+        (conn-quick-reference
+         (cl-block nil
+           (dolist (a arguments)
+             (ignore
+              (conn-argument-command-reference
+               a cmd (lambda (&rest pages) (cl-return pages))))))
+         (lambda (&rest _) (funcall message-function)))
+      (user-error
+       (conn-read-args-error (error-message-string err))))))
 
 (defmacro conn-read-args-return (&rest body)
   "Evaluate body and return the result from the current `conn-read-args'.
@@ -350,11 +349,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (scroll-conservatively 100))
                  (funcall display-handler prompt arguments (and timer t)))))
            (update-args (cmd)
-             (catch 'break
+             (cl-block nil
                (let ((break nil))
                  (dolist (a arguments)
                    (conn-argument-update a cmd (lambda () (setq break t)))
-                   (when break (throw 'break t))))))
+                   (when break (cl-return t))))))
            (read-command ()
              (let (partial-keymap cmd reading)
                (dlet ((conn-wincontrol-mode nil)
@@ -430,7 +429,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                       (display-message))))))
                ((or 'describe-symbol 'conn-describe-symbol)
                 (with-keymaps
-                 (conn--read-args-describe-symbol arguments)))
+                 (conn--read-args-describe-symbol arguments
+                                                  #'display-message)))
                ((pred identity)
                 (or (update-args cmd)
                     (set-error-message "Invalid command: %s <%s>"

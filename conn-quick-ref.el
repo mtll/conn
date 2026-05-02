@@ -382,7 +382,7 @@
          (conn-with-overriding-map (make-composed-keymap
                                     (list (define-keymap "C-h" prefix-help-command)
                                           keymap
-                                          (define-keymap "<t>" #'ignore)))
+                                          (define-keymap "<t>" #'undefined)))
            (conn--quick-ref-loop
             pages
             (lambda (&optional binding continue)
@@ -391,7 +391,7 @@
                          (key-description prefix)))
               (pcase binding
                 ('nil)
-                ('ignore
+                ('undefined
                  (let (inhibit-message)
                    (message "%s not bound in keymaps"
                             (key-description (this-command-keys-vector))))

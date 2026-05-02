@@ -558,7 +558,7 @@ remove whatever the function has added to the mode-line.")
         (conn-quick-reference
          (list conn-wincontrol-windows-reference
                conn-wincontrol-tabs-and-frames-reference)
-         (lambda ()
+         (lambda (&rest _)
            (let ((inhibit-message nil)
                  (message-log-max nil))
              (message "%s" (conn--wincontrol-message))))))
