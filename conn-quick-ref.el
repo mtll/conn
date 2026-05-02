@@ -61,7 +61,7 @@
                ( :constructor conn--make-reference-page
                  (name depth definition)))
   (name nil :type symbol :read-only t)
-  (depth 0 :type integer :read-only t)
+  (depth 0 :type integer)
   (definition nil :type list :read-only t))
 
 (defmacro conn-reference-quote (form)

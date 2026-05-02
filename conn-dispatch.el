@@ -832,7 +832,7 @@ buffer is a valid target.")
  conn-dispatch-transform-argument-map
  (conn-reference-page
    :name conn-dispatch-transform
-   (:heading "Transforms")
+   (:heading "Transformations")
    ((("anchored" conn-dispatch-bounds-anchored)
      ("between" conn-dispatch-bounds-between)
      ("trim" conn-bounds-trim))

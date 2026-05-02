@@ -244,7 +244,7 @@
    (conn-reference-page
      :name conn-windows-1
      :depth -30
-     (:heading "Window:")
+     (:heading "Window")
      ((("switch window" conn-goto-window)
        ("quit win" quit-window)
        ("delete win" delete-window)
@@ -273,7 +273,7 @@
      :depth -20
      (((:keymap conn-window-resize-map)
        (:eval (concat
-               (propertize "Resize Map:"
+               (propertize "Resize Map"
                            'face 'conn-quick-ref-heading-face)
                " "
                (propertize (key-description
@@ -291,7 +291,7 @@
         conn-wincontrol-maximize-vertically
         conn-wincontrol-maximize-horizontally)
        ("balance" balance-windows))
-      ((:heading "Buffer:")
+      ((:heading "Buffer")
        ("beg/end" beginning-of-buffer end-of-buffer)
        ("prev/next" conn-previous-buffer conn-next-buffer)
        ("bury/unbury" conn-bury-buffer conn-unbury-buffer)
@@ -304,7 +304,7 @@
       (:splice
        (static-if (<= 31 emacs-major-version)
            (conn-reference-quote
-             (((:heading "Window Layout:")
+             (((:heading "Window Layout")
                ("transpose" window-layout-transpose)
                ("flip ↔" window-layout-flip-leftright)
                ("flip ↕" window-layout-flip-topdown)
@@ -324,7 +324,7 @@
         windmove-swap-states-down
         windmove-swap-states-left
         windmove-swap-states-right)))
-     (((:heading "Misc:")
+     (((:heading "Misc")
        ("tear off window" tear-off-window)
        ("isearch other window forward/back"
         conn-wincontrol-isearch-other-window
@@ -337,14 +337,14 @@
 (defvar conn-wincontrol-tabs-and-frames-reference
   (conn-reference-page
     :name conn-tabs-and-frames
-    (((:heading "Tabs:")))
+    (((:heading "Tabs")))
     ((("next/prev" tab-next tab-previous)
       ("new" tab-new)
       ("close" tab-close))
      (("win to tab" tab-bar-move-window-to-tab)
       ("duplicate" tab-bar-duplicate-tab)
       ("detach" tab-bar-detach-tab)))
-    (((:heading "Frames:")))
+    (((:heading "Frames")))
     ((("delete/other" delete-frame delete-other-frames)
       ("undelete" undelete-frame)
       ("clone" clone-frame))
@@ -510,7 +510,7 @@
            ""))
      'face 'bold)))
 
-(defun conn--setup-mode-line-label (&optional remove)
+(defun conn-setup-mode-line-label (&optional remove)
   (if remove
       (setq mode-line-format
             (assq-delete-all
@@ -527,7 +527,7 @@
                 ,@(cdr cons)))))))
 
 (defvar conn-wincontrol-label-mode-line-set-function
-  #'conn--setup-mode-line-label
+  #'conn-setup-mode-line-label
   "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.
 Function should take one argument, REMOVE, which when non-nil means to
 remove whatever the function has added to the mode-line.")
