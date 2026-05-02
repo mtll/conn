@@ -842,8 +842,11 @@
   "a" 'conn-dispatch-bounds-anchored
   "B" 'conn-dispatch-bounds-between
   "^" 'conn-bounds-trim
-  "C->" 'conn-bounds-untrim-right
-  "C-<" 'conn-bounds-untrim-left
+  "<down>" 'conn-bounds-trim
+  "C-b" 'conn-bounds-untrim-left
+  "<left>" 'conn-bounds-untrim-left
+  "C-f" 'conn-bounds-untrim-right
+  "<right>" 'conn-bounds-untrim-right
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
@@ -881,8 +884,11 @@
 (define-keymap
   :keymap conn-transform-map
   "^" 'conn-bounds-trim
-  "C-<" 'conn-bounds-untrim-left
-  "C->" 'conn-bounds-untrim-right
+  "<down>" 'conn-bounds-trim
+  "C-b" 'conn-bounds-untrim-left
+  "<left>" 'conn-bounds-untrim-left
+  "C-f" 'conn-bounds-untrim-right
+  "<right>" 'conn-bounds-untrim-right
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point

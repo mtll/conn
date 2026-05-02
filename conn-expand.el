@@ -59,16 +59,15 @@ potential expansions.  Functions may return invalid expansions
 
 (defun conn--expand-create-expansions ()
   (unless (conn--valid-expansions-p)
-    (prog1
-        (setq conn--current-expansions
-              (compat-call sort
-                           (thread-first
-                             (mapcan #'funcall conn-expansion-functions)
-                             (conn--expand-filter-regions))
-                           :lessp (lambda (a b)
-                                    (or (> (car a) (car b))
-                                        (< (cdr a) (cdr b))))
-                           :in-place t))
+    (prog1 (conn->
+             (mapcan #'funcall conn-expansion-functions)
+             conn--expand-filter-regions
+             (:as exp (compat-call sort exp
+                                   :lessp (lambda (a b)
+                                            (or (> (car a) (car b))
+                                                (< (cdr a) (cdr b))))
+                                   :in-place t))
+             (setq conn--current-expansions))
       (setq conn--current-expansions-tick (buffer-chars-modified-tick)))))
 
 (defun conn-expand-subr (arg)
@@ -93,8 +92,8 @@ potential expansions.  Functions may return invalid expansions
 If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
-  (unless (and (region-active-p)
-               (conn--valid-expansions-p))
+  (unless (or (region-active-p)
+              (conn--valid-expansions-p))
     (push-mark nil t t))
   (conn-expand-subr arg)
   (unless conn-mark-state
