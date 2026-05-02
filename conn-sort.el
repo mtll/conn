@@ -42,9 +42,9 @@
     (("Numeric fields" sort-numeric-fields)
      ("Fields" sort-fields)))))
 
-(cl-defstruct (conn-sort-things-argument
+(cl-defstruct (conn-sort-thing-argument
                (:include conn-thing-argument)
-               ( :constructor conn-sort-things-argument
+               ( :constructor conn-sort-thing-argument
                  (&aux
                   (required t)
                   (value
@@ -55,19 +55,19 @@
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command ((arg conn-sort-things-argument)
+(conn-define-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-numeric-fields)))
   "Sort by numeric fields.")
 
-(conn-define-argument-command ((arg conn-sort-things-argument)
+(conn-define-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-fields)))
   "Sort by fields.")
 
-(conn-define-argument-command ((arg conn-sort-things-argument)
+(conn-define-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-columns)))
   "Sort columns.")
 
-(conn-define-argument-command ((arg conn-sort-things-argument)
+(conn-define-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-regexp-fields)))
   "Sort regexp fields.")
 
@@ -215,7 +215,7 @@ Interactively defaults to the current value of `sort-fold-case'."
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (if (region-active-p)
                             (list 'conn-things-in-region)
-                          (conn-sort-things-argument)))
+                          (conn-sort-thing-argument)))
         (transform (conn-transform-argument))
         (reverse
          (conn-boolean-argument "reverse"

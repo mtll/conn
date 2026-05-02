@@ -1379,6 +1379,15 @@ Currently selected window remains selected afterwards."
 
 (defvar-keymap conn-swap-argument-map)
 
+(cl-defstruct (conn-yank-replace-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-yank-replace-thing-argument
+                 (&aux
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-yank-replace-subr (beg end)
   (conn-protected-let* ((cg (prepare-change-group)
                             (cancel-change-group cg))
@@ -1674,7 +1683,7 @@ with `conn-check-bounds' before deleting."
   (interactive
    (conn-read-args (conn-yank-replace-state
                     :prompt "Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
+       ((`(,thing ,arg) (conn-yank-replace-thing-argument))
         (transform (conn-transform-argument))
         (swap (conn-boolean-argument "swap" 'swap conn-swap-argument-map))
         (register (conn-read-argument
@@ -2196,9 +2205,9 @@ For more information about how the replacement is carried out see
 
 (defvar-keymap conn-isearch-thing-map)
 
-(cl-defstruct (conn-isearch-thing-argument
+(cl-defstruct (conn-isearch-in-thing-argument
                (:include conn-thing-with-subregions-argument)
-               ( :constructor conn-isearch-thing-argument
+               ( :constructor conn-isearch-in-thing-argument
                  (&aux
                   (keymap conn-isearch-thing-map)
                   (required t)
@@ -2214,7 +2223,7 @@ For more information about how the replacement is carried out see
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(cl-defmethod conn-argument-predicate ((_arg conn-isearch-thing-argument)
+(cl-defmethod conn-argument-predicate ((_arg conn-isearch-in-thing-argument)
                                        cmd)
   (or (memq cmd '(multi-file multi-buffer project))
       (cl-call-next-method)))
@@ -2284,7 +2293,7 @@ Exiting the recursive edit will resume the isearch."
     (with-isearch-suspended
      (conn-read-args (conn-isearch-state
                       :prompt "Isearch in Thing")
-         ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
+         ((`(,thing ,arg ,subregions) (conn-isearch-in-thing-argument))
           (transform (conn-transform-argument)))
        (conn-isearch-restrict-to-thing-subr thing
                                             arg
@@ -2368,7 +2377,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
-       ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
+       ((`(,thing ,arg ,subregions) (conn-isearch-in-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument "regexp"
                                        'regexp
@@ -2398,7 +2407,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
-       ((`(,thing ,arg ,subregions) (conn-isearch-thing-argument))
+       ((`(,thing ,arg ,subregions) (conn-isearch-in-thing-argument))
         (transform (conn-transform-argument))
         (regexp (conn-boolean-argument
                  "regexp"
@@ -5306,6 +5315,18 @@ subregion."
 (conn-define-state conn-join-lines-state (conn-read-thing-state)
   :lighter "SHELL")
 
+(cl-defstruct (conn-shell-command-on-thing-argument
+               (:include conn-thing-with-subregions-argument)
+               ( :constructor conn-shell-command-on-thing-argument
+                 (&aux
+                  (subregions (use-region-p))
+                  (recursive-edit t)
+                  (subregions-explicit-flag subregions)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-shell-command-on-thing (thing
                                     arg
                                     transform
@@ -5315,7 +5336,7 @@ subregion."
   (interactive
    (conn-read-args (conn-join-lines-state
                     :prompt "Thing")
-       ((`(,thing ,arg ,subregions) (conn-thing-with-subregions-argument-dwim t))
+       ((`(,thing ,arg ,subregions) (conn-shell-command-on-thing-argument))
         (transform (conn-transform-argument))
         (replace
          (conn-boolean-argument

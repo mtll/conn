@@ -5156,6 +5156,7 @@ for the dispatch."
             '(region)
             :target-finder ( :method (_self &rest _)
                              (conn-isearch-targets
+                              :prompt isearch-string
                               :window-predicate (let ((owin (selected-window)))
                                                   (lambda (win) (eq win owin))))))
           nil nil
