@@ -189,10 +189,14 @@ Expansions and contractions are provided by functions in
               :bounds-op ( :method (_ _)
                            (conn-multi-thing-select
                             (alist-get (point) bounds))))))
-      (unless (oref state expansions)
-        (setf (oref state expansions) (conn--expand-create-expansions)))
       (pcase-dolist ((and cons `(,beg . ,end))
-                     (oref state expansions))
+                     (with-memoization (oref state expansions)
+                       (if (region-active-p)
+                           (conn--expand-create-expansions)
+                         (push-mark nil t t)
+                         (unwind-protect
+                             (conn--expand-create-expansions)
+                           (deactivate-mark)))))
         (push (conn-make-bounds 'region nil cons)
               (alist-get beg bounds))
         (conn-make-target-overlay beg 0 :thing thing)))))
