@@ -58,7 +58,7 @@ potential expansions.  Functions may return invalid expansions
                conn--current-expansions)))
 
 (defun conn--clear-expansions ()
-  (setq conn--current-expansions nil))
+  (setf conn--current-expansions nil))
 
 (defun conn--expand-create-expansions ()
   (unless (region-active-p)
@@ -73,7 +73,7 @@ potential expansions.  Functions may return invalid expansions
                                      (or (> (car a) (car b))
                                          (< (cdr a) (cdr b))))
                             :in-place t))
-      (setq conn--current-expansions))))
+      (setf conn--current-expansions))))
 
 (defun conn-expand-subr (arg)
   (conn--expand-create-expansions)

@@ -335,7 +335,7 @@
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-thing))
                               arg)
-  (setq arg (prefix-numeric-value arg))
+  (setf arg (prefix-numeric-value arg))
   (unless (= 0 arg)
     (let* ((seen (when (> arg 100)
                    (make-hash-table :test 'equal :size arg)))
@@ -352,7 +352,7 @@
         (while (if (< arg 0)
                    (> beg (point-min))
                  (< beg (point-max)))
-          (setq end (if (< arg 0)
+          (setf end (if (< arg 0)
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
@@ -378,7 +378,7 @@
               (cl-callf max max (cdr node))
               (cl-callf min min (car node))
               (push (conn-make-bounds cmd 1 node) nodes)
-              (setq at (if (< arg 0) (car node) (cdr node)))
+              (setf at (if (< arg 0) (car node) (cdr node)))
               (when (= (cl-incf count) (abs arg))
                 (throw 'done nil))))))
       (when nodes
@@ -391,7 +391,7 @@
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-ts-flat-thing))
                               arg)
-  (setq arg (prefix-numeric-value arg))
+  (setf arg (prefix-numeric-value arg))
   (unless (= 0 arg)
     (let* ((seen (when (> arg 100)
                    (make-hash-table :test 'equal :size arg)))
@@ -408,7 +408,7 @@
         (while (if (< arg 0)
                    (> beg (point-min))
                  (< beg (point-max)))
-          (setq end (if (< arg 0)
+          (setf end (if (< arg 0)
                         (max (point-min) (- beg conn-ts--chunk-size))
                       (min (point-max) (+ beg conn-ts--chunk-size)))
                 captures (conn-ts-filter-captures
@@ -430,7 +430,7 @@
               (cl-callf max max (cdr node))
               (cl-callf min min (car node))
               (push (conn-make-bounds cmd 1 node) nodes)
-              (setq at (car node))
+              (setf at (car node))
               (when (= (cl-incf count) (abs arg))
                 (throw 'done nil))))))
       (when nodes
@@ -560,14 +560,14 @@
                       (<= (window-start) beg (window-end))
                       (or (null region-pred)
                           (funcall region-pred beg end))
-                      (setq type-things (seq-intersection
+                      (setf type-things (seq-intersection
                                          (get type :conn-ts--member-of)
                                          things)))))
                ((not (alist-get beg bounds-alist))
                 (push (make-bounds (cons beg end) type-things)
                       (alist-get beg bounds-alist))
                 (conn-make-target-overlay beg 0 :thing target-thing))
-               ((not (setq bounds (seq-find
+               ((not (setf bounds (seq-find
                                    (lambda (bounds)
                                      (pcase bounds
                                        ((conn-bounds `(,b . ,e))

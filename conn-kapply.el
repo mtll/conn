@@ -62,7 +62,7 @@
 
 (defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))
-    (setq conn--kapply-automatic-flag nil))
+    (setf conn--kapply-automatic-flag nil))
   (dolist (cons conn--kbd-query-automatic-flags)
     (when (or force
               (eq :automatic (cdr cons))
@@ -123,7 +123,7 @@ Your options are: \\<conn-kapply-query-map>
           (eq (alist-get executing-kbd-macro-index
                          conn--kbd-query-automatic-flags)
               :exit-all))
-      (setq executing-kbd-macro ""))
+      (setf executing-kbd-macro ""))
      ((not (alist-get executing-kbd-macro-index
                       conn--kbd-query-automatic-flags))
       (let ((wconf (current-window-configuration))
@@ -139,22 +139,22 @@ Your options are: \\<conn-kapply-query-map>
             (set-window-configuration wconf)
             (cl-return))
            ('skip
-            (setq executing-kbd-macro "")
+            (setf executing-kbd-macro "")
             (cl-return))
            ('exit-current
             (setf (alist-get executing-kbd-macro-index
                              conn--kbd-query-automatic-flags)
                   :exit-current)
-            (setq executing-kbd-macro "")
+            (setf executing-kbd-macro "")
             (cl-return))
            ('exit-all
             (setf (alist-get executing-kbd-macro-index
                              conn--kbd-query-automatic-flags)
                   :exit-all)
-            (setq executing-kbd-macro "")
+            (setf executing-kbd-macro "")
             (cl-return))
            ('exit
-            (setq executing-kbd-macro t)
+            (setf executing-kbd-macro t)
             (cl-return))
            ('recenter
             (recenter nil))
@@ -164,7 +164,7 @@ Your options are: \\<conn-kapply-query-map>
                   inhibit-message)
               (recursive-edit)))
            ('quit
-            (setq quit-flag t)
+            (setf quit-flag t)
             (cl-return))
            ('automatic
             (set-window-configuration wconf)
@@ -277,11 +277,11 @@ region."
         init)
     (lambda (state)
       (pcase state
-        (`(:patterns . ,pats) (setq patterns pats))
+        (`(:patterns . ,pats) (setf patterns pats))
         (:exit-current
          (mapc #'delete-overlay (cl-shiftf matches nil)))
-        (:forward (setq sort-function #'nreverse))
-        (:backward (setq sort-function #'identity))
+        (:forward (setf sort-function #'nreverse))
+        (:backward (setf sort-function #'identity))
         (:cleanup
          (mapc #'delete-overlay matches))
         ((or :record :next)
@@ -294,10 +294,10 @@ region."
                    (push (conn-kapply-make-region (match-beginning subexp)
                                                   (match-end subexp))
                          matches)))))
-           (setq init t)
+           (setf init t)
            (unless matches
              (user-error "No matches for kapply.")))
-         (setq matches (funcall sort-function matches))
+         (setf matches (funcall sort-function matches))
          (conn-kapply-consume-region (pop matches)))))))
 
 (defun conn-kapply-region-iterator (regions)
@@ -381,7 +381,7 @@ of highlighting."
                                    #'char-fold-to-regexp))
          :transform (lambda (string)
                       (when (and case-fold-search search-upper-case)
-                        (setq isearch-case-fold-search
+                        (setf isearch-case-fold-search
                               (isearch-no-upper-case-p string regexp-flag)))
                       string))
       (if regexp-flag
@@ -406,7 +406,7 @@ of highlighting."
                      (`(,mb ,me . ,_)
                       (push (conn-kapply-make-region mb me)
                             matches)))))))
-           (setq matches (funcall sort-function matches)))
+           (setf matches (funcall sort-function matches)))
          (check-buffer (buffer)
            (with-current-buffer buffer
              (save-excursion
@@ -426,7 +426,7 @@ of highlighting."
                           (file-error
                            (let ((msg (error-message-string err)))
                              (unless (string-search next msg)
-                               (setq msg (format "%s: %s" next msg)))
+                               (setf msg (format "%s: %s" next msg)))
                              (delay-warning 'file-error msg :error))
                            nil))
                         (check-buffer (current-buffer)))
@@ -438,7 +438,7 @@ of highlighting."
            (:exit-current
             (mapc #'delete-overlay (cl-shiftf matches nil)))
            (:backward
-            (setq sort-function #'identity))
+            (setf sort-function #'identity))
            (:cleanup
             (mapc #'delete-overlay matches))
            ((or :next :record)
@@ -661,18 +661,18 @@ Possibilities: \\<query-replace-map>
                                (message "%s" msg)
                                (lookup-key multi-query-replace-map (vector (read-event))))
                         ('act (cl-return res))
-                        ('skip (setq res (funcall iterator state)))
+                        ('skip (setf res (funcall iterator state)))
                         ('exit-current
                          (funcall iterator :exit-current)
-                         (setq res (funcall iterator state)))
+                         (setf res (funcall iterator state)))
                         ('exit (cl-return))
                         ('recenter (recenter nil))
                         ('quit (signal 'quit nil))
                         ('automatic
-                         (setq conn--kapply-automatic-flag t)
+                         (setf conn--kapply-automatic-flag t)
                          (cl-return res))
                         ('automatic-all
-                         (setq conn--kapply-automatic-flag :automatic-all)
+                         (setf conn--kapply-automatic-flag :automatic-all)
                          (cl-return res))
                         ('help
                          (with-output-to-temp-buffer "*Help*"
@@ -891,7 +891,7 @@ Changes will be undone if an error is signaled during macro application."
           (prog1
               (funcall iterator state)
             (unless (eq buffer-undo-list t)
-              (setq handle (prepare-change-group))
+              (setf handle (prepare-change-group))
               (activate-change-group handle))))
          (:cleanup
           (when handle
@@ -905,9 +905,9 @@ Changes will be undone if an error is signaled during macro application."
           (prog1
               (funcall iterator state)
             (if (eq buffer-undo-list t)
-                (setq handle nil)
+                (setf handle nil)
               (undo-boundary)
-              (setq handle (prepare-change-group))
+              (setf handle (prepare-change-group))
               (activate-change-group handle))))
          (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
@@ -952,10 +952,10 @@ Changes will be undone if an error is signaled during macro application."
                       (set-window-configuration wconf)
                       (cl-return (save-buffer '(16))))
                      ('skip (cl-return))
-                     ('quit (setq quit-flag t))
+                     ('quit (setf quit-flag t))
                      ('automatic
                       (set-window-configuration wconf)
-                      (setq automatic t)
+                      (setf automatic t)
                       (cl-return))
                      ('help
                       (with-output-to-temp-buffer "*Help*"
@@ -1093,7 +1093,7 @@ When kapply finishes restore the restrictions in each buffer."
                     conn-local-mode
                     (or (eq state :record)
                         (eq state :next)))
-           (setq prev (conn-enter-recursive-stack conn-state)))
+           (setf prev (conn-enter-recursive-stack conn-state)))
          ret)))
    `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))
@@ -1129,7 +1129,7 @@ After kapply has finished restore the previous window configuration."
           (set-window-configuration wconf)
           (funcall iterator state))
          ((or :record :next)
-          (unless wconf (setq wconf (current-window-configuration)))
+          (unless wconf (setf wconf (current-window-configuration)))
           (funcall iterator state))
          (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-wconf conn--kapply-pipeline-depths))
@@ -1158,7 +1158,7 @@ After kapply has finished restore the previous window configuration."
           (advice-add 'kmacro-loop-setup-function :before-while iterator)
           (run-hooks 'conn-kmacro-apply-start-hook)
           (funcall body iterator)
-          (setq success t)
+          (setf success t)
           (unless conn-kapply-suppress-message
             (message "Kapply completed successfully after %s %s."
                      iterations
@@ -1219,7 +1219,7 @@ The iterator must be the first argument in ARGLIST.
 (conn-define-kapplier conn-kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
     (let* ((apply nil)
-           (hook (lambda () (setq apply kmacro-step-edit-replace))))
+           (hook (lambda () (setf apply kmacro-step-edit-replace))))
       (add-hook 'kbd-macro-termination-hook hook)
       (unwind-protect
           (kmacro-step-edit-macro)
@@ -1818,12 +1818,12 @@ finishing showing the buffers that were visited."))
        (conn-protected-let*
            ((regions (cl-loop for b in (or subregions (list bounds))
                               for (beg . end) = (conn-bounds b)
-                              when (< beg end) do (setq all-empty nil)
+                              when (< beg end) do (setf all-empty nil)
                               collect (save-excursion
                                         (goto-char beg)
                                         (conn-kapply-make-region beg end)))
                      (mapc #'delete-overlay regions)))
-         (setq pipeline (apply #'conn-kapply-on-iterator
+         (setf pipeline (apply #'conn-kapply-on-iterator
                                (conn-kapply-region-iterator regions)
                                :empty (and rmm (not all-empty))
                                pipeline)))
@@ -1844,12 +1844,12 @@ finishing showing the buffers that were visited."))
        (conn-protected-let*
            ((regions (cl-loop for b in (or subregions (list bounds))
                               for (beg . end) = (conn-bounds b)
-                              when (< beg end) do (setq all-empty nil)
+                              when (< beg end) do (setf all-empty nil)
                               collect (save-excursion
                                         (goto-char beg)
                                         (conn-kapply-make-region beg (1+ beg))))
                      (mapc #'delete-overlay regions)))
-         (setq pipeline (apply #'conn-kapply-on-iterator
+         (setf pipeline (apply #'conn-kapply-on-iterator
                                (conn-kapply-region-iterator regions)
                                :empty (not all-empty)
                                pipeline)))
@@ -1951,7 +1951,7 @@ finishing showing the buffers that were visited."))
                                      (lambda ,args
                                        (let ,(mapcar #'reverse bindings)
                                          ,@body)))))))))
-        (setq iterator (with-protected-isearch-vars
+        (setf iterator (with-protected-isearch-vars
                         (lambda (state)
                           (pcase state
                             (:exit-current
@@ -1981,7 +1981,7 @@ finishing showing the buffers that were visited."))
                                  (conn-kapply-window-conf-argument)
                                  (conn-kapply-undo-argument))))
                 (applier (conn-kapply-macro-argument)))
-             (setq restrict rst)
+             (setf restrict rst)
              (collect-matches)
              (conn-kapply-macro
               applier
@@ -1990,8 +1990,8 @@ finishing showing the buffers that were visited."))
                 conn-kapply-open-invisible
                 conn-kapply-pulse-region
                 ,@pipeline))
-             (setq curr (current-buffer))))
-        (setq isearch-window-configuration nil)
+             (setf curr (current-buffer))))
+        (setf isearch-window-configuration nil)
         (isearch-done)
         (switch-to-buffer curr)))))
 
@@ -2172,7 +2172,7 @@ finishing showing the buffers that were visited."))
                       (conn-kapply-region-iterator
                        (list (conn-kapply-make-region beg end)))
                       pipeline)
-                     (unless macro (setq macro (kmacro-ring-head))))))))
+                     (unless macro (setf macro (kmacro-ring-head))))))))
             (_ (user-error "Cannot find thing at point"))))
         (conn-dispatch-undo-case
           ((or :undo :cancel)

@@ -253,9 +253,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                              mbody)))))
                 (result (error "Unexpected macroexpansion result :%S"
                                result))))))
-      (while (setq key (pop properties)
+      (while (setf key (pop properties)
                    val (pop properties))
-        (if (setq gfn (alist-get key known))
+        (if (setf gfn (alist-get key known))
             (progn
               (push (macroexpand-all
                      `(cons ',gfn ,val)
@@ -376,7 +376,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
             `(or (when (conn-anonymous-thing-p ,thing)
                    (or (assq ,property (conn--anonymous-thing-properties ,thing))
                        (progn
-                         (setq ,thing (car (conn-thing-all-parents ,thing)))
+                         (setf ,thing (car (conn-thing-all-parents ,thing)))
                          nil)))
                  (get ,thing ,property)))
         `(cl-loop for p in (conn-thing-all-parents ,thing)
@@ -390,7 +390,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
         `(or (when (conn-anonymous-thing-p ,thing)
                (or (assq ,property (conn--anonymous-thing-properties ,thing))
                    (progn
-                     (setq ,thing (car (conn-thing-all-parents ,thing)))
+                     (setf ,thing (car (conn-thing-all-parents ,thing)))
                      nil)))
              (if-let* ((v (assq ,property (ignore-errors
                                             (conn--thing-properties
@@ -403,7 +403,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
         `(or (when (conn-anonymous-thing-p ,thing)
                (or (assq ,property (conn--anonymous-thing-properties ,thing))
                    (progn
-                     (setq ,thing (car (conn-thing-all-parents ,thing)))
+                     (setf ,thing (car (conn-thing-all-parents ,thing)))
                      nil)))
              (if (memq ,property '(forward-op
                                    beginning-op
@@ -422,13 +422,13 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
               (ignore no-inherit default)
               `(conn-thing-set ,thing ,property ,val))))
   (when (conn-bounds-p thing)
-    (setq thing (conn-bounds-thing thing)))
+    (setf thing (conn-bounds-thing thing)))
   (let (v)
     (cond
      ((when (conn-anonymous-thing-p thing)
-        (or (setq v (assq property (conn--anonymous-thing-properties thing)))
+        (or (setf v (assq property (conn--anonymous-thing-properties thing)))
             (progn
-              (setq thing (car (conn-thing-all-parents thing)))
+              (setf thing (car (conn-thing-all-parents thing)))
               nil)))
       (cdr v))
      ((null (ignore-errors (conn--find-thing thing)))
@@ -445,7 +445,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                               bounds-of-thing-at-point))
              (or (get thing property)
                  default))
-            ((setq v (assq property (conn--thing-properties
+            ((setf v (assq property (conn--thing-properties
                                      (conn--find-thing thing))))
              (cdr v))
             (t default)))
@@ -1142,7 +1142,7 @@ Returns a `conn-bounds' struct."
   :global t
   (if conn-bounds-of-recursive-edit-mode
       (progn
-        (setq conn--eldoc-prev-msg-fn
+        (setf conn--eldoc-prev-msg-fn
               (buffer-local-set-state eldoc-message-function #'ignore))
         (conn--bounds-of-recursive-edit-message)
         (add-hook 'pre-command-hook #'conn--bounds-of-recursive-edit-message))
@@ -1189,10 +1189,10 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
-  (setq arg (prefix-numeric-value arg))
+  (setf arg (prefix-numeric-value arg))
   (when (> arg 0) (cl-decf arg))
   (when (eq cmd 'conn-next-emacs-state)
-    (setq arg (- arg)))
+    (setf arg (- arg)))
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
@@ -1231,7 +1231,7 @@ Returns a `conn-bounds' struct."
                                      (max isearch-opoint beg)))))))
                 (when isearch-forward
                   (cl-callf nreverse subregions))
-                (setq bounds (conn-make-bounds
+                (setf bounds (conn-make-bounds
                               cmd arg
                               (cons (min isearch-opoint beg)
                                     (max isearch-opoint end))
@@ -1264,7 +1264,7 @@ Returns a `conn-bounds' struct."
                      (when (or isearch-mode-end-hook-quit
                                (null isearch-other-end))
                        (abort-recursive-edit))
-                     (setq bounds (conn-bounds-of thing arg)))))
+                     (setf bounds (conn-bounds-of thing arg)))))
       (unwind-protect
           (save-mark-and-excursion
             (add-hook 'isearch-mode-end-hook quit)
@@ -1986,7 +1986,7 @@ Only the background color is used."
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg))
                          (size (conn-multi-thing-argument-size arg)))
-      (setq curr (mod (1+ curr) size))
+      (setf curr (mod (1+ curr) size))
       (pcase (nth curr bounds)
         ((conn-bounds `(,beg . ,end))
          (goto-char (if (< (point) (mark)) beg end))
@@ -2000,7 +2000,7 @@ Only the background color is used."
     (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
                          (bounds (conn-multi-thing-argument-bounds arg))
                          (size (conn-multi-thing-argument-size arg)))
-      (setq curr (mod (1- curr) size))
+      (setf curr (mod (1- curr) size))
       (pcase (nth curr bounds)
         ((conn-bounds `(,beg . ,end))
          (goto-char (if (< (point) (mark)) beg end))

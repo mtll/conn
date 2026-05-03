@@ -71,7 +71,7 @@
                 (read-regexp "Regexp" re 'regexp-history))
               (hi-lock-read-face-name)))
            (deactivate-mark))
-          ((setq regexps (and (fboundp 'hi-lock--regexps-at-point)
+          ((setf regexps (and (fboundp 'hi-lock--regexps-at-point)
                               (hi-lock--regexps-at-point)))
            (mapc #'hi-lock-unface-buffer regexps))
           (t
@@ -133,7 +133,7 @@ execution."
                (lambda ()
                  (let ((conn-command-history (cdr conn-command-history)))
                    (conn-repeat arg))))))
-    (setq this-command (car cmd))
+    (setf this-command (car cmd))
     (apply #'funcall-interactively cmd)))
 
 ;;;;; Movement
@@ -630,7 +630,7 @@ If the mark is already active then deactivate it instead."
       (setf conn--popping-marks nil)
     (when conn--unpoped-marks
       (conn-push-jump-ring (car (last conn--unpoped-marks))))
-    (setq mark-ring (nconc mark-ring
+    (setf mark-ring (nconc mark-ring
                            (mapcar #'copy-marker
                                    (nreverse conn--unpoped-marks))))
     (setf conn--unpoped-marks nil)
@@ -769,7 +769,7 @@ for the meaning of prefix ARG."
       (if before
           (funcall (or yank-undo-function 'delete-region) (point) (mark t))
         (funcall (or yank-undo-function 'delete-region) (mark t) (point)))
-      (setq yank-undo-function nil)
+      (setf yank-undo-function nil)
       (set-marker (mark-marker) (point) (current-buffer))
       (insert-for-yank string)
       ;; Set the window start back where it was in the yank command,
@@ -1602,7 +1602,7 @@ selected by dispatch with it.")
                           (insert-for-yank str))
                         (conn-dispatch-action-pulse
                          beg (+ beg (length str)))
-                        (setq str newstr))
+                        (setf str newstr))
                     (delete-region beg end)
                     (save-excursion
                       (goto-char beg)
@@ -1646,7 +1646,7 @@ selected by dispatch with it.")
                                       ,@(when check-bounds
                                           (list 'conn-check-bounds))))
             (conn-dispatch-goto-char b 'nopush)
-            (setq beg b
+            (setf beg b
                   end e))
            (_ (user-error "Cannot find thing at point")))))
      thing arg nil
@@ -1790,7 +1790,7 @@ with `conn-check-bounds' before deleting."
                     (let* ((split (query-replace--split-string string))
                            (from-string (if (consp split) (car split) split)))
                       (when (and case-fold-search search-upper-case)
-                        (setq isearch-case-fold-search
+                        (setf isearch-case-fold-search
                               (isearch-no-upper-case-p from-string regexp-flag)))
                       from-string)))
     (minibuffer-with-setup-hook
@@ -1818,7 +1818,7 @@ with `conn-check-bounds' before deleting."
                     regexp-flag
                     delimited))
              (to (if (consp from)
-                     (prog1 (cdr from) (setq from (car from)))
+                     (prog1 (cdr from) (setf from (car from)))
                    (query-replace-read-to from prompt regexp-flag))))
         (cons from to)))))
 
@@ -2452,10 +2452,10 @@ Exiting the recursive edit will resume the isearch."
       (let ((string (buffer-substring-no-properties beg end)))
         (if (and isearch-case-fold-search
                  (eq 'not-yanks search-upper-case))
-            (setq string (downcase string)))
-        (if isearch-regexp (setq string (regexp-quote string)))
-        (setq isearch-yank-flag t)
-        (setq isearch-new-string (concat isearch-string string)
+            (setf string (downcase string)))
+        (if isearch-regexp (setf string (regexp-quote string)))
+        (setf isearch-yank-flag t)
+        (setf isearch-new-string (concat isearch-string string)
               isearch-new-message (concat isearch-message
                                           (mapconcat 'isearch-text-char-description
                                                      string ""))))
@@ -2511,7 +2511,7 @@ Exiting the recursive edit will resume the isearch."
        ((let mc (lookup-key conn-transpose-repeat-map
                             (this-command-keys-vector)))
         (when (and mc (symbolp mc))
-          (setq mc (or (command-remapping mc) mc)))
+          (setf mc (or (command-remapping mc) mc)))
         (and mc (eq this-command mc)))))
    (lambda ()
      (let ((inhibit-quit t))
@@ -2668,10 +2668,10 @@ Exiting the recursive edit will resume the isearch."
       (transpose-regions from-beg from-end to-beg to-end))
      (t
       ;; Calculate intersection of FROM and TO with active region.
-      (when (< from-beg beg from-end) (setq from-beg beg))
-      (when (< from-beg end from-end) (setq from-end end))
-      (when (< to-beg beg to-end)     (setq to-beg beg))
-      (when (< to-beg end to-end)     (setq to-end end))
+      (when (< from-beg beg from-end) (setf from-beg beg))
+      (when (< from-beg end from-end) (setf from-end end))
+      (when (< to-beg beg to-end)     (setf to-beg beg))
+      (when (< to-beg end to-end)     (setf to-end end))
       (transpose-regions from-beg from-end to-beg to-end)))))
 
 (defvar-keymap conn-transpose-thing-argument-map)
@@ -2921,7 +2921,7 @@ conn-bounds-trim:         file name sans extension")
                        (fws (conn-transform-and-fixup-argument-reformat arg)))
     (let ((valid nil))
       (cond ((progn
-               (conn-argument-update tform cmd (lambda () (setq valid t)))
+               (conn-argument-update tform cmd (lambda () (setf valid t)))
                valid)
              (unless (conn-transform-and-fixup-argument-explicit arg)
                (setf (conn-reformat-argument-value fws)
@@ -2931,7 +2931,7 @@ conn-bounds-trim:         file name sans extension")
                                      :no-reformat))))
              (funcall break))
             ((progn
-               (conn-argument-update fws cmd (lambda () (setq valid t)))
+               (conn-argument-update fws cmd (lambda () (setf valid t)))
                valid)
              (setf (conn-transform-and-fixup-argument-explicit arg) t)
              (funcall break))))))
@@ -2998,7 +2998,7 @@ hook, which see."
                           separator
                           reformat
                           check-bounds)
-      (setq this-command 'conn-kill-thing
+      (setf this-command 'conn-kill-thing
             last-command 'conn-kill-thing
             conn-repeating-command t))))
 
@@ -3093,11 +3093,11 @@ hook, which see."
                           separator)
   (pcase append
     ('repeat
-     (setq append (and conn-repeating-command 'append)))
+     (setf append (and conn-repeating-command 'append)))
     ((and 'nil
           (guard (and conn-repeating-command
                       (eq last-command this-command))))
-     (setq append (if (<= end (point)) 'prepend 'append)
+     (setf append (if (<= end (point)) 'prepend 'append)
            separator (or separator t))))
   (if register
       (pcase append
@@ -3123,11 +3123,11 @@ hook, which see."
 (defun conn--kill-string (string &optional append register separator)
   (pcase append
     ('repeat
-     (setq append (and conn-repeating-command 'append)))
+     (setf append (and conn-repeating-command 'append)))
     ((and 'nil
           (guard (and conn-repeating-command
                       (eq last-command this-command))))
-     (setq append 'append
+     (setf append 'append
            separator (or separator t))))
   (if register
       (if append
@@ -3225,7 +3225,7 @@ hook, which see."
                        (t fname))))
       (progn
         (when (memq 'conn-bounds-trim transform)
-          (setq str (file-name-sans-extension str)))
+          (setf str (file-name-sans-extension str)))
         (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
@@ -3274,7 +3274,7 @@ hook, which see."
            (flush-lines
             (conn-read-regexp "Delete lines containing match for regexp" region)
             beg end t)
-         (when append (setq last-command 'kill-region))
+         (when append (setf last-command 'kill-region))
          (kill-matching-lines
           (conn-read-regexp "Kill lines containing match for regexp" region)
           beg end t))))))
@@ -3357,7 +3357,7 @@ hook, which see."
            (:predicate (cmd) (eq cmd 'append))
            ( :keymap conn-kill-dispatch-append-map)
            ( :update (_cmd break)
-             (setq append (pcase append
+             (setf append (pcase append
                             ('nil 'append)
                             ('prepend nil)
                             (_ 'prepend)))
@@ -3433,7 +3433,7 @@ hook, which see."
           (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
                                                       separator)))
             (pcase-dolist (`(,append . ,string) (nreverse strings))
-              (setq result
+              (setf result
                     (if append
                         (concat result (and result sep) string)
                       (concat string (and result sep) result))))
@@ -3458,7 +3458,7 @@ hook, which see."
      (:predicate (cmd) (eq cmd 'append))
      ( :keymap conn-kill-dispatch-append-map)
      ( :update (_cmd break)
-       (setq append (pcase append
+       (setf append (pcase append
                       ('nil 'append)
                       ('prepend nil)
                       (_ 'prepend)))
@@ -3758,7 +3758,7 @@ that place."
        (transform (conn-transform-argument transform)))
     (pcase (conn-bounds-of thing targ)
       ((conn-bounds (and region `(,beg . ,end)) transform)
-       (when append (setq last-command 'kill-region))
+       (when append (setf last-command 'kill-region))
        (copy-matching-lines
         (conn-read-regexp "Copy lines containing match for regexp" region)
         beg end t))
@@ -3782,7 +3782,7 @@ that place."
                        (t fname))))
       (progn
         (when (memq 'conn-bounds-trim transform)
-          (setq str (file-name-sans-extension str)))
+          (setf str (file-name-sans-extension str)))
         (conn--kill-string str append register separator)
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a file")))
@@ -3838,7 +3838,7 @@ that place."
        (:keymap (define-keymap "<remap> <other-end>" 'copy-append))
        (:predicate (cmd) (eq cmd 'copy-append))
        ( :update (_cmd break)
-         (setq append (pcase append
+         (setf append (pcase append
                         ('nil 'append)
                         ('prepend nil)
                         (_ 'prepend)))
@@ -3887,7 +3887,7 @@ that place."
           (let ((sep (conn-kill-separator-for-strings (mapcar #'cdr strings)
                                                       separator)))
             (pcase-dolist (`(,prepend . ,string) (nreverse strings))
-              (setq result
+              (setf result
                     (if prepend
                         (concat string (and result sep) result)
                       (concat result (and result sep) string))))
@@ -4088,7 +4088,7 @@ Only available during repeating duplicate."
 
 (defun conn-duplicate-subr (beg end &optional repeat no-padding)
   "Duplicate the region from BEG to END REPEAT times."
-  (unless repeat (setq repeat 1))
+  (unless repeat (setf repeat 1))
   (deactivate-mark)
   (conn-protected-let*
       ((keymap (if no-padding
@@ -4131,7 +4131,7 @@ Only available during repeating duplicate."
                (insert str)
                (push (make-overlay rbeg (point) nil t)
                      regions)
-               (setq ov (car regions))
+               (setf ov (car regions))
                (overlay-put ov 'face 'lazy-highlight)
                (when commented
                  (set-marker m1 (overlay-start ov))
@@ -4176,7 +4176,7 @@ Only available during repeating duplicate."
                (delete-region (overlay-end (car keep))
                               (overlay-end (car delete)))
                (mapc #'delete-overlay delete)
-               (setq regions keep))))
+               (setf regions keep))))
          (comment ()
            (interactive)
            (atomic-change-group
@@ -4192,7 +4192,7 @@ Only available during repeating duplicate."
                                 (pos-eol)))))
              (set-marker m1 nil)
              (set-marker m2 nil)
-             (setq commented (not commented))))
+             (setf commented (not commented))))
          (block-padding ()
            (interactive)
            (atomic-change-group
@@ -4223,7 +4223,7 @@ Only available during repeating duplicate."
                              (unless (or no-padding
                                          (looking-back regexp 1))
                                (insert padding))))))
-           (setq extra-newline (not extra-newline)
+           (setf extra-newline (not extra-newline)
                  padding (if extra-newline "\n" " ")
                  regexp (if extra-newline "\n" "[\t ]")))
          (kapply (all)
@@ -4232,7 +4232,7 @@ Only available during repeating duplicate."
                  (offset 0))
              (dolist (ov (if all regions (butlast regions)))
                (when (<= (overlay-start ov) (point) (overlay-end ov))
-                 (setq offset (- (point) (overlay-start ov))))
+                 (setf offset (- (point) (overlay-start ov))))
                (push (conn-kapply-make-region (overlay-start ov)
                                               (overlay-end ov))
                      kapply-regions))
@@ -4248,7 +4248,7 @@ Only available during repeating duplicate."
               t)
              ((let mc (lookup-key keymap (this-command-keys-vector)))
               (when (and mc (symbolp mc))
-                (setq mc (or (command-remapping mc) mc)))
+                (setf mc (or (command-remapping mc) mc)))
               (and mc (eq this-command mc))))))
       (when (> repeat 0) (push-mark nil nil))
       (undo-boundary)
@@ -4265,7 +4265,7 @@ Only available during repeating duplicate."
           (advice-add 'conn-duplicate-repeat-comment :override #'comment)
           (advice-add 'conn-duplicate-repeat-toggle-padding :override
                       (if block #'block-padding #'non-block-padding)))
-        (setq exit-fn
+        (setf exit-fn
               (set-transient-map
                keymap
                #'pred
@@ -4349,7 +4349,7 @@ Only available during repeating duplicate."
                  ((let mc (lookup-key conn-duplicate-repeat-map
                                       (this-command-keys-vector)))
                   (when (and mc (symbolp mc))
-                    (setq mc (or (command-remapping mc) mc)))
+                    (setf mc (or (command-remapping mc) mc)))
                   (and mc (eq this-command mc)))))
              (cleanup ()
                (let ((inhibit-quit t))
@@ -4364,7 +4364,7 @@ Only available during repeating duplicate."
           (advice-add 'conn-duplicate-repeat-kapply :override #'kapply)
           (undo-boundary)
           (rectangle--duplicate-right repeat 1)
-          (setq exit-fn
+          (setf exit-fn
                 (set-transient-map
                  conn-duplicate-repeat-map
                  #'pred
@@ -4645,13 +4645,13 @@ Interactively REPEAT is given by the prefix argument."
                 (delete-region beg end)
                 (if (stringp with)
                     (insert with)
-                  (setq with
+                  (setf with
                         (if (and (= (abs (- end beg)) 1)
                                  (or (conn-subthing-p thing 'char)
                                      (conn-subthing-p thing 'point)))
                             (conn-record-one-insertion)
                           (conn-record-insertion t))))
-                (setq end-pt (point)))
+                (setf end-pt (point)))
               (unless stay
                 (conn-dispatch-goto-char end-pt))))))
        dthing darg dtform
@@ -4698,7 +4698,7 @@ Interactively REPEAT is given by the prefix argument."
         (conn-record-insertion nil cg pt)
         (conn-state-unwind clone
           (unless clone
-            (setq with (conn-insertion-recording-text)))))))
+            (setf with (conn-insertion-recording-text)))))))
   (conn-push-command-history
    (let ((prev (conn-previous-dispatch-copy
                 (conn-ring-head conn-dispatch-ring))))
@@ -4716,7 +4716,7 @@ Interactively REPEAT is given by the prefix argument."
              (conn-record-insertion nil cg pt)
              (conn-state-unwind clone
                (unless clone
-                 (setq with (conn-insertion-recording-text)))))))))))
+                 (setf with (conn-insertion-recording-text)))))))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))
                                     arg
@@ -4985,31 +4985,31 @@ If CLEANUP-WHITESPACE is non-nil then also run
      (list thing arg transform)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
-     (setq end (copy-marker end))
+     (setf end (copy-marker end))
      (cl-labels ((right ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
                      (indent-rigidly-right beg end)
-                     (setq beg (point))))
+                     (setf beg (point))))
                  (left ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
                      (indent-rigidly-left beg end)
-                     (setq beg (point))))
+                     (setf beg (point))))
                  (ltts ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
                      (indent-rigidly-left-to-tab-stop beg end)
-                     (setq beg (point))))
+                     (setf beg (point))))
                  (rtts ()
                    (interactive)
                    (save-excursion
                      (goto-char beg)
                      (indent-rigidly-right-to-tab-stop beg end)
-                     (setq beg (point)))))
+                     (setf beg (point)))))
        (advice-add 'conn-indent-left :override #'left)
        (advice-add 'conn-indent-right :override #'right)
        (advice-add 'conn-indent-right-to-tab-stop :override #'rtts)
@@ -5109,7 +5109,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 
 (defun conn--narrow-ring-record (beg end &optional point)
   (unless (conn-ring-p conn-narrow-ring)
-    (setq conn-narrow-ring
+    (setf conn-narrow-ring
           (conn-make-ring conn-narrow-ring-max
                           :cleanup #'conn-delete-narrowing
                           :copier #'conn-copy-narrowing)))

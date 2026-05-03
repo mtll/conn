@@ -54,8 +54,7 @@
     (:eval (format "[%s/%s] "
                    conn--quick-ref-current-page
                    conn--quick-ref-page-count))
-    ,(propertize "Quick Reference"
-                 'face '(:weight bold))
+    ,(propertize "Quick Reference" 'face '(:weight bold))
     "   ("
     ,conn-quick-reference-header-key-description
     ") ")
@@ -99,13 +98,13 @@
     (while (pcase definition
              (`(:depth ,n . ,_def)
               (cl-callf2 drop 2 definition)
-              (setq depth n)
+              (setf depth n)
               t)
              (`(:name ,n . ,_def)
               (cl-callf2 drop 2 definition)
-              (setq name n)
+              (setf name n)
               t)))
-    (unless depth (setq depth 0))
+    (unless depth (setf depth 0))
     (cl-labels ((process-definition (def)
                   (pcase def
                     (`(,(and (or :eval :splice :keymap :heading)
@@ -135,7 +134,7 @@
                                collect (cdr col) into next
                                finally do
                                (push row rows)
-                               (setq curr next)))
+                               (setf curr next)))
                     (nreverse rows)))
                 (check-advertised (bind)
                   (when-let* ((_(symbolp bind))
@@ -261,7 +260,7 @@
                 (save-excursion
                   (goto-char prev)
                   (insert ""))
-                (setq beg prev)))))
+                (setf beg prev)))))
         (goto-char (point-min))
         (narrow-to-page)))))
 

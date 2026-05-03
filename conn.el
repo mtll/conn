@@ -47,7 +47,7 @@
   "C-<escape>" 'exit-recursive-edit)
 
 (defun conn--clone-buffer-setup ()
-  (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
+  (setf conn-narrow-ring (conn-copy-ring conn-narrow-ring)
         conn-jump-ring (conn-copy-ring conn-jump-ring)
         conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)
         conn-mark-state-ring (conn-copy-ring conn-mark-state-ring))
@@ -62,7 +62,7 @@
         (cl-pushnew 'conn--state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--minor-mode-maps emulation-mode-map-alists))
-    (setq emulation-mode-map-alists
+    (setf emulation-mode-map-alists
           (seq-difference '(conn--state-map
                             conn--major-mode-map
                             conn--minor-mode-maps)
@@ -81,20 +81,20 @@
         (setq-local conn--state-map (list (list 'conn-local-mode))
                     conn--major-mode-map (list (list 'conn-local-mode)))
         (unless conn-emacs-state-ring
-          (setq conn-emacs-state-ring
+          (setf conn-emacs-state-ring
                 (conn-make-ring 8
                                 :cleanup (lambda (mk) (set-marker mk nil))
                                 :copier #'conn--copy-mark)))
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
-        (setq conn--input-method current-input-method)
+        (setf conn--input-method current-input-method)
         (conn-setup-state-for-buffer))
     (let (conn-next-state)
       (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
-    (setq conn--state-stack nil)
+    (setf conn--state-stack nil)
     (kill-local-variable 'conn-lighter)
-    (setq cursor-type t)
+    (setf cursor-type t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)

@@ -97,7 +97,7 @@
   (when conn-wincontrol-one-command-mode
     (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (conn-wincontrol-mode 1)
-    (setq conn--wincontrol-message-newline nil)))
+    (setf conn--wincontrol-message-newline nil)))
 
 (defun conn-wincontrol-one-command ()
   (interactive)
@@ -105,11 +105,11 @@
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
-    (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+    (setf prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (if this-command
       (when (function-get this-command :conn-wincontrol-preserve-arg)
-        (setq conn--wincontrol-preserve-arg t))
-    (setq conn--wincontrol-preserve-arg t)))
+        (setf conn--wincontrol-preserve-arg t))
+    (setf conn--wincontrol-preserve-arg t)))
 
 (eval-and-compile
   (defun conn--set-wincontrol-arg-property (f _args)
@@ -123,10 +123,10 @@
   (condition-case _
       (progn
         (unless conn--wincontrol-preserve-arg
-          (setq conn--wincontrol-arg nil
+          (setf conn--wincontrol-arg nil
                 conn--wincontrol-arg-sign 1))
-        (setq conn--wincontrol-preserve-arg nil)
-        (setq emulation-mode-map-alists
+        (setf conn--wincontrol-preserve-arg nil)
+        (setf emulation-mode-map-alists
               `(conn--wincontrol-maps
                 ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
         (let ((curr (current-message))
@@ -185,7 +185,7 @@
         (when (zerop (minibuffer-depth))
           (let ((message-log-max nil))
             (message "%s" (conn--wincontrol-message))))
-        (setq emulation-mode-map-alists
+        (setf emulation-mode-map-alists
               `(conn--wincontrol-maps
                 ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
         (add-hook 'set-message-functions #'conn-wincontrol-message-function)
@@ -199,7 +199,7 @@
                       '((name . wincontrol-mode-line)))
         (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
         (unless preserve-state
-          (setq conn--wincontrol-arg (when current-prefix-arg
+          (setf conn--wincontrol-arg (when current-prefix-arg
                                        (prefix-numeric-value current-prefix-arg))
                 conn--wincontrol-arg-sign 1
                 conn--wincontrol-initial-window (selected-window)
@@ -209,7 +209,7 @@
      (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-exit ()
-  (setq conn--wincontrol-message-newline t)
+  (setf conn--wincontrol-message-newline t)
   (conn-wincontrol-one-command-mode -1)
   (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
@@ -358,7 +358,7 @@
   "Multiply wincontrol prefix arg by 4."
   (declare (conn-wincontrol-preserve-arg))
   (interactive)
-  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
+  (setf conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
 (defun conn-wincontrol-digit-argument ()
   (declare (conn-wincontrol-preserve-arg))
@@ -368,17 +368,17 @@
                  (get last-command-event 'ascii-character)))
          (digit (- (logand char ?\177) ?0)))
     (if conn--wincontrol-arg
-        (setq conn--wincontrol-arg
+        (setf conn--wincontrol-arg
               (+ (if (>= (or conn--wincontrol-arg 1) 0) digit (- digit))
                  (* 10 (or conn--wincontrol-arg 1))))
-      (setq conn--wincontrol-arg digit)))
-  (setq this-command 'conn-wincontrol-digit-argument))
+      (setf conn--wincontrol-arg digit)))
+  (setf this-command 'conn-wincontrol-digit-argument))
 
 (defun conn-wincontrol-invert-argument ()
   "Invert sign of wincontrol prefix arg."
   (declare (conn-wincontrol-preserve-arg))
   (interactive)
-  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
+  (setf conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
 (defun conn-wincontrol-digit-argument-reset ()
   "Reset wincontrol prefix arg to nil and sign to +."
@@ -388,10 +388,10 @@
   "Delete least significant digit of prefix arg."
   (declare (conn-wincontrol-preserve-arg))
   (interactive)
-  (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
+  (setf conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
 
 (defun conn-wincontrol-prefix-arg-and-keep ()
-  (setq conn--wincontrol-preserve-arg t)
+  (setf conn--wincontrol-preserve-arg t)
   (when conn--wincontrol-arg
     (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
@@ -512,7 +512,7 @@
 
 (defun conn-setup-mode-line-label (&optional remove)
   (if remove
-      (setq mode-line-format
+      (setf mode-line-format
             (assq-delete-all
              'conn-wincontrol-label-mode-line-local-mode
              mode-line-format))
@@ -570,7 +570,7 @@ remove whatever the function has added to the mode-line.")
 (defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
-  (setq this-command 'conn-scroll-down)
+  (setf this-command 'conn-scroll-down)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines
            (or (conn-wincontrol-prefix-arg-and-keep)
@@ -582,7 +582,7 @@ remove whatever the function has added to the mode-line.")
 (defun conn-wincontrol-other-window-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive)
-  (setq this-command 'conn-scroll-up)
+  (setf this-command 'conn-scroll-up)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines
            (or (conn-wincontrol-prefix-arg-and-keep)
@@ -595,7 +595,7 @@ remove whatever the function has added to the mode-line.")
   "Scroll down with ARG `next-screen-context-lines'."
   (declare (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive)
-  (setq this-command 'conn-scroll-down)
+  (setf this-command 'conn-scroll-down)
   (let ((next-screen-context-lines
          (or (conn-wincontrol-prefix-arg-and-keep)
              next-screen-context-lines)))
@@ -605,7 +605,7 @@ remove whatever the function has added to the mode-line.")
   "Scroll down with ARG `next-screen-context-lines'."
   (declare (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive)
-  (setq this-command 'conn-scroll-up)
+  (setf this-command 'conn-scroll-up)
   (let ((next-screen-context-lines
          (or (conn-wincontrol-prefix-arg-and-keep)
              next-screen-context-lines)))

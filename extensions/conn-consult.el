@@ -76,7 +76,7 @@
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (deactivate-mark)
-     (setq this-command 'consult-ripgrep)
+     (setf this-command 'consult-ripgrep)
      (consult-ripgrep
       nil
       (when (and (< (- end beg) 1000)
@@ -100,7 +100,7 @@
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (deactivate-mark)
-     (setq this-command 'consult-line)
+     (setf this-command 'consult-line)
      (consult-line
       (when (and (< (- end beg) 1000)
                  (= (count-lines beg end) 1))
@@ -123,7 +123,7 @@
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (deactivate-mark)
-     (setq this-command 'consult-line-multi)
+     (setf this-command 'consult-line-multi)
      (consult-line-multi
       nil
       (when (and (< (- end beg) 1000)
@@ -169,7 +169,7 @@
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (deactivate-mark)
-     (setq this-command 'consult-git-grep)
+     (setf this-command 'consult-git-grep)
      (consult-git-grep
       nil
       (when (and (< (- end beg) 1000)
@@ -193,7 +193,7 @@
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
      (deactivate-mark)
-     (setq this-command 'consult-find)
+     (setf this-command 'consult-find)
      (consult-find
       nil
       (when (and (< (- end beg) 1000)

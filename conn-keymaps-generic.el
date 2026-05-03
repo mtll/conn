@@ -20,7 +20,7 @@
 (require 'compat)
 (require 'conn)
 
-(setq conn-keymaps-defined 'generic)
+(setf conn-keymaps-defined 'generic)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)

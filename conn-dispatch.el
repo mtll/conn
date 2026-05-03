@@ -304,7 +304,7 @@ themselves once the selection process has concluded."
     (cl-loop
      (pcase current
        ('nil
-        (setq current candidates
+        (setf current candidates
               partial nil
               prompt-flag always-prompt)
         (conn-read-args-message "No matches")
@@ -314,7 +314,7 @@ themselves once the selection process has concluded."
                              (and partial
                                   (not (conn-label-completed-p it)))))))
         (cl-return (conn-label-payload it))))
-     (setq prompt-flag nil)
+     (setf prompt-flag nil)
      (while (let ((c (conn-dispatch-read-char
                       prompt
                       conn-dispatch-label-input-method)))
@@ -322,7 +322,7 @@ themselves once the selection process has concluded."
                      (cl-callf2 seq-keep
                          (lambda (l) (conn-label-narrow l c))
                          current)
-                     (setq partial t))))))))
+                     (setf partial t))))))))
 
 (defvar conn--dispatch-read-char-handlers nil)
 
@@ -393,12 +393,12 @@ themselves once the selection process has concluded."
 (defvar conn--window-label-pool nil)
 
 (defun conn--simple-window-labels ()
-  (setq conn-dispatch-label-input-method conn-simple-label-input-method)
+  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
   (let* ((windows (conn-get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (or (null conn--window-label-pool)
               (length< conn--window-label-pool window-count))
-      (setq conn--window-label-pool
+      (setf conn--window-label-pool
             (conn-simple-labels (max (ceiling (* 1.67 window-count))
                                      (length conn-simple-label-characters)))))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
@@ -577,7 +577,7 @@ for dispatch."
   "Narrow labels by character."
   (:predicate)
   ( :update (break)
-    (setq conn--read-args-error-message nil
+    (setf conn--read-args-error-message nil
           conn--dispatch-redisplay-prompt-flag nil)
     (conn-add-unread-events (this-single-command-raw-keys))
     (pcase (conn--dispatch-read-char-1
@@ -835,12 +835,20 @@ buffer is a valid target.")
    (:heading "Transformations")
    ((("anchored" conn-dispatch-bounds-anchored)
      ("between" conn-dispatch-bounds-between)
-     ("trim" conn-bounds-trim))
-    (("over" conn-dispatch-bounds-over)
-     ("reset" conn-transform-reset)))))
+     ("reset" conn-transform-reset))
+    (("trim" conn-bounds-trim)
+     ("over" conn-dispatch-bounds-over)
+     ("last" conn-bounds-last))
+    (("untrim left" conn-bounds-untrim-left)
+     ("untrim right" conn-bounds-untrim-right)
+     ("upto next/prev"
+      conn-bounds-upto-next
+      conn-bounds-upto-previous)))))
 
 (defun conn-dispatch-transform-argument (&optional value)
-  (conn-transform-argument value :keymap conn-dispatch-transform-argument-map))
+  (conn-transform-argument
+   value
+   :keymap conn-dispatch-transform-argument-map))
 
 (cl-defstruct (conn-dispatch-target-argument
                (:include conn-thing-argument)
@@ -1132,8 +1140,8 @@ that slot's value and otherwise performs a shallow copy."
   (add-function :after-while conn-target-predicate
                 (conn-action-target-predicate action)
                 '((name . action-predicate)))
-  (setq conn-dispatch-action action)
-  (setq conn-dispatch-repeating
+  (setf conn-dispatch-action action)
+  (setf conn-dispatch-repeating
         (and repeat (conn-action-repeatable-p action))))
 
 (defun conn--action-buffer-change-group ()
@@ -1155,7 +1163,7 @@ that slot's value and otherwise performs a shallow copy."
      (let ((omark (marker-position (mark-marker)))
            (cur-mark-active mark-active))
        (set-marker (mark-marker) saved-mark)
-       (setq mark-active saved-mark-active)
+       (setf mark-active saved-mark-active)
        (if saved-mark-active
            (when (or (not cur-mark-active)
                      (not (= omark saved-mark)))
@@ -1261,14 +1269,14 @@ that slot's value and otherwise performs a shallow copy."
    ((("copy from" conn-dispatch-copy-from)
      ("send" conn-dispatch-send)
      ("kapply" conn-dispatch-kapply))
-    (("yank to/read"
-      conn-dispatch-yank-to
-      conn-dispatch-reading-yank-to)
+    (("take" conn-dispatch-take)
      ("copy to" conn-dispatch-copy-to)
      ("transpose" conn-dispatch-transpose))
     (("register load" conn-dispatch-register-load)
      ("repeat command at" conn-dispatch-repeat-command)
-     ("take" conn-dispatch-take)))))
+     ("yank to/read"
+      conn-dispatch-yank-to
+      conn-dispatch-reading-yank-to)))))
 
 (cl-defmethod conn-argument-command-reference ((_arg conn-dispatch-action-argument)
                                                cmd
@@ -1597,7 +1605,7 @@ with `conn-dispatch-thing-ignored-modes'."
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
-  (unless window (setq window (selected-window)))
+  (unless window (setf window (selected-window)))
   (when (funcall conn-target-predicate pt length window)
     (conn-protected-let*
         ((line-bounds
@@ -1769,7 +1777,7 @@ Target overlays may override this default by setting the
         (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
           ;; width calculations, temporarily disable them.
-          (setq ov (make-overlay (point-min) (point-max)))
+          (setf ov (make-overlay (point-min) (point-max)))
           (overlay-put ov 'priority most-positive-fixnum)
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
@@ -1794,7 +1802,7 @@ Target overlays may override this default by setting the
                (add-display-text-property 0 (length full-string)
                                           'height (cadr h)
                                           full-string))))
-          (setq display-width
+          (setf display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-max))
             (let* ((win (overlay-get target 'window))
@@ -1812,13 +1820,13 @@ Target overlays may override this default by setting the
                  ((= line-end pt)
                   (if (and (not (invisible-p pt))
                            (/= pt beg))
-                      (setq end pt)
+                      (setf end pt)
                     ;; If we are at the end of the line and the label
                     ;; overlay has width 0 then we need to expand the
                     ;; label overlay to include the EOL and append it
                     ;; as an after overlay.  Ensure we preserve the
                     ;; invisibility property when we do so.
-                    (setq end (1+ pt))
+                    (setf end (1+ pt))
                     (let ((str (buffer-substring pt end)))
                       (add-text-properties
                        0 (length str)
@@ -1842,12 +1850,12 @@ Target overlays may override this default by setting the
                                    t))
                                 (= pt (next-single-property-change
                                        (1- pt) 'display nil (1+ pt))))))
-                  (setq end (1+ pt)
+                  (setf end (1+ pt)
                         pixelwise nil))
                  ((and (get-char-property pt 'after-string)
                        (not (eq (get-char-property pt 'after-string)
                                 (get-char-property (1+ pt) 'after-string))))
-                  (setq end (1+ pt)
+                  (setf end (1+ pt)
                         pixelwise nil))
                  ;; If the label overlay is wider than the label
                  ;; string we are done.
@@ -1863,14 +1871,14 @@ Target overlays may override this default by setting the
                     ;;        overlays with after strings.
                     (when (or (= pt (point-max))
                               (>= width display-width))
-                      (setq padding-width (max (- width display-width) 0)
+                      (setf padding-width (max (- width display-width) 0)
                             end pt))))
                  ((cl-loop for ov in (conn--overlays-in-of-type
                                       pt (1+ pt) 'conn-target-overlay window)
                            thereis (not (eq ov target)))
-                  (setq end pt))
+                  (setf end pt))
                  ((get-text-property pt 'composition)
-                  (setq pt (next-single-property-change
+                  (setf pt (next-single-property-change
                             pt 'composition nil line-end)))
                  (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
@@ -1907,7 +1915,7 @@ Target overlays may override this default by setting the
         (progn
           ;; display-line-numbers, line-prefix and wrap-prefix break
           ;; width calculations, temporarily disable them.
-          (setq ov (make-overlay (point-min) (point-max)))
+          (setf ov (make-overlay (point-min) (point-max)))
           (overlay-put ov 'priority most-positive-fixnum)
           (overlay-put ov 'display-line-numbers-disable t)
           (overlay-put ov 'line-prefix "")
@@ -1934,7 +1942,7 @@ Target overlays may override this default by setting the
                (add-display-text-property 0 (length full-string)
                                           'height (cadr h)
                                           full-string))))
-          (setq display-width
+          (setf display-width
                 (conn--string-pixel-width full-string (window-buffer window)))
           (unless (= (overlay-start overlay) (point-min))
             (let* ((beg (save-excursion
@@ -1957,7 +1965,7 @@ Target overlays may override this default by setting the
               (while (not end)
                 (cond
                  ((= line-beg pt)
-                  (setq end pt))
+                  (setf end pt))
                  ((and (/= pt (point-min))
                        (or (and (get-text-property pt 'before-string)
                                 (= pt (next-single-property-change
@@ -1970,12 +1978,12 @@ Target overlays may override this default by setting the
                                    t))
                                 (= pt (next-single-property-change
                                        (1- pt) 'display nil (1+ pt))))))
-                  (setq end (min beg (1+ pt))))
+                  (setf end (min beg (1+ pt))))
                  ((and (/= pt (point-min))
                        (get-char-property (1- pt) 'after-string)
                        (= pt (next-single-char-property-change
                               (1- pt) 'after-string nil (1+ pt))))
-                  (setq end pt))
+                  (setf end pt))
                  ((let ((width
                          (save-excursion
                            (with-restriction pt beg
@@ -1983,14 +1991,14 @@ Target overlays may override this default by setting the
                                 (car (window-text-pixel-size window pt pt)))))))
                     (when (or (= pt (point-min))
                               (>= width display-width))
-                      (setq padding-width (max (- width display-width) 0)
+                      (setf padding-width (max (- width display-width) 0)
                             end pt))))
                  ((conn--overlays-in-of-type (1- pt) pt
                                              'conn-target-overlay
                                              window)
-                  (setq end pt))
+                  (setf end pt))
                  ((get-text-property (1- pt) 'composition)
-                  (setq pt (previous-single-property-change
+                  (setf pt (previous-single-property-change
                             (1- pt) 'composition nil line-beg)))
                  (t (cl-decf pt))))
               (move-overlay overlay end beg)))
@@ -2026,8 +2034,8 @@ Target overlays may override this default by setting the
            ((= line-end pt)
             (if (and (not (invisible-p pt))
                      (/= pt beg))
-                (setq end pt)
-              (setq end (1+ pt))
+                (setf end pt)
+              (setf end (1+ pt))
               (let ((str (buffer-substring pt end)))
                 (add-text-properties
                  0 (length str)
@@ -2036,12 +2044,12 @@ Target overlays may override this default by setting the
                 (overlay-put overlay 'after-string str))))
            ((or (= pt (point-max))
                 (= (- pt beg) (length full-string)))
-            (setq end pt))
+            (setf end pt))
            ((and (/= beg pt)
                  (conn--overlays-in-of-type pt (1+ pt)
                                             'conn-target-overlay
                                             win))
-            (setq end pt))
+            (setf end pt))
            ((or (and (get-text-property pt 'display)
                      (= pt (next-single-char-property-change
                             (1- pt) 'display nil (1+ pt))))
@@ -2051,9 +2059,9 @@ Target overlays may override this default by setting the
                 (and (get-text-property pt 'before-string)
                      (= pt (next-single-char-property-change
                             (1- pt) 'before-string nil (1+ pt)))))
-            (setq end (max beg (1- pt))))
+            (setf end (max beg (1- pt))))
            ((get-text-property pt 'composition)
-            (setq pt (next-single-property-change
+            (setf pt (next-single-property-change
                       pt 'composition nil line-end)))
            (t (cl-incf pt))))
         (move-overlay overlay (overlay-start overlay) end)))
@@ -2084,14 +2092,14 @@ Target overlays may override this default by setting the
             (goto-char pt)
             (cond
              ((= line-beg pt)
-              (setq end pt))
+              (setf end pt))
              ((or (= pt (point-min))
                   (= (abs (- pt beg)) (length full-string)))
-              (setq end pt))
+              (setf end pt))
              ((conn--overlays-in-of-type (1- pt) pt
                                          'conn-target-overlay
                                          win)
-              (setq end pt))
+              (setf end pt))
              ((or (and (get-char-property pt 'display)
                        (= pt (next-single-char-property-change
                               (1- pt) 'display nil (1+ pt))))
@@ -2101,9 +2109,9 @@ Target overlays may override this default by setting the
                   (and (get-char-property pt 'before-string)
                        (= pt (next-single-char-property-change
                               (1- pt) 'before-string nil (1+ pt)))))
-              (setq end (1+ pt)))
+              (setf end (1+ pt)))
              ((get-text-property (1- pt) 'composition)
-              (setq pt (previous-single-property-change
+              (setf pt (previous-single-property-change
                         (1- pt) 'composition nil line-beg)))
              (t (cl-decf pt)))))
         (move-overlay overlay end beg)))
@@ -2125,13 +2133,13 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-window-lines (&optional window)
   (declare (important-return-value t))
-  (unless window (setq window (selected-window)))
+  (unless window (setf window (selected-window)))
   (with-memoization (gethash window conn--dispatch-window-lines-cache)
     (let (lines prev)
       (with-selected-window window
         (save-excursion
           (goto-char (window-start window))
-          (setq prev (point-marker))
+          (setf prev (point-marker))
           (set-marker-insertion-type prev t)
           (while (and (<= prev (window-end window))
                       (not (eobp)))
@@ -2145,7 +2153,7 @@ Target overlays may override this default by setting the
                         lines)
                 (push (cons prev (cons eovl nil))
                       lines))
-              (setq prev (point-marker))
+              (setf prev (point-marker))
               (set-marker-insertion-type prev t)))))
       (nreverse lines))))
 
@@ -2202,7 +2210,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-simple-labels (&optional state)
   "Create simple labels for all targets."
   (declare (important-return-value t))
-  (setq conn-dispatch-label-input-method conn-simple-label-input-method)
+  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
   (pcase-let ((`(,pool ,size ,in-use)
                (or state
                    (list nil 0 (make-hash-table :test 'equal))))
@@ -2257,7 +2265,7 @@ Target overlays may override this default by setting the
                       conn--dispatch-label-state)
            (funcall conn-dispatch-label-function))
     (`(:state ,state . ,labels)
-     (setq conn--dispatch-label-state state)
+     (setf conn--dispatch-label-state state)
      labels)
     (labels labels)))
 
@@ -2338,7 +2346,7 @@ depths will be sorted before greater depths.
   (declare (indent 0))
   (let ((depth 0))
     (when (eq :depth (car cases))
-      (setq depth (nth 1 cases)
+      (setf depth (nth 1 cases)
             cases (drop 2 cases)))
     (cl-assert (<= -100 depth 100))
     (cl-with-gensyms (buf signal)
@@ -2351,7 +2359,7 @@ depths will be sorted before greater depths.
 
 (defun conn-dispatch-redisplay (&optional maybe-dont-prompt)
   (unless maybe-dont-prompt
-    (setq conn--dispatch-redisplay-prompt-flag t))
+    (setf conn--dispatch-redisplay-prompt-flag t))
   (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-select-window (window)
@@ -2430,8 +2438,8 @@ depths will be sorted before greater depths.
                  (message (error-message-string err)))
                (setf conn--read-args-error-message
                      (error-message-string err))))))
-        (setq success t))
-      (setq conn-dispatch-quit-flag (not success))
+        (setf success t))
+      (setf conn-dispatch-quit-flag (not success))
       (dolist (undo conn--dispatch-change-groups)
         (pcase-dolist (`(,_ . ,undo-fn) undo)
           (funcall undo-fn (if success :accept :cancel))))
@@ -2503,8 +2511,8 @@ the meaning of depth."
   (unless conn-dispatch-in-progress
     (error "No dispatch in progress"))
   (if buffers
-      (setq buffers (delete-dups buffers))
-    (setq buffers (list (current-buffer))))
+      (setf buffers (delete-dups buffers))
+    (setf buffers (list (current-buffer))))
   (conn-protected-let*
       ((cg (mapcan #'prepare-change-group
                    (or buffers (list (current-buffer))))
@@ -2678,7 +2686,7 @@ the meaning of depth."
   ( :update (break)
     (if conn--read-args-prefix-mag
         (cl-callf * conn--read-args-prefix-mag 4)
-      (setq conn--read-args-prefix-mag 4))
+      (setf conn--read-args-prefix-mag 4))
     (funcall break)))
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-prefix-arg)
@@ -2699,7 +2707,7 @@ the meaning of depth."
                                        (cmd (eql reset-arg)))
   "Reset the current prefix argument."
   ( :update (break)
-    (setq conn--read-args-prefix-mag nil
+    (setf conn--read-args-prefix-mag nil
           conn--read-args-prefix-sign nil)
     (funcall break)))
 
@@ -2909,7 +2917,7 @@ buffer."
 
 (defun conn--dispatch-recenter-hook (cmd)
   (unless (eq cmd 'recenter-top-bottom)
-    (setq recenter-last-op nil)))
+    (setf recenter-last-op nil)))
 (add-hook 'conn-dispatch-read-char-pre-functions
           'conn--dispatch-recenter-hook)
 
@@ -3121,11 +3129,11 @@ buffer."
                             def-body)])))
   (let (docstring)
     (when (stringp (car rest))
-      (setq docstring (pop rest)))
+      (setf docstring (pop rest)))
     (conn--define-target-finder name superclasses slots docstring rest)))
 
 (defun conn-add-update-handler (target-finder function &optional depth)
-  (unless depth (setq depth 0))
+  (unless depth (setf depth 0))
   (cl-assert (and (integerp depth)
                   (<= -100 depth 100)))
   (setf (alist-get function (oref-default target-finder update-handlers))
@@ -3202,7 +3210,7 @@ buffer."
         (progn
           (pcase-dolist (`(,_ . ,targets) conn-targets)
             (cl-callf2 nconc targets old))
-          (setq conn-targets nil
+          (setf conn-targets nil
                 conn-target-count nil)
           (conn-target-finder-update target-finder)
           (pcase-dolist ((and cons `(,window . ,targets))
@@ -3252,10 +3260,10 @@ buffer."
                ( :update (cmd _break)
                  (pcase cmd
                    ('skip
-                    (setq after (lambda () (setq executing-kbd-macro "")))
+                    (setf after (lambda () (setf executing-kbd-macro "")))
                     (:return))
                    ('exit
-                    (setq after (lambda () (setq executing-kbd-macro t)))
+                    (setf after (lambda () (setf executing-kbd-macro t)))
                     (:return))))))
             (let ((executing-kbd-macro nil)
                   (defining-kbd-macro nil))
@@ -3355,7 +3363,7 @@ buffer."
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
       (delete-overlay target)))
-  (setq conn-targets nil
+  (setf conn-targets nil
         conn-target-count nil))
 
 (defun conn--mark-targets (property)
@@ -3363,7 +3371,7 @@ buffer."
     (dolist (target targets)
       (overlay-put target 'category property)
       (overlay-put target 'face nil)))
-  (setq conn-target-count nil))
+  (setf conn-target-count nil))
 
 (cl-defgeneric conn-target-finder-suspend (target-finder))
 
@@ -3770,8 +3778,8 @@ contain targets."
             (conn-make-target-overlay beg 0 :thing thing)
             (when (<= beg (pos-eol) prev)
               (cl-incf line-count))
-            (setq prev beg))))
-      (setq line-count 0)
+            (setf prev beg))))
+      (setf line-count 0)
       (save-excursion
         (while (and (< line-count line-height)
                     (search-forward string nil t))
@@ -3780,7 +3788,7 @@ contain targets."
             (conn-make-target-overlay beg 0 :thing thing)
             (when (<= prev (pos-bol) beg)
               (cl-incf line-count))
-            (setq prev beg)))))))
+            (setf prev beg)))))))
 
 (cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-thing-at-point))
   (conn-focus-targets-remove-overlays state))
@@ -4044,13 +4052,13 @@ contain targets."
                 ((memq (nth 1 posn) '(right-fringe left-fringe))
                  (window-width))
                 ((car (posn-x-y posn))
-                 (setq x-pos (- (car (posn-x-y posn)) lnum-width))
+                 (setf x-pos (- (car (posn-x-y posn)) lnum-width))
                  ;; In R2L lines, the X pixel coordinate is measured from the
                  ;; left edge of the window, but columns are still counted
                  ;; from the logical-order beginning of the line, i.e. from
                  ;; the right edge in this case.  We need to adjust for that.
                  (if (eq (current-bidi-paragraph-direction) 'right-to-left)
-                     (setq x-pos (- (window-body-width nil t) 1 x-pos)))
+                     (setf x-pos (- (window-body-width nil t) 1 x-pos)))
                  (/ (float x-pos)
                     (frame-char-width))))))))
       (save-excursion
@@ -4540,7 +4548,7 @@ it.")
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
              (conn-dispatch-action-pulse beg end)
-             (setq str (filter-buffer-substring beg end)))
+             (setf str (filter-buffer-substring beg end)))
             (_ (user-error "Cannot find thing at point"))))
         (cl-flet ((do ()
                     (conn-dispatch-change-group)
@@ -4549,9 +4557,9 @@ it.")
                       (cond ((or (null cg) init)
                              (insert (conn-kill-separator-for-strings str separator)))
                             ((and cg (not init))
-                             (setq init t)
+                             (setf init t)
                              (conn-dispatch-undo-case
-                               (:undo (setq init nil))))))
+                               (:undo (setf init nil))))))
                     (insert-for-yank str)))
           (with-current-buffer (marker-buffer opoint)
             (if (= (point) opoint)
@@ -4582,7 +4590,7 @@ it.")
             (goto-char pt)
             (pcase (conn-bounds-of thing arg)
               ((and bounds (conn-bounds `(,beg . ,end) transform))
-               (setq str (filter-buffer-substring beg end 'delete))
+               (setf str (filter-buffer-substring beg end 'delete))
                (when conn-kill-reformat-function
                  (funcall conn-kill-reformat-function bounds)))
               (_ (user-error "Cannot find thing at point")))))
@@ -4591,9 +4599,9 @@ it.")
             (cond ((or (null cg) init)
                    (insert (conn-kill-separator-for-strings str separator)))
                   ((and cg (not init))
-                   (setq init t)
+                   (setf init t)
                    (conn-dispatch-undo-case
-                     (:undo (setq init nil))))))
+                     (:undo (setf init nil))))))
           (insert-for-yank str))))))
 
 (defun conn-dispatch-jump ()
@@ -4650,7 +4658,7 @@ it.")
                (goto-char beg)
                (let ((conn-repeating-command t))
                  (when (commandp (car command))
-                   (setq this-command (car command)))
+                   (setf this-command (car command)))
                  (apply #'funcall-interactively command)))
               (_ (user-error "Cannot find thing at point")))))))))
 
@@ -4742,10 +4750,10 @@ it.")
                             (str2))
         (activate-change-group cg)
         (with-current-buffer buffer1
-          (setq str1 (filter-buffer-substring beg1 end1))
+          (setf str1 (filter-buffer-substring beg1 end1))
           (delete-region beg1 end1))
         (with-current-buffer buffer2
-          (setq str2 (filter-buffer-substring beg2 end2))
+          (setf str2 (filter-buffer-substring beg2 end2))
           (goto-char (min beg2 end2))
           (delete-region beg2 end2)
           (insert str1))
@@ -4918,11 +4926,11 @@ it.")
                                other-end
                                must-prompt)
   (when (null action)
-    (setq action (conn-get-default-action thing)))
+    (setf action (conn-get-default-action thing)))
   (conn-with-dispatch
     (when must-prompt
-      (setq conn-dispatch-always-prompt t))
-    (setq conn-dispatch-other-end (pcase other-end
+      (setf conn-dispatch-always-prompt t))
+    (setf conn-dispatch-other-end (pcase other-end
                                     (:no-other-end (lambda (&rest _) 0))
                                     ('t #'-)
                                     ('nil #'+)))
@@ -5135,7 +5143,7 @@ for the dispatch."
   (when (equal isearch-string "")
     (if (null (if isearch-regexp regexp-search-ring search-ring))
         (error "No previous search string")
-      (setq isearch-string
+      (setf isearch-string
 	    (car (if isearch-regexp regexp-search-ring search-ring))
 	    isearch-case-fold-search isearch-last-case-fold-search)))
   (unwind-protect
@@ -5163,7 +5171,7 @@ for the dispatch."
           :repeat nil
           :restrict-windows t
           :other-end nil)
-         (setq opoint (point)))
+         (setf opoint (point)))
         (goto-char opoint))
     (save-mark-and-excursion
       (isearch-exit))))
@@ -5246,7 +5254,7 @@ for the dispatch."
      (let (obeg oend ov)
        (unwind-protect
            (progn
-             (setq ov (make-overlay beg end))
+             (setf ov (make-overlay beg end))
              (overlay-put ov 'face 'region)
              (conn-dispatch-setup
               (conn-action ()
@@ -5262,7 +5270,7 @@ for the dispatch."
                   (with-selected-window window
                     (pcase (conn-bounds-of-dispatch thing arg pt)
                       ((conn-dispatch-bounds `(,beg . ,end) transform)
-                       (setq obeg beg
+                       (setf obeg beg
                              oend end))
                       (_ (user-error "No %s found at point" thing))))))
               (conn-bounds-thing bounds)

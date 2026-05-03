@@ -46,7 +46,7 @@
                      ((pred keywordp)
                       (cl-callf2 nconc (list k (car rest)) props))
                      (`(interactive)
-                      (cl-return (setq body (cons k rest))))
+                      (cl-return (setf body (cons k rest))))
                      (_ (error "Malformed body"))))
        `(transient-define-suffix ,name ,arglist
           :description (lambda ()
@@ -184,7 +184,7 @@
      (goto-char point)
      (save-mark-and-excursion--restore mark)
      (conn-clear-narrow-ring)
-     (setq conn-narrow-ring (conn-copy-ring ring)))))
+     (setf conn-narrow-ring (conn-copy-ring ring)))))
 
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)

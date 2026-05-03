@@ -100,12 +100,12 @@ The duration of the message display is controlled by
   (unless executing-kbd-macro
     (let ((inhibit-message conn-read-args-inhibit-message)
           (message-log-max nil))
-      (setq conn--read-args-message (apply #'format format-string args)
+      (setf conn--read-args-message (apply #'format format-string args)
             conn--read-args-message-timeout (time-add nil minibuffer-message-timeout)))))
 
 (defun conn-read-args-error (format-string &rest args)
   "Print an error message of FORMAT-STRING with ARGS."
-  (setq conn--read-args-error-message (apply #'format format-string args)
+  (setf conn--read-args-error-message (apply #'format format-string args)
         conn--read-args-error-flag t)
   (let ((message-log-max t))
     (apply #'message format-string args))
@@ -337,7 +337,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                        (cl-callf2 delq maps emulation-mode-map-alists))))
       (cl-labels
           ((timer-function ()
-             (setq timer nil)
+             (setf timer nil)
              (display-message))
            (continue-p ()
              (cl-loop for arg in arguments
@@ -352,7 +352,7 @@ This skips executing the body of the `conn-read-args' form entirely."
              (cl-block nil
                (let ((break nil))
                  (dolist (a arguments)
-                   (conn-argument-update a cmd (lambda () (setq break t)))
+                   (conn-argument-update a cmd (lambda () (setf break t)))
                    (when break (cl-return t))))))
            (read-command ()
              (let (partial-keymap cmd reading)
@@ -364,7 +364,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (timer-activate-when-idle timer t))
                  (cl-loop
                   repeat 10 do
-                  (setq keyseq (let ((inhibit-quit t))
+                  (setf keyseq (let ((inhibit-quit t))
                                  (read-key-sequence nil))
                         cmd (key-binding keyseq 'accept-default))
                   (if (arrayp cmd)
@@ -376,10 +376,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (when timer
                    (cancel-timer timer)))
                (cond ((eql (aref keyseq 0) quit-event)
-                      (setq cmd 'keyboard-quit))
+                      (setf cmd 'keyboard-quit))
                      ((and (null cmd)
                            (eql help-char (aref keyseq (1- (length keyseq)))))
-                      (setq cmd 'execute-extended-command
+                      (setf cmd 'execute-extended-command
                             partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
                      ((and (symbolp cmd)
                            (autoloadp (symbol-function cmd)))
@@ -387,10 +387,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                (setf conn--read-args-error-message "")
                (when (and conn--read-args-message-timeout
                           (time-less-p conn--read-args-message-timeout nil))
-                 (setq conn--read-args-message nil
+                 (setf conn--read-args-message nil
                        conn--read-args-message-timeout nil))
                (while (eq cmd 'execute-extended-command)
-                 (setq cmd (conn--read-args-completing-read arguments
+                 (setf cmd (conn--read-args-completing-read arguments
                                                             partial-keymap)
                        reading t))
                (if (or (eq cmd 'undefined)
@@ -412,7 +412,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                ('reference
                 (when timer
                   (cancel-timer timer)
-                  (setq timer nil))
+                  (setf timer nil))
                 (with-keymaps
                  (condition-case err
                      (conn-quick-reference
@@ -448,14 +448,14 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (emulation-mode-map-alists emulation-mode-map-alists)
                      (inhibit-message t)
                      (minibuffer-message-clear-timeout nil))
-                 (setq maps `((,state . nil)))
+                 (setf maps `((,state . nil)))
                  (while (continue-p)
                    (catch 'conn-read-args-error
                      (execute-command
                       (with-keymaps
                        (display-message)
                        (read-command)))))
-                 (setq unread-command-events nil ;should this be smarter?
+                 (setf unread-command-events nil ;should this be smarter?
                        conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
         (apply
          (catch 'conn-read-args-return
@@ -464,11 +464,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                       (> conn-read-args-message-delay 0)
                       (cl-loop for arg in arguments
                                thereis (conn-argument-display arg)))
-             (setq timer conn--read-args-timer))
+             (setf timer conn--read-args-timer))
            (conn--unwind-protect-all
              (let ((conn-read-args-last-prefix nil))
                (if around (funcall around #'loop) (loop))
-               (setq argument-values (mapcar #'conn-argument-payload
+               (setf argument-values (mapcar #'conn-argument-payload
                                              arglist)))
              (unless argument-values
                (mapc #'conn-argument-cancel arguments))
@@ -1105,7 +1105,7 @@ be displayed in the echo area during `conn-read-args'."
                                             cmd
                                             _break)
   (unless (eq cmd 'recenter-top-bottom)
-    (setq recenter-last-op nil)))
+    (setf recenter-last-op nil)))
 
 (conn-define-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql digit-argument)))

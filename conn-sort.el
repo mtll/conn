@@ -97,9 +97,9 @@
            (let ((old (reverse sort-lists))
                  (case-fold-search fold-case))
              (when sort-lists
-               (or reverse (setq sort-lists (nreverse sort-lists)))
+               (or reverse (setf sort-lists (nreverse sort-lists)))
                (if messages (message "Sorting records..."))
-               (setq sort-lists
+               (setf sort-lists
                      (sort sort-lists
                            (if predicate
                                (lambda (a b)
@@ -108,7 +108,7 @@
                                (> 0 (compare-buffer-substrings
                                      nil (car (car a)) (cdr (car a))
                                      nil (car (car b)) (cdr (car b))))))))
-               (if reverse (setq sort-lists (nreverse sort-lists)))
+               (if reverse (setf sort-lists (nreverse sort-lists)))
                (if messages (message "Reordering buffer..."))
                (with-buffer-unmodified-if-unchanged
                  (sort-reorder-buffer sort-lists old))))))))

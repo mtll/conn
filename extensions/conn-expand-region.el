@@ -43,7 +43,7 @@
                      (er--point-is-surrounded-by-white-space)
                      (= (region-beginning) (region-end)))
             (skip-chars-forward er--space-str)
-            (setq start (point)))
+            (setf start (point)))
 
           (dolist (try er/try-expand-list)
             (er--save-excursion
@@ -52,8 +52,8 @@
                (when (and (region-active-p)
                           (er--this-expansion-is-better
                            start end best-start best-end))
-                 (setq best-start (region-beginning))
-                 (setq best-end (region-end))))))
+                 (setf best-start (region-beginning))
+                 (setf best-end (region-end))))))
 
           (goto-char best-start)
           (set-mark best-end)

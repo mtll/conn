@@ -58,7 +58,7 @@
 
   (defun conn--wgrep-setup ()
     (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setq conn--grep-edit-stack-handle
+    (setf conn--grep-edit-stack-handle
           (conn-enter-recursive-stack 'conn-command-state)))
   (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
 
@@ -345,7 +345,7 @@
 
   (defun conn--wdired-setup ()
     (conn-set-major-mode-maps (list 'wdired-mode))
-    (setq conn--wdired-stack-handle
+    (setf conn--wdired-stack-handle
           (conn-enter-recursive-stack 'conn-command-state)))
   (add-hook 'wdired-mode-hook 'conn--wdired-setup))
 
@@ -641,7 +641,7 @@
                         (let ((last-pt (goto-char (window-end))))
                           (while (and (> last-pt (progn
                                                    (Info-prev-reference)
-                                                   (setq last-pt (point))))
+                                                   (setf last-pt (point))))
                                       (<= (window-start) (point) (window-end)))
                             (conn-make-target-overlay (point) 0))))))
    nil nil

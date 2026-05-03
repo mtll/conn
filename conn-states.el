@@ -595,26 +595,26 @@ then an error is signaled."
           input-method-deactivate-hook)
       (pcase (conn-state-get conn-current-state :suppress-input-method)
         ((and 'nil (guard current-input-method))
-         (setq conn--input-method current-input-method
+         (setf conn--input-method current-input-method
                conn--input-method-title current-input-method-title))
         ((and 'nil (guard conn--input-method))
          (activate-input-method conn--input-method))
         ((guard (and current-input-method
                      conn--input-method
                      deactivate-current-input-method-function))
-         (setq conn--input-method current-input-method
+         (setf conn--input-method current-input-method
                conn--input-method-title current-input-method-title)
          (deactivate-input-method))
         ((guard (and current-input-method
                      deactivate-current-input-method-function))
-         (setq conn--input-method current-input-method
+         (setf conn--input-method current-input-method
                conn--input-method-title current-input-method-title)
          (deactivate-input-method))))))
 (put 'conn--activate-input-method 'permanent-local-hook t)
 
 (defun conn--deactivate-input-method ()
   (unless conn-disable-input-method-hooks
-    (setq conn--input-method nil
+    (setf conn--input-method nil
           conn--input-method-title nil)))
 (put 'conn--deactivate-input-method 'permanent-local-hook t)
 
@@ -625,7 +625,7 @@ then an error is signaled."
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (let ((overriding-terminal-local-map nil))
       (activate-input-method conn--input-method))
-    (setq isearch-input-method-function input-method-function)
+    (setf isearch-input-method-function input-method-function)
     (setq-local input-method-function nil)
     (isearch-update)
     (let ((hook (make-symbol "hook")))
@@ -649,7 +649,7 @@ is shown even if the input method is deactivated because a state is
 suppressing it."
   (cond
    (conn-local-mode
-    (setq conn--prev-mode-line-mule-info
+    (setf conn--prev-mode-line-mule-info
           (buffer-local-set-state
            mode-line-mule-info `(""
                                  (conn--input-method
@@ -801,7 +801,7 @@ that has just been exited.")
 (defun conn--run-exit-fns (type)
   (let ((fns conn--state-exit-functions))
     (unless (cl-typep type 'conn-stack-clone)
-      (setq conn--state-exit-functions (list 'conn--state-exit-default)
+      (setf conn--state-exit-functions (list 'conn--state-exit-default)
             conn--state-exit-functions-ids nil))
     (funcall (car fns) type (cdr fns))))
 
@@ -824,7 +824,7 @@ is being entered after the current state has exited or nil if
   (declare (indent 1)
            (debug (def-body)))
   (when (eql ?_ (string-to-char (symbol-name transition)))
-    (setq transition (gensym)))
+    (setf transition (gensym)))
   (cl-with-gensyms (rest)
     (if (eq (car body) :label)
         `(let ((label ,(cadr body)))
@@ -854,7 +854,7 @@ If the stack is being unwound because the buffer has been cloned then
 CLONE will be non-nil, otherwise CLONE will nil."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name clone)))
-    (setq clone (gensym)))
+    (setf clone (gensym)))
   (cl-with-gensyms (rest)
     `(push (lambda (,clone ,rest)
              (unwind-protect
@@ -878,7 +878,7 @@ CLONE will be non-nil, otherwise CLONE will nil."
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
     (let ((lighter (conn-state-get conn-current-state :lighter)))
       (dolist (elem (cdr conn--state-stack))
-        (setq lighter
+        (setf lighter
               (if elem
                   (concat (conn-state-get elem :lighter)
                           conn-state-lighter-separator
@@ -1311,7 +1311,7 @@ command was a prefix command.")
             (lambda ()
               (funcall fn)
               (remove-hook 'post-command-hook msg-fn t))))
-    (fset preserve-state (lambda () (setq prefix-command t)))
+    (fset preserve-state (lambda () (setf prefix-command t)))
     (fset pre (lambda ()
                 (remove-hook 'pre-command-hook pre t)
                 (add-hook 'prefix-command-preserve-state-hook preserve-state)
@@ -1414,10 +1414,10 @@ command was a prefix command.")
   (cl-call-next-method)
   (unless (conn-insertion-recording-p)
     (require 'diff-mode)
-    (setq conn--insertion-recording-overlay (make-overlay (point) (point))
+    (setf conn--insertion-recording-overlay (make-overlay (point) (point))
           conn-insertion-recording-other-end (point-marker))
     (unless conn--insertion-recording-change-group
-      (setq conn--insertion-recording-change-group (prepare-change-group))
+      (setf conn--insertion-recording-change-group (prepare-change-group))
       (activate-change-group conn--insertion-recording-change-group))
     (overlay-put conn--insertion-recording-overlay 'face 'diff-added)
     (overlay-put conn--insertion-recording-overlay 'category 'conn-recording-region)
@@ -1425,7 +1425,7 @@ command was a prefix command.")
               #'conn--update-record-insertion-region
               nil 'local)
     (conn-state-unwind clone
-      (setq conn--insertion-recording-start-point nil)
+      (setf conn--insertion-recording-start-point nil)
       (remove-hook 'pre-redisplay-functions
                    #'conn--update-record-insertion-region
                    'local)
@@ -1433,12 +1433,12 @@ command was a prefix command.")
         (unless clone
           (accept-change-group conn--insertion-recording-change-group)
           (undo-amalgamate-change-group conn--insertion-recording-change-group))
-        (setq conn--insertion-recording-change-group nil))
+        (setf conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
         (unless clone
-          (setq conn-insertion-recording-last-insertion
+          (setf conn-insertion-recording-last-insertion
                 (conn-insertion-recording-text)))
-        (setq conn-insertion-recording-other-end nil))
+        (setf conn-insertion-recording-other-end nil))
       (when (overlayp conn--insertion-recording-overlay)
         (if clone
             (without-restriction
@@ -1446,7 +1446,7 @@ command was a prefix command.")
                     (conn--overlays-in-of-type (point-min) (point-max)
                                                'conn-recording-region)))
           (delete-overlay conn--insertion-recording-overlay))
-        (setq conn--insertion-recording-overlay nil)))))
+        (setf conn--insertion-recording-overlay nil)))))
 
 (defun conn-insertion-recording-text ()
   (when (markerp conn-insertion-recording-other-end)
@@ -1461,10 +1461,10 @@ command was a prefix command.")
   (require 'diff-mode)
   (when (conn-insertion-recording-p)
     (error "Already recording"))
-  (setq conn--insertion-recording-start-point
+  (setf conn--insertion-recording-start-point
         (or init-point (point)))
   (when change-group
-    (setq conn--insertion-recording-change-group change-group))
+    (setf conn--insertion-recording-change-group change-group))
   (if (not recursive-edit)
       (progn
         (set-transient-map conn-record-insertion-transient-map
@@ -1533,11 +1533,11 @@ command was a prefix command.")
 (defun conn-pop-mark-state ()
   "Pop `conn-mark-state'."
   (interactive)
-  (setq deactivate-mark t))
+  (setf deactivate-mark t))
 
 (defun conn-push-mark-state-ring (state)
   (unless conn-mark-state-ring
-    (setq conn-mark-state-ring
+    (setf conn-mark-state-ring
           (conn-make-ring conn-mark-state-ring-max
                           :cleanup (lambda (elem)
                                      (pcase elem
@@ -1578,9 +1578,9 @@ command was a prefix command.")
   (when conn--state-stack
     (let (conn-next-state)
       (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
-    (setq conn--state-stack nil))
+    (setf conn--state-stack nil))
   (unless no-major-mode-maps
-    (setq conn--active-major-mode-maps
+    (setf conn--active-major-mode-maps
           (conn--derived-mode-all-parents major-mode)))
   (condition-case err
       (or (run-hook-with-args-until-success 'conn-setup-state-functions)

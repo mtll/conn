@@ -463,7 +463,7 @@
                                    :subregions subregions)
                              (list with with-arg
                                    :padding padding))))
-                  (setq success t)))
+                  (setf success t)))
             (mapc #'delete-overlay regions)
             (when cleanup
               (funcall cleanup (if success :accept :cancel)))))))))
@@ -481,7 +481,7 @@
         (progn
           (apply #'conn-surround-with
                  `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
-          (setq success t))
+          (setf success t))
       (mapc #'delete-overlay regions)
       (when cleanup
         (funcall cleanup (if success :accept :cancel))))))
@@ -501,12 +501,12 @@
   :global t
   (if conn-adjust-surround-mode
       (progn
-        (setq conn--eldoc-prev-msg-fn eldoc-message-function
+        (setf conn--eldoc-prev-msg-fn eldoc-message-function
               eldoc-message-function #'ignore)
         (conn--adjust-surround-edit-message)
         (add-hook 'pre-command-hook #'conn--adjust-surround-edit-message))
     (remove-hook 'pre-command-hook #'conn--adjust-surround-edit-message)
-    (setq eldoc-message-function conn--eldoc-prev-msg-fn
+    (setf eldoc-message-function conn--eldoc-prev-msg-fn
           conn--eldoc-prev-msg-fn nil)
     (message nil)))
 
@@ -599,7 +599,7 @@
                  'conn-previous-change-surround
                  (cons (list thing arg)
                        (list with with-arg :padding padding)))
-                (setq success t))
+                (setf success t))
             (delete-overlay ov)
             (when cleanup
               (funcall cleanup (if success :accept :cancel)))))))))
@@ -649,7 +649,7 @@
             (progn
               (apply #'conn-surround-with
                      `(,with ,with-arg :regions ,(list ov) ,@prep-keys ,@with-keys))
-              (setq success t))
+              (setf success t))
           (delete-overlay ov)
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))

@@ -38,7 +38,7 @@
         (named-let protect ((binding (car (last varlist)))
                             (rest (reverse (cons success (butlast varlist))))
                             (body `(prog1 ,(macroexp-progn body)
-                                     (setq ,success t))))
+                                     (setf ,success t))))
           (pcase binding
             ('nil body)
             (`(,var ,val ,cleanup)
@@ -236,7 +236,7 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
   "Add KEY to `unread-command-events', but avoid recording it a second time.
 
 See `quail-add-unread-command-events'."
-  (if reset (setq unread-command-events nil))
+  (if reset (setf unread-command-events nil))
   (if (or (characterp key)
           (symbolp key))
       (cl-callf2 cons
@@ -539,7 +539,7 @@ This function destructively modifies LIST."
                      (new-dist (min (abs (- (point) beg))
                                     (abs (- (point) end))))
                      ((< new-dist min-dist)))
-           (setq min region
+           (setf min region
                  min-dist new-dist)))
         ((or `(,beg . ,end)
              (and beg end))
@@ -549,7 +549,7 @@ This function destructively modifies LIST."
                      (new-dist (min (abs (- (point) beg))
                                     (abs (- (point) end))))
                      ((< new-dist min-dist)))
-           (setq min region
+           (setf min region
                  min-dist new-dist)))))
     (if min (cons min (delq min list)) list)))
 
@@ -622,7 +622,7 @@ the same form and contains disjoint (BEG . END) pairs."
 Although this returns a fresh list it will not beginning in Emacs 30.1,
 so don't modify it."
       (let ((parents (list mode)))
-        (while (and (setq mode (get mode 'derived-mode-parent))
+        (while (and (setf mode (get mode 'derived-mode-parent))
                     (not (memq mode parents)))
           (push mode parents))
         (nreverse parents)))
@@ -734,18 +734,18 @@ be restricted to those before or after the current match inclusive."
 (defun conn--visible-regions (beg end &optional backward)
   (while (and (or (invisible-p beg)
                   (get-text-property beg 'display))
-              (/= end (setq beg (next-char-property-change beg end)))))
+              (/= end (setf beg (next-char-property-change beg end)))))
   (let ((prev beg)
         visible)
     (while (/= end beg)
-      (while (and (/= end (setq beg (next-char-property-change beg end)))
+      (while (and (/= end (setf beg (next-char-property-change beg end)))
                   (not (or (invisible-p beg)
                            (get-text-property beg 'display)))))
       (push (cons prev beg) visible)
-      (while (and (/= end (setq beg (next-char-property-change beg end)))
+      (while (and (/= end (setf beg (next-char-property-change beg end)))
                   (or (invisible-p beg)
                       (get-text-property beg 'display))))
-      (setq prev beg))
+      (setf prev beg))
     (if backward visible (nreverse visible))))
 
 (defmacro conn-for-each-visible (beg end &rest body)

@@ -21,7 +21,7 @@
 
 (require 'conn-extras)
 
-(setq conn-keymaps-defined 'qwerty)
+(setf conn-keymaps-defined 'qwerty)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
@@ -504,7 +504,6 @@
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   "b" 'conn-dispatch-repeat-command
-  "=" 'conn-dispatch-repeat-command
   "RET" 'conn-repeat-last-dispatch
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
@@ -850,7 +849,7 @@
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
-  "G" 'conn-bounds-upto-next
+  "G" 'conn-bounds-upto-previous
   "SPC" 'conn-bounds-last)
 
 (define-keymap
