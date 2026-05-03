@@ -1002,7 +1002,7 @@ buffer is a valid target.")
   (cancel #'ignore :type function :read-only t))
 
 (eval-and-compile
-  (defun conn--dispatch-action (slots body)
+  (defun conn--action (slots body)
     (let* ((syms (cl-loop for (var . _) in slots
                           collect (gensym var)))
            (ignore nil)
@@ -1049,7 +1049,7 @@ buffer is a valid target.")
   ;; If the body of an action captures then all copies share the same
   ;; captures.
   (declare (indent 1))
-  (conn--dispatch-action slots body))
+  (conn--action slots body))
 
 (eval-and-compile
   (defun conn--set-action-property (f _args)

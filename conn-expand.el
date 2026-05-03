@@ -57,18 +57,23 @@ potential expansions.  Functions may return invalid expansions
        (member (cons (region-beginning) (region-end))
                conn--current-expansions)))
 
+(defun conn--clear-expansions ()
+  (setq conn--current-expansions nil))
+
 (defun conn--expand-create-expansions ()
-  (unless (conn--valid-expansions-p)
-    (prog1 (conn->
-             (mapcan #'funcall conn-expansion-functions)
-             conn--expand-filter-regions
-             (:as exp (compat-call sort exp
-                                   :lessp (lambda (a b)
-                                            (or (> (car a) (car b))
-                                                (< (cdr a) (cdr b))))
-                                   :in-place t))
-             (setq conn--current-expansions))
-      (setq conn--current-expansions-tick (buffer-chars-modified-tick)))))
+  (unless (region-active-p)
+    (error "Region not active"))
+  (with-memoization conn--current-expansions
+    (add-hook 'deactivate-mark-hook 'conn--clear-expansions nil 'local)
+    (conn->
+      (mapcan #'funcall conn-expansion-functions)
+      conn--expand-filter-regions
+      (:as exp (compat-call sort exp
+                            :lessp (lambda (a b)
+                                     (or (> (car a) (car b))
+                                         (< (cdr a) (cdr b))))
+                            :in-place t))
+      (setq conn--current-expansions))))
 
 (defun conn-expand-subr (arg)
   (conn--expand-create-expansions)
@@ -92,15 +97,14 @@ potential expansions.  Functions may return invalid expansions
 If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
-  (unless (or (region-active-p)
-              (conn--valid-expansions-p))
+  (unless (region-active-p)
     (push-mark nil t t))
   (conn-expand-subr arg)
   (unless conn-mark-state
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-contract-subr (arg)
-  (unless (conn--valid-expansions-p)
+  (unless conn--current-expansions
     (user-error "No expansion in progress"))
   (if (< arg 0)
       (conn-expand (- arg))

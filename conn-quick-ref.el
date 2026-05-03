@@ -36,14 +36,6 @@
   "Face for key not found errors."
   :group 'conn-quick-ref)
 
-(defface conn-quick-ref-page-header-face
-  '((t ( :extend t
-         :box nil
-         :inherit header-line
-         :underline (:style line :position t :color "black"))))
-  "Face for quick ref header."
-  :group 'conn-quick-ref)
-
 (define-derived-mode conn-quick-ref-mode special-mode "Quick-Ref"
   "Mode for conn quick reference buffers.")
 
@@ -51,6 +43,9 @@
 
 (defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))
+
+(defvar conn--quick-ref-current-page nil)
+(defvar conn--quick-ref-page-count nil)
 
 (defvar-keymap conn-quick-ref-map
   "?" 'next
@@ -229,12 +224,12 @@
                                 :objects objs)
                    (goto-char (point-max))))))))))))
 
-(defun conn-quick-ref-insert-pages (pages buffer header)
-  (let ((page-count 1)
-        (keymap-buffer (current-buffer))
-        (page-lines (max 10 (ceiling (frame-height) 3.5)))
-        (face `(:background ,(face-foreground 'default) :extend t)))
+(defun conn-quick-ref-insert-pages (pages buffer)
+  (let ((keymap-buffer (current-buffer))
+        (page-lines (max 10 (ceiling (frame-height) 3.5))))
     (with-current-buffer buffer
+      (setq-local conn--quick-ref-page-count 1)
+      (setq-local conn--quick-ref-current-page 1)
       (with-silent-modifications
         (let ((beg (point)))
           (dolist (page pages)
@@ -244,24 +239,11 @@
                keymap-buffer)
               (when (and (> (count-lines beg (point)) page-lines)
                          (/= prev beg))
-                (cl-incf page-count)
+                (cl-incf conn--quick-ref-page-count)
                 (save-excursion
                   (goto-char prev)
-                  (insert
-                   (propertize "__" 'face face 'display '(space :height (1)))
-                   (propertize "\n" 'face face 'line-height t)
-                   ""))
+                  (insert ""))
                 (setq beg prev)))))
-        (goto-char (point-min))
-        (let ((current-page 1))
-          (insert (format header current-page page-count))
-          (while (search-forward "" nil t)
-            (cl-incf current-page)
-            (insert (format header current-page page-count))))
-        (goto-char (point-max))
-        (insert
-         (propertize "__" 'face face 'display '(space :height (1)))
-         (propertize "\n" 'face face 'line-height t))
         (goto-char (point-min))
         (narrow-to-page)))))
 
@@ -269,14 +251,18 @@
   (with-current-buffer buffer
     (widen)
     (forward-page 1)
+    (cl-incf conn--quick-ref-current-page)
     (when (= (point) (point-max))
+      (setq-local conn--quick-ref-current-page 1)
       (goto-char (point-min)))
     (narrow-to-page)))
 
 (defun conn-quick-ref-previous-page (buffer)
   (with-current-buffer buffer
     (widen)
+    (cl-decf conn--quick-ref-current-page)
     (when (= (point) (point-min))
+      (setq-local conn--quick-ref-current-page conn--quick-ref-page-count)
       (goto-char (point-max)))
     (backward-page 1)
     (narrow-to-page)))
@@ -298,59 +284,65 @@
       (flatten-tree (nreverse result)))))
 
 (defun conn--quick-ref-loop (pages loop-fn)
-  (let* ((buf (get-buffer-create " *conn-quick-ref*"))
-         (display-function conn-quick-ref-display-function)
-         (inhibit-message t)
+  (let* ((inhibit-message t)
          (state nil)
          (header
-          (substitute-command-keys
-           (concat "\\<conn-quick-ref-map>"
-                   (propertize "[%s/%s] " 'face 'minibuffer-prompt)
-                   (propertize "Quick Reference" 'face 'bold)
-                   " — \\[next] Next; \\[previous] Previous; \\[close] Close "
-                   "\n"))))
-    (add-face-text-property 0 (length header)
-                            'conn-quick-ref-page-header-face
-                            t header)
-    (with-current-buffer buf
-      (conn-quick-ref-mode)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (delete-all-overlays))
-      (setq-local page-delimiter ""
-                  cursor-type nil
-                  mode-line-format nil))
-    (conn-quick-ref-insert-pages pages buf header)
-    (when loop-fn (funcall loop-fn))
-    (conn->f state (funcall display-function buf))
-    (unwind-protect
-        (conn-with-overriding-map conn-quick-ref-map
-          (cl-loop
-           (let ((keys (let ((inhibit-quit t))
-                         (read-key-sequence nil))))
-             (when (eql (aref keys 0) (car (last (current-input-mode))))
-               (signal 'quit nil))
-             (pcase (key-binding keys 'accept-default)
-               ('close (cl-return))
-               ('next
-                (conn-quick-ref-next-page buf)
-                (when loop-fn (funcall loop-fn))
-                (conn->f state (funcall display-function buf)))
-               ('previous
-                (conn-quick-ref-previous-page buf)
-                (when loop-fn (funcall loop-fn))
-                (conn->f state (funcall display-function buf)))
-               ((or 'quit 'keyboard-quit)
-                (signal 'quit nil))
-               (binding
-                (cl-block continue
-                  (when loop-fn
-                    (funcall loop-fn binding
-                             (lambda () (cl-return-from continue))))
-                  (conn-add-unread-events
-                   (this-single-command-raw-keys))
-                  (cl-return)))))))
-      (funcall display-function buf state t))))
+          `(" "
+            (:eval (format "[%s/%s] "
+                           conn--quick-ref-current-page
+                           conn--quick-ref-page-count))
+            (:propertize "Quick Reference"
+                         face mode-line-buffer-id)
+            ,(substitute-command-keys
+              (concat "\\<conn-quick-ref-map>   "
+                      "(\\[next] Next; \\[previous] Previous; \\[close] Close) ")))))
+    (let ((buf (generate-new-buffer " *conn-quick-ref*" t)))
+      (conn--unwind-protect-all
+        (progn
+          (with-current-buffer buf
+            (conn-quick-ref-mode)
+            (with-silent-modifications
+              (erase-buffer)
+              (delete-all-overlays))
+            (setq-local page-delimiter ""
+                        cursor-type nil
+                        header-line-format header
+                        mode-line-format nil
+                        face-remapping-alist '((header-line-inactive header-line))))
+          (conn-quick-ref-insert-pages pages buf)
+          (when loop-fn (funcall loop-fn))
+          (conn->f state
+            (funcall conn-quick-ref-display-function buf))
+          (conn-with-overriding-map conn-quick-ref-map
+            (cl-loop
+             (let ((keys (let ((inhibit-quit t))
+                           (read-key-sequence nil))))
+               (when (eql (aref keys 0) (car (last (current-input-mode))))
+                 (signal 'quit nil))
+               (pcase (key-binding keys 'accept-default)
+                 ('close (cl-return))
+                 ('next
+                  (conn-quick-ref-next-page buf)
+                  (when loop-fn (funcall loop-fn))
+                  (conn->f state
+                    (funcall conn-quick-ref-display-function buf)))
+                 ('previous
+                  (conn-quick-ref-previous-page buf)
+                  (when loop-fn (funcall loop-fn))
+                  (conn->f state
+                    (funcall conn-quick-ref-display-function buf)))
+                 ((or 'quit 'keyboard-quit)
+                  (signal 'quit nil))
+                 (binding
+                  (cl-block continue
+                    (when loop-fn
+                      (funcall loop-fn binding
+                               (lambda () (cl-return-from continue))))
+                    (conn-add-unread-events
+                     (this-single-command-raw-keys))
+                    (cl-return))))))))
+        (funcall conn-quick-ref-display-function buf state t)
+        (kill-buffer buf)))))
 
 (defun conn-quick-reference (pages &optional loop-fn)
   (interactive (list (conn-get-quick-ref-pages)))

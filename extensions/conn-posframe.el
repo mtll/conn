@@ -580,14 +580,28 @@
 
 ;;;; Quick Ref
 
-(defun conn-quick-ref-posframe (buffer &optional _state teardown)
+(defvar conn--quick-ref-posframe-overlay nil)
+
+;;;###autoload
+(defun conn-quick-ref-posframe (buffer &optional state teardown)
   (if teardown
       (posframe-hide buffer)
+    (unless state
+      (posframe-show buffer
+                     :min-width 66
+                     :left-fringe 0
+                     :right-fringe 0
+                     :border-width conn-posframe-border-width
+                     :border-color (face-background 'conn-posframe-border)
+                     :poshandler conn-posframe-buffer-poshandler
+                     :respect-header-line t))
     (posframe-show buffer
+                   :min-width 66
                    :left-fringe 0
                    :right-fringe 0
                    :border-width conn-posframe-border-width
                    :border-color (face-background 'conn-posframe-border)
-                   :poshandler conn-posframe-buffer-poshandler)))
+                   :poshandler conn-posframe-buffer-poshandler
+                   :respect-header-line t)))
 
 (provide 'conn-posframe)
