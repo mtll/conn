@@ -19,7 +19,7 @@
 
 (require 'conn-utils)
 
-;;;;; Quick Reference
+;;;; Quick Reference
 
 (defgroup conn-quick-ref nil
   "Conn posframes."
@@ -304,7 +304,7 @@
 (defun conn--quick-ref-loop (pages loop-fn)
   (let* ((inhibit-message t)
          (state nil)
-         (buf (generate-new-buffer " *conn-quick-ref*" t)))
+         (buf (generate-new-buffer " *conn-quick-ref*")))
     (conn--unwind-protect-all
       (progn
         (with-current-buffer buf
@@ -435,6 +435,8 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
+;;;; Buffer Display Function
+
 (defcustom conn-quick-reference-buffer-separator 'line
   "Separator for quick reference buffer display."
   :type '(choice
@@ -468,9 +470,10 @@
                    (goto-char (point-max))
                    (insert line newline)))))))
         ('mode-line
-         (cl-shiftf (buffer-local-value 'mode-line-format buffer)
-                    (buffer-local-value 'header-line-format buffer)
-                    nil))))
+         (ignore
+          (cl-shiftf (buffer-local-value 'mode-line-format buffer)
+                     (buffer-local-value 'header-line-format buffer)
+                     nil)))))
     (when-let* ((win (get-buffer-window buffer)))
       (with-current-buffer buffer
         (set-window-point win (point)))
