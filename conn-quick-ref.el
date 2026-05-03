@@ -445,13 +445,17 @@
           (const :tag "Display help information in mode-line instead of header-line"
                  mode-line)))
 
+(defvar conn-quick-reference-buffer-display-action
+  '(display-buffer-in-side-window
+    (dedicated t)
+    (side . bottom)
+    (inhibit-same-window . t))
+  "Display action for quick reference buffers.")
+
 (defun conn-quick-ref-buffer (buffer &optional initialized teardown)
   (if teardown
       (when-let* ((win (get-buffer-window buffer)))
         (delete-window win))
-    (unless (get-buffer-window buffer)
-      (display-buffer buffer '((display-buffer-in-side-window (side . bottom))
-                               (window-height . fit-window-to-buffer))))
     (unless initialized
       (pcase conn-quick-reference-buffer-separator
         ('line
@@ -474,11 +478,17 @@
           (cl-shiftf (buffer-local-value 'mode-line-format buffer)
                      (buffer-local-value 'header-line-format buffer)
                      nil)))))
-    (when-let* ((win (get-buffer-window buffer)))
+    (let ((win (display-buffer buffer
+                               conn-quick-reference-buffer-display-action))
+          (window-min-height 2)
+          (fit-window-to-buffer-horizontally t)
+          (window-resize-pixelwise t))
+      (unless (window-live-p win)
+        (error "Failed to display quick reference buffer"))
       (with-current-buffer buffer
+        (setq-local window-size-fixed nil)
         (set-window-point win (point)))
-      (let ((window-min-height 2))
-        (fit-window-to-buffer win)))
+      (fit-window-to-buffer win))
     t))
 
 (provide 'conn-quick-ref)
