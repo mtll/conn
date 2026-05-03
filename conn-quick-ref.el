@@ -169,7 +169,7 @@
                         ((or `(,bind . ,options)
                              bind)
                          (push (apply #'get-key bind keymap options) keys))))
-                    (conn--with-work-buffer
+                    (with-work-buffer
                       (dolist (key (nreverse keys))
                         (insert key ", "))
                       (delete-char -2)
@@ -256,7 +256,7 @@
                keymap-buffer)
               (when (and (> (count-lines beg (point)) page-lines)
                          (/= prev beg))
-                (cl-incf conn--quick-ref-page-count)
+                (incf conn--quick-ref-page-count)
                 (save-excursion
                   (goto-char prev)
                   (insert ""))
@@ -268,7 +268,7 @@
   (with-current-buffer buffer
     (widen)
     (forward-page 1)
-    (cl-incf conn--quick-ref-current-page)
+    (incf conn--quick-ref-current-page)
     (when (= (point) (point-max))
       (setq-local conn--quick-ref-current-page 1)
       (goto-char (point-min)))
@@ -277,7 +277,7 @@
 (defun conn-quick-ref-previous-page (buffer)
   (with-current-buffer buffer
     (widen)
-    (cl-decf conn--quick-ref-current-page)
+    (decf conn--quick-ref-current-page)
     (when (= (point) (point-min))
       (setq-local conn--quick-ref-current-page conn--quick-ref-page-count)
       (goto-char (point-max)))

@@ -175,13 +175,13 @@ Label strings are constructed by concatenating elements of
                (dolist (b conn-simple-label-characters)
                  (push (concat a b) (aref buckets (1+ i)))))
              (cl-callf nreverse (aref buckets i))
-             (cl-incf i))
+             (incf i))
          (catch 'done
            (let ((n (length (aref buckets i))))
              (dolist (prefix prefixes)
                (dolist (c conn-simple-label-characters)
                  (push (concat prefix c) (aref buckets (1+ i)))
-                 (when (= (cl-incf n) count)
+                 (when (= (incf n) count)
                    (throw 'done nil))))))
          (cl-callf nreverse (aref buckets i))
          (cl-return (cl-loop for bucket across buckets
@@ -1880,7 +1880,7 @@ Target overlays may override this default by setting the
                  ((get-text-property pt 'composition)
                   (setf pt (next-single-property-change
                             pt 'composition nil line-end)))
-                 (t (cl-incf pt))))
+                 (t (incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
           (if (= (overlay-start overlay) (overlay-end overlay))
               (overlay-put overlay 'setup (list 'before-string full-string))
@@ -2000,7 +2000,7 @@ Target overlays may override this default by setting the
                  ((get-text-property (1- pt) 'composition)
                   (setf pt (previous-single-property-change
                             (1- pt) 'composition nil line-beg)))
-                 (t (cl-decf pt))))
+                 (t (decf pt))))
               (move-overlay overlay end beg)))
           (if (= (overlay-start overlay) (overlay-end overlay))
               (overlay-put overlay 'setup (list 'before-string full-string))
@@ -2063,7 +2063,7 @@ Target overlays may override this default by setting the
            ((get-text-property pt 'composition)
             (setf pt (next-single-property-change
                       pt 'composition nil line-end)))
-           (t (cl-incf pt))))
+           (t (incf pt))))
         (move-overlay overlay (overlay-start overlay) end)))
     (if (= (overlay-start overlay) (overlay-end overlay))
         (overlay-put overlay 'setup (list 'before-string full-string))
@@ -2113,7 +2113,7 @@ Target overlays may override this default by setting the
              ((get-text-property (1- pt) 'composition)
               (setf pt (previous-single-property-change
                         (1- pt) 'composition nil line-beg)))
-             (t (cl-decf pt)))))
+             (t (decf pt)))))
         (move-overlay overlay end beg)))
     (if (= (overlay-start overlay) (overlay-end overlay))
         (overlay-put overlay 'setup (list 'before-string full-string))
@@ -2427,9 +2427,9 @@ depths will be sorted before greater depths.
                            (set-window-configuration wconf)
                            (goto-char pt))))
                       (conn-call-action conn-dispatch-action)
-                      (cl-incf conn-dispatch-iteration-count)
+                      (incf conn-dispatch-iteration-count)
                       (conn-dispatch-undo-case
-                        (:undo (cl-decf conn-dispatch-iteration-count))))))
+                        (:undo (decf conn-dispatch-iteration-count))))))
               (user-error
                (pcase-dolist (`(,_ . ,undo-fn)
                               (pop conn--dispatch-change-groups))
@@ -3548,9 +3548,9 @@ to the key binding for that target."
                   (or (and (not quote-flag)
                            (alist-get char conn-dispatch-read-n-chars-re-alist))
                       (progn
-                        (cl-incf literal-count)
+                        (incf literal-count)
                         (regexp-quote (char-to-string char))))))
-              (cl-incf char-count)
+              (incf char-count)
               (setf quote-flag nil)))
           (conn-clear-targets))
         (setf (oref state prompt) (oref state string))
@@ -3777,7 +3777,7 @@ contain targets."
             (push (cons beg end) matches)
             (conn-make-target-overlay beg 0 :thing thing)
             (when (<= beg (pos-eol) prev)
-              (cl-incf line-count))
+              (incf line-count))
             (setf prev beg))))
       (setf line-count 0)
       (save-excursion
@@ -3787,7 +3787,7 @@ contain targets."
                 (end (match-end 0)))
             (conn-make-target-overlay beg 0 :thing thing)
             (when (<= prev (pos-bol) beg)
-              (cl-incf line-count))
+              (incf line-count))
             (setf prev beg)))))))
 
 (cl-defmethod conn-target-finder-update :before ((state conn-dispatch-focus-thing-at-point))

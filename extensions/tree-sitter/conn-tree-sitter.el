@@ -49,7 +49,7 @@
                     when (symbolp s) concat (symbol-name s))
            (number-to-string
             (prog1 gensym-counter
-              (cl-incf gensym-counter))))))
+              (incf gensym-counter))))))
 
 (defun conn-ts--parse-query (query)
   (cl-labels
@@ -217,7 +217,7 @@
                             (concat (symbol-name lang) "/textobjects.scm")
                             conn-ts-query-dir)))
              (when (file-exists-p filename)
-               (conn--with-work-buffer
+               (with-work-buffer
                  (insert-file-contents-literally filename)
                  (pcase-let ((`(,inherits ,toplevel)
                               (parse-inherits)))
@@ -379,7 +379,7 @@
               (cl-callf min min (car node))
               (push (conn-make-bounds cmd 1 node) nodes)
               (setf at (if (< arg 0) (car node) (cdr node)))
-              (when (= (cl-incf count) (abs arg))
+              (when (= (incf count) (abs arg))
                 (throw 'done nil))))))
       (when nodes
         (conn-make-bounds
@@ -431,7 +431,7 @@
               (cl-callf min min (car node))
               (push (conn-make-bounds cmd 1 node) nodes)
               (setf at (car node))
-              (when (= (cl-incf count) (abs arg))
+              (when (= (incf count) (abs arg))
                 (throw 'done nil))))))
       (when nodes
         (conn-make-bounds

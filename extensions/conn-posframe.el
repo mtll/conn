@@ -263,7 +263,7 @@
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-list-posframe fn))))
-    (let* ((header (conn--with-work-buffer
+    (let* ((header (with-work-buffer
                      (insert conn-posframe--padding
                              (if (fboundp 'nerd-icons-faicon)
                                  (concat (nerd-icons-faicon "nf-fa-buffer")
@@ -306,7 +306,7 @@
   (when (and (not executing-kbd-macro)
              (cl-loop for fn in (cons this-command (function-alias-p this-command))
                       thereis (advice-member-p 'conn-list-posframe fn)))
-    (let ((header (conn--with-work-buffer
+    (let ((header (with-work-buffer
                     (insert (when (fboundp 'nerd-icons-mdicon)
                               (concat conn-posframe--padding
                                       (nerd-icons-mdicon "nf-md-tab")
@@ -399,7 +399,7 @@
                 (concat conn-posframe--padding
                         (conn-describe-dispatch d)
                         conn-posframe--padding)))
-      (let ((header (conn--with-work-buffer
+      (let ((header (with-work-buffer
                       (insert conn-posframe--padding
                               (when (fboundp 'nerd-icons-faicon)
                                 (concat (nerd-icons-faicon "nf-fa-buffer")

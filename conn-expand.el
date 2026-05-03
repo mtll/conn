@@ -17,7 +17,6 @@
 
 ;;; Code:
 
-(require 'compat)
 (require 'conn-things)
 (require 'conn-dispatch)
 

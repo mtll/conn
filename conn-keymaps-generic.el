@@ -17,7 +17,6 @@
 
 ;;; Code
 
-(require 'compat)
 (require 'conn)
 
 (setf conn-keymaps-defined 'generic)

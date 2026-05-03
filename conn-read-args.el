@@ -169,7 +169,7 @@ The duration of the message display is controlled by
          (make-list (mod (- (length to-display)) column-count)
                     ""))
        (if (length> to-display column-count)
-           (conn--with-work-buffer
+           (with-work-buffer
              (insert prompt-line)
              (when to-display
                (insert "\n")

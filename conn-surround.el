@@ -17,7 +17,6 @@
 
 ;;; Code
 
-(require 'compat)
 (require 'conn-things)
 (require 'conn-states)
 (require 'conn-read-args)
@@ -193,7 +192,7 @@
                            (eql open (char-after beg))
                            (eql close (char-before end))
                            (> (- end beg) 1)
-                           (>= 0 (cl-decf n)))
+                           (>= 0 (decf n)))
                   (throw 'return
                          (conn-make-bounds
                           'conn-surround arg (cons beg end)

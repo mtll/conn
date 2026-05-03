@@ -19,7 +19,6 @@
 
 ;;; Code
 
-(require 'compat)
 (require 'conn-jump-ring)
 (require 'conn-vars)
 (require 'conn-utils)
@@ -151,7 +150,7 @@ execution."
       (while (and (> count 0)
                   (search-forward str)
                   (conn--region-visible-p (1- (point)) (point)))
-        (cl-decf count)))))
+        (decf count)))))
 
 (defun conn-to-char-backward (char count)
   (declare (conn-thing-command to-char))
@@ -166,7 +165,7 @@ execution."
       (while (and (> count 0)
                   (search-backward str)
                   (conn--region-visible-p (point) (1+ (point))))
-        (cl-decf count)))))
+        (decf count)))))
 
 (defun conn-forward-up-list (arg)
   (interactive "p")
@@ -199,9 +198,9 @@ Respects the current restriction."
   (if (> 0 line)
       (progn
         (goto-char (point-max))
-        (cl-incf line))
+        (incf line))
     (goto-char (point-min))
-    (cl-decf line))
+    (decf line))
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
@@ -320,23 +319,23 @@ Empty lines are skipped."
   (cond ((> N 0)
          (let ((pt (point)))
            (conn--end-of-inner-line-1)
-           (when (> (point) pt) (cl-decf N))
+           (when (> (point) pt) (decf N))
            (cl-loop until (or (<= N 0)
                               (= (point) (point-max)))
                     do (forward-line 1)
                     unless (eolp)
-                    do (cl-decf N))
+                    do (decf N))
            (conn--end-of-inner-line-1)))
         ((< N 0)
          (cl-callf abs N)
          (let ((pt (point)))
            (back-to-indentation)
-           (when (> pt (point)) (cl-decf N))
+           (when (> pt (point)) (decf N))
            (cl-loop until (or (<= N 0)
                               (= (point) (point-max)))
                     do (forward-line -1)
                     unless (eolp)
-                    do (cl-decf N))
+                    do (decf N))
            (back-to-indentation)))))
 
 (defun conn-backward-inner-line (N)
@@ -368,7 +367,7 @@ Empty lines are skipped."
          (let ((pt (point)))
            (conn--end-of-inner-line-1)
            (unless (= pt (point))
-             (cl-decf N))
+             (decf N))
            (conn-forward-inner-line N)))
         ((< N 0)
          (conn-backward-inner-line-dwim (abs N)))))
@@ -389,7 +388,7 @@ Empty lines are skipped."
          (let ((pt (point)))
            (back-to-indentation)
            (unless (= pt (point))
-             (cl-decf N))
+             (decf N))
            (conn-backward-inner-line N)))
         ((< N 0)
          (conn-forward-inner-line-dwim (abs N)))))
@@ -575,7 +574,7 @@ If the mark is already active then deactivate it instead."
             (list (point-marker)
                   (copy-marker (mark-marker))
                   (bound-and-true-p rectangle-mark-mode))))
-         (unless conn-mark-state (cl-decf arg))
+         (unless conn-mark-state (decf arg))
          (dotimes (_ arg)
            (conn-ring-rotate-forward conn-mark-state-ring))
          (conn-previous-mark-command))))
@@ -4075,7 +4074,7 @@ Only available during repeating duplicate."
                     (key-description
                      (where-is-internal ,command (list keymap) 'first-only))
                     'face 'help-key-binding)))
-    (conn--with-work-buffer
+    (with-work-buffer
       (insert (format "Repeat duplicate (%s reference):\n"
                       (key-desc 'conn-quick-reference)))
       (conn-to-vtable
@@ -5138,7 +5137,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
        (if (and (= (point-min) start)
                 (= (point-max) end))
            (set-marker (conn-narrowing-point head) (point))
-         (cl-decf arg)))
+         (decf arg)))
       (_ (user-error "Narrow ring empty")))
     (cond ((> arg 0)
            (dotimes (_ arg)

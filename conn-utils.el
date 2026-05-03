@@ -197,11 +197,6 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
          '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
         (car (buffer-text-pixel-size nil nil t))))))
 
-(defalias 'conn--with-work-buffer
-  (static-if (<= 31 emacs-major-version)
-      'with-work-buffer
-    'with-temp-buffer))
-
 (defun conn--open-invisible (beg end)
   (catch 'return
     (cl-loop for pt = beg then (next-single-property-change

@@ -1190,7 +1190,7 @@ Returns a `conn-bounds' struct."
 (cl-defmethod conn-bounds-of ((cmd (conn-thing emacs-state))
                               arg)
   (setf arg (prefix-numeric-value arg))
-  (when (> arg 0) (cl-decf arg))
+  (when (> arg 0) (decf arg))
   (when (eq cmd 'conn-next-emacs-state)
     (setf arg (- arg)))
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
@@ -1840,7 +1840,7 @@ not be delete.  The the value returned by each function is ignored.")
 
 (defun conn--transforms-get-references (transforms)
   (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
-    (conn--with-work-buffer
+    (with-work-buffer
       (dolist (tform transforms)
         (when-let* ((doc (alist-get tform doc-strings)))
           (let ((pt (point)))

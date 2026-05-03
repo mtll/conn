@@ -419,7 +419,7 @@ of highlighting."
                (cond (buffer
                       (when (check-buffer buffer)
                         (collect-matches buffer)))
-                     ((conn--with-work-buffer
+                     ((with-work-buffer
                         (condition-case err
                             (insert-file-contents next nil)
                           (file-missing nil)
@@ -1151,7 +1151,7 @@ After kapply has finished restore the previous window configuration."
          (success nil)
          (iterator (lambda (&optional state)
                      (and (vectorp (funcall iterator (or state :next)))
-                          (cl-incf iterations)))))
+                          (incf iterations)))))
     (deactivate-mark)
     (unwind-protect
         (cl-letf (((symbol-function 'kmacro-loop-setup-function)))

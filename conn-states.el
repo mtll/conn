@@ -482,7 +482,7 @@ depth value.  Depth should be an integer between -100 and 100."
   (if (null state)
       (progn
         (setf (get mode :conn-mode-depth) depth)
-        (cl-incf conn--minor-mode-maps-sort-tick))
+        (incf conn--minor-mode-maps-sort-tick))
     (cl-assert (not (conn-state-get state :no-keymap)) nil
                "%s :no-keymap property non-nil" state)
     (let* ((state-obj (conn--find-state state))
