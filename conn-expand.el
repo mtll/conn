@@ -17,6 +17,7 @@
 
 ;;; Code:
 
+(require 'conn-utils)
 (require 'conn-things)
 (require 'conn-dispatch)
 

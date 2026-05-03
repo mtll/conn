@@ -174,20 +174,17 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
     (declare (important-return-value t))
     (if (zerop (length string))
         0
-      ;; Keeping a work buffer around is more efficient than creating a
-      ;; new temporary buffer.
-      (with-current-buffer (get-buffer-create " *string-pixel-width*")
+      (with-work-buffer
         ;; Setup current buffer to correctly compute pixel width.
-        (when buffer
-          (dolist (v '(face-remapping-alist
-                       char-property-alias-alist
-                       default-text-properties))
-            (if (local-variable-p v buffer)
-                (set (make-local-variable v)
-                     (buffer-local-value v buffer)))))
+        (dolist (v '(face-remapping-alist
+                     char-property-alias-alist
+                     default-text-properties))
+          (if (local-variable-p v buffer)
+              (set (make-local-variable v)
+                   (buffer-local-value v buffer))))
         ;; Avoid deactivating the region as side effect.
-        (delete-region (point-min) (point-max))
-        (insert string)
+        (let (deactivate-mark)
+          (insert string))
         ;; If `display-line-numbers' is enabled in internal
         ;; buffers (e.g. globally), it breaks width calculation
         ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',

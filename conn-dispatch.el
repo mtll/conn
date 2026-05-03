@@ -18,6 +18,7 @@
 ;;; Code
 
 (require 'eieio)
+(require 'conn-utils)
 (require 'conn-states)
 (require 'conn-read-args)
 (require 'conn-things)
