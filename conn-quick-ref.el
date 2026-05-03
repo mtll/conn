@@ -31,7 +31,7 @@
   "Face for column headings in quick ref buffer."
   :group 'conn-quick-ref)
 
-(defface conn-quick-ref-error-face
+(defface conn-quick-ref-unbound-face
   '((t (:inherit error)))
   "Face for key not found errors."
   :group 'conn-quick-ref)
@@ -42,7 +42,24 @@
 (defvar conn-quick-ref-display-function 'conn-quick-ref-buffer)
 
 (defvar conn--quick-ref-unbound
-  (propertize "Ø" 'face 'conn-quick-ref-error-face))
+  (propertize "Ø" 'face 'conn-quick-ref-unbound-face))
+
+(defvar conn-quick-reference-header-key-description
+  '(:eval (substitute-command-keys
+           "\\<conn-quick-ref-map>\\[next] Next; \\[previous] Previous; \\[close] Close"))
+  "Keybinding hints for `conn-quick-reference-header-line-format'.")
+
+(defvar conn-quick-reference-header-line-format
+  `(" "
+    (:eval (format "[%s/%s] "
+                   conn--quick-ref-current-page
+                   conn--quick-ref-page-count))
+    ,(propertize "Quick Reference"
+                 'face '(:weight bold))
+    "   ("
+    ,conn-quick-reference-header-key-description
+    ") ")
+  "Template for `header-line-format' in quick reference buffers.")
 
 (defvar conn--quick-ref-current-page nil)
 (defvar conn--quick-ref-page-count nil)
@@ -228,8 +245,9 @@
   (let ((keymap-buffer (current-buffer))
         (page-lines (max 10 (ceiling (frame-height) 3.5))))
     (with-current-buffer buffer
-      (setq-local conn--quick-ref-page-count 1)
-      (setq-local conn--quick-ref-current-page 1)
+      (setq-local conn--quick-ref-page-count 1
+                  conn--quick-ref-current-page 1
+                  page-delimiter "")
       (with-silent-modifications
         (let ((beg (point)))
           (dolist (page pages)
@@ -286,63 +304,51 @@
 (defun conn--quick-ref-loop (pages loop-fn)
   (let* ((inhibit-message t)
          (state nil)
-         (header
-          `(" "
-            (:eval (format "[%s/%s] "
-                           conn--quick-ref-current-page
-                           conn--quick-ref-page-count))
-            (:propertize "Quick Reference"
-                         face mode-line-buffer-id)
-            ,(substitute-command-keys
-              (concat "\\<conn-quick-ref-map>   "
-                      "(\\[next] Next; \\[previous] Previous; \\[close] Close) ")))))
-    (let ((buf (generate-new-buffer " *conn-quick-ref*" t)))
-      (conn--unwind-protect-all
-        (progn
-          (with-current-buffer buf
-            (conn-quick-ref-mode)
-            (with-silent-modifications
-              (erase-buffer)
-              (delete-all-overlays))
-            (setq-local page-delimiter ""
-                        cursor-type nil
-                        header-line-format header
-                        mode-line-format nil
-                        face-remapping-alist '((header-line-inactive header-line))))
-          (conn-quick-ref-insert-pages pages buf)
-          (when loop-fn (funcall loop-fn))
-          (conn->f state
-            (funcall conn-quick-ref-display-function buf))
-          (conn-with-overriding-map conn-quick-ref-map
-            (cl-loop
-             (let ((keys (let ((inhibit-quit t))
-                           (read-key-sequence nil))))
-               (when (eql (aref keys 0) (car (last (current-input-mode))))
-                 (signal 'quit nil))
-               (pcase (key-binding keys 'accept-default)
-                 ('close (cl-return))
-                 ('next
-                  (conn-quick-ref-next-page buf)
-                  (when loop-fn (funcall loop-fn))
-                  (conn->f state
-                    (funcall conn-quick-ref-display-function buf)))
-                 ('previous
-                  (conn-quick-ref-previous-page buf)
-                  (when loop-fn (funcall loop-fn))
-                  (conn->f state
-                    (funcall conn-quick-ref-display-function buf)))
-                 ((or 'quit 'keyboard-quit)
-                  (signal 'quit nil))
-                 (binding
-                  (cl-block continue
-                    (when loop-fn
-                      (funcall loop-fn binding
-                               (lambda () (cl-return-from continue))))
-                    (conn-add-unread-events
-                     (this-single-command-raw-keys))
-                    (cl-return))))))))
-        (funcall conn-quick-ref-display-function buf state t)
-        (kill-buffer buf)))))
+         (buf (generate-new-buffer " *conn-quick-ref*" t)))
+    (conn--unwind-protect-all
+      (progn
+        (with-current-buffer buf
+          (conn-quick-ref-mode)
+          (setq-local cursor-type nil
+                      header-line-format conn-quick-reference-header-line-format
+                      mode-line-format nil
+                      face-remapping-alist `((header-line-inactive header-line)
+                                             (mode-line-inactive mode-line)
+                                             ,@face-remapping-alist)))
+        (conn-quick-ref-insert-pages pages buf)
+        (when loop-fn (funcall loop-fn))
+        (conn->f state
+          (funcall conn-quick-ref-display-function buf))
+        (conn-with-overriding-map conn-quick-ref-map
+          (cl-loop
+           (let ((keys (let ((inhibit-quit t))
+                         (read-key-sequence nil))))
+             (when (eql (aref keys 0) (car (last (current-input-mode))))
+               (signal 'quit nil))
+             (pcase (key-binding keys 'accept-default)
+               ('close (cl-return))
+               ('next
+                (conn-quick-ref-next-page buf)
+                (when loop-fn (funcall loop-fn))
+                (conn->f state
+                  (funcall conn-quick-ref-display-function buf)))
+               ('previous
+                (conn-quick-ref-previous-page buf)
+                (when loop-fn (funcall loop-fn))
+                (conn->f state
+                  (funcall conn-quick-ref-display-function buf)))
+               ((or 'quit 'keyboard-quit)
+                (signal 'quit nil))
+               (binding
+                (cl-block continue
+                  (when loop-fn
+                    (funcall loop-fn binding
+                             (lambda () (cl-return-from continue))))
+                  (conn-add-unread-events
+                   (this-single-command-raw-keys))
+                  (cl-return))))))))
+      (funcall conn-quick-ref-display-function buf state t)
+      (kill-buffer buf))))
 
 (defun conn-quick-reference (pages &optional loop-fn)
   (interactive (list (conn-get-quick-ref-pages)))
@@ -429,17 +435,47 @@
            do (push elem (nth (mod i col-count) cols))
            finally return (mapcar #'nreverse cols)))
 
-(defun conn-quick-ref-buffer (buffer &optional _state teardown)
+(defcustom conn-quick-reference-buffer-separator 'line
+  "Separator for quick reference buffer display."
+  :type '(choice
+          (const :tag "No separator" nil)
+          (const :tag "Substitute thin line" line)
+          (const :tag "Display help information in mode-line instead of header-line"
+                 mode-line)))
+
+(defun conn-quick-ref-buffer (buffer &optional initialized teardown)
   (if teardown
       (when-let* ((win (get-buffer-window buffer)))
         (delete-window win))
     (unless (get-buffer-window buffer)
       (display-buffer buffer '((display-buffer-in-side-window (side . bottom))
                                (window-height . fit-window-to-buffer))))
+    (unless initialized
+      (pcase conn-quick-reference-buffer-separator
+        ('line
+         (with-current-buffer buffer
+           (let* ((face `(:background ,(face-foreground 'default) :extend t))
+                  (line (propertize "__" 'face face 'display '(space :height (1))))
+                  (newline (propertize "\n" 'face face 'line-height t)))
+             (with-silent-modifications
+               (without-restriction
+                 (save-excursion
+                   (goto-char (point-min))
+                   (while (search-forward "" nil t)
+                     (backward-char 1)
+                     (insert line newline)
+                     (forward-char 1))
+                   (goto-char (point-max))
+                   (insert line newline)))))))
+        ('mode-line
+         (cl-shiftf (buffer-local-value 'mode-line-format buffer)
+                    (buffer-local-value 'header-line-format buffer)
+                    nil))))
     (when-let* ((win (get-buffer-window buffer)))
       (with-current-buffer buffer
         (set-window-point win (point)))
       (let ((window-min-height 2))
-        (fit-window-to-buffer win)))))
+        (fit-window-to-buffer win)))
+    t))
 
 (provide 'conn-quick-ref)

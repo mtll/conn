@@ -580,8 +580,6 @@
 
 ;;;; Quick Ref
 
-(defvar conn--quick-ref-posframe-overlay nil)
-
 ;;;###autoload
 (defun conn-quick-ref-posframe (buffer &optional state teardown)
   (if teardown
