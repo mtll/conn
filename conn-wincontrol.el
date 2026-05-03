@@ -96,8 +96,8 @@
   :interactive nil
   (when conn-wincontrol-one-command-mode
     (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (conn-wincontrol-mode 1)
-    (setf conn--wincontrol-message-newline nil)))
+    (setf conn--wincontrol-message-newline nil)
+    (conn-wincontrol-mode 1)))
 
 (defun conn-wincontrol-one-command ()
   (interactive)
