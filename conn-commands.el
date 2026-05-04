@@ -1159,16 +1159,20 @@ Currently selected window remains selected afterwards."
 
 (defun conn-dwim-button ()
   (and (fboundp 'widget-apply)
-       (ignore-errors
-         (widget-apply (get-char-property (point) 'button)
-                       :active))
+       (or (ignore-errors
+             (widget-apply (get-char-property (point) 'button)
+                           :active))
+           (ignore-errors
+             (button-get (button-at (point)) 'action)))
        'forward-button))
 
 (defun conn-dwim-alt-button ()
   (and (fboundp 'widget-apply)
-       (ignore-errors
-         (widget-apply (get-char-property (point) 'button)
-                       :active))
+       (or (ignore-errors
+             (widget-apply (get-char-property (point) 'button)
+                           :active))
+           (ignore-errors
+             (button-get (button-at (point)) 'action)))
        'backward-button))
 
 ;; From embark
@@ -5294,6 +5298,18 @@ The region is added to `conn-narrow-ring'."
 (conn-define-state conn-join-lines-state (conn-read-thing-state)
   :lighter "JOIN")
 
+(cl-defstruct (conn-join-lines-thing-argument
+               (:include conn-thing-with-subregions-argument)
+               ( :constructor conn-join-lines-thing-argument
+                 (&aux
+                  (subregions (use-region-p))
+                  (recursive-edit t)
+                  (subregions-explicit-flag subregions)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
 (defun conn-join-lines (thing arg transform &optional subregions-p)
   "Join the lines in region defined by THING, ARG, and TRANSFORM.
 
@@ -5306,7 +5322,7 @@ subregion."
    (conn-read-args (conn-join-lines-state
                     :prompt "Thing")
        ((`(,thing ,arg ,subregions)
-         (conn-thing-with-subregions-argument-dwim t))
+         (conn-join-lines-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform subregions)))
   (save-mark-and-excursion
@@ -5335,7 +5351,7 @@ subregion."
 
 (defvar-keymap conn-shell-command-replace-map)
 
-(conn-define-state conn-join-lines-state (conn-read-thing-state)
+(conn-define-state conn-shell-command-state (conn-read-thing-state)
   :lighter "SHELL")
 
 (cl-defstruct (conn-shell-command-on-thing-argument
@@ -5357,7 +5373,7 @@ subregion."
                                     replace
                                     subregions)
   (interactive
-   (conn-read-args (conn-join-lines-state
+   (conn-read-args (conn-shell-command-state
                     :prompt "Thing")
        ((`(,thing ,arg ,subregions) (conn-shell-command-on-thing-argument))
         (transform (conn-transform-argument))
@@ -5405,5 +5421,68 @@ subregion."
       replace
       shell-command-default-error-buffer
       t nil))))
+
+;;;;; Case
+
+(conn-define-state conn-case-state (conn-read-thing-state)
+  :lighter "CASE")
+
+(cl-defstruct (conn-case-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-case-thing-argument
+                 (&aux (required t)))))
+
+(cl-defgeneric conn-case-thing-do (thing arg transform case-function)
+  (declare (conn-anonymous-thing-property :upcase-op)))
+
+(cl-defmethod conn-case-thing-do :around (&rest args)
+  (let ((hist conn-command-history))
+    (cl-call-next-method)
+    (when (eq hist conn-command-history)
+      (apply #'conn-push-command-history
+             'conn-case-thing-do
+             args))))
+
+(cl-defmethod conn-case-thing-do ((thing (conn-thing t))
+                                  arg
+                                  transform
+                                  case-function)
+  (pcase (conn-bounds-of thing arg)
+    ((and (conn-bounds `(,beg . ,end) transform)
+          ;; (conn-bounds-get :direction)
+          )
+     (funcall case-function beg end)
+     ;; Is it more useful to stay put or move the point?
+     ;; (pcase direction
+     ;;   (1 (goto-char end))
+     ;;   (-1 (goto-char beg)))
+     )))
+
+(defun conn-upcase-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-case-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-case-thing-argument))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-case-thing-do thing arg transform #'upcase-region))
+
+(defun conn-downcase-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-case-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-case-thing-argument))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-case-thing-do thing arg transform #'downcase-region))
+
+(defun conn-capitalize-thing (thing arg transform)
+  (interactive
+   (conn-read-args (conn-case-state
+                    :prompt "Thing")
+       ((`(,thing ,arg) (conn-case-thing-argument))
+        (transform (conn-transform-argument)))
+     (list thing arg transform)))
+  (conn-case-thing-do thing arg transform #'capitalize-region))
 
 (provide 'conn-commands)

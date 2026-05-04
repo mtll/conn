@@ -93,7 +93,6 @@
   :keymap conn-default-edit-map
   "w" 'conn-kapply-on-word
   "W" 'conn-kapply-on-symbol
-  "," 'conn-dispatch-on-buttons
   "t" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
   "b" 'conn-command-to-register
@@ -104,8 +103,11 @@
   "_" 'indent-relative
   "i" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
+  "u" 'conn-upcase-thing
+  "l" 'conn-downcase-thing
+  "x" 'conn-capitalize-thing
   "q" 'conn-indent-thing
-  "l" 'conn-indent-thing-rigidly
+  "v" 'conn-indent-thing-rigidly
   "R" 'indent-rigidly
   "V" 'vc-region-history
   "a c" 'align-current
@@ -417,7 +419,12 @@
                          :bounds-op ( :method (_self _arg)
                                       (save-excursion
                                         (goto-char (pos-bol))
-                                        (cl-call-next-method)))))
+                                        (cl-call-next-method))))
+  ";" (conn-anonymous-thing
+        '(button)
+        :pretty-print ( :method (_self) "all-buttons")
+        :target-finder ( :method (_self &rest _)
+                         (conn-dispatch-button-targets))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'outline-minor-mode)
@@ -850,8 +857,7 @@
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
-  "G" 'conn-bounds-upto-previous
-  "SPC" 'conn-bounds-last)
+  "G" 'conn-bounds-upto-previous)
 
 (define-keymap
   :keymap conn-dispatch-replace-argument-map

@@ -146,14 +146,22 @@
                   (let ((noindirect (memq :noindirect options))
                         (no-remap (memq :no-remap options)))
                     (if-let* ((key (if keymap
-                                       (where-is-internal bind keymap t noindirect no-remap)
+                                       (where-is-internal bind
+                                                          keymap
+                                                          'firstonly
+                                                          noindirect
+                                                          no-remap)
                                      (or (check-advertised bind)
                                          (when overriding-terminal-local-map
                                            (where-is-internal
                                             bind
                                             (list overriding-terminal-local-map)
                                             t noindirect no-remap))
-                                         (where-is-internal bind nil t noindirect no-remap)))))
+                                         (where-is-internal bind
+                                                            nil
+                                                            'firstonly
+                                                            noindirect
+                                                            no-remap)))))
                         (propertize (key-description key) 'face 'help-key-binding)
                       conn--quick-ref-unbound)))
                 (process-bindings (description bindings keymap)

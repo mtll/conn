@@ -840,8 +840,7 @@ buffer is a valid target.")
      ("between" conn-dispatch-bounds-between)
      ("reset" conn-transform-reset))
     (("trim" conn-bounds-trim)
-     ("over" conn-dispatch-bounds-over)
-     ("last" conn-bounds-last))
+     ("over" conn-dispatch-bounds-over))
     (("untrim left" conn-bounds-untrim-left)
      ("untrim right" conn-bounds-untrim-right)
      ("upto next/prev"
@@ -5226,12 +5225,12 @@ for the dispatch."
                    :prefix (conn-bounds-arg bounds)
                    :prompt "Bounds of Dispatch")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
-       (transform (conn-dispatch-transform-argument))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               :value subregions-p)))
+                               :value subregions-p))
+       (transform (conn-dispatch-transform-argument)))
     (let (ovs subregions)
       (unwind-protect
           (progn
