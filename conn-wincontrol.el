@@ -242,7 +242,7 @@
 (defvar conn-wincontrol-windows-reference
   (list
    (conn-reference-page
-     :name conn-windows-1
+     :name 'conn-windows-1
      :depth -30
      (:heading "Window")
      ((("switch window" conn-goto-window)
@@ -269,7 +269,7 @@
        ("throw buffer" conn-throw-buffer)
        ("fit win" shrink-window-if-larger-than-buffer))))
    (conn-reference-page
-     :name conn-windows-2
+     :name 'conn-windows-2
      :depth -20
      (((:keymap conn-window-resize-map)
        (:eval (concat
@@ -311,7 +311,7 @@
                ("rotate" window-layout-rotate-clockwise
                 window-layout-rotate-anticlockwise))))))))
    (conn-reference-page
-     :name conn-windows-3
+     :name 'conn-windows-3
      :depth -10
      (((:heading "Windmove")
        ("up/down/left/right"
@@ -336,7 +336,7 @@
 
 (defvar conn-wincontrol-tabs-and-frames-reference
   (conn-reference-page
-    :name conn-tabs-and-frames
+    :name 'conn-tabs-and-frames
     (((:heading "Tabs")))
     ((("next/prev" tab-next tab-previous)
       ("new" tab-new)

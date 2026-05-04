@@ -832,7 +832,7 @@ buffer is a valid target.")
 (conn-add-keymap-reference
  conn-dispatch-transform-argument-map
  (conn-reference-page
-   :name conn-dispatch-transform
+   :name 'conn-dispatch-transform
    (:heading "Transformations")
    ((("anchored" conn-dispatch-bounds-anchored)
      ("between" conn-dispatch-bounds-between)
@@ -928,7 +928,7 @@ buffer is a valid target.")
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-targets-state)
  (conn-reference-page
-   :name conn-targets
+   :name 'conn-targets
    :depth -10
    (:heading "Special Target Bindings")
    ((("symbol" forward-symbol))
@@ -1264,7 +1264,7 @@ that slot's value and otherwise performs a shallow copy."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-state)
  (conn-reference-page
-   :name conn-dispatch-actions
+   :name 'conn-dispatch-actions
    :depth -50
    (:heading "Actions")
    ((("copy from" conn-dispatch-copy-from)
@@ -1402,7 +1402,7 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
 (conn-add-keymap-reference
  conn-dispatch-command-handler-map
  (conn-reference-page
-   :name conn-dispatch-commands
+   :name 'conn-dispatch-commands
    (((:heading "History:")
      ("previous dispatch" conn-dispatch-cycle-ring-previous)
      ("next dispatch" conn-dispatch-cycle-ring-next))
@@ -2589,7 +2589,7 @@ the meaning of depth."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-read-char-state)
  (conn-reference-page
-   :name conn-dispatch-action-commands
+   :name 'conn-dispatch-action-commands
    (((:heading "Action Commands")
      ("toggle repeat" repeat-dispatch)
      ("undo" undo))
@@ -2600,7 +2600,7 @@ the meaning of depth."
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-read-char-state)
  (conn-reference-page
-   :name conn-dispatch-read-char-commands
+   :name 'conn-dispatch-read-char-commands
    :depth 50
    (:heading "Miscellaneous Commands")
    ((("isearch forward" isearch-forward)

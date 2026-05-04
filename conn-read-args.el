@@ -67,7 +67,7 @@
 (conn-add-keymap-reference
  conn-read-args-map
  (conn-reference-page
-   :name conn-read-args
+   :name 'conn-read-args
    :depth 80
    (:heading "Read Args")
    ((("backward delete arg" backward-delete-arg))
@@ -380,7 +380,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                      ((and (null cmd)
                            (eql help-char (aref keyseq (1- (length keyseq)))))
                       (setf cmd 'execute-extended-command
-                            partial-keymap (key-binding (seq-subseq keyseq 0 -1))))
+                            partial-keymap (key-binding (seq-subseq keyseq 0 -1)
+                                                        'accept-default)))
                      ((and (symbolp cmd)
                            (autoloadp (symbol-function cmd)))
                       (autoload-do-load (symbol-function cmd))))

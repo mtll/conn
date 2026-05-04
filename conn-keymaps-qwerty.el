@@ -46,12 +46,13 @@
 
 (defvar-keymap conn-error-repeat-map
   :repeat (:continue (conn-repeat
-                      kmacro-end-or-call-macro))
+                      ;; kmacro-call-macro
+                      ))
   "i" 'previous-error
   "k" 'next-error)
-(keymap-set conn-error-repeat-map "l" 'conn-repeat)
+(keymap-set conn-error-repeat-map "j" 'conn-repeat)
 (keymap-set conn-error-repeat-map "b" 'conn-repeat)
-(keymap-set conn-error-repeat-map "j" 'kmacro-call-macro)
+;; (keymap-set conn-error-repeat-map "l" 'kmacro-call-macro)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)

@@ -172,7 +172,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'dired-mode)
  (conn-reference-page
-   :name conn-dired
+   :name 'conn-dired
    (:heading "Dired")
    ((("next/prev" dired-next-line dired-previous-line)
      ("next/prev dirline" dired-next-dirline dired-prev-dirline)
@@ -354,7 +354,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'diff-mode)
  (conn-reference-page
-   :name conn-diff
+   :name 'conn-diff
    (:heading "Diff")
    ((("hunk next/prev" diff-hunk-next diff-hunk-prev)
      ("file next/prev" diff-file-next diff-file-prev)
@@ -379,7 +379,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'magit-section-mode)
  (conn-reference-page
-   :name conn-magit
+   :name 'conn-magit
    (:heading "Magit")
    ((("section forward/back" magit-section-forward magit-section-backward)
      ("delete thing" magit-delete-thing)
@@ -495,7 +495,7 @@
  (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
  (list
   (conn-reference-page
-    :name conn-ibuffer
+    :name 'conn-ibuffer
     (:heading "Ibuffer")
     ((("next/prev line" ibuffer-forward-line ibuffer-backward-line)
       ("next/prev group" ibuffer-forward-filter-group ibuffer-backward-filter-group)
@@ -513,7 +513,7 @@
       ("size" ibuffer-do-sort-by-size)
       ("recency" ibuffer-do-sort-by-recency))))
   (conn-reference-page
-    :name conn-ibuffer-mark
+    :name 'conn-ibuffer-mark
     (:heading "Ibuffer Mark")
     ((("mark" ibuffer-mark-forward)
       ("unmark next/prev" ibuffer-unmark-forward ibuffer-unmark-backward)
@@ -572,7 +572,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
  (conn-reference-page
-   :name conn-bookmark
+   :name 'conn-bookmark
    (:heading "Bookmark Menu")
    ((("mark/all" bookmark-bmenu-mark bookmark-bmenu-mark-all)
      ("unmark/all" bookmark-bmenu-unmark bookmark-bmenu-unmark-all)

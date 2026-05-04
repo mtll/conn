@@ -1237,7 +1237,7 @@ The iterator must be the first argument in ARGLIST.
  (conn-get-state-map 'conn-kapply-state)
  (list
   (conn-reference-page
-    :name conn-kapply-macro
+    :name 'conn-kapply-macro
     :depth -20
     ((("record a new macro in the current state" record)
       ("apply the previous macro" apply)
@@ -1245,7 +1245,7 @@ The iterator must be the first argument in ARGLIST.
       ("apply and append without executing macro first" append-skip-exec)
       ("step edit the previous macro" step-edit))))
   (conn-reference-page
-    :name conn-kapply-macro-ring
+    :name 'conn-kapply-macro-ring
     :depth -10
     (:heading "Kmacro Ring")
     ((("cycle backward" kmacro-cycle-ring-next)
@@ -1739,7 +1739,7 @@ finishing showing the buffers that were visited."))
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-kapply-matches-state)
  (conn-reference-page
-   :name conn-kapply-matches
+   :name 'conn-kapply-matches
    :depth -10
    "Replace instances of a pattern in a thing."
    ((("In project" project)

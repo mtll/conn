@@ -140,7 +140,7 @@
                   (when-let* ((_(symbolp bind))
                               (adv (get bind :advertised-binding))
                               (desc (key-description adv))
-                              (_(eq bind (key-binding adv))))
+                              (_(eq bind (key-binding adv 'accept-default))))
                     adv))
                 (get-key (bind keymap &rest options)
                   (let ((noindirect (memq :noindirect options))

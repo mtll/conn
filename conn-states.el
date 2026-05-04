@@ -826,7 +826,7 @@ is being entered after the current state has exited or nil if
   (when (eql ?_ (string-to-char (symbol-name transition)))
     (setf transition (gensym)))
   (cl-with-gensyms (rest)
-    (if (eq (car body) :label)
+    (if (eq (car body) :name)
         `(let ((label ,(cadr body)))
            (unless (memq label conn--state-exit-functions-ids)
              (push label conn--state-exit-functions-ids)

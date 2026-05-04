@@ -1708,7 +1708,7 @@ words."))
 (conn-add-keymap-reference
  conn-reformat-argument-map
  (conn-reference-page
-   :name conn-reformat
+   :name 'conn-reformat
    :depth 70
    (:heading "Reformat")
    ((("toggle" reformat))
@@ -1773,7 +1773,7 @@ not be delete.  The the value returned by each function is ignored.")
 (conn-add-keymap-reference
  conn-check-bounds-argument-map
  (conn-reference-page
-   :name conn-check-bounds
+   :name 'conn-check-bounds
    :depth 70
    (:heading "Check Bounds Argument")
    ((("toggle" check-bounds))
@@ -1814,7 +1814,7 @@ not be delete.  The the value returned by each function is ignored.")
 (conn-add-keymap-reference
  conn-transform-map
  (conn-reference-page
-   :name conn-transform
+   :name 'conn-transform
    (:heading "Transformations")
    ((("after point/exclusive"
       conn-bounds-after-point

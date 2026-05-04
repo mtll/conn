@@ -242,7 +242,7 @@ See also `conn-repeat'.")
     nil
     :filter ,(lambda (_real-binding)
                (conn--without-conn-maps
-                 (key-binding (vector last-input-event) t)))))
+                 (key-binding (vector last-input-event) 'accept-default)))))
 
 (defmacro conn-remap-key (from-keys &optional without-conn-maps no-accept-default)
   "Map to whatever is bound at FROM-KEYS."
@@ -308,13 +308,13 @@ See also `conn-repeat'.")
           (`(:without-conn-maps ,key)
            (if (stringp key) (setf key (key-parse key)))
            (push `(conn--without-conn-maps
-                    (key-binding ,key t))
+                    (key-binding ,key 'accept-default))
                  maps))
           ((and key (pred stringp))
            (if (stringp key) (setf key (key-parse key)))
-           (push `(key-binding ,key t) maps))
+           (push `(key-binding ,key 'accept-default) maps))
           ((and key (pred vectorp))
-           (push `(key-binding ,key t) maps))
+           (push `(key-binding ,key 'accept-default) maps))
           (map
            (push map maps)
            (push map default-maps))))
