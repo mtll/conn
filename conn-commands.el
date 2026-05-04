@@ -4068,15 +4068,19 @@ Only available during repeating duplicate."
   (interactive)
   (user-error "Not repeating duplicate"))
 
-(defun conn--duplicate-message-string (keymap &rest desc-and-commands)
+(defun conn--repeat-message-string (keymap
+                                    command-name
+                                    reference-command
+                                    &rest desc-and-commands)
   (cl-macrolet ((key-desc (command)
                   `(propertize
                     (key-description
                      (where-is-internal ,command (list keymap) 'first-only))
                     'face 'help-key-binding)))
     (with-work-buffer
-      (insert (format "Repeat duplicate (%s reference):\n"
-                      (key-desc 'conn-quick-reference)))
+      (insert (format "Repeat %s (%s reference):\n"
+                      command-name
+                      (key-desc reference-command)))
       (conn-to-vtable
        (cl-loop for (d c) on desc-and-commands by #'cddr
                 collect (format "%s %s" (key-desc c) d))
@@ -4270,13 +4274,17 @@ Only available during repeating duplicate."
                #'pred
                #'cleanup
                (if no-padding
-                   (conn--duplicate-message-string
+                   (conn--repeat-message-string
                     keymap
+                    "duplicate"
+                    'conn-quick-reference
                     "repeat" 'conn-duplicate-repeat
                     "delete" 'conn-duplicate-repeat-delete
                     "kapply" 'conn-duplicate-repeat-kapply)
-                 (conn--duplicate-message-string
+                 (conn--repeat-message-string
                   keymap
+                  "duplicate"
+                  'conn-quick-reference
                   "repeat" 'conn-duplicate-repeat
                   "indent" 'conn-duplicate-repeat-indent
                   "newline" 'conn-duplicate-repeat-toggle-padding
@@ -4368,8 +4376,10 @@ Only available during repeating duplicate."
                  conn-duplicate-repeat-map
                  #'pred
                  #'cleanup
-                 (conn--duplicate-message-string
+                 (conn--repeat-message-string
                   conn-duplicate-repeat-map
+                  "duplicate"
+                  'conn-quick-reference
                   "repeat" 'conn-duplicate-repeat
                   "indent" 'conn-duplicate-repeat-delete
                   "kapply" 'conn-duplicate-repeat-kapply)))))
@@ -5062,6 +5072,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 
 (cl-defmethod conn-bounds-of ((_thing (conn-thing narrow-ring))
                               _arg)
+  (conn--narrow-ring-ensure)
   (cl-symbol-macrolet ((beg (conn-narrowing-start n))
                        (end (conn-narrowing-end n)))
     (cl-loop for n in (conn-ring-list conn-narrow-ring)
@@ -5106,12 +5117,15 @@ If CLEANUP-WHITESPACE is non-nil then also run
                              transform
                              subregions-p))
 
-(defun conn--narrow-ring-record (beg end &optional point)
+(defun conn--narrow-ring-ensure ()
   (unless (conn-ring-p conn-narrow-ring)
     (setf conn-narrow-ring
           (conn-make-ring conn-narrow-ring-max
                           :cleanup #'conn-delete-narrowing
-                          :copier #'conn-copy-narrowing)))
+                          :copier #'conn-copy-narrowing))))
+
+(defun conn--narrow-ring-record (beg end &optional point)
+  (conn--narrow-ring-ensure)
   (pcase-let (((or 'nil (cl-struct conn-narrowing (start bf) (end ef)))
                (conn-ring-head conn-narrow-ring))
               ((or 'nil (cl-struct conn-narrowing (start bb) (end eb)))
@@ -5128,9 +5142,10 @@ If CLEANUP-WHITESPACE is non-nil then also run
           :point (or (copy-marker point)
                      (make-marker))))))))
 
-(defun conn-cycle-narrowings (arg)
+(defun conn-narrow-ring-previous (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
   (interactive "p")
+  (conn--narrow-ring-ensure)
   (unless (= arg 0)
     (pcase (conn-ring-head conn-narrow-ring)
       ((and head (cl-struct conn-narrowing start end))
@@ -5155,12 +5170,18 @@ If CLEANUP-WHITESPACE is non-nil then also run
        (narrow-to-region start end))
       (_ (user-error "Narrow ring empty")))))
 
+(defun conn-narrow-ring-next (arg)
+  "Cycle to the ARGth region in `conn-narrow-ring'."
+  (interactive "p")
+  (conn-narrow-ring-previous (- arg)))
+
 (defun conn-widen ()
   "Widen and record the current position in `conn-narrow-ring'.
 
 Records point in `conn-narrow-ring' if the current narrowing is the head
 of `conn-narrow-ring'."
   (interactive)
+  (conn--narrow-ring-ensure)
   (pcase (conn-ring-head conn-narrow-ring)
     ((and head (cl-struct conn-narrowing start end))
      (when (and (= (point-min) start)
@@ -5171,6 +5192,7 @@ of `conn-narrow-ring'."
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
+  (conn--narrow-ring-ensure)
   (let* ((new (conn--merge-overlapping-regions
                (cl-loop for n in (conn-ring-list conn-narrow-ring)
                         collect (cons (conn-narrowing-start n)
@@ -5186,6 +5208,7 @@ of `conn-narrow-ring'."
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
+  (conn--narrow-ring-ensure)
   (mapc (conn-ring-cleanup conn-narrow-ring)
         (conn-ring-list conn-narrow-ring))
   (setf (conn-ring-list conn-narrow-ring) nil
@@ -5194,6 +5217,7 @@ of `conn-narrow-ring'."
 (defun conn-pop-narrow-ring ()
   "Pop `conn-narrow-ring'."
   (interactive)
+  (conn--narrow-ring-ensure)
   (pcase (conn-ring-head conn-narrow-ring)
     ('nil (widen))
     ((and (cl-struct conn-narrowing start end)

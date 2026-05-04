@@ -116,7 +116,7 @@
                      `(list ,@(mapcar #'process-definition def)))
                     (_ `(quote ,def)))))
       `(conn--make-reference-page
-        ',(or name (make-symbol "anonymous-page"))
+        ,(or name `(quote ,(make-symbol "anonymous-page")))
         ,depth
         (list ,@(cl-loop for row in definition
                          if (listp row)

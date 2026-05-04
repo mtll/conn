@@ -39,6 +39,8 @@
 (declare-function conn-kill-thing "conn-commands")
 (declare-function conn-toggle-highlight-at-point "conn-commands")
 (declare-function conn--unhighlight-at-point "conn-commands")
+(declare-function conn--dwim-at-point-filter "conn-commands")
+(declare-function conn--alt-dwim-at-point-filter "conn-commands")
 
 (autoload 'pulse-momentary-highlight-overlay "pulse")
 
@@ -1249,7 +1251,7 @@ that slot's value and otherwise performs a shallow copy."
       (eq (conn-action-repeat action) nil)))
 
 (defvar-keymap conn-dispatch-repeat-argument-map
-  "TAB" 'repeat-dispatch)
+  "SPC" 'repeat-dispatch)
 
 (cl-defstruct (conn-dispatch-action-argument
                (:include conn-argument))
@@ -2786,7 +2788,7 @@ buffer."
   "C-h c" 'conn-describe-key
   "C-h o" 'conn-describe-symbol
   "C-w" 'restrict-windows
-  "M-TAB" 'repeat-dispatch
+  "M-SPC" 'repeat-dispatch
   "M-s" conn-search-remap
   "M-g" conn-goto-remap
   "M-h" conn-edit-remap
@@ -4680,6 +4682,40 @@ it.")
            (goto-char pt)
            (conn--unhighlight-at-point)))))))
 
+(defun conn-dispatch-dwim ()
+  (declare (conn-dispatch-action)
+           (important-return-value t))
+  (conn-action ()
+    (:description "DWIM")
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (if-let* ((cmd (save-excursion
+                         (goto-char pt)
+                         (conn--dwim-at-point-filter nil))))
+            (save-mark-and-excursion
+              (conn-dispatch-change-group)
+              (goto-char pt)
+              (call-interactively cmd))
+          (user-error "No DWIM action at point"))))))
+
+(defun conn-dispatch-dwim-alt ()
+  (declare (conn-dispatch-action)
+           (important-return-value t))
+  (conn-action ()
+    (:description "DWIM alt")
+    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
+      (with-selected-window window
+        (if-let* ((cmd (save-excursion
+                         (goto-char pt)
+                         (conn--alt-dwim-at-point-filter nil))))
+            (save-mark-and-excursion
+              (conn-dispatch-change-group)
+              (goto-char pt)
+              (call-interactively cmd))
+          (user-error "No DWIM action at point"))))))
+
 (defun conn-dispatch-transpose ()
   (declare (conn-dispatch-action)
            (important-return-value t))
@@ -4976,7 +5012,6 @@ INITIAL-ARG is the initial value of the prefix argument during
   (interactive)
   (conn-read-args (conn-dispatch-state
                    :command-handler (conn-dispatch-command-handler)
-                   :prefix current-prefix-arg
                    :prompt "Dispatch"
                    :display-handler (conn-read-args-display-columns 5 3)
                    :pre (lambda (_)
@@ -5012,7 +5047,6 @@ INITIAL-ARG is the initial value of the prefix argument during
   (interactive)
   (let ((conn-dispatch-always-prompt t))
     (conn-read-args (conn-dispatch-thingatpt-state
-                     :prefix current-prefix-arg
                      :command-handler (conn-dispatch-command-handler)
                      :prompt "Dispatch"
                      :pre (lambda (_)

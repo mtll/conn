@@ -188,44 +188,44 @@
 
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
-      (pcase-let ((`(,beg . ,end) narrowing))
+      (pcase-let (((cl-struct conn-narrowing start end)
+                   narrowing))
         (format "(%s . %s)"
-                (marker-position beg)
+                (marker-position start)
                 (marker-position end)))
-    (save-restriction
-      (widen)
-      (pcase-let ((`(,beg . ,end) narrowing))
+    (without-restriction
+      (pcase-let (((cl-struct conn-narrowing start end)
+                   narrowing))
         (format "%s+%s"
-                (line-number-at-pos (marker-position beg) t)
-                (count-lines (marker-position beg)
+                (line-number-at-pos (marker-position start) t)
+                (count-lines (marker-position start)
                              (marker-position end)))))))
 
 (defun conn--narrow-ring-display ()
   (let ((len (length (when (conn-ring-p conn-narrow-ring)
                        (conn-ring-list conn-narrow-ring)))))
-    (ignore-errors
-      (concat
-       (propertize "Narrow Ring: " 'face 'transient-heading)
-       (propertize (format "[%s]" len)
-                   'face 'transient-value)
-       " - "
-       (when (> len 2)
-         (format "%s, " (conn--format-narrowing
-                         (conn-ring-tail conn-narrow-ring))))
-       (when (> len 0)
-         (pcase (conn-ring-head conn-narrow-ring)
-           ('nil (propertize "nil" 'face 'transient-value))
-           ((and reg `(,beg . ,end)
-                 (guard (and (= (point-min) beg)
-                             (= (point-max) end))))
-            (propertize (conn--format-narrowing reg)
-                        'face 'transient-value))
-           (reg
-            (propertize (conn--format-narrowing reg)
-                        'face 'bold))))
-       (when (> len 1)
-         (format ", %s" (conn--format-narrowing
-                         (cadr (conn-ring-list conn-narrow-ring)))))))))
+    (concat
+     (propertize "Narrow Ring: " 'face 'transient-heading)
+     (propertize (format "[%s]" len)
+                 'face 'transient-value)
+     " - "
+     (when (> len 2)
+       (format "%s, " (conn--format-narrowing
+                       (conn-ring-tail conn-narrow-ring))))
+     (when (> len 0)
+       (pcase (conn-ring-head conn-narrow-ring)
+         ('nil (propertize "nil" 'face 'transient-value))
+         ((and reg `(,beg . ,end)
+               (guard (and (= (point-min) beg)
+                           (= (point-max) end))))
+          (propertize (conn--format-narrowing reg)
+                      'face 'transient-value))
+         (reg
+          (propertize (conn--format-narrowing reg)
+                      'face 'bold))))
+     (when (> len 1)
+       (format ", %s" (conn--format-narrowing
+                       (cadr (conn-ring-list conn-narrow-ring))))))))
 
 ;;;###autoload (autoload 'conn-narrow-ring-prefix "conn-transients" nil t)
 (transient-define-prefix conn-narrow-ring-prefix ()
@@ -238,12 +238,8 @@
          (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))
       ("w" "Widen" conn-widen)
       ("c" "Clear" conn-clear-narrow-ring)]
-    [ ("k" "Cycle Next" conn-cycle-narrowings :transient t)
-      ("i" "Cycle Previous"
-       (lambda (arg)
-         (interactive "p")
-         (conn-cycle-narrowings (- arg)))
-       :transient t)
+    [ ("i" "Cycle Previous" conn-narrow-ring-previous :transient t)
+      ("k" "Cycle Next" conn-narrow-ring-next :transient t)
       ("d" "Pop" conn-pop-narrow-ring :transient t)
       ("m" "Merge" conn-merge-narrow-ring :transient t)]
     [ ("N" "Narrow Indirect"

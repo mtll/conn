@@ -2125,7 +2125,8 @@ Only the background color is used."
 
 (conn-register-thing-commands
  '(narrow-ring) nil
- 'conn-cycle-narrowings
+ 'conn-narrow-ring-previous
+ 'conn-narrow-ring-backward
  'conn-narrow-ring-prefix)
 
 (conn-register-thing

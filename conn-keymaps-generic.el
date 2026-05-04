@@ -339,7 +339,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-targets-state)
-  "TAB" 'repeat-dispatch
+  "SPC" 'repeat-dispatch
   "n" 'next-line
   "p" 'forward-line
   "<conn-thing-map> b" (conn-anonymous-thing
@@ -507,10 +507,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-transpose-state)
-  "TAB" 'repeat-dispatch
+  "SPC" 'repeat-dispatch
   "C-w" 'restrict-windows
-  "SPC" 'scroll-up-command
-  "DEL" 'scroll-down-command
   "C-o" 'other-window)
 
 (define-keymap

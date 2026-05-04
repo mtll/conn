@@ -651,7 +651,7 @@
 (conn-add-keymap-reference
  (conn-get-major-mode-map 'conn-special-state 'Info-mode)
  (conn-reference-page
-   :name conn-info
+   :name 'conn-info
    (:heading "Info")
    ((("history forward/back" Info-history-forward Info-history-back)
      ("next/prev" Info-next Info-prev)
