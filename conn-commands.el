@@ -5436,6 +5436,7 @@ subregion."
   (declare (conn-anonymous-thing-property :upcase-op)))
 
 (cl-defmethod conn-case-thing-do :around (&rest args)
+  (push (point) buffer-undo-list)
   (let ((hist conn-command-history))
     (cl-call-next-method)
     (when (eq hist conn-command-history)
