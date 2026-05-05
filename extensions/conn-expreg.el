@@ -4,7 +4,7 @@
 ;; Description: expreg extension for conn
 ;; Author: David Feller
 ;; Package-Version: 0.1
-;; Package-Requires: ((emacs "29.4") (compat "31.0.0.0") expreg conn)
+;; Package-Requires: ((emacs "29.4") (compat "31") expreg conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
