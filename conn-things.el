@@ -1174,7 +1174,7 @@ Returns a `conn-bounds' struct."
         (progn
           (conn-with-recursive-stack 'conn-command-state
             (conn-read-args (conn-mark-thing-state
-                             :prompt "Thing"
+                             :prompt "Mark Thing"
                              :prefix arg)
                 ((`(,thing ,arg) (conn-mark-thing-argument))
                  (transform (conn-transform-argument)))
@@ -1254,7 +1254,7 @@ Returns a `conn-bounds' struct."
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
                               arg)
   (conn-read-args (conn-read-thing-state
-                   :prompt "Thing"
+                   :prompt "Thing at Isearch"
                    :prefix arg)
       ((`(,thing ,arg) (conn-thing-argument)))
     (let ((bounds nil)
@@ -2069,7 +2069,7 @@ Only the background color is used."
          (activate-mark)
          (let (conn-read-args-message-delay)
            (conn-read-args (conn-multi-thing-select-state
-                            :prompt "Thing"
+                            :prompt "Which Thing"
                             :display-handler display-handler
                             :command-handler nil)
                ((bound (conn-multi-thing-argument bounds)))

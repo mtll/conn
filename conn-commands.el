@@ -717,7 +717,7 @@ for the meaning of prefix ARG."
                                        register)
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
+                    :prompt "Register Replace Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument))
         (register (conn-read-argument
@@ -810,7 +810,7 @@ for the meaning of prefix ARG."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
+                    :prompt "Rgrep Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -831,7 +831,7 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive
    (conn-read-args (conn-read-thing-state
-                    :prompt "Thing")
+                    :prompt "Occur Thing")
        ((`(,thing ,arg) (conn-thing-argument-dwim))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -1072,7 +1072,7 @@ Currently selected window remains selected afterwards."
   (insert-for-yank
    (with-minibuffer-selected-window
      (conn-read-args (conn-read-thing-state
-                      :prompt "Thing")
+                      :prompt "Yank Thing")
          ((`(,thing ,arg) (conn-thing-argument t))
           (transform (conn-transform-argument)))
        (pcase (conn-bounds-of thing arg)
@@ -1154,7 +1154,8 @@ Currently selected window remains selected afterwards."
 (defun conn-dwim-xref-definitions ()
   (and-let* ((_ (derived-mode-p 'prog-mode))
              (bounds (bounds-of-thing-at-point 'symbol))
-             (_ (<= (car bounds) (point) (cdr bounds))))
+             (_ (<= (car bounds) (point) (cdr bounds)))
+             (_ (not (conn--point-in-string-p))))
     'xref-find-definitions))
 
 (defun conn-dwim-button ()
@@ -1205,15 +1206,15 @@ Currently selected window remains selected afterwards."
 
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-url -50)
-(add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -20)
-(add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -10)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -20)
+(add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -10)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-eval-sexp 0)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-heading 20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-hs 80)
 
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-button -70)
-(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -20)
-(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol 0)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol -20)
+(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -10)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-heading 20)
 
 (defvar conn-emacs-state-tab-hook nil)
@@ -1299,7 +1300,7 @@ Currently selected window remains selected afterwards."
                                   transform)
   (conn-read-args (conn-mark-dispatch-state
                    :prefix arg
-                   :prompt "Thing")
+                   :prompt "Mark Dispatch")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
        (repeat
@@ -1368,7 +1369,7 @@ Currently selected window remains selected afterwards."
   "Mark the region defined by THING, ARG, and TRANSFORM"
   (interactive
    (conn-read-args (conn-mark-thing-state
-                    :prompt "Thing")
+                    :prompt "Mark Thing")
        ((`(,thing ,arg) (conn-mark-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -1522,7 +1523,7 @@ Currently selected window remains selected afterwards."
                                     check-bounds)
   (conn-read-args (conn-yank-replace-dispatch-state
                    :prefix arg
-                   :prompt "Yank and Replace")
+                   :prompt "Yank and Replace Dispatch")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (read-from-kill-ring
@@ -1685,7 +1686,7 @@ if non-nil check-bounds checks the bounds of the region to be deleted
 with `conn-check-bounds' before deleting."
   (interactive
    (conn-read-args (conn-yank-replace-state
-                    :prompt "Thing")
+                    :prompt "Yank and Replace Thing")
        ((`(,thing ,arg) (conn-yank-replace-thing-argument))
         (transform (conn-transform-argument))
         (swap (conn-boolean-argument "swap" 'swap conn-swap-argument-map))
@@ -2013,7 +2014,7 @@ with `conn-check-bounds' before deleting."
                                &rest _)
   (conn-read-args (conn-change-state
                    :prefix arg
-                   :prompt "Thing")
+                   :prompt "Change Thing")
       ((`(,thing ,arg) (conn-change-thing-argument))
        (transform (conn-transform-argument transform)))
     (conn-change-thing thing arg transform)))
@@ -2444,7 +2445,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive)
   (with-isearch-suspended
    (pcase (conn-read-args (conn-read-thing-state
-                           :prompt "Thing")
+                           :prompt "Isearch in Thing")
               ((`(,thing ,arg) (conn-thing-argument-dwim))
                (transform (conn-transform-argument)))
             (conn-transform-bounds
@@ -2703,7 +2704,7 @@ If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-read-args (conn-transpose-state
-                    :prompt "Transpose"
+                    :prompt "Transpose Things"
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-transpose-thing-argument t))
         (at-point-and-mark (conn-boolean-argument
@@ -2978,7 +2979,7 @@ If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
 hook, which see."
   (interactive
    (conn-read-args (conn-kill-state
-                    :prompt "Thing"
+                    :prompt "Kill Thing"
                     :display-handler (conn-read-args-display-columns 5 3))
        ((`(,thing ,arg) (conn-kill-thing-argument t))
         (`(,transform ,reformat) (conn-transform-and-fixup-argument))
@@ -3266,8 +3267,8 @@ hook, which see."
                                   _check-bounds)
   (conn-read-args (conn-read-thing-state
                    :prompt (if delete
-                               "Delete Matching Lines In"
-                             "Kill Matching Lines In")
+                               "Delete Matching Lines in Thing"
+                             "Kill Matching Lines in Thing")
                    :prefix arg)
       ((`(,thing ,targ) (conn-thing-argument t))
        (transform (conn-transform-argument transform)))
@@ -3323,7 +3324,7 @@ hook, which see."
     (with-undo-amalgamate
       (conn-read-args (conn-kill-dispatch-state
                        :prefix arg
-                       :prompt "Kill"
+                       :prompt "Kill Dispatch"
                        :display-handler (conn-read-args-display-columns 3 3))
           ((`(,thing ,arg) (conn-dispatch-thing-argument t))
            (repeat
@@ -3684,7 +3685,7 @@ being copied to and further invocations with `conn-repeat' append to
 that place."
   (interactive
    (conn-read-args (conn-copy-state
-                    :prompt "Thing")
+                    :prompt "Copy Thing")
        ((`(,thing ,arg) (conn-copy-thing-argument))
         (transform (conn-transform-argument))
         (`(,append ,register ,separator) (conn-copy-how-argument)))
@@ -3818,7 +3819,7 @@ that place."
                                   separator)
   (conn-read-args (conn-copy-dispatch-state
                    :prefix arg
-                   :prompt "Copy")
+                   :prompt "Copy Dispatch")
       ((`(,thing ,arg) (conn-dispatch-thing-argument t))
        (transform (conn-dispatch-transform-argument transform))
        (repeat
@@ -3929,7 +3930,7 @@ TRANSFORM.  For how they are used to define the region see
 The regexp is read interactively."
   (interactive
    (conn-read-args (conn-how-many-state
-                    :prompt "Thing")
+                    :prompt "How Many in Thing")
        ((`(,thing ,arg) (conn-how-many-in-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -3994,7 +3995,7 @@ For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-comment-state
-                    :prompt "Thing")
+                    :prompt "Comment Thing")
        ((`(,thing ,arg) (conn-comment-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -4417,7 +4418,7 @@ If REPEAT is non-nil then duplicate the region REPEAT times.
 Interactively REPEAT is given by the prefix argument."
   (interactive
    (conn-read-args (conn-duplicate-state
-                    :prompt "Thing")
+                    :prompt "Duplicate Thing")
        ((`(,thing ,arg) (conn-duplicate-thing-argument t))
         (transform (conn-transform-argument)))
      (list thing arg transform
@@ -4607,7 +4608,7 @@ Interactively REPEAT is given by the prefix argument."
                                     _kbd-macro-query)
   (conn-read-args (conn-dispatch-change-state
                    :prefix arg
-                   :prompt "Thing")
+                   :prompt "Change Dispatch")
       ((`(,dthing ,darg) (conn-dispatch-thing-argument t))
        (dtform (conn-dispatch-transform-argument))
        (other-end
@@ -4808,7 +4809,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 `conn-bounds-of' and `conn-transform-bounds'."
   (interactive
    (conn-read-args (conn-change-state
-                    :prompt "Thing")
+                    :prompt "Change Thing")
        ((`(,thing ,arg) (conn-change-thing-argument))
         (transform (conn-transform-argument))
         (check-bounds (conn-check-bounds-argument))
@@ -4838,7 +4839,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
   (unless (conn-insertion-recording-p)
     (user-error "Not replacing"))
   (conn-read-args (conn-record-set-region-state
-                   :prompt "Thing")
+                   :prompt "Set Record Region to Thing")
       ((`(,thing ,arg) (conn-thing-argument-dwim))
        (transform (conn-transform-argument)))
     (pcase (conn-bounds-of thing arg)
@@ -4947,7 +4948,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 `whitespace-cleanup-region' on the region."
   (interactive
    (conn-read-args (conn-indent-state
-                    :prompt "Thing")
+                    :prompt "Indent Thing")
        ((`(,thing ,arg) (conn-indent-thing-argument))
         (transform (conn-transform-argument))
         (cleanup-whitespace
@@ -4992,7 +4993,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
 (defun conn-indent-thing-rigidly (thing arg transform)
   (interactive
    (conn-read-args (conn-indent-state
-                    :prompt "Thing")
+                    :prompt "Indent Thing Rigidly")
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -5099,7 +5100,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   "Push thing regions to narrow ring."
   (interactive
    (conn-read-args (conn-narrow-state
-                    :prompt "Thing")
+                    :prompt "Thing to Narrow Ring")
        ((`(,thing ,arg ,subregions)
          (conn-thing-with-subregions-argument-dwim))
         (transform (conn-transform-argument)))
@@ -5264,7 +5265,7 @@ If INDIRECT is non-nil then narrow to the region in an indirect buffer.
 The region is added to `conn-narrow-ring'."
   (interactive
    (conn-read-args (conn-narrow-state
-                    :prompt "Thing"
+                    :prompt "Narrow to Thing"
                     :prefix current-prefix-arg)
        ((`(,thing ,arg) (conn-thing-argument-dwim t))
         (transform (conn-transform-argument))
@@ -5320,7 +5321,7 @@ If SUBREGIONS-P is non-nil then join the lines in each individual
 subregion."
   (interactive
    (conn-read-args (conn-join-lines-state
-                    :prompt "Thing")
+                    :prompt "Join Lines in Thing")
        ((`(,thing ,arg ,subregions)
          (conn-join-lines-thing-argument))
         (transform (conn-transform-argument)))
@@ -5374,7 +5375,7 @@ subregion."
                                     subregions)
   (interactive
    (conn-read-args (conn-shell-command-state
-                    :prompt "Thing")
+                    :prompt "Shell Command on Thing")
        ((`(,thing ,arg ,subregions) (conn-shell-command-on-thing-argument))
         (transform (conn-transform-argument))
         (replace
@@ -5459,10 +5460,55 @@ subregion."
      ;;   (-1 (goto-char beg)))
      )))
 
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql upcase)))
+  "Change case of thing to UPPER CASE.")
+
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql downcase)))
+  "Change case of thing to lower case.")
+
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql capitalize)))
+  "Change case of thing to Capitalize.")
+
+(cl-defmethod conn-change-thing-do ((thing (eql upcase))
+                                    arg
+                                    transform
+                                    &rest _)
+  (conn-read-args (conn-case-state
+                   :prefix arg
+                   :prompt "Upcase Thing")
+      ((`(,thing ,arg) (conn-case-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (conn-case-thing-do thing arg transform #'upcase-region)))
+
+(cl-defmethod conn-change-thing-do ((thing (eql downcase))
+                                    arg
+                                    transform
+                                    &rest _)
+  (conn-read-args (conn-case-state
+                   :prefix arg
+                   :prompt "Downcase Thing")
+      ((`(,thing ,arg) (conn-case-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (conn-case-thing-do thing arg transform #'downcase-region)))
+
+(cl-defmethod conn-change-thing-do ((_thing (eql capitalize))
+                                    arg
+                                    transform
+                                    &rest _)
+  (conn-read-args (conn-case-state
+                   :prefix arg
+                   :prompt "Capitalize Thing")
+      ((`(,thing ,arg) (conn-case-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (conn-case-thing-do thing arg transform #'capitalize-region)))
+
 (defun conn-upcase-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-case-state
-                    :prompt "Thing")
+                    :prompt "Upcase Thing")
        ((`(,thing ,arg) (conn-case-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -5471,7 +5517,7 @@ subregion."
 (defun conn-downcase-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-case-state
-                    :prompt "Thing")
+                    :prompt "Downcase Thing")
        ((`(,thing ,arg) (conn-case-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))
@@ -5480,7 +5526,7 @@ subregion."
 (defun conn-capitalize-thing (thing arg transform)
   (interactive
    (conn-read-args (conn-case-state
-                    :prompt "Thing")
+                    :prompt "Capitalize Thing")
        ((`(,thing ,arg) (conn-case-thing-argument))
         (transform (conn-transform-argument)))
      (list thing arg transform)))

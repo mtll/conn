@@ -103,9 +103,6 @@
   "_" 'indent-relative
   "i" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
-  "u" 'conn-upcase-thing
-  "l" 'conn-downcase-thing
-  "x" 'conn-capitalize-thing
   "q" 'conn-indent-thing
   "v" 'conn-indent-thing-rigidly
   "R" 'indent-rigidly
@@ -569,6 +566,9 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "v u" 'upcase
+  "v l" 'downcase
+  "v c" 'capitalize
   "i" 'conn-backward-outer-line
   "k" 'conn-forward-outer-line
   "x" 'conn-record-emacs-state

@@ -58,14 +58,25 @@
 
   (defun conn--wgrep-setup ()
     (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setf conn--grep-edit-stack-handle
-          (conn-enter-recursive-stack 'conn-command-state)))
+    (setq-local conn--grep-edit-stack-handle
+                (conn-enter-recursive-stack 'conn-command-state)))
   (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
 
-(with-eval-after-load 'grep
-  (defun conn--exit-grep-edit-mode (&rest _)
-    (conn-setup-state-for-buffer))
-  (advice-add 'grep-edit-save-changes :after 'conn--exit-grep-edit-mode))
+(static-when (>= emacs-major-version 31)
+  (with-eval-after-load 'grep
+    (defun conn--exit-grep-edit-mode (&rest _)
+      (when-let* ((handle (cl-shiftf conn--grep-edit-stack-handle nil)))
+        (conn-set-major-mode-maps
+         (conn--derived-mode-all-parents major-mode))
+        (conn-exit-recursive-stack handle)))
+    (advice-add 'grep-edit-save-changes :after 'conn--exit-grep-edit-mode)
+
+    (defun conn--setup-grep-edit-mode ()
+      (conn-set-major-mode-maps
+       (conn--derived-mode-all-parents major-mode))
+      (setq-local conn--grep-edit-stack-handle
+                  (conn-enter-recursive-stack 'conn-command-state)))
+    (add-hook 'grep-edit-mode-hook 'conn--setup-grep-edit-mode)))
 
 ;;;; Calc
 
