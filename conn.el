@@ -112,11 +112,13 @@
     (unless conn-keymaps-defined
       (require 'conn-keymaps-qwerty))
     (conn--setup-keymaps)
+    (dolist (fn '(read-char read-string read-from-minibuffer))
+      (if conn-mode
+          (advice-add fn :around #'conn--inherit-input-method-ad)
+        (advice-remove fn #'conn--inherit-input-method-ad)))
     (if conn-mode
         (progn
           (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
-          (dolist (fn '(read-char read-string read-from-minibuffer))
-            (advice-add fn :around #'conn--inherit-input-method-ad))
           (add-hook 'clone-buffer-hook #'conn--clone-buffer-setup)
           (add-hook 'clone-indirect-buffer-hook #'conn--clone-buffer-setup))
       (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)

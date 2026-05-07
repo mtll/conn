@@ -1333,11 +1333,11 @@
                        'sexp)))))
   (define-keymap
     :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'global-conn-ts-things-mode)
-    "s" all-things
+    "h" all-things
     "n" all-sexps)
   (define-keymap
     :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
-    "s" all-things
+    "h" all-things
     "n" all-sexps))
 
 (define-minor-mode conn-ts-things-mode
