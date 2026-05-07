@@ -573,6 +573,14 @@ then an error is signaled."
 
 (defvar-local conn--prev-mode-line-mule-info nil)
 
+(defun conn--inherit-input-method-ad (&rest app)
+  (if conn--input-method
+      (let ((im conn--input-method))
+        (with-temp-buffer
+          (activate-input-method im)
+          (apply app)))
+    (apply app)))
+
 (defun conn--toggle-input-method-ad (&rest app)
   (if (and conn-local-mode
            (not isearch-mode)

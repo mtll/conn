@@ -1293,25 +1293,25 @@
                           (lambda (bd)
                             (<= (car bd) (point) (cdr bd)))))
                        'conn-ts-thing))))
-      (all-parents
-       (conn-anonymous-thing
-         '(conn-ts-thing)
-         :pretty-print ( :method (_) "ts-all-parents")
-         :target-finder ( :method (_self &rest _)
-                          (conn-ts-query-targets
-                           :things conn-ts-parent-things
-                           :region-predicate (lambda (beg end)
-                                               (and (<= beg (point))
-                                                    (<= (point) end)))))
-         :bounds-op ( :method (_self _arg)
-                      (conn-ts-select-expansion
-                       (lambda ()
-                         (conn-ts-filter-captures
-                          conn-ts-parent-things
-                          (conn-ts-capture (point) (1+ (point)))
-                          (lambda (bd)
-                            (<= (car bd) (point) (cdr bd)))))
-                       'conn-ts-thing))))
+      ;; (all-parents
+      ;;  (conn-anonymous-thing
+      ;;    '(conn-ts-thing)
+      ;;    :pretty-print ( :method (_) "ts-all-parents")
+      ;;    :target-finder ( :method (_self &rest _)
+      ;;                     (conn-ts-query-targets
+      ;;                      :things conn-ts-parent-things
+      ;;                      :region-predicate (lambda (beg end)
+      ;;                                          (and (<= beg (point))
+      ;;                                               (<= (point) end)))))
+      ;;    :bounds-op ( :method (_self _arg)
+      ;;                 (conn-ts-select-expansion
+      ;;                  (lambda ()
+      ;;                    (conn-ts-filter-captures
+      ;;                     conn-ts-parent-things
+      ;;                     (conn-ts-capture (point) (1+ (point)))
+      ;;                     (lambda (bd)
+      ;;                       (<= (car bd) (point) (cdr bd)))))
+      ;;                  'conn-ts-thing))))
       (all-sexps
        (conn-anonymous-thing
          '(sexp)
@@ -1333,13 +1333,11 @@
                        'sexp)))))
   (define-keymap
     :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'global-conn-ts-things-mode)
-    "h" all-things
-    "s" all-parents
+    "s" all-things
     "n" all-sexps)
   (define-keymap
     :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'conn-ts-things-mode)
-    "h" all-things
-    "s" all-parents
+    "s" all-things
     "n" all-sexps))
 
 (define-minor-mode conn-ts-things-mode
