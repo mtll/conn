@@ -1838,19 +1838,15 @@ not be delete.  The the value returned by each function is ignored.")
                   (keymap conn-transform-map)
                   (annotation "transform")))))
 
-(defun conn--transforms-get-references (transforms)
-  (let ((doc-strings (get 'conn-transform-bounds :known-transformations)))
-    (with-work-buffer
-      (dolist (tform transforms)
-        (when-let* ((doc (alist-get tform doc-strings)))
-          (let ((pt (point)))
-            (insert (propertize
-                     (concat (get tform :conn-transform-description) ":\n")
-                     'face 'conn-quick-ref-heading-face))
-            (capitalize-region pt (point)))
-          (insert doc "\n")))
-      (when (buffer-modified-p)
-        (substring (buffer-string) 0 -1)))))
+(cl-defmethod conn-argument-command-reference ((_arg conn-transform-argument)
+                                               cmd
+                                               break)
+  (when-let* ((doc (alist-get cmd (get 'conn-transform-bounds
+                                       :known-transformations))))
+    (cl-typecase doc
+      (string (funcall break (conn-reference-page ,doc)))
+      (function (funcall doc cmd break))
+      (conn--reference-page (funcall break doc)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd

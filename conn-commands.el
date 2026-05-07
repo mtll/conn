@@ -1204,7 +1204,7 @@ Currently selected window remains selected afterwards."
   (and (thing-at-point 'url t)
        'browse-url-at-point))
 
-(add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
+;; (add-hook 'conn-dwim-at-point-hook #'conn-dwim-button -70)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-url -50)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-xref-definitions -20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-file -10)
@@ -1212,7 +1212,7 @@ Currently selected window remains selected afterwards."
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-heading 20)
 (add-hook 'conn-dwim-at-point-hook #'conn-dwim-hs 80)
 
-(add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-button -70)
+;; (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-button -70)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-describe-symbol -20)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-file -10)
 (add-hook 'conn-alt-dwim-at-point-hook #'conn-dwim-alt-heading 20)
@@ -5464,15 +5464,7 @@ subregion."
                                (cmd (eql upcase)))
   "Change case of thing to UPPER CASE.")
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
-                               (cmd (eql downcase)))
-  "Change case of thing to lower case.")
-
-(conn-define-argument-command ((arg conn-change-thing-argument)
-                               (cmd (eql capitalize)))
-  "Change case of thing to Capitalize.")
-
-(cl-defmethod conn-change-thing-do ((thing (eql upcase))
+(cl-defmethod conn-change-thing-do ((_thing (eql upcase))
                                     arg
                                     transform
                                     &rest _)
@@ -5483,7 +5475,11 @@ subregion."
        (transform (conn-transform-argument transform)))
     (conn-case-thing-do thing arg transform #'upcase-region)))
 
-(cl-defmethod conn-change-thing-do ((thing (eql downcase))
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql downcase)))
+  "Change case of thing to lower case.")
+
+(cl-defmethod conn-change-thing-do ((_thing (eql downcase))
                                     arg
                                     transform
                                     &rest _)
@@ -5493,6 +5489,10 @@ subregion."
       ((`(,thing ,arg) (conn-case-thing-argument))
        (transform (conn-transform-argument transform)))
     (conn-case-thing-do thing arg transform #'downcase-region)))
+
+(conn-define-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql capitalize)))
+  "Change case of thing to Capitalize.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql capitalize))
                                     arg

@@ -1998,20 +1998,20 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-on-symbol ()
   (interactive)
   (conn-read-args (conn-kapply-matches-state
-                   :prompt "Kapply in Thing")
+                   :prompt "Kapply on Symbol Within Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument)))
     (save-excursion
       (let (conn-kapply-query-on-record)
         (conn-kapply-on-matches
          thing arg transform
-         nil t t
+         nil t nil
          (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
 
 (defun conn-kapply-on-word ()
   (interactive)
   (conn-read-args (conn-kapply-matches-state
-                   :prompt "Kapply in Thing")
+                   :prompt "Kapply on Word Within Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument)))
     (save-excursion
@@ -2121,8 +2121,7 @@ finishing showing the buffers that were visited."))
                        (point)
                        (line-end-position))))))))
     (conn-kapply-region-iterator)
-    (conn-kapply-on-iterator
-     :ibuffer t)))
+    (conn-kapply-on-iterator :ibuffer t)))
 
 ;;;;; Dispatch Kapply
 

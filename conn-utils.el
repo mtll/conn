@@ -361,8 +361,7 @@ See `quail-add-unread-command-events'."
 (define-inline conn-ring--visit (ring item)
   (inline-letevals (item)
     (inline-quote
-     (conn->f
-         (conn-ring-history ,ring)
+     (conn->f (conn-ring-history ,ring)
        (delq ,item)
        (cons ,item)))))
 
@@ -382,8 +381,7 @@ See `quail-add-unread-command-events'."
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (conn->f
-      (conn-ring-list ring)
+  (conn->f (conn-ring-list ring)
     (delq item)
     (cons item))
   (conn-ring--visit ring item)

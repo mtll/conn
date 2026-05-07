@@ -92,7 +92,7 @@
 (define-keymap
   :keymap conn-default-edit-map
   "w" 'conn-kapply-on-word
-  "W" 'conn-kapply-on-symbol
+  "s" 'conn-kapply-on-symbol
   "t" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
   "b" 'conn-command-to-register
@@ -122,7 +122,7 @@
   "r" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
   "Y" 'yank-rectangle
-  "s" 'conn-sort-things
+  "S" 'conn-sort-things
   "v" 'diff-buffer-with-file
   "y" 'yank-in-context)
 
@@ -899,7 +899,7 @@
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point
   "B" 'conn-bounds-before-point-exclusive
-  "SPC" 'conn-bounds-last
+  "z" 'conn-bounds-last
   "g" 'conn-bounds-upto-next
   "G" 'conn-bounds-upto-previous
   "C-t" 'conn-transform-reset)

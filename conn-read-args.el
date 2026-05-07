@@ -422,6 +422,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (user-error
                     (set-error-message (error-message-string err))))))
                ((or 'describe-key 'conn-describe-key)
+                (when timer
+                  (cancel-timer timer)
+                  (setf timer nil))
                 (with-keymaps
                  (conn--read-args-describe-key
                   arguments
@@ -429,6 +432,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (let ((conn--read-args-error-message (or str "")))
                       (display-message))))))
                ((or 'describe-symbol 'conn-describe-symbol)
+                (when timer
+                  (cancel-timer timer)
+                  (setf timer nil))
                 (with-keymaps
                  (conn--read-args-describe-symbol arguments
                                                   #'display-message)))
