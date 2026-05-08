@@ -556,6 +556,9 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
           (mapc #'delete-overlay matches))
          ((or :next :record)
           (conn-kapply-consume-region (pop matches)))))
+     :around (lambda (cont)
+               (conn-with-region-emphasis regions
+                 (funcall cont)))
      :extra (conn-kapply-order-argument)
      :query t)))
 
@@ -1680,6 +1683,11 @@ finishing showing the buffers that were visited."))
 
 (cl-defun conn-kapply-on-iterator (iterator
                                    &key
+                                   around
+                                   pre
+                                   post
+                                   (prompt "Kapply")
+                                   overriding-map
                                    pipeline
                                    extra
                                    other-end
@@ -1691,13 +1699,17 @@ finishing showing the buffers that were visited."))
                                    windows
                                    applier)
   (conn-read-args (conn-kapply-state
-                   :prompt "Kapply"
+                   :prompt prompt
                    :command-handler (conn-kapply-command-handler)
                    :display-handler (conn-read-args-display-columns 3 3)
+                   :around around
+                   :post post
+                   :overriding-map overriding-map
                    :pre (lambda (_)
                           (when (and (bound-and-true-p conn-posframe-mode)
                                      (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                            (posframe-hide " *conn-list-posframe*"))
+                          (when pre (funcall pre))))
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
@@ -1808,6 +1820,58 @@ finishing showing the buffers that were visited."))
 
 (conn-define-state conn-kapply-on-things-state (conn-read-thing-state))
 
+(cl-defstruct (conn-kapply-on-thing-argument
+               (:include conn-thing-argument)
+               ( :constructor conn-kapply-on-thing-argument
+                 (&optional
+                  recursive-edit
+                  in-region
+                  &aux
+                  (required t)))))
+
+(cl-defgeneric conn-kapply-on-things-do (thing arg transform &optional pipeline))
+
+(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+                               (cmd (eql conn-kapply-on-word)))
+  "Kapply on all matching words in a thing.")
+
+(cl-defmethod conn-kapply-on-things-do ((_thing (eql conn-kapply-on-word))
+                                        arg
+                                        transform
+                                        &optional
+                                        _pipeline)
+  (conn-read-args (conn-kapply-matches-state
+                   :prefix arg
+                   :prompt "Kapply on Word Within Thing")
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (save-excursion
+      (let (conn-kapply-query-on-record)
+        (conn-kapply-on-matches thing arg transform
+                                nil nil t
+                                (thing-at-point 'word))))))
+
+(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+                               (cmd (eql conn-kapply-on-symbol)))
+  "Kapply on all matching words in a thing.")
+
+(cl-defmethod conn-kapply-on-things-do ((_thing (eql conn-kapply-on-symbol))
+                                        arg
+                                        transform
+                                        &optional
+                                        _pipeline)
+  (conn-read-args (conn-kapply-matches-state
+                   :prefix arg
+                   :prompt "Kapply on Symbol Within Thing")
+      ((`(,thing ,arg) (conn-thing-argument))
+       (transform (conn-transform-argument transform)))
+    (save-excursion
+      (let (conn-kapply-query-on-record)
+        (conn-kapply-on-matches
+         thing arg transform
+         nil t nil
+         (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
+
 (cl-defmethod conn-kapply-on-things-do (thing arg transform &optional pipeline)
   (let ((rmm (bound-and-true-p rectangle-mark-mode))
         (all-empty t))
@@ -1867,7 +1931,7 @@ finishing showing the buffers that were visited."))
     (conn-read-args (conn-kapply-on-things-state
                      :prompt "On Things")
         ((`(,thing ,arg)
-          (conn-thing-argument nil (use-region-p)))
+          (conn-kapply-on-thing-argument nil (use-region-p)))
          (transform (conn-transform-argument))
          (repeat (when prev
                    (conn-boolean-argument

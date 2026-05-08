@@ -298,6 +298,8 @@ This skips executing the body of the `conn-read-args' form entirely."
 
 (defconst conn--read-args-timer (timer-create))
 
+(defvar conn--read-args-maps nil)
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -317,13 +319,13 @@ This skips executing the body of the `conn-read-args' form entirely."
         (prompt (or prompt "Read Args"))
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
-        (maps nil)
+        (conn--read-args-maps nil)
         (keyseq nil)
         (timer nil))
     (cl-macrolet ((with-keymaps (&rest body)
                     `(prog1
                          (progn
-                           (setf (cdar maps)
+                           (setf (cdar conn--read-args-maps)
                                  (thread-last
                                    (mapcar #'conn-argument-compose-keymap
                                            arguments)
@@ -331,10 +333,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                                    (delq nil)
                                    (make-composed-keymap)))
                            (conn->f emulation-mode-map-alists
-                             (delq maps)
-                             (cons maps))
+                             (delq 'conn--read-args-maps)
+                             (cons 'conn--read-args-maps))
                            ,@body)
-                       (cl-callf2 delq maps emulation-mode-map-alists))))
+                       (cl-callf2 delq
+                           'conn--read-args-maps
+                           emulation-mode-map-alists))))
       (cl-labels
           ((timer-function ()
              (setf timer nil)
@@ -455,7 +459,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (emulation-mode-map-alists emulation-mode-map-alists)
                      (inhibit-message t)
                      (minibuffer-message-clear-timeout nil))
-                 (setf maps `((,state . nil)))
+                 (setf conn--read-args-maps `((,state . nil)))
                  (while (continue-p)
                    (catch 'conn-read-args-error
                      (execute-command

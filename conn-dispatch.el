@@ -332,37 +332,39 @@ themselves once the selection process has concluded."
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
     (cl-with-gensyms (self)
-      `(push (cons (conn-dispatch-handler
-                    ,(pcase (alist-get :update body)
-                       (`(,args . ,update-body)
-                        (macroexpand-all
-                         `(lambda ,(cons self args)
-                            (ignore ,self)
-                            ,@update-body)
-                         `((:return
-                            . ,(lambda (&optional value)
-                                 `(throw (cdr (alist-get ,self conn--dispatch-read-char-handlers))
-                                         ,value)))
-                           ,@macroexpand-all-environment))))
-                    ,(if-let* ((v (alist-get :predicate body)))
-                         `(lambda ,@v)
-                       '#'ignore)
-                    :display ,(if-let* ((v (alist-get :display body)))
-                                  `(lambda ,@v)
-                                '#'ignore)
-                    :annotation ,(if-let* ((v (alist-get :annotation body)))
-                                     `(lambda ,@v)
-                                   '#'ignore)
-                    :reference ,(if-let* ((v (alist-get :reference body)))
-                                    `(lambda ,@v)
-                                  '#'ignore)
-                    :keymap ,(car (alist-get :keymap body)))
-                   (cons ,(or (car (alist-get :depth body)) 0) ',tag))
-             conn--dispatch-read-char-handlers))))
+      `(let ((handler
+              (conn-dispatch-handler
+               ,(pcase (alist-get :update body)
+                  (`(,args . ,update-body)
+                   (macroexpand-all
+                    `(lambda ,(cons self args)
+                       (ignore ,self)
+                       ,@update-body)
+                    `((:return
+                       . ,(lambda (&optional value)
+                            `(conn-<
+                               conn--dispatch-read-char-handlers
+                               (:> (alist-get ,self) cdr)
+                               (throw ,value))))
+                      ,@macroexpand-all-environment))))
+               ,(if-let* ((v (alist-get :predicate body)))
+                    `(lambda ,@v)
+                  '#'ignore)
+               :display ,(if-let* ((v (alist-get :display body)))
+                             `(lambda ,@v)
+                           '#'ignore)
+               :annotation ,(if-let* ((v (alist-get :annotation body)))
+                                `(lambda ,@v)
+                              '#'ignore)
+               :reference ,(if-let* ((v (alist-get :reference body)))
+                               `(lambda ,@v)
+                             '#'ignore)
+               :keymap ,(car (alist-get :keymap body)))))
+         (push (cons handler
+                     (cons ,(or (car (alist-get :depth body)) 0) ',tag))
+               conn--dispatch-read-char-handlers))))
 
-(defmacro conn-with-dispatch-handlers (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (tag)
+  (defun conn--with-dispatch-handlers (tag body)
     (macroexpand-all
      `(let ((conn--dispatch-read-char-handlers
              conn--dispatch-read-char-handlers))
@@ -374,6 +376,11 @@ themselves once the selection process has concluded."
                     `(push (cons ,exp (cons ,(or depth 0) ',tag))
                            conn--dispatch-read-char-handlers))))
        ,@macroexpand-all-environment))))
+
+(defmacro conn-with-dispatch-handlers (&rest body)
+  "Bind a dispatch event handler."
+  (declare (indent 0))
+  (conn--with-dispatch-handlers (gensym "handler") body))
 
 ;;;;; Window Header-line Labels
 
@@ -1481,13 +1488,12 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
     bounds))
 
 (cl-defgeneric conn-dispatch-bounds-over (bounds)
+  "Transform bounds to begin at the start of the thing at point and end at
+the end of the thing dispatched on.  Can only be used during
+`conn-dispatch'."
   (declare (important-return-value t)
            (conn-anonymous-thing-property :over)
-           (conn-bounds-transformation
-            "over"
-            "Transform bounds to begin at the start of the thing at point and end at
-the end of the thing dispatched on.  Can only be used during
-`conn-dispatch'.")))
+           (conn-bounds-transformation "over")))
 
 (cl-defmethod conn-dispatch-bounds-over (bounds)
   (pcase bounds
@@ -1507,14 +1513,12 @@ the end of the thing dispatched on.  Can only be used during
     (_ bounds)))
 
 (cl-defgeneric conn-dispatch-bounds-anchored (bounds)
-  (declare (important-return-value t)
-           (conn-anonymous-thing-property :dispatch-anchored)
-           (conn-bounds-transformation
-            "anchored"
-            "Transform bounds to begin at point and end the bound most distant from
+  "Transform bounds to begin at point and end the bound most distant from
 point.  If `conn-dispatch-other-end' is non-nil then end at the bound
 nearest to point.  Can only be used during `conn-dispatch'."
-            :no-reformat t)))
+  (declare (important-return-value t)
+           (conn-anonymous-thing-property :dispatch-anchored)
+           (conn-bounds-transformation "anchored" :no-reformat t)))
 
 (cl-defmethod conn-dispatch-bounds-anchored (bounds)
   (pcase bounds
@@ -1535,14 +1539,13 @@ nearest to point.  Can only be used during `conn-dispatch'."
     (_ bounds)))
 
 (cl-defgeneric conn-dispatch-bounds-between (bounds)
-  (declare (important-return-value t)
-           (conn-anonymous-thing-property :dispatch-between)
-           (conn-bounds-transformation
-            "between"
-            "Dispatch on a second thing and transform bounds to be the largest region
+  "Dispatch on a second thing and transform bounds to be the largest region
 created from the bounds of the two things.  The new beg and end are
 taken to be the points where point would be after dispatching on each
-thing.  Can only be used during `conn-dispatch'.")))
+thing.  Can only be used during `conn-dispatch'."
+  (declare (important-return-value t)
+           (conn-anonymous-thing-property :dispatch-between)
+           (conn-bounds-transformation "between")))
 
 (define-inline conn-dispatch-bounds (bounds &optional transforms)
   (inline-quote

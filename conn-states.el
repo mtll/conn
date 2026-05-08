@@ -114,8 +114,10 @@ function may setup any other necessary state as well.")
   "Return non-nil if STATE is a conn-state."
   (declare (side-effect-free t)
            (important-return-value t))
-  (inline-quote
-   (conn-state-p (get ,state :conn-state))))
+  (inline-letevals (state)
+    (inline-quote
+     (and (symbolp ,state)
+          (conn-state-p (get ,state :conn-state))))))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
@@ -574,11 +576,11 @@ then an error is signaled."
 (defvar-local conn--prev-mode-line-mule-info nil)
 
 (defun conn--inherit-input-method-ad (&rest app)
-  (if conn--input-method
-      (let ((im conn--input-method))
-        (with-temp-buffer
-          (activate-input-method im)
-          (apply app)))
+  (if-let* ((im (and (null current-input-method)
+                     conn--input-method)))
+      (with-temp-buffer
+        (activate-input-method im)
+        (apply app))
     (apply app)))
 
 (defun conn--toggle-input-method-ad (&rest app)
@@ -882,16 +884,18 @@ CLONE will be non-nil, otherwise CLONE will nil."
   (if (char-displayable-p ?→) "→" ">")
   "Separator string for state lighters in `conn-lighter'.")
 
-(defun conn--get-lighter ()
+(defvar conn-mode-line-state-stack '(conn-local-mode (:eval (conn-mode-line-lighter)))
+  "Mode line construct to display the state stack.")
+
+(defun conn-mode-line-lighter ()
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
     (let ((lighter (conn-state-get conn-current-state :lighter)))
       (dolist (elem (cdr conn--state-stack))
-        (setf lighter
-              (if elem
-                  (concat (conn-state-get elem :lighter)
-                          conn-state-lighter-separator
-                          lighter)
-                (concat "[" lighter "]"))))
+        (setf lighter (if elem
+                          (concat (conn-state-get elem :lighter)
+                                  conn-state-lighter-separator
+                                  lighter)
+                        (concat "[" lighter "]"))))
       (concat " [" lighter "]"))))
 
 (defun conn-update-lighter (&optional buffer)

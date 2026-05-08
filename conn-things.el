@@ -916,10 +916,11 @@ Returns a `conn-bounds' struct."
     (with-temp-buffer
       (insert (or (cdr ud) main ""))
       (insert "\n\n\tCurrently defined transformations for bounds:\n\n")
-      (pcase-dolist (`(,fn . ,tform-doc)
-                     (reverse (get 'conn-transform-bounds :known-transformations)))
-        (insert (format "`%s':\n %s" fn tform-doc))
-        (insert "\n\n"))
+      (dolist (fn (reverse (get 'conn-transform-bounds :known-transformations)))
+        (insert (format "`%s':\n" fn)
+                (or (cdr (help-split-fundoc (documentation fn) fn))
+                    "No documentation.")
+                "\n\n"))
       (let ((combined-doc (buffer-string)))
         (if ud
             (help-add-fundoc-usage combined-doc (car ud))
@@ -932,13 +933,10 @@ Returns a `conn-bounds' struct."
   (defun conn--set-bounds-transform-property (f
                                               _args
                                               short-name
-                                              doc-string
                                               &rest
                                               transform-properties)
     `(eval-and-compile
-       (setf (alist-get ',f (get 'conn-transform-bounds
-                                 :known-transformations))
-             ,doc-string)
+       (push ',f (get 'conn-transform-bounds :known-transformations))
        (function-put ',f :conn-bounds-transformation t)
        (function-put ',f :conn-transform-description ,short-name)
        (function-put ',f :conn-transform-properties (list ,@transform-properties))))
@@ -948,9 +946,8 @@ Returns a `conn-bounds' struct."
 ;;;;;; Bounds Upto
 
 (cl-defgeneric conn-bounds-upto-next (bounds)
-  (declare (conn-bounds-transformation
-            "upto"
-            "Bounds upto the start of the next thing.")))
+  "Bounds upto the start of the next thing."
+  (declare (conn-bounds-transformation "upto")))
 
 (cl-defmethod conn-bounds-upto-next (bounds)
   (pcase bounds
@@ -974,9 +971,8 @@ Returns a `conn-bounds' struct."
         (cons beg end))))))
 
 (cl-defgeneric conn-bounds-upto-previous (bounds)
-  (declare (conn-bounds-transformation
-            "upto-prev"
-            "Bounds upto the start of the previous thing.")))
+  "Bounds upto the start of the previous thing."
+  (declare (conn-bounds-transformation "upto-prev")))
 
 (cl-defmethod conn-bounds-upto-previous (bounds)
   (pcase bounds
@@ -1002,9 +998,8 @@ Returns a `conn-bounds' struct."
 ;;;;;; Last Bounds
 
 (cl-defgeneric conn-bounds-last (bounds)
-  (declare (conn-bounds-transformation
-            "last"
-            "Only return the bounds of the last thing.")))
+  "Only return the bounds of the last thing."
+  (declare (conn-bounds-transformation "last")))
 
 (cl-defmethod conn-bounds-last (bounds)
   (conn-bounds bounds)
@@ -1021,10 +1016,8 @@ Returns a `conn-bounds' struct."
 (defvar conn-bounds-trim-chars " \t\r\n")
 
 (cl-defgeneric conn-bounds-trim (bounds)
-  (declare (conn-bounds-transformation
-            "trim"
-            "Trim `conn-bounds-trim-chars' from either end of bounds."
-            :no-reformat t)))
+  "Trim `conn-bounds-trim-chars' from either end of bounds."
+  (declare (conn-bounds-transformation "trim" :no-reformat t)))
 
 (cl-defmethod conn-bounds-trim (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
@@ -1042,10 +1035,8 @@ Returns a `conn-bounds' struct."
        bounds (cons tb te)))))
 
 (cl-defgeneric conn-bounds-untrim-left (bounds)
-  (declare (conn-bounds-transformation
-            "<untrim"
-            "Expand bounds to include `conn-bounds-trim-chars'."
-            :no-reformat t)))
+  "Expand bounds to include `conn-bounds-trim-chars'."
+  (declare (conn-bounds-transformation "<untrim" :no-reformat t)))
 
 (cl-defmethod conn-bounds-untrim-left (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
@@ -1058,10 +1049,8 @@ Returns a `conn-bounds' struct."
      bounds (cons tb end))))
 
 (cl-defgeneric conn-bounds-untrim-right (bounds)
-  (declare (conn-bounds-transformation
-            "untrim>"
-            "Expand bounds to include `conn-bounds-trim-chars'."
-            :no-reformat t)))
+  "Expand bounds to include `conn-bounds-trim-chars'."
+  (declare (conn-bounds-transformation "untrim>" :no-reformat t)))
 
 (cl-defmethod conn-bounds-untrim-right (bounds)
   (pcase-let* (((conn-bounds `(,beg . ,end)) bounds)
@@ -1076,10 +1065,8 @@ Returns a `conn-bounds' struct."
 ;;;;;; Bounds Before/After
 
 (cl-defgeneric conn-bounds-after-point (bounds &optional exclusive)
-  (declare (conn-bounds-transformation
-            "after"
-            "Make bounds begin at point."
-            :no-reformat t)))
+  "Make bounds begin at point."
+  (declare (conn-bounds-transformation "after" :no-reformat t)))
 
 (cl-defmethod conn-bounds-after-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -1090,17 +1077,13 @@ Returns a `conn-bounds' struct."
       (error "Invalid bounds"))))
 
 (defun conn-bounds-after-point-exclusive (bounds)
-  (declare (conn-bounds-transformation
-            "after exclusive"
-            "Make bounds begin at point and end at the start of bounds."
-            :no-reformat t))
+  "Make bounds begin at point and end at the start of bounds."
+  (declare (conn-bounds-transformation "after exclusive" :no-reformat t))
   (conn-bounds-after-point bounds t))
 
 (cl-defgeneric conn-bounds-before-point (bounds &optional exclusive)
-  (declare (conn-bounds-transformation
-            "before"
-            "Make bounds end at point"
-            :no-reformat t)))
+  "Make bounds end at point"
+  (declare (conn-bounds-transformation "before" :no-reformat t)))
 
 (cl-defmethod conn-bounds-before-point (bounds &optional exclusive)
   (pcase-let (((conn-bounds `(,beg . ,end)) bounds))
@@ -1111,10 +1094,8 @@ Returns a `conn-bounds' struct."
       (error "Invalid bounds"))))
 
 (defun conn-bounds-before-point-exclusive (bounds)
-  (declare (conn-bounds-transformation
-            "before exclusive"
-            "Make bounds end at point and begin at end of bounds."
-            :no-reformat t))
+  "Make bounds end at point and begin at end of bounds."
+  (declare (conn-bounds-transformation "before exclusive" :no-reformat t))
   (conn-bounds-before-point bounds t))
 
 ;;;;;; Check Bounds
@@ -1841,12 +1822,9 @@ not be delete.  The the value returned by each function is ignored.")
 (cl-defmethod conn-argument-command-reference ((_arg conn-transform-argument)
                                                cmd
                                                break)
-  (when-let* ((doc (alist-get cmd (get 'conn-transform-bounds
-                                       :known-transformations))))
-    (cl-typecase doc
-      (string (funcall break (conn-reference-page ,doc)))
-      (function (funcall doc cmd break))
-      (conn--reference-page (funcall break doc)))))
+  (pcase (help-split-fundoc (documentation cmd t) cmd)
+    ((or `(,_usage . ,doc) doc)
+     (funcall break (conn-reference-page doc)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd

@@ -91,8 +91,6 @@
 
 (define-keymap
   :keymap conn-default-edit-map
-  "w" 'conn-kapply-on-word
-  "s" 'conn-kapply-on-symbol
   "t" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
   "b" 'conn-command-to-register
@@ -715,6 +713,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kapply-on-things-state)
+  "w" 'conn-kapply-on-word
+  "s" 'conn-kapply-on-symbol
   "i" 'previous-line
   "k" 'next-line)
 

@@ -232,7 +232,8 @@ See also `conn-repeat'.")
                           '(conn--wincontrol-maps
                             conn--minor-mode-maps
                             conn--major-mode-map
-                            conn--state-map)
+                            conn--state-map
+                            conn--read-args-maps)
                           #'eq)))
      ,(macroexp-progn body)))
 

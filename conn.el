@@ -71,7 +71,7 @@
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :lighter (:eval (conn--get-lighter))
+  :lighter (:eval (conn-mode-line-lighter))
   :group 'conn
   :keymap conn-local-mode-map
   (conn--input-method-mode-line)
@@ -112,7 +112,10 @@
     (unless conn-keymaps-defined
       (require 'conn-keymaps-qwerty))
     (conn--setup-keymaps)
-    (dolist (fn '(read-char read-string read-from-minibuffer))
+    (dolist (fn '(read-char
+                  read-event
+                  read-string
+                  read-from-minibuffer))
       (if conn-mode
           (advice-add fn :around #'conn--inherit-input-method-ad)
         (advice-remove fn #'conn--inherit-input-method-ad)))
