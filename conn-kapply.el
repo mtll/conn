@@ -391,7 +391,12 @@ of highlighting."
          (query-replace-read-from-suggestions)
          t)))))
 
-(defun conn--kapply-multi-file-matches (files string regexp-flag delimited-flag)
+(defun conn--kapply-multi-file-matches (files
+                                        string
+                                        regexp-flag
+                                        delimited-flag
+                                        &optional
+                                        pipeline)
   (let ((sort-function #'nreverse)
         matches)
     (cl-labels
@@ -432,25 +437,26 @@ of highlighting."
                         (check-buffer (current-buffer)))
                       (collect-matches (find-file-noselect next)))
                      (t (next)))))))
-      (conn-kapply-on-iterator
-       (lambda (state)
-         (pcase state
-           (:exit-current
-            (mapc #'delete-overlay (cl-shiftf matches nil)))
-           (:backward
-            (setf sort-function #'identity))
-           (:cleanup
-            (mapc #'delete-overlay matches))
-           ((or :next :record)
-            (unless matches (next))
-            (conn-kapply-consume-region (pop matches)))))
-       :query t
-       :ibuffer t))))
+      (apply #'conn-kapply-on-iterator
+             (lambda (state)
+               (pcase state
+                 (:exit-current
+                  (mapc #'delete-overlay (cl-shiftf matches nil)))
+                 (:backward
+                  (setf sort-function #'identity))
+                 (:cleanup
+                  (mapc #'delete-overlay matches))
+                 ((or :next :record)
+                  (unless matches (next))
+                  (conn-kapply-consume-region (pop matches)))))
+             (or pipeline
+                 (list :query t
+                       :ibuffer t))))))
 
 (cl-defgeneric conn-kapply-on-matches (thing
                                        arg
                                        transform
-                                       &optional
+                                       &key
                                        subregions
                                        regexp-flag
                                        delimited-flag
@@ -474,48 +480,69 @@ boundaries.
 SORT-FUNCTION if non-nil is a function to sort the regions before
 iterating over them.  SORT-FUNCTION should take a list of overlays.")
 
-(cl-defmethod conn-kapply-on-matches ((_thing (eql multi-file))
+(cl-defmethod conn-kapply-on-matches ((thing (eql multi-file))
                                       _arg
                                       _transform
-                                      &optional
+                                      &key
                                       _subregions
                                       regexp-flag
                                       delimited-flag
-                                      string)
-  (conn--kapply-multi-file-matches
-   (multi-isearch-read-files)
-   (or string (conn--kapply-read-from-with-preview
-               (if regexp-flag "Regexp: " "String: ")
-               nil regexp-flag))
-   regexp-flag
-   delimited-flag))
+                                      string
+                                      pipeline)
+  (setf pipeline
+        (conn--kapply-multi-file-matches
+         (multi-isearch-read-files)
+         (or string (conn--kapply-read-from-with-preview
+                     (if regexp-flag "Regexp: " "String: ")
+                     nil regexp-flag))
+         regexp-flag
+         delimited-flag
+         pipeline))
+  (conn-push-command-history 'conn-kapply-on-matches
+                             thing nil nil
+                             :subregions nil
+                             :regexp-flag regexp-flag
+                             :delimited-flag delimited-flag
+                             :string string
+                             :pipeline pipeline))
 
-(cl-defmethod conn-kapply-on-matches ((_thing (eql project))
+(cl-defmethod conn-kapply-on-matches ((thing (eql project))
                                       _arg
                                       _transform
-                                      &optional
+                                      &key
                                       _subregions
                                       regexp-flag
                                       delimited-flag
-                                      string)
+                                      string
+                                      pipeline)
   (require 'project)
-  (conn--kapply-multi-file-matches
-   (or (project-files (project-current t))
-       (user-error "No files for kapply."))
-   (or string (conn--kapply-read-from-with-preview
-               (if regexp-flag "Regexp: " "String: ")
-               nil regexp-flag))
-   regexp-flag
-   delimited-flag))
+  (setf pipeline
+        (conn--kapply-multi-file-matches
+         (or (project-files (project-current t))
+             (user-error "No files for kapply."))
+         (or string (conn--kapply-read-from-with-preview
+                     (if regexp-flag "Regexp: " "String: ")
+                     nil regexp-flag))
+         regexp-flag
+         delimited-flag
+         pipeline))
+  (conn-push-command-history 'conn-kapply-on-matches
+                             thing nil nil
+                             :subregions nil
+                             :regexp-flag regexp-flag
+                             :delimited-flag delimited-flag
+                             :string string
+                             :pipeline pipeline))
 
 (cl-defmethod conn-kapply-on-matches ((thing (conn-thing t))
                                       arg
                                       transform
-                                      &optional
+                                      &key
                                       subregions
                                       regexp-flag
                                       delimited-flag
-                                      string)
+                                      string
+                                      pipeline)
   (let* ((regions
           (prog1
               (pcase (conn-bounds-of thing arg)
@@ -543,24 +570,33 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                    matches))))))
     (unless matches
       (user-error "No matches for kapply."))
-    (conn-kapply-on-iterator
-     (lambda (state)
-       (pcase state
-         (:exit-current
-          (mapc #'delete-overlay (cl-shiftf matches nil)))
-         (:backward
-          (cl-callf nreverse matches))
-         (:any-order
-          (conn-<f matches nreverse conn--nnearest-first))
-         (:cleanup
-          (mapc #'delete-overlay matches))
-         ((or :next :record)
-          (conn-kapply-consume-region (pop matches)))))
-     :around (lambda (cont)
-               (conn-with-region-emphasis regions
-                 (funcall cont)))
-     :extra (conn-kapply-order-argument)
-     :query t)))
+    (setf pipeline
+          (apply #'conn-kapply-on-iterator
+                 (lambda (state)
+                   (pcase state
+                     (:exit-current
+                      (mapc #'delete-overlay (cl-shiftf matches nil)))
+                     (:backward
+                      (cl-callf nreverse matches))
+                     (:any-order
+                      (conn-<f matches nreverse conn--nnearest-first))
+                     (:cleanup
+                      (mapc #'delete-overlay matches))
+                     ((or :next :record)
+                      (conn-kapply-consume-region (pop matches)))))
+                 :around (lambda (cont)
+                           (conn-with-region-emphasis regions
+                             (funcall cont)))
+                 (or pipeline
+                     (list :extra (conn-kapply-order-argument)
+                           :query t))))
+    (conn-push-command-history 'conn-kapply-on-matches
+                               thing arg transform
+                               :subregions subregions
+                               :regexp-flag regexp-flag
+                               :delimited-flag delimited-flag
+                               :string string
+                               :pipeline pipeline)))
 
 (cl-defmethod conn-kapply-on-matches ((_thing (conn-thing widen))
                                       &rest _)
@@ -1811,12 +1847,11 @@ finishing showing the buffers that were visited."))
                                'delimited
                                conn-delimited-argument-map
                                :value delimited)))
-    (conn-kapply-on-matches thing
-                            arg
-                            transform
-                            subregions-p
-                            regexp-flag
-                            delimited)))
+    (conn-kapply-on-matches
+     thing arg transform
+     :subregions subregions-p
+     :regexp-flag regexp-flag
+     :delimited-flag delimited)))
 
 (conn-define-state conn-kapply-on-things-state (conn-read-thing-state))
 
@@ -1839,17 +1874,33 @@ finishing showing the buffers that were visited."))
                                         arg
                                         transform
                                         &optional
-                                        _pipeline)
+                                        pipeline)
   (conn-read-args (conn-kapply-matches-state
                    :prefix arg
                    :prompt "Kapply on Word Within Thing")
       ((`(,thing ,arg) (conn-thing-argument))
        (transform (conn-transform-argument transform)))
     (save-excursion
-      (let (conn-kapply-query-on-record)
+      (let (conn-kapply-query-on-record
+            conn-command-history)
         (conn-kapply-on-matches thing arg transform
-                                nil nil t
-                                (thing-at-point 'word))))))
+                                :subregions nil
+                                :regexp-flag nil
+                                :delimited-flag t
+                                :string (thing-at-point 'word)
+                                :pipeline pipeline)
+        (setf pipeline (and-let* ((hist (car conn-command-history)))
+                         (cadr (memq :pipeline hist)))))
+      (when pipeline
+        (conn-push-command-history
+         (lambda ()
+           (conn-kapply-on-matches
+            thing arg transform
+            :subregions nil
+            :regexp-flag nil
+            :delimited-flag t
+            :string (thing-at-point 'word)
+            :pipeline pipeline)))))))
 
 (conn-define-argument-command ((arg conn-kapply-on-thing-argument)
                                (cmd (eql conn-kapply-on-symbol)))
@@ -1869,8 +1920,11 @@ finishing showing the buffers that were visited."))
       (let (conn-kapply-query-on-record)
         (conn-kapply-on-matches
          thing arg transform
-         nil t nil
-         (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
+         :subregions nil
+         :regexp-flag t
+         :delimited-flag nil
+         :string (format "\\_<%s\\_>"
+                         (regexp-quote (thing-at-point 'symbol))))))))
 
 (cl-defmethod conn-kapply-on-things-do (thing arg transform &optional pipeline)
   (let ((rmm (bound-and-true-p rectangle-mark-mode))
@@ -2069,8 +2123,11 @@ finishing showing the buffers that were visited."))
       (let (conn-kapply-query-on-record)
         (conn-kapply-on-matches
          thing arg transform
-         nil t nil
-         (format "\\_<%s\\_>" (regexp-quote (thing-at-point 'symbol))))))))
+         :subregions nil
+         :regexp-flag t
+         :delimited-flag nil
+         :string (format "\\_<%s\\_>"
+                         (regexp-quote (thing-at-point 'symbol))))))))
 
 (defun conn-kapply-on-word ()
   (interactive)
@@ -2080,9 +2137,12 @@ finishing showing the buffers that were visited."))
        (transform (conn-transform-argument)))
     (save-excursion
       (let (conn-kapply-query-on-record)
-        (conn-kapply-on-matches thing arg transform
-                                nil nil t
-                                (thing-at-point 'word))))))
+        (conn-kapply-on-matches
+         thing arg transform
+         :subregions nil
+         :regexp-flag nil
+         :delimited-flag t
+         :string (thing-at-point 'word))))))
 
 (defvar-keymap conn-read-pattern-map)
 

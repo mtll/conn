@@ -439,16 +439,6 @@
            'org-open-at-point
          'org-open-at-point-global)))
 
-;; (defun conn-dwim-todo ()
-;;   (when (eq major-mode 'org-mode)
-;;     (save-excursion
-;;       (org-back-to-heading t)
-;;       (and (when (looking-at org-outline-regexp) (goto-char (1- (match-end 0))))
-;;            (or (looking-at (concat " +" org-todo-regexp "\\( +\\|[ \t]*$\\)"))
-;;                ;; (looking-at "\\(?: *\\|[ \t]*$\\)")
-;;                )
-;;            'org-todo))))
-
 (defun conn-dwim-alt-org-heading ()
   (and (derived-mode-p 'org-mode)
        (save-excursion
