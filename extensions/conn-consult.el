@@ -29,8 +29,6 @@
   (require 'cl-lib)
   (require 'subr-x))
 
-(declare-function consult-imenu "consult-imenu")
-
 (defgroup conn-consult nil
   "Consult integration for conn"
   :prefix "conn-"
@@ -290,6 +288,7 @@
                                        (cmd (eql consult-imenu)))
   "Invert the prefix argument."
   ( :update (_break)
+    (declare-function consult-imenu "consult-imenu")
     (conn-with-dispatch-suspended
       (call-interactively #'consult-imenu))
     (conn-dispatch-redisplay)))

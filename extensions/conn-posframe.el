@@ -33,9 +33,6 @@
 (defvar kmacro-initial-counter-value)
 (defvar kmacro-ring)
 
-(declare-function kmacro--keys "kmacro")
-(declare-function conn--kmacro-display "conn-transient")
-
 ;;;; Posframe command displays
 
 (defgroup conn-posframe nil
@@ -343,6 +340,8 @@
 
 (defun conn-posframe--kmacro-ring-display-subr ()
   (require 'kmacro)
+  (declare-function kmacro--keys "kmacro")
+  (declare-function conn--kmacro-display "conn-transient")
   (let ((header
          (propertize (format " %s Kmacro Ring\n"
                              (or (if defining-kbd-macro

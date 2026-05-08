@@ -24,24 +24,6 @@
 (require 'conn-things)
 (require 'conn-jump-ring)
 
-(defvar outline-heading-end-regexp)
-(defvar treesit-defun-type-regexp)
-(defvar conn-wincontrol-mode)
-(defvar conn-wincontrol-one-command-mode)
-
-(declare-function face-remap-remove-relative "face-remap")
-(declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
-(declare-function conn-scroll-up "conn-commands")
-(declare-function conn-scroll-down "conn-commands")
-(declare-function conn-register-load "conn-commands")
-(declare-function conn-end-of-inner-line "conn-commands")
-(declare-function conn-beginning-of-inner-line "conn-commands")
-(declare-function conn-kill-thing "conn-commands")
-(declare-function conn-toggle-highlight-at-point "conn-commands")
-(declare-function conn--unhighlight-at-point "conn-commands")
-(declare-function conn--dwim-at-point-filter "conn-commands")
-(declare-function conn--alt-dwim-at-point-filter "conn-commands")
-
 (autoload 'pulse-momentary-highlight-overlay "pulse")
 
 ;;;; Labels
@@ -733,6 +715,9 @@ buffer is a valid target.")
 
 (defvar conn-dispatch-label-function)
 (defvar conn-dispatch-action-reference)
+
+(defvar conn-wincontrol-mode)
+(defvar conn-wincontrol-one-command-mode)
 
 (defun conn--with-dispatch (body &optional suspend)
   (when suspend
@@ -1427,6 +1412,8 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
                ( :constructor conn-dispatch-command-handler
                  (&aux
                   (keymap conn-dispatch-command-handler-map)))))
+
+(declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 
 (conn-define-argument-command ((arg conn-dispatch-command-handler)
                                (cmd (eql conn-dispatch-cycle-ring-next)))
@@ -4453,6 +4440,7 @@ the string after the region selected by dispatch.")
 (defun conn-dispatch-send ()
   (declare (conn-dispatch-action)
            (important-return-value t))
+  (declare-function conn-kill-thing "conn-commands")
   (let* ((change-group (conn-action-change-group))
          (str
           (conn-read-args (conn-kill-state
@@ -4521,6 +4509,7 @@ it.")
     (:description (format "Register <%c>" register))
     (:reference
      "Replace region selected by dispatch with contents of register.")
+    (declare-function conn-register-load "conn-commands")
     (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -4672,6 +4661,8 @@ it.")
            (important-return-value t))
   (conn-action ()
     (:description "Highlight Symbol")
+    (declare-function conn-toggle-highlight-at-point "conn-commands")
+    (declare-function conn--unhighlight-at-point "conn-commands")
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -4689,6 +4680,7 @@ it.")
            (important-return-value t))
   (conn-action ()
     (:description "DWIM")
+    (declare-function conn--dwim-at-point-filter "conn-commands")
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window
@@ -4706,6 +4698,7 @@ it.")
            (important-return-value t))
   (conn-action ()
     (:description "DWIM alt")
+    (declare-function conn--alt-dwim-at-point-filter "conn-commands")
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
       (with-selected-window window

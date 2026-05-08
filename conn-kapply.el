@@ -29,13 +29,6 @@
 
 (autoload 'multi-isearch-read-files "misearch")
 
-(declare-function conn--kmacro-display "conn-transient")
-(declare-function project-files "project")
-(declare-function ibuffer-unmark-all-marks "ibuffer")
-(declare-function compilation--message->loc "compile")
-(declare-function conn-replace-thing-argument "conn-commands")
-(declare-function conn-exchange-mark-command "conn-commands")
-
 ;;;; Kapply
 
 (defvar kmacro-step-edit-replace)
@@ -515,6 +508,7 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                                       delimited-flag
                                       string
                                       pipeline)
+  (declare-function project-files "project")
   (require 'project)
   (setf pipeline
         (conn--kapply-multi-file-matches
@@ -956,6 +950,7 @@ Changes will be undone if an error is signaled during macro application."
   "Display an ibuffer window if multiple buffers are visited by ITERATOR."
   (declare (important-return-value t)
            (side-effect-free t))
+  (declare-function ibuffer-unmark-all-marks "ibuffer")
   (add-function
    :around (var iterator)
    (let ((msg (substitute-command-keys
@@ -1108,6 +1103,7 @@ When kapply finishes restore the restrictions in each buffer."
   "Exchange point and mark before each macro iteration."
   (declare (important-return-value t)
            (side-effect-free t))
+  (declare-function conn-exchange-mark-command "conn-commands")
   (add-function
    :after (var iterator)
    (lambda (state)
@@ -1638,6 +1634,7 @@ finishing showing the buffers that were visited."))
                ( :constructor conn-kapply-command-handler)))
 
 (defun conn--kapply-display-ring (&optional timeout)
+  (declare-function conn--kmacro-display "conn-transient")
   (if (fboundp 'conn-posframe--kmacro-ring-display-subr)
       (conn-posframe--kmacro-ring-display-subr)
     (let ((minibuffer-message-timeout (or timeout minibuffer-message-timeout)))
@@ -2224,6 +2221,7 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-compilation ()
   (interactive)
+  (declare-function compilation--message->loc "compile")
   (conn-<
     (save-excursion
       (goto-char (point-min))

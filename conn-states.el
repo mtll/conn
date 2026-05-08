@@ -25,11 +25,6 @@
   (require 'cl-lib))
 
 (defvar conn-local-mode)
-(defvar conn-wincontrol-mode)
-(defvar conn-wincontrol-one-command-mode)
-(declare-function conn-local-mode "conn")
-(declare-function face-remap-remove-relative "face-remap")
-(declare-function conn--thing-post-command-hook "conn-things")
 
 ;;;; States
 
@@ -959,6 +954,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
 
 (cl-defmethod conn-enter-state :around ((state (conn-substate t))
                                         transition)
+  (declare-function conn-local-mode "conn")
   (when (conn-state-get state :abstract)
     (error "Attempting to enter abstract state %s" state))
   (let (conn-previous-state)
@@ -1587,6 +1583,7 @@ command was a prefix command.")
 ;;;;; Buffer State Setup
 
 (defun conn-setup-state-for-buffer (&optional no-major-mode-maps)
+  (declare-function conn-local-mode "conn")
   (when conn--state-stack
     (let (conn-next-state)
       (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))

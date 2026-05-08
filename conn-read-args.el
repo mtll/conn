@@ -25,8 +25,6 @@
 (eval-when-compile
   (require 'cl-lib))
 
-(declare-function conn-thing-pretty-print "conn-things")
-
 (defvar conn-read-args-inhibit-message nil
   "Value for `inhibit-message' in `conn-read-args' message functions.")
 
@@ -186,6 +184,7 @@ The duration of the message display is controlled by
 
 ;; From embark
 (defun conn--read-args-bindings (args &optional keymap)
+  (declare-function conn-thing-pretty-print "conn-things")
   (let ((result nil))
     (cl-labels ((predicate (item)
                   (cl-loop for arg in args

@@ -24,15 +24,6 @@
 (eval-when-compile
   (require 'cl-lib))
 
-(declare-function conn-to-char-forward "conn-commands")
-(declare-function conn-to-char-backward "conn-commands")
-(declare-function conn--end-of-inner-line-1 "conn-commands")
-(declare-function conn-exchange-mark-command "conn-command")
-(declare-function conn-mark-thing-do "conn-commands")
-(declare-function conn-mark-thing-argument "conn-commands")
-(declare-function rectangle--reset-crutches "rect")
-(declare-function rectangle--col-pos "rect")
-
 ;;;; Other End Handlers
 
 (defvar-local conn-other-end-handler-overrides-alist nil
@@ -1150,6 +1141,8 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-bounds-of ((_cmd (conn-thing recursive-edit-mark))
                               arg)
+  (declare-function conn-mark-thing-do "conn-commands")
+  (declare-function conn-mark-thing-argument "conn-commands")
   (save-mark-and-excursion
     (unwind-protect
         (progn
@@ -2336,6 +2329,7 @@ Only the background color is used."
  'org-beginning-of-line 'org-end-of-line)
 
 (defun conn--bounds-of-inner-line ()
+  (declare-function conn--end-of-inner-line-1 "conn-commands")
   (cons
    (save-excursion
      (back-to-indentation)
@@ -2365,6 +2359,7 @@ Only the background color is used."
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-to-char-forward))
                               arg
                               &key char)
+  (declare-function conn-to-char-forward "conn-commands")
   (let* ((arg (prefix-numeric-value arg))
          (char (or char (read-char "Char: " t)))
          (pt (save-excursion
@@ -2383,6 +2378,7 @@ Only the background color is used."
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-to-char-backward))
                               arg
                               &key char)
+  (declare-function conn-to-char-backward "conn-commands")
   (let* ((arg (prefix-numeric-value arg))
          (char (or char (read-char "Char: " t)))
          (pt (save-excursion

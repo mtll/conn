@@ -39,24 +39,13 @@
 (autoload 'pulse-momentary-highlight-overlay "pulse")
 (autoload 'hi-lock-regexp-okay "hi-lock")
 
-(declare-function outline-insert-heading "outline")
-(declare-function ffap-file-at-point "ffap")
-(declare-function project-files "project")
-(declare-function project-root "project")
-(declare-function rectangle--reset-crutches "rect")
-(declare-function rectangle--col-pos "rect")
-(declare-function fileloop-continue "fileloop")
-(declare-function hi-lock-read-face-name "hi-lock")
-
-(defvar hi-lock-auto-select-face)
-(defvar hi-lock-interactive-patterns)
-(defvar hi-lock-interactive-lighters)
-
 ;;;; Commands
 
 (defun conn-toggle-highlight-at-point (&optional read)
   (interactive "P")
   (require 'hi-lock)
+  (defvar hi-lock-auto-select-face)
+  (declare-function hi-lock-read-face-name "hi-lock")
   (let ((hi-lock-auto-select-face t)
         (regexps nil))
     (cond ((use-region-p)
@@ -799,6 +788,7 @@ for the meaning of prefix ARG."
 
 (defun conn-outline-insert-heading ()
   (interactive)
+  (declare-function outline-insert-heading "outline")
   (conn-with-recursive-stack 'conn-emacs-state
     (save-mark-and-excursion
       (save-current-buffer
@@ -1179,6 +1169,7 @@ Currently selected window remains selected afterwards."
 ;; From embark
 (defun conn-dwim-file ()
   (require 'ffap)
+  (declare-function ffap-file-at-point "ffap")
   (or (and (derived-mode-p 'dired-mode)
            (fboundp 'dired-get-filename)
            (dired-get-filename t 'no-error-if-not-filep)
@@ -1197,6 +1188,7 @@ Currently selected window remains selected afterwards."
 ;; From embark
 (defun conn-dwim-alt-file ()
   (require 'ffap)
+  (declare-function ffap-file-at-point "ffap")
   (and (ffap-file-at-point)
        #'dired-at-point))
 
@@ -1921,6 +1913,8 @@ with `conn-check-bounds' before deleting."
                                subregions-p
                                from
                                to)
+  (declare-function project-files "project")
+  (declare-function fileloop-continue "fileloop")
   (when (or (null from) (null to))
     (pcase-setq `(,from . ,to)
                 (conn--replace-read-args regexp-flag
@@ -2031,6 +2025,7 @@ with `conn-check-bounds' before deleting."
                                      subregions-p
                                      from
                                      to)
+        (declare-function project-files "project")
         (when (or (null from) (null to))
           (pcase-setq `(,from . ,to)
                       (conn--replace-read-args regexp-flag
@@ -2361,8 +2356,8 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
-  (if-let* ((_ (fboundp 'project-root))
-            (files (project-files (project-current))))
+  (declare-function project-files "project")
+  (if-let* ((files (project-files (project-current))))
       (let ((isearch-forward (not backward)))
         (multi-isearch-files
          (if-let* ((n (seq-position files (buffer-file-name) 'file-equal-p)))
@@ -3244,8 +3239,8 @@ hook, which see."
                                   separator
                                   _reformat
                                   _check-bounds)
-  (if-let* ((_ (fboundp 'project-root))
-            (fname (buffer-file-name
+  (declare-function project-root "project")
+  (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
                       (current-buffer))))
@@ -3798,6 +3793,7 @@ that place."
                                   append
                                   register
                                   separator)
+  (declare-function project-root "project")
   (if-let* ((fname (buffer-file-name
                     (if (minibuffer-window-active-p (selected-window))
                         (window-buffer (minibuffer-selected-window))
