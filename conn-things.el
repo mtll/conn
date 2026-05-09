@@ -1815,9 +1815,11 @@ not be delete.  The the value returned by each function is ignored.")
 (cl-defmethod conn-argument-command-reference ((_arg conn-transform-argument)
                                                cmd
                                                break)
-  (pcase (help-split-fundoc (documentation cmd t) cmd)
-    ((or `(,_usage . ,doc) doc)
-     (funcall break (conn-reference-page doc)))))
+  (and (symbolp cmd)
+       (get cmd :conn-bounds-transformation)
+       (pcase (help-split-fundoc (documentation cmd t) cmd)
+         ((or `(,_usage . ,doc) doc)
+          (funcall break (conn-reference-page doc))))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd

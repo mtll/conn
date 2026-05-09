@@ -4431,9 +4431,9 @@ Interactively REPEAT is given by the prefix argument."
  (conn-reference-page
    :name 'conn-special
    :depth -10
-   ((("quoted-insert" quoted-insert))
-    (("emacs-state-overwrite" conn-emacs-state-overwrite))
-    (("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary)))))
+   ((("emacs-state-overwrite" conn-emacs-state-overwrite)
+     ("emacs-state-binary-overwrite" conn-emacs-state-overwrite-binary))
+    (("quoted-insert" quoted-insert)))))
 
 (defvar-keymap conn-change-thing-argument-map)
 
@@ -4570,8 +4570,13 @@ Interactively REPEAT is given by the prefix argument."
                                     _transform
                                     &optional
                                     _check-bounds
-                                    _with)
+                                    _with
+                                    kbd-macro-query)
   (conn-emacs-state-overwrite-binary)
+  (when kbd-macro-query
+    (let (executing-kbd-macro
+          defining-kbd-macro)
+      (recursive-edit)))
   (conn-push-command-history 'conn-emacs-state-overwrite-binary))
 
 (cl-defmethod conn-change-thing-do :extra "rectangle" ((thing (conn-thing region))

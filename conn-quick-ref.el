@@ -51,9 +51,12 @@
 
 (defvar conn-quick-reference-header-line-format
   `(" "
-    (:eval (format "[%s/%s] "
-                   conn--quick-ref-current-page
-                   conn--quick-ref-page-count))
+    (:propertize
+     (:eval (format "[%s/%s]"
+                    conn--quick-ref-current-page
+                    conn--quick-ref-page-count))
+     face minibuffer-prompt)
+    "  "
     ,(propertize "Quick Reference" 'face '(:weight bold))
     "   ("
     ,conn-quick-reference-header-key-description
