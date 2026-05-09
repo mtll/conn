@@ -510,21 +510,24 @@
            ""))
      'face 'bold)))
 
+(defvar conn-wincontrol-mode-line-label
+  '(conn-wincontrol-label-mode-line-local-mode
+    ((:eval (conn-window-label-mode-line))
+     " ")))
+(put 'conn-wincontrol-mode-line-label 'risky-local-variable t)
+
 (defun conn-setup-mode-line-label (&optional remove)
   (if remove
-      (setf mode-line-format
-            (assq-delete-all
-             'conn-wincontrol-label-mode-line-local-mode
-             mode-line-format))
-    (when (consp mode-line-format)
-      (when-let* ((_ (not (assq 'conn-wincontrol-label-mode-line-local-mode
-                                mode-line-format)))
-                  (cons (memq 'mode-line-front-space mode-line-format)))
-        (setf (cdr cons)
-              `((conn-wincontrol-label-mode-line-local-mode
-                 ((:eval (conn-window-label-mode-line))
-                  " "))
-                ,@(cdr cons)))))))
+      (cl-callf2 delq
+          'conn-wincontrol-mode-line-label
+          mode-line-format)
+    (when-let* ((_ (consp mode-line-format))
+                (_ (not (memq 'conn-wincontrol-mode-line-label
+                              mode-line-format)))
+                (cons (memq 'mode-line-front-space
+                            mode-line-format)))
+      (push 'conn-wincontrol-mode-line-label
+            (cdr cons)))))
 
 (defvar conn-wincontrol-label-mode-line-set-function
   #'conn-setup-mode-line-label

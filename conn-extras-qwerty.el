@@ -23,8 +23,8 @@
   "M-?" 'conn-quick-reference
   "SPC" 'conn-one-emacs-state
   "<escape>" 'conn-pop-state
-  "M-j" 'conn-one-command
-  "M-J" 'conn-command-state
+  "M-i" 'conn-one-command
+  "M-I" 'conn-command-state
   "w" 'conn-wincontrol-one-command
   ";" 'conn-wincontrol
   "`" 'conn-wincontrol-mru-window
