@@ -26,7 +26,7 @@
 
 ;;;; WinControl
 
-(defgroup conn-wincontrol-mode nil
+(defgroup conn-wincontrol nil
   "Conn-mode WinControl."
   :prefix "conn-wincontrol-"
   :group 'conn)
@@ -78,7 +78,6 @@
   "Global minor mode for wincontrol."
   :global t
   :lighter " WinC"
-  :group 'conn-wincontrol
   :interactive nil
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
@@ -92,7 +91,6 @@
 (define-minor-mode conn-wincontrol-one-command-mode
   "Global minor mode for wincontrol one command."
   :global t
-  :group 'conn-wincontrol
   :interactive nil
   (when conn-wincontrol-one-command-mode
     (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
@@ -499,16 +497,22 @@
   (with-selected-window (other-window-for-scrolling)
     (quit-window)))
 
+(defface conn-wincontrol-mode-line-label-face
+  '((t (:bold t)))
+  "Face for wincontrol mode-line window labels.")
+
+(defvar conn-wincontrol-mode-line-format-string "%s")
+
 (defun conn-window-label-mode-line ()
   (let ((win (selected-window)))
     (propertize
-     (or (window-parameter win 'conn-label-string)
-         (if (conn--dispatch-window-predicate (selected-window) t)
-             (progn
-               (conn--simple-window-labels)
-               (window-parameter win 'conn-label-string))
-           ""))
-     'face 'bold)))
+     (if-let* ((_ (conn--dispatch-window-predicate (selected-window) t))
+               (str (progn
+                      (conn--ensure-simple-window-labels)
+                      (window-parameter win 'conn-label-string))))
+         (format conn-wincontrol-mode-line-format-string str)
+       "")
+     'face 'conn-wincontrol-mode-line-label-face)))
 
 (defvar conn-wincontrol-mode-line-label
   '(conn-wincontrol-mode-line-label-local-mode

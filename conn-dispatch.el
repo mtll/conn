@@ -13,9 +13,9 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Commentary
+;;; Commentary:
 
-;;; Code
+;;; Code:
 
 (require 'eieio)
 (require 'conn-utils)
@@ -384,8 +384,7 @@ themselves once the selection process has concluded."
 
 (defvar conn--window-label-pool nil)
 
-(defun conn--simple-window-labels ()
-  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
+(defun conn--ensure-simple-window-labels ()
   (let* ((windows (conn-get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (or (null conn--window-label-pool)
@@ -410,6 +409,10 @@ themselves once the selection process has concluded."
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
+
+(defun conn--simple-window-labels ()
+  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
+  (conn--ensure-simple-window-labels))
 
 (defun conn--setup-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
@@ -683,16 +686,14 @@ A sort function should take two targets as arguments and return non-nil
 if the first should be sorted before the second.")
 
 (defvar conn-target-window-predicate 'conn-dispatch-ignored-mode-p
-  "Predicate which windows must satisfy in order to be considered during
-dispatch.")
+  "Predicate windows must satisfy in order to be considered for dispatch.")
 
 (defvar conn-target-predicate
   (lambda (pt length window)
     (not (conn--overlays-in-of-type pt (+ pt length)
                                     'conn-target-overlay
                                     window)))
-  "Predicate which a buffer position must satisfy in order to be a valid
-target.
+  "Predicate a buffer position must satisfy in order to be a valid target.
 
 A target predicate function should take POINT, LENGTH, and WINDOW as
 arguments and return non-nil if a target at POINT of LENGTH in WINDOW's
@@ -2315,6 +2316,13 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Loop
 
+(defun conn--dispatch-push-undo-case (depth body)
+  (push (cons depth body)
+        (car conn--dispatch-change-groups))
+  (conn--compat-callf sort (car conn--dispatch-change-groups)
+    :key #'car
+    :in-place t))
+
 (defmacro conn-dispatch-undo-case (&rest cases)
   "Add an undo case to the current iterations undo list.
 
@@ -2480,13 +2488,6 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
       (overlay-put ov 'pulse-delete t)
       (pulse-momentary-highlight-overlay
        ov 'conn--dispatch-action-current-pulse-face))))
-
-(defun conn--dispatch-push-undo-case (depth body)
-  (push (cons depth body)
-        (car conn--dispatch-change-groups))
-  (conn--compat-callf sort (car conn--dispatch-change-groups)
-    :key #'car
-    :in-place t))
 
 (defun conn-dispatch-change-group (&rest buffers)
   "Create a dispatch change group for the current buffer.
