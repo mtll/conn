@@ -2651,6 +2651,25 @@ Exiting the recursive edit will resume the isearch."
          :other-end :no-other-end
          :restrict-windows restrict-windows)))))
 
+(cl-defmethod conn-transpose-things-do ((_thing (eql conn-previous-mark-command))
+                                        arg
+                                        _at-point-and-mark)
+  (if conn-mark-state-ring
+      (pcase (conn-ring-head conn-mark-state-ring)
+        (`(,pt ,mk ,rmm)
+         (when rmm
+           (user-error "Cannot transpose rectangles"))
+         (let* ((bounds1 (save-mark-and-excursion
+                           (goto-char pt)
+                           (set-mark mk)
+                           (conn-bounds-of 'region nil)))
+                (bounds2 (if (use-region-p)
+                             (conn-bounds-of 'region nil)
+                           (conn-bounds-of 'recursive-edit-mark nil))))
+           (conn--dispatch-transpose-subr bounds1 bounds2)))
+        (_ (user-error "No previous mark state")))
+    (user-error "Mark state ring empty")))
+
 ;; Coming in emacs 31
 (defun conn--query-replace-read-transpose-from-to ()
   (let* ((from-beg (minibuffer-prompt-end))
