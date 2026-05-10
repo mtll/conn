@@ -84,13 +84,13 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 (defmacro conn-< (&rest forms)
   (declare (indent 0))
   (cl-with-gensyms (as)
-    `(cl-macrolet ((,as (val binding forms)
+    `(cl-macrolet ((,as (val pat body)
                      `(pcase-exhaustive ,val
-                        (,binding ,@forms))))
+                        (,pat ,@body))))
        (thread-first
          ,@(mapcar (lambda (form)
                      (pcase form
-                       (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                       (`(:as ,pat . ,body) `(,as ,pat ,body))
                        (`(:> . ,forms) `(thread-last ,@forms))
                        (_ form)))
                    forms)))))
@@ -98,13 +98,13 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 (defmacro conn-<f (&rest forms)
   (declare (indent 1))
   (cl-with-gensyms (as)
-    `(cl-macrolet ((,as (val binding forms)
+    `(cl-macrolet ((,as (val pat body)
                      `(pcase-exhaustive ,val
-                        (,binding ,@forms))))
+                        (,pat ,@body))))
        (cl-callf thread-first
            ,@(mapcar (lambda (form)
                        (pcase form
-                         (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                         (`(:as ,pat . ,body) `(,as ,pat ,body))
                          (`(:> . ,forms) `(thread-last ,@forms))
                          (_ form)))
                      forms)))))
@@ -114,13 +114,13 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
   (cl-with-gensyms (first as)
     `(cl-macrolet ((,first (forms val)
                      `(thread-first ,val ,@forms))
-                   (,as (binding forms val)
+                   (,as (pat body val)
                      `(pcase-exhaustive ,val
-                        (,binding ,@forms))))
+                        (,pat ,@body))))
        (thread-last
          ,@(mapcar (lambda (form)
                      (pcase form
-                       (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                       (`(:as ,pat . ,body) `(,as ,pat ,body))
                        (`(:< . ,forms) `(,first ,forms))
                        (_ form)))
                    forms)))))
@@ -130,13 +130,13 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
   (cl-with-gensyms (first as)
     `(cl-macrolet ((,first (forms val)
                      `(thread-first ,val ,@forms))
-                   (,as (binding forms val)
+                   (,as (pat body val)
                      `(pcase-exhaustive ,val
-                        (,binding ,@forms))))
+                        (,pat ,@body))))
        (cl-callf thread-last
            ,@(mapcar (lambda (form)
                        (pcase form
-                         (`(:as ,binding . ,forms) `(,as ,binding ,forms))
+                         (`(:as ,pat . ,body) `(,as ,pat ,body))
                          (`(:< . ,forms) `(,first ,forms))
                          (_ form)))
                      forms)))))

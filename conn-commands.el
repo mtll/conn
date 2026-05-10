@@ -435,20 +435,6 @@ Line beginning positions are determined by `move-beginning-of-line'."
       (conn-forward-outer-line (abs N))
     (move-beginning-of-line (- 2 (+ N (if (bolp) 1 0))))))
 
-(defun conn-end-of-inner-list ()
-  "Move point to the end of the enclosing list."
-  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
-  (interactive)
-  (up-list 1 t t)
-  (down-list -1 t))
-
-(defun conn-beginning-of-inner-list ()
-  "Move point to the beginning of the enclosing list."
-  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
-  (interactive)
-  (backward-up-list nil t t)
-  (down-list 1 t))
-
 ;;;;; Command Registers
 
 (cl-defstruct (conn-command-register)
