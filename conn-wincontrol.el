@@ -498,10 +498,13 @@
     (quit-window)))
 
 (defface conn-wincontrol-mode-line-label-face
-  '((t (:bold t)))
+  '((t ( :bold t :inherit highlight)))
   "Face for wincontrol mode-line window labels.")
 
-(defvar conn-wincontrol-mode-line-format-string "%s")
+(defvar conn-wincontrol-mode-line-format-string
+  (if (display-graphic-p)
+      (propertize " %s " 'display '(space-width 0.33))
+    "%s"))
 
 (defun conn-window-label-mode-line ()
   (let ((win (selected-window)))
