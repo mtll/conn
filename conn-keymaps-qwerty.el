@@ -102,7 +102,7 @@
   "i" 'clone-indirect-buffer
   "SPC" 'whitespace-cleanup
   "q" 'conn-indent-thing
-  "v" 'conn-indent-thing-rigidly
+  "n" 'conn-indent-thing-rigidly
   "R" 'indent-rigidly
   "V" 'vc-region-history
   "a c" 'align-current

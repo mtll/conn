@@ -880,7 +880,9 @@ CLONE will be non-nil, otherwise CLONE will nil."
   "Separator string for state lighters in `conn-lighter'.")
 
 (defvar conn-mode-line-state-stack
-  '(conn-local-mode (:eval (conn-mode-line-lighter)))
+  '(conn-local-mode
+    ("   "
+     (:eval (conn-mode-line-lighter))))
   "Mode line construct to display the state stack.")
 (put 'conn-mode-line-state-stack 'risky-local-variable t)
 

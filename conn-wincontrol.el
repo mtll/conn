@@ -511,43 +511,38 @@
      'face 'bold)))
 
 (defvar conn-wincontrol-mode-line-label
-  '(conn-wincontrol-label-mode-line-local-mode
+  '(conn-wincontrol-mode-line-label-local-mode
     ((:eval (conn-window-label-mode-line))
      " ")))
 (put 'conn-wincontrol-mode-line-label 'risky-local-variable t)
 
-(defun conn-setup-mode-line-label (&optional remove)
-  (if remove
-      (cl-callf2 delq
-          'conn-wincontrol-mode-line-label
-          mode-line-format)
-    (when-let* ((_ (consp mode-line-format))
-                (_ (not (memq 'conn-wincontrol-mode-line-label
-                              mode-line-format)))
-                (cons (memq 'mode-line-front-space
-                            mode-line-format)))
-      (push 'conn-wincontrol-mode-line-label
-            (cdr cons)))))
+(defun conn-setup-mode-line-label ()
+  (when-let* ((_ (and (consp mode-line-format)
+                      (not (memq 'conn-wincontrol-mode-line-label
+                                 mode-line-format))))
+              (cons (memq 'mode-line-front-space
+                          mode-line-format)))
+    (push 'conn-wincontrol-mode-line-label
+          (cdr cons))
+    (force-mode-line-update)))
 
-(defvar conn-wincontrol-label-mode-line-set-function
+(defvar conn-wincontrol-mode-line-label-setup-function
   #'conn-setup-mode-line-label
   "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.
 Function should take one argument, REMOVE, which when non-nil means to
 remove whatever the function has added to the mode-line.")
 
-(define-minor-mode conn-wincontrol-label-mode-line-local-mode
+(define-minor-mode conn-wincontrol-mode-line-label-local-mode
   "Add the wincontrol window label to the beginning of `mode-line-format'."
   :lighter ""
-  (funcall conn-wincontrol-label-mode-line-set-function
-           (unless conn-wincontrol-label-mode-line-local-mode
-             'remove)))
+  (funcall conn-wincontrol-mode-line-label-setup-function))
 
 (defun conn--turn-on-label-mode-line-local-mode ()
-  (conn-wincontrol-label-mode-line-local-mode 1))
+  (conn-wincontrol-mode-line-label-local-mode 1))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-wincontrol-label-mode-line-mode
-  conn-wincontrol-label-mode-line-local-mode
+  conn-wincontrol-mode-line-label-local-mode
   conn--turn-on-label-mode-line-local-mode
   :group 'conn)
 

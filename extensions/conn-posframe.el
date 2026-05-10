@@ -264,7 +264,8 @@
                      (insert conn-posframe--padding
                              (if (fboundp 'nerd-icons-faicon)
                                  (concat (nerd-icons-faicon "nf-fa-buffer")
-                                         conn-posframe--padding))
+                                         conn-posframe--padding)
+                               "")
                              "Buffers\n")
                      (add-face-text-property (point-min) (point-max)
                                              'conn-posframe-header 'append)
@@ -304,10 +305,11 @@
              (cl-loop for fn in (cons this-command (function-alias-p this-command))
                       thereis (advice-member-p 'conn-list-posframe fn)))
     (let ((header (with-work-buffer
-                    (insert (when (fboundp 'nerd-icons-mdicon)
-                              (concat conn-posframe--padding
-                                      (nerd-icons-mdicon "nf-md-tab")
-                                      conn-posframe--padding))
+                    (insert (if (fboundp 'nerd-icons-mdicon)
+                                (concat conn-posframe--padding
+                                        (nerd-icons-mdicon "nf-md-tab")
+                                        conn-posframe--padding)
+                              "")
                             "Tabs\n")
                     (add-face-text-property (point-min) (point-max)
                                             'conn-posframe-header 'append)

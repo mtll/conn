@@ -43,6 +43,18 @@
 
 ;;;; Mode Definition
 
+(defvar conn-mode-line-state-stack-setup-function
+  #'conn-mode-line-state-stack-setup)
+
+(defun conn-mode-line-state-stack-setup ()
+  (when-let* ((_ (and (consp mode-line-format)
+                      (not (memq 'conn-mode-line-state-stack
+                                 mode-line-format))))
+              (cons (memq 'mode-line-buffer-identification
+                          mode-line-format)))
+    (push 'conn-mode-line-state-stack (cdr cons))
+    (force-mode-line-update)))
+
 (defvar-keymap conn-local-mode-map
   "C-<escape>" 'exit-recursive-edit)
 
@@ -71,7 +83,7 @@
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :lighter (:eval (conn-mode-line-lighter))
+  :lighter " Conn" ;; (:eval (conn-mode-line-lighter))
   :group 'conn
   :keymap conn-local-mode-map
   (conn--input-method-mode-line)
@@ -99,7 +111,8 @@
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)
     (when (and conn--input-method (not current-input-method))
-      (activate-input-method conn--input-method))))
+      (activate-input-method conn--input-method)))
+  (funcall conn-mode-line-state-stack-setup-function))
 
 (defun conn--initialize-buffer ()
   (conn-local-mode 1))
