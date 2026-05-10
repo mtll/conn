@@ -103,6 +103,13 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
       (`(,beg . ,end)
        (if (= (point) end) beg end)))))
 
+(defun conn-inverse-op-other-end-handler (inverse)
+  "Mark the thing at point."
+  (lambda (_thing _beg _arg)
+    (save-excursion
+      (funcall inverse)
+      (point))))
+
 (defun conn-jump-other-end-handler (_thing beg _arg)
   beg)
 

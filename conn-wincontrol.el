@@ -517,20 +517,25 @@
 (put 'conn-wincontrol-mode-line-label 'risky-local-variable t)
 
 (defun conn-setup-mode-line-label ()
-  (when-let* ((_ (and (consp mode-line-format)
+  (when (and (consp mode-line-format)
+             (not (memq 'conn-wincontrol-mode-line-label
+                        mode-line-format)))
+    (let* ((pred (and (consp mode-line-format)
                       (not (memq 'conn-wincontrol-mode-line-label
-                                 mode-line-format))))
-              (cons (memq 'mode-line-front-space
-                          mode-line-format)))
-    (push 'conn-wincontrol-mode-line-label
-          (cdr cons))
+                                 mode-line-format))
+                      (lambda (elem)
+                        (not (eq elem 'mode-line-front-space)))))
+           (head (take-while pred mode-line-format))
+           (tail (drop-while pred mode-line-format)))
+      (setq mode-line-format (append head
+                                     (list (car tail))
+                                     (list 'conn-wincontrol-mode-line-label)
+                                     (cdr tail))))
     (force-mode-line-update)))
 
 (defvar conn-wincontrol-mode-line-label-setup-function
   #'conn-setup-mode-line-label
-  "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.
-Function should take one argument, REMOVE, which when non-nil means to
-remove whatever the function has added to the mode-line.")
+  "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.")
 
 (define-minor-mode conn-wincontrol-mode-line-label-local-mode
   "Add the wincontrol window label to the beginning of `mode-line-format'."

@@ -158,11 +158,11 @@ execution."
 
 (defun conn-forward-up-list (arg)
   (interactive "p")
-  (backward-up-list (- arg)))
+  (backward-up-list (- arg) t t))
 
 (defun conn-backward-down-list (arg)
   (interactive "p")
-  (down-list (- arg)))
+  (down-list (- arg) t))
 
 (defun conn-forward-visual-line (arg)
   "Move forward ARG visual lines."
@@ -193,29 +193,50 @@ Respects the current restriction."
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
+  (declare (conn-thing-command inner-list
+                               (conn-inverse-op-other-end-handler
+                                (lambda () (conn-forward-up-inner-list 1)))))
   (interactive "p")
-  (unless (= 0 arg)
-    (conn-protected-let* ((pt (point) (goto-char pt))
-                          (dir (cl-signum arg)))
-      (backward-up-list (* dir (1- (abs arg))) t t)
+  (cond
+   ((= 0 arg))
+   ((> 0 arg)
+    (conn-forward-up-inner-list (abs arg)))
+   (t
+    (conn-protected-let* ((pt (point) (goto-char pt)))
+      (backward-up-list (1- arg) t t)
       (if (conn--point-in-comment-or-string-p)
           (progn
             (while (conn--point-in-comment-or-string-p)
-              (backward-up-list dir t t))
-            (if (> dir 0)
-                (skip-syntax-forward (rx (syntax string-quote)))
-              (skip-syntax-backward (rx (syntax string-quote)))))
-        (backward-up-list dir t t)
-        (down-list dir))
+              (backward-up-list 1 t t))
+            (skip-syntax-forward (rx (syntax string-quote))))
+        (backward-up-list 1 t t)
+        (down-list 1))
       (when (= (point) pt)
-        (backward-up-list (1+ dir) t t)
-        (down-list dir)))))
+        (backward-up-list 2 t t)
+        (down-list 1))))))
 
 (defun conn-forward-up-inner-list (arg)
-  (declare (conn-thing-command inner-list #'conn-inner-list-handler))
+  (declare (conn-thing-command inner-list
+                               (conn-inverse-op-other-end-handler
+                                (lambda () (conn-backward-up-inner-list 1)))))
   (interactive "p")
-  (conn-backward-up-inner-list (- arg)))
+  (cond
+   ((= 0 arg))
+   ((> 0 arg)
+    (conn-backward-up-inner-list (abs arg)))
+   (t
+    (conn-protected-let* ((pt (point) (goto-char pt)))
+      (backward-up-list (- (1- arg)) t t)
+      (if (conn--point-in-comment-or-string-p)
+          (progn
+            (while (conn--point-in-comment-or-string-p)
+              (backward-up-list -1 t t))
+            (skip-syntax-backward (rx (syntax string-quote))))
+        (backward-up-list -1 t t)
+        (down-list -1))
+      (when (= (point) pt)
+        (backward-up-list -2 t t)
+        (down-list -1))))))
 
 (defun conn-forward-defun (N)
   "Move forward by defuns.

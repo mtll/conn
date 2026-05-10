@@ -47,12 +47,17 @@
   #'conn-mode-line-state-stack-setup)
 
 (defun conn-mode-line-state-stack-setup ()
-  (when-let* ((_ (and (consp mode-line-format)
-                      (not (memq 'conn-mode-line-state-stack
-                                 mode-line-format))))
-              (cons (memq 'mode-line-buffer-identification
-                          mode-line-format)))
-    (push 'conn-mode-line-state-stack (cdr cons))
+  (when-let* ((pred (and (listp mode-line-format)
+                         (not (memq 'conn-mode-line-state-stack
+                                    mode-line-format))
+                         (lambda (elem)
+                           (not (eq elem 'mode-line-buffer-identification)))))
+              (head (take-while pred mode-line-format))
+              (tail (drop-while pred mode-line-format)))
+    (setq mode-line-format (append head
+                                   (list (car tail))
+                                   (list 'conn-mode-line-state-stack)
+                                   (cdr tail)))
     (force-mode-line-update)))
 
 (defvar-keymap conn-local-mode-map
