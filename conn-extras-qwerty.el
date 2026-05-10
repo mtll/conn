@@ -252,8 +252,8 @@
   "M-s i s" 'ibuffer-do-isearch
   "M-s i o" 'ibuffer-do-occur
   "M-w" 'ibuffer-copy-filename-as-kill
-  "<" 'ibuffer-forward-next-marked
-  ">" 'ibuffer-backwards-next-marked
+  "<" 'ibuffer-backwards-next-marked
+  ">" 'ibuffer-forward-next-marked
   "M-SPC" 'ibuffer-toggle-marks
   "C-M-l" 'ibuffer-redisplay
   "v" 'ibuffer-mark-forward
@@ -261,7 +261,8 @@
   "C-d" 'ibuffer-unmark-forward
   "D" 'ibuffer-mark-for-delete-backwards
   "o" 'ibuffer-visit-buffer-other-window
-  "RET" 'ibuffer-visit-buffer)
+  "RET" 'ibuffer-visit-buffer
+  "S-<return>" 'ibuffer-do-view)
 
 ;;;; Bookmark Bmenu
 
