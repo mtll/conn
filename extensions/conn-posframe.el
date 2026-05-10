@@ -582,10 +582,12 @@
 ;;;; Quick Ref
 
 ;;;###autoload
-(defun conn-quick-ref-posframe (buffer &optional state teardown)
+(defun conn-quick-ref-posframe (buffer &optional initialized teardown)
   (if teardown
       (posframe-hide buffer)
-    (unless state
+    ;; The child frame isn't correctly sized for displaying the
+    ;; header-line the first time.
+    (unless initialized
       (posframe-show buffer
                      :min-width 66
                      :left-fringe 0
@@ -601,6 +603,7 @@
                    :border-width conn-posframe-border-width
                    :border-color (face-background 'conn-posframe-border)
                    :poshandler conn-posframe-buffer-poshandler
-                   :respect-header-line t)))
+                   :respect-header-line t)
+    t))
 
 (provide 'conn-posframe)

@@ -832,12 +832,12 @@ buffer is a valid target.")
      ("between" conn-dispatch-bounds-between)
      ("reset" conn-transform-reset))
     (("trim" conn-bounds-trim)
-     ("over" conn-dispatch-bounds-over))
-    (("untrim left" conn-bounds-untrim-left)
-     ("untrim right" conn-bounds-untrim-right)
-     ("upto next/prev"
+     ("untrim left" conn-bounds-untrim-left)
+     ("untrim right" conn-bounds-untrim-right))
+    (("upto next/prev"
       conn-bounds-upto-next
-      conn-bounds-upto-previous)))))
+      conn-bounds-upto-previous)
+     ("over" conn-dispatch-bounds-over)))))
 
 (defun conn-dispatch-transform-argument (&optional value)
   (conn-transform-argument
@@ -1260,10 +1260,10 @@ that slot's value and otherwise performs a shallow copy."
    :name 'conn-dispatch-actions
    :depth -50
    (:heading "Actions")
-   ((("copy from" conn-dispatch-copy-from)
+   ((("take" conn-dispatch-take)
      ("send" conn-dispatch-send)
      ("kapply" conn-dispatch-kapply))
-    (("take" conn-dispatch-take)
+    (("copy from" conn-dispatch-copy-from)
      ("copy to" conn-dispatch-copy-to)
      ("transpose" conn-dispatch-transpose))
     (("register load" conn-dispatch-register-load)
