@@ -508,19 +508,19 @@
 
 (defun conn-window-label-mode-line ()
   (let ((win (selected-window)))
-    (propertize
-     (if-let* ((_ (conn--dispatch-window-predicate (selected-window) t))
-               (str (progn
-                      (conn--ensure-simple-window-labels)
-                      (window-parameter win 'conn-label-string))))
-         (format conn-wincontrol-mode-line-format-string str)
-       "")
-     'face 'conn-wincontrol-mode-line-label-face)))
+    (if-let* ((_ (conn--dispatch-window-predicate (selected-window)))
+              (str (progn
+                     (conn--ensure-simple-window-labels)
+                     (window-parameter win 'conn-label-string))))
+        (concat (propertize
+                 (format conn-wincontrol-mode-line-format-string str)
+                 'face 'conn-wincontrol-mode-line-label-face)
+                " ")
+      "")))
 
 (defvar conn-wincontrol-mode-line-label
-  '(conn-wincontrol-mode-line-label-local-mode
-    ((:eval (conn-window-label-mode-line))
-     " ")))
+  '(conn-wincontrol-mode-line-label-mode
+    (:eval (conn-window-label-mode-line))))
 (put 'conn-wincontrol-mode-line-label 'risky-local-variable t)
 
 (defun conn-setup-mode-line-label ()
@@ -537,25 +537,23 @@
       (setq mode-line-format (append head
                                      (list (car tail))
                                      (list 'conn-wincontrol-mode-line-label)
-                                     (cdr tail))))
-    (force-mode-line-update)))
+                                     (cdr tail))))))
 
 (defvar conn-wincontrol-mode-line-label-setup-function
   #'conn-setup-mode-line-label
   "Function to setup `mode-line-format' for `conn-wincontrol-label-mode-line-mode'.")
 
-(define-minor-mode conn-wincontrol-mode-line-label-local-mode
+(define-minor-mode conn-wincontrol-mode-line-label-mode
   "Add the wincontrol window label to the beginning of `mode-line-format'."
-  :lighter ""
-  (funcall conn-wincontrol-mode-line-label-setup-function))
+  :after-hook (funcall conn-wincontrol-mode-line-label-setup-function))
 
-(defun conn--turn-on-label-mode-line-local-mode ()
-  (conn-wincontrol-mode-line-label-local-mode 1))
+(defun conn--turn-on-mode-line-label-mode ()
+  (conn-wincontrol-mode-line-label-mode 1))
 
 ;;;###autoload
-(define-globalized-minor-mode conn-wincontrol-label-mode-line-mode
-  conn-wincontrol-mode-line-label-local-mode
-  conn--turn-on-label-mode-line-local-mode
+(define-globalized-minor-mode conn-global-wincontrol-mode-line-label-mode
+  conn-wincontrol-mode-line-label-mode
+  conn--turn-on-mode-line-label-mode
   :group 'conn)
 
 ;;;;; Window Scroll Commands

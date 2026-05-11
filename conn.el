@@ -57,8 +57,7 @@
     (setq mode-line-format (append head
                                    (list (car tail))
                                    (list 'conn-mode-line-state-stack)
-                                   (cdr tail)))
-    (force-mode-line-update)))
+                                   (cdr tail)))))
 
 (defvar-keymap conn-local-mode-map
   "C-<escape>" 'exit-recursive-edit)
@@ -91,6 +90,7 @@
   :lighter " Conn" ;; (:eval (conn-mode-line-lighter))
   :group 'conn
   :keymap conn-local-mode-map
+  :after-hook (funcall conn-mode-line-state-stack-setup-function)
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
@@ -116,8 +116,7 @@
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)
     (when (and conn--input-method (not current-input-method))
-      (activate-input-method conn--input-method)))
-  (funcall conn-mode-line-state-stack-setup-function))
+      (activate-input-method (cl-shiftf conn--input-method nil)))))
 
 (defun conn--initialize-buffer ()
   (conn-local-mode 1))

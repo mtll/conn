@@ -1024,7 +1024,8 @@ determine which window to display the buffer in."
   (interactive
    (list (conn-prompt-for-window
           (delq (selected-window)
-                (conn-get-windows nil 'nomini 'visible 'not-dedicated)))))
+                (conn-get-windows nil 'nomini 'visible
+                                  'not-dedicated)))))
   (unless (eq window (selected-window))
     (if window
         (window-swap-states nil window)
@@ -1056,7 +1057,8 @@ Currently selected window remains selected afterwards."
   (interactive
    (list (conn-prompt-for-window
           (delq (selected-window)
-                (conn-get-windows nil 'nomini 'visible 'not-dedicated)))))
+                (conn-get-windows nil 'nomini 'visible
+                                  'not-dedicated)))))
   (unless (eq window (selected-window))
     (if window
         (save-selected-window (window-swap-states nil window))
