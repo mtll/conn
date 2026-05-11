@@ -52,9 +52,8 @@
                                     mode-line-format))
                          (lambda (elem)
                            (not (eq elem 'mode-line-buffer-identification)))))
-              (head (take-while pred mode-line-format))
               (tail (drop-while pred mode-line-format)))
-    (setq mode-line-format (append head
+    (setf mode-line-format (append (take-while pred mode-line-format)
                                    (list (car tail))
                                    (list 'conn-mode-line-state-stack)
                                    (cdr tail)))))

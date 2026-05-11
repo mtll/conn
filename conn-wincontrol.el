@@ -386,8 +386,10 @@
 
 (defun conn-wincontrol-prefix-arg-and-keep ()
   (setf conn--wincontrol-preserve-arg t)
-  (when conn--wincontrol-arg
-    (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
+  (cond (conn--wincontrol-arg
+         (* conn--wincontrol-arg-sign conn--wincontrol-arg))
+        ((= -1 conn--wincontrol-arg-sign)
+         '-)))
 
 (defun conn-wincontrol-consume-prefix-arg ()
   (when conn--wincontrol-arg
@@ -498,9 +500,11 @@
   "Face for wincontrol mode-line window labels.")
 
 (defvar conn-wincontrol-mode-line-format-string
-  (if (display-graphic-p)
-      (propertize " %s " 'display '(space-width 0.33))
-    "%s"))
+  (propertize
+   (if (display-graphic-p)
+       (propertize " %s " 'display '(space-width 0.33))
+     "%s")
+   'face 'conn-wincontrol-mode-line-label-face))
 
 (defun conn-window-label-mode-line ()
   (let ((win (selected-window)))
@@ -508,9 +512,7 @@
               (str (progn
                      (conn--ensure-simple-window-labels)
                      (window-parameter win 'conn-label-string))))
-        (concat (propertize
-                 (format conn-wincontrol-mode-line-format-string str)
-                 'face 'conn-wincontrol-mode-line-label-face)
+        (concat (format conn-wincontrol-mode-line-format-string str)
                 " ")
       "")))
 
@@ -520,20 +522,16 @@
 (put 'conn-wincontrol-mode-line-label 'risky-local-variable t)
 
 (defun conn-setup-mode-line-label ()
-  (when (and (consp mode-line-format)
-             (not (memq 'conn-wincontrol-mode-line-label
-                        mode-line-format)))
-    (let* ((pred (and (consp mode-line-format)
-                      (not (memq 'conn-wincontrol-mode-line-label
-                                 mode-line-format))
-                      (lambda (elem)
-                        (not (eq elem 'mode-line-front-space)))))
-           (head (take-while pred mode-line-format))
-           (tail (drop-while pred mode-line-format)))
-      (setq mode-line-format (append head
-                                     (list (car tail))
-                                     (list 'conn-wincontrol-mode-line-label)
-                                     (cdr tail))))))
+  (when-let* ((pred (and (consp mode-line-format)
+                         (not (memq 'conn-wincontrol-mode-line-label
+                                    mode-line-format))
+                         (lambda (elem)
+                           (not (eq elem 'mode-line-front-space)))))
+              (tail (drop-while pred mode-line-format)))
+    (setq mode-line-format (append (take-while pred mode-line-format)
+                                   (list (car tail))
+                                   (list 'conn-wincontrol-mode-line-label)
+                                   (cdr tail)))))
 
 (defvar conn-wincontrol-mode-line-label-setup-function
   #'conn-setup-mode-line-label
@@ -577,8 +575,10 @@
   (setf this-command 'conn-scroll-down)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines
-           (or (conn-wincontrol-prefix-arg-and-keep)
-               next-screen-context-lines)))
+           (pcase (conn-wincontrol-prefix-arg-and-keep)
+             ('- (floor (window-height) 2))
+             ('nil next-screen-context-lines)
+             (lines lines))))
       (funcall (or (command-remapping #'scroll-down-command)
                    (command-remapping #'conn-scroll-down)
                    #'conn-scroll-down)))))
@@ -589,8 +589,10 @@
   (setf this-command 'conn-scroll-up)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines
-           (or (conn-wincontrol-prefix-arg-and-keep)
-               next-screen-context-lines)))
+           (pcase (conn-wincontrol-prefix-arg-and-keep)
+             ('- (floor (window-height) 2))
+             ('nil next-screen-context-lines)
+             (lines lines))))
       (funcall (or (command-remapping #'scroll-up-command)
                    (command-remapping #'conn-scroll-up)
                    #'conn-scroll-up)))))
@@ -601,8 +603,10 @@
   (interactive)
   (setf this-command 'conn-scroll-down)
   (let ((next-screen-context-lines
-         (or (conn-wincontrol-prefix-arg-and-keep)
-             next-screen-context-lines)))
+         (pcase (conn-wincontrol-prefix-arg-and-keep)
+           ('- (floor (window-height) 2))
+           ('nil next-screen-context-lines)
+           (lines lines))))
     (conn-scroll-down)))
 
 (defun conn-wincontrol-scroll-up ()
@@ -611,8 +615,10 @@
   (interactive)
   (setf this-command 'conn-scroll-up)
   (let ((next-screen-context-lines
-         (or (conn-wincontrol-prefix-arg-and-keep)
-             next-screen-context-lines)))
+         (pcase (conn-wincontrol-prefix-arg-and-keep)
+           ('- (floor (window-height) 2))
+           ('nil next-screen-context-lines)
+           (lines lines))))
     (conn-scroll-up)))
 
 ;;;;; Window Configuration Commands

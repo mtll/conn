@@ -121,7 +121,7 @@ The duration of the message display is controlled by
   (substitute-command-keys
    (concat
     (propertize prompt 'face 'minibuffer-prompt)
-    " (arg: "
+    " ("
     (propertize
      (cond (conn--read-args-prefix-mag
             (number-to-string
