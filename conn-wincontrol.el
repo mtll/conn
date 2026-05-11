@@ -177,6 +177,8 @@
               conn-wincontrol-one-command-mode nil)
   (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
 
+(defvar conn--prev-echo-keystrokes nil)
+
 (defun conn--wincontrol-setup (&optional preserve-state)
   (condition-case _
       (progn
@@ -202,12 +204,23 @@
                 conn--wincontrol-arg-sign 1
                 conn--wincontrol-initial-window (selected-window)
                 conn--wincontrol-initial-winconf (current-window-configuration)))
+        ;; When `echo-keystrokes' is non-nil and non-zero echo
+        ;; keystrokes immediately.  This prevents echo keystrokes from
+        ;; clearing the wincontrol message for `echo-keystrokes'
+        ;; seconds before the first keystroke echo message is
+        ;; displayed.
+        (when (and (numberp echo-keystrokes)
+                   (> echo-keystrokes 0))
+          (setf conn--prev-echo-keystrokes (list echo-keystrokes)
+                echo-keystrokes 0.001))
         (set-face-inverse-video 'mode-line-active t))
     ((debug error)
      (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-exit ()
   (setf conn--wincontrol-message-newline t)
+  (pcase (cl-shiftf conn--prev-echo-keystrokes nil)
+    (`(,ek . ,_) (setf echo-keystrokes ek)))
   (conn-wincontrol-one-command-mode -1)
   (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
