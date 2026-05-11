@@ -34,20 +34,18 @@
 (defvar conn--wincontrol-help-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "WinControl " 'face 'minibuffer-prompt)
-   "(arg: "
+   (propertize "WinC " 'face 'minibuffer-prompt)
+   "("
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
-   "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[conn-wincontrol-exit] exit; "
    "\\[conn-wincontrol-quick-ref] help):"))
 
 (defvar conn--wincontrol-one-command-help-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "WinControl " 'face 'minibuffer-prompt)
-   "(arg: "
+   (propertize "WinC " 'face 'minibuffer-prompt)
+   "("
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
-   "\\[conn-wincontrol-digit-argument-reset] reset arg; "
    "\\[keyboard-quit] exit; "
    "\\[conn-wincontrol-quick-ref] help):"))
 
@@ -56,9 +54,9 @@
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
-(defvar conn--wincontrol-message-newline t)
 
 (function-put 'keyboard-quit :conn-wincontrol-preserve-arg t)
+(function-put 'balance-windows :conn-wincontrol-preserve-arg t)
 
 (defalias 'conn-bury-buffer #'bury-buffer)
 (defalias 'conn-unbury-buffer #'unbury-buffer)
@@ -94,7 +92,6 @@
   :interactive nil
   (when conn-wincontrol-one-command-mode
     (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (setf conn--wincontrol-message-newline nil)
     (conn-wincontrol-mode 1)))
 
 (defun conn-wincontrol-one-command ()
@@ -135,7 +132,7 @@
                 ((not (text-property-any 0 (length curr)
                                          'conn-wincontrol-string
                                          t curr))
-                 (message "%s%s" (conn--wincontrol-message) curr)))))
+                 (message "%s %s" (conn--wincontrol-message) curr)))))
     ((debug error)
      (conn-wincontrol-mode -1))))
 
@@ -146,10 +143,7 @@
                   conn--wincontrol-one-command-help-format
                 conn--wincontrol-help-format)))
     (propertize
-     (format (substitute-command-keys
-              (if conn--wincontrol-message-newline
-                  (concat help "\n")
-                (concat help " ")))
+     (format (substitute-command-keys help)
              (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                      (if (= conn--wincontrol-arg-sign -1) "-" "")
                      conn--wincontrol-arg))
@@ -162,7 +156,7 @@
                                'conn-wincontrol-string
                                t string)
             string
-          (concat (conn--wincontrol-message) string)))
+          (concat (conn--wincontrol-message) " " string)))
     ((debug error)
      (conn-wincontrol-mode -1))))
 
@@ -197,30 +191,18 @@
                       (lambda (&rest _)
                         (set-face-inverse-video 'mode-line-active t))
                       '((name . wincontrol-mode-line)))
-        (add-function :override eldoc-message-function 'conn--wincontrol-ignore)
+        (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
         (unless preserve-state
           (setf conn--wincontrol-arg (when current-prefix-arg
                                        (prefix-numeric-value current-prefix-arg))
                 conn--wincontrol-arg-sign 1
                 conn--wincontrol-initial-window (selected-window)
                 conn--wincontrol-initial-winconf (current-window-configuration)))
-        ;; When `echo-keystrokes' is non-nil and non-zero echo
-        ;; keystrokes immediately.  This prevents echo keystrokes from
-        ;; clearing the wincontrol message for `echo-keystrokes'
-        ;; seconds before the first keystroke echo message is
-        ;; displayed.
-        (when (and (numberp echo-keystrokes)
-                   (> echo-keystrokes 0))
-          (setf conn--prev-echo-keystrokes (list echo-keystrokes)
-                echo-keystrokes 0.001))
         (set-face-inverse-video 'mode-line-active t))
     ((debug error)
      (conn-wincontrol-mode -1))))
 
 (defun conn--wincontrol-exit ()
-  (setf conn--wincontrol-message-newline t)
-  (pcase (cl-shiftf conn--prev-echo-keystrokes nil)
-    (`(,ek . ,_) (setf echo-keystrokes ek)))
   (conn-wincontrol-one-command-mode -1)
   (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
@@ -228,7 +210,8 @@
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
   (remove-function after-focus-change-function 'wincontrol-mode-line)
-  (remove-function eldoc-message-function 'conn--wincontrol-ignore)
+  (remove-function eldoc-message-function #'conn--wincontrol-ignore)
+  (message nil)
   (set-face-inverse-video 'mode-line-active nil))
 
 (defvar conn-wincontrol-one-command-stay-command
