@@ -78,8 +78,42 @@
   :lighter " WinC"
   :interactive nil
   (if conn-wincontrol-mode
-      (conn--wincontrol-setup)
-    (conn--wincontrol-exit)))
+      (condition-case _
+          (progn
+            (when (zerop (minibuffer-depth))
+              (let ((message-log-max nil))
+                (message "%s" (conn--wincontrol-message))))
+            (setf emulation-mode-map-alists
+                  `(conn--wincontrol-maps
+                    ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
+            (add-hook 'set-message-functions #'conn-wincontrol-message-function)
+            ;; Must be before 'repeat-post-hook
+            (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
+            (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
+            (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+            (add-function :after after-focus-change-function
+                          (lambda (&rest _)
+                            (set-face-inverse-video 'mode-line-active t))
+                          '((name . wincontrol-mode-line)))
+            (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
+            (setf conn--wincontrol-arg (when current-prefix-arg
+                                         (prefix-numeric-value current-prefix-arg))
+                  conn--wincontrol-arg-sign 1
+                  conn--wincontrol-initial-window (selected-window)
+                  conn--wincontrol-initial-winconf (current-window-configuration))
+            (set-face-inverse-video 'mode-line-active t))
+        ((debug error)
+         (conn-wincontrol-mode -1)))
+    (conn-wincontrol-one-command-mode -1)
+    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
+    (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
+    (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+    (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+    (remove-function after-focus-change-function 'wincontrol-mode-line)
+    (remove-function eldoc-message-function #'conn--wincontrol-ignore)
+    (message nil)
+    (set-face-inverse-video 'mode-line-active nil)))
 
 (defun conn-wincontrol ()
   (interactive)
@@ -172,47 +206,6 @@
   (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
 
 (defvar conn--prev-echo-keystrokes nil)
-
-(defun conn--wincontrol-setup (&optional preserve-state)
-  (condition-case _
-      (progn
-        (when (zerop (minibuffer-depth))
-          (let ((message-log-max nil))
-            (message "%s" (conn--wincontrol-message))))
-        (setf emulation-mode-map-alists
-              `(conn--wincontrol-maps
-                ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
-        (add-hook 'set-message-functions #'conn-wincontrol-message-function)
-        ;; Must be before 'repeat-post-hook
-        (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
-        (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-        (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-        (add-function :after after-focus-change-function
-                      (lambda (&rest _)
-                        (set-face-inverse-video 'mode-line-active t))
-                      '((name . wincontrol-mode-line)))
-        (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
-        (unless preserve-state
-          (setf conn--wincontrol-arg (when current-prefix-arg
-                                       (prefix-numeric-value current-prefix-arg))
-                conn--wincontrol-arg-sign 1
-                conn--wincontrol-initial-window (selected-window)
-                conn--wincontrol-initial-winconf (current-window-configuration)))
-        (set-face-inverse-video 'mode-line-active t))
-    ((debug error)
-     (conn-wincontrol-mode -1))))
-
-(defun conn--wincontrol-exit ()
-  (conn-wincontrol-one-command-mode -1)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-  (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
-  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-  (remove-function after-focus-change-function 'wincontrol-mode-line)
-  (remove-function eldoc-message-function #'conn--wincontrol-ignore)
-  (message nil)
-  (set-face-inverse-video 'mode-line-active nil))
 
 (defvar conn-wincontrol-one-command-stay-command
   (list 'conn-wincontrol-backward-delete-arg
