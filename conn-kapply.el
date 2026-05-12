@@ -1928,6 +1928,33 @@ finishing showing the buffers that were visited."))
             pipeline)))))
     pipeline))
 
+(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+                               (cmd (eql conn-kapply-on-highlights-in-thing)))
+  "Kapply on all matching words in a thing.")
+
+(cl-defmethod conn-kapply-on-things-do ((_thing (eql conn-kapply-on-highlights-in-thing))
+                                        arg
+                                        transform
+                                        &optional
+                                        pipeline)
+  (conn-read-args (conn-read-thing-state
+                   :prompt "Highlights in Thing"
+                   :prefix arg)
+      ((`(,thing ,arg) (conn-thing-argument-dwim))
+       (transform (conn-transform-argument transform)))
+    (pcase (conn-bounds-of thing arg)
+      ((conn-bounds `(,beg . ,end))
+       (conn->f pipeline
+         (apply #'conn-kapply-on-iterator
+                (conn-kapply-highlight-iterator beg end)
+                :extra (conn-read-patterns-argument)))
+       (when pipeline
+         (conn-push-command-history
+          'conn-kapply-on-things-do
+          'conn-kapply-on-highlights-in-thing
+          arg transform pipeline))
+       pipeline))))
+
 (cl-defmethod conn-kapply-on-things-do ((thing (conn-thing t))
                                         arg
                                         transform
@@ -2026,7 +2053,17 @@ finishing showing the buffers that were visited."))
      `(conn-kapply-relocate-to-region
        conn-kapply-open-invisible
        conn-kapply-pulse-region
-       ,@pipeline))))
+       ,@pipeline))
+    (conn-push-command-history
+     (lambda ()
+       (conn-kapply-macro
+        (lambda (iterator)
+          (funcall applier iterator (or conn-read-args-last-prefix 0)))
+        (conn-kapply-infinite-iterator)
+        `(conn-kapply-relocate-to-region
+          conn-kapply-open-invisible
+          conn-kapply-pulse-region
+          ,@pipeline))))))
 
 (defvar-keymap conn-restrict-argument-map)
 
@@ -2146,11 +2183,12 @@ finishing showing the buffers that were visited."))
                             . ,(conn--kapply-highlights-read-patterns)))
               it)
             (name (arg)
-              (concat "\\[read-pattern] "
-                      (propertize
-                       "read patterns"
-                       'face (when (conn-anonymous-argument-value arg)
-                               'conn-argument-active-face))))
+              (substitute-command-keys
+               (concat "\\[read-pattern] "
+                       (propertize
+                        "read patterns"
+                        'face (when (conn-anonymous-argument-value arg)
+                                'conn-argument-active-face)))))
             (predicate (cmd)
               (eq cmd 'read-pattern)))
     (oclosure-lambda (conn-anonymous-argument
@@ -2161,17 +2199,6 @@ finishing showing the buffers that were visited."))
       (when (eq cmd 'read-pattern)
         (setf value (unless value #'read-pats))
         (funcall break)))))
-
-(defun conn-kapply-on-highlights-in-thing ()
-  (interactive)
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Thing")
-      ((`(,thing ,arg) (conn-thing-argument-dwim)))
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds `(,beg . ,end))
-       (conn-kapply-on-iterator
-        (conn-kapply-highlight-iterator beg end)
-        :extra (conn-read-patterns-argument))))))
 
 (defun conn-kapply-on-highlights ()
   (interactive)
@@ -2191,10 +2218,10 @@ finishing showing the buffers that were visited."))
                         (list (conn-kapply-make-region
                                pt pt (marker-buffer pt))))
                        (regs
-                        (cl-loop
-                         for (beg . end) in regs
-                         collect (conn-kapply-make-region
-                                  beg end (marker-buffer beg)))))))
+                        (cl-loop for (beg . end) in regs
+                                 collect (conn-kapply-make-region
+                                          beg end
+                                          (marker-buffer beg)))))))
     (conn-kapply-region-iterator)
     (conn-kapply-on-iterator)))
 
@@ -2248,12 +2275,12 @@ finishing showing the buffers that were visited."))
     (conn-action ((macro nil))
       (:description "Kapply")
       (:repeat t)
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (let ((conn-dispatch-always-prompt t))
-                      (conn-select-target)))
-                   (counter (if macro
-                                (kmacro--counter macro)
-                              kmacro-counter)))
+      (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                   (let ((conn-dispatch-always-prompt t))
+                     (conn-select-target)))
+                  (counter (if macro
+                               (kmacro--counter macro)
+                             kmacro-counter)))
         (with-selected-window window
           (conn-dispatch-change-group)
           (pcase (conn-bounds-of-dispatch thing arg pt)

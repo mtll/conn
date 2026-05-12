@@ -64,10 +64,6 @@
   "#" 'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
-(define-keymap
-  :keymap (conn-get-major-mode-map 'conn-command-state 'occur-mode)
-  "<conn-edit-map> '" 'conn-kapply-on-occur)
-
 (defun conn-setup-isearch-map ()
   (define-keymap
     :keymap isearch-mode-map
