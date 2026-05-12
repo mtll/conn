@@ -40,15 +40,6 @@
    "\\[conn-wincontrol-exit] exit; "
    "\\[conn-wincontrol-quick-ref] help):"))
 
-(defvar conn--wincontrol-one-command-help-format
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "WinC " 'face 'minibuffer-prompt)
-   "("
-   (propertize "%s" 'face 'read-multiple-choice-face) ", "
-   "\\[keyboard-quit] exit; "
-   "\\[conn-wincontrol-quick-ref] help):"))
-
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
@@ -80,12 +71,6 @@
   (if conn-wincontrol-mode
       (condition-case _
           (progn
-            (when (zerop (minibuffer-depth))
-              (let ((message-log-max nil))
-                (message "%s" (conn--wincontrol-message))))
-            (setf emulation-mode-map-alists
-                  `(conn--wincontrol-maps
-                    ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
             (add-hook 'set-message-functions #'conn-wincontrol-message-function)
             ;; Must be before 'repeat-post-hook
             (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
@@ -100,7 +85,14 @@
                                          (prefix-numeric-value current-prefix-arg))
                   conn--wincontrol-arg-sign 1
                   conn--wincontrol-initial-window (selected-window)
-                  conn--wincontrol-initial-winconf (current-window-configuration))
+                  conn--wincontrol-initial-winconf (current-window-configuration)
+                  emulation-mode-map-alists `(conn--wincontrol-maps
+                                              ,@(delq 'conn--wincontrol-maps
+                                                      emulation-mode-map-alists)))
+            (if (eq (selected-window) (active-minibuffer-window))
+                (conn--wincontrol-minibuffer-setup)
+              (let ((message-log-max nil))
+                (message "%s" (conn--wincontrol-message))))
             (set-face-inverse-video 'mode-line-active t))
         ((debug error)
          (conn-wincontrol-mode -1)))
@@ -173,15 +165,13 @@
 (defalias 'conn--wincontrol-ignore 'ignore)
 
 (defun conn--wincontrol-message ()
-  (let ((help (if conn-wincontrol-one-command-mode
-                  conn--wincontrol-one-command-help-format
-                conn--wincontrol-help-format)))
-    (propertize
-     (format (substitute-command-keys help)
-             (format (if conn--wincontrol-arg "%s%s" "[%s1]")
-                     (if (= conn--wincontrol-arg-sign -1) "-" "")
-                     conn--wincontrol-arg))
-     'conn-wincontrol-string t)))
+  (propertize
+   (format (substitute-command-keys
+            conn--wincontrol-help-format)
+           (format (if conn--wincontrol-arg "%s%s" "[%s1]")
+                   (if (= conn--wincontrol-arg-sign -1) "-" "")
+                   conn--wincontrol-arg))
+   'conn-wincontrol-string t))
 
 (defun conn-wincontrol-message-function (string)
   (condition-case _err
@@ -204,8 +194,6 @@
   (setq-local conn-wincontrol-mode nil
               conn-wincontrol-one-command-mode nil)
   (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
-
-(defvar conn--prev-echo-keystrokes nil)
 
 (defvar conn-wincontrol-one-command-stay-command
   (list 'conn-wincontrol-backward-delete-arg
