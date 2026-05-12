@@ -33,7 +33,6 @@
 
 (defvar conn--wincontrol-help-format
   (concat
-   "\\<conn-wincontrol-map>"
    (propertize "WinC " 'face 'minibuffer-prompt)
    "("
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
@@ -96,7 +95,8 @@
             (set-face-inverse-video 'mode-line-active t))
         ((debug error)
          (conn-wincontrol-mode -1)))
-    (conn-wincontrol-one-command-mode -1)
+    (when conn-wincontrol-one-command-mode
+      (conn-wincontrol-one-command-mode -1))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
@@ -116,9 +116,13 @@
   "Global minor mode for wincontrol one command."
   :global t
   :interactive nil
-  (when conn-wincontrol-one-command-mode
-    (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (conn-wincontrol-mode 1)))
+  (if conn-wincontrol-one-command-mode
+      (progn
+        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+        (conn-wincontrol-mode 1))
+    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (when conn-wincontrol-mode
+      (conn-wincontrol-mode -1))))
 
 (defun conn-wincontrol-one-command ()
   (interactive)
