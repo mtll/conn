@@ -37,7 +37,8 @@
   :group 'conn-quick-ref)
 
 (define-derived-mode conn-quick-ref-mode special-mode "Quick-Ref"
-  "Mode for conn quick reference buffers.")
+  "Mode for conn quick reference buffers."
+  :interactive nil)
 
 (defvar conn-quick-ref-display-function 'conn-quick-ref-buffer)
 
@@ -58,7 +59,7 @@
      face minibuffer-prompt)
     "  "
     ,(propertize "Quick Reference" 'face '(:weight bold))
-    "   ("
+    "  ("
     ,conn-quick-reference-header-key-description
     ") ")
   "Template for `header-line-format' in quick reference buffers.")
