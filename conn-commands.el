@@ -802,48 +802,6 @@ for the meaning of prefix ARG."
         (outline-insert-heading)
         (recursive-edit)))))
 
-(defun conn-rgrep-thing (thing arg transform)
-  "`rgrep' for the string contained in the region from BEG to END.
-Interactively `region-beginning' and `region-end'."
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Rgrep Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (let ((search-string
-            (read-string "Search for: "
-                         (regexp-quote (buffer-substring-no-properties beg end))
-                         'grep-regexp-history)))
-       (rgrep search-string))))
-  (conn-push-command-history 'conn-rgrep-thing
-                             thing
-                             arg
-                             transform))
-
-(defun conn-occur-thing (thing arg transform)
-  "`occur' for the string contained in the region from BEG to END.
-Interactively `region-beginning' and `region-end'."
-  (interactive
-   (conn-read-args (conn-read-thing-state
-                    :prompt "Occur Thing")
-       ((`(,thing ,arg) (conn-thing-argument-dwim))
-        (transform (conn-transform-argument)))
-     (list thing arg transform)))
-  (pcase (conn-bounds-of thing arg)
-    ((conn-bounds `(,beg . ,end) transform)
-     (let ((search-string
-            (read-string "Search for: "
-                         (regexp-quote (buffer-substring-no-properties beg end))
-                         'grep-regexp-history)))
-       (occur search-string))))
-  (conn-push-command-history 'conn-occur-thing
-                             thing
-                             arg
-                             transform))
-
 ;;;;; Transition Functions
 
 (defun conn-one-emacs-state ()
@@ -1245,6 +1203,174 @@ Currently selected window remains selected afterwards."
 
 (defvar conn-backward-argument-reference
   "Toggle whether matches should be operated on backward.")
+
+;;;;; Search
+
+(cl-defstruct (conn-search-thing-argument
+               (:include conn-thing-argument)))
+
+(cl-defstruct (conn-occur-thing-argument
+               (:include conn-search-thing-argument)
+               ( :constructor conn-occur-thing-argument
+                 (&aux
+                  (recursive-edit t)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
+(cl-defstruct (conn-grep-thing-argument
+               (:include conn-search-thing-argument)
+               ( :constructor conn-grep-thing-argument
+                 (&aux
+                  (recursive-edit t)
+                  (required t)
+                  (value (when (use-region-p)
+                           (list 'region nil)))
+                  (set-flag (use-region-p))))))
+
+(defvar-keymap conn-grep-directory-argument-map)
+
+(cl-defstruct (conn-grep-directory-argument
+               (:include conn-argument)
+               (:constructor
+                conn-grep-directory-argument
+                (&aux
+                 (keymap conn-grep-directory-argument-map)))))
+
+(conn-define-argument-command ((arg conn-grep-directory-argument)
+                               (cmd (eql conn-grep-directory)))
+  "Search for thing within a directory."
+  ( :update (break)
+    (setf (conn-grep-directory-argument-value arg)
+          (read-directory-name "Base directory: "
+			       (conn-grep-directory-argument-value arg)
+                               (or (ignore-errors
+                                     (declare-function project-root "project")
+                                     (project-root (project-current)))
+                                   default-directory)
+                               'must-match))
+    (funcall break)))
+
+(cl-defmethod conn-argument-payload ((arg conn-grep-directory-argument))
+  (or (conn-grep-directory-argument-value arg)
+      (ignore-errors
+        (declare-function project-root "project")
+        (project-root (project-current)))
+      default-directory))
+
+(cl-defmethod conn-argument-display ((_arg conn-grep-directory-argument))
+  (substitute-command-keys "\\[conn-grep-directory] dir"))
+
+(defvar-keymap conn-grep-files-argument-map)
+
+(cl-defstruct (conn-grep-files-argument
+               (:include conn-argument)
+               (:constructor conn-grep-files-argument
+                             (&aux
+                              (keymap conn-grep-files-argument-map)
+                              (value "*.*")))))
+
+(conn-define-argument-command ((arg conn-grep-files-argument)
+                               (cmd (eql conn-grep-files)))
+  "Search for thing in files matching wildcard."
+  ( :update (break)
+    (require 'grep)
+    (declare-function grep-read-files "grep")
+    (setf (conn-grep-files-argument-value arg)
+          (grep-read-files "THING"))
+    (funcall break)))
+
+(cl-defmethod conn-argument-display ((arg conn-grep-files-argument))
+  (concat (substitute-command-keys "\\[conn-grep-files] ")
+          "files"
+          (and-let* ((val (conn-grep-files-argument-value arg)))
+            (concat
+             " "
+             (propertize val 'face 'conn-argument-active-face)))))
+
+(defvar-keymap conn-grep-confirm-argument-map)
+
+(conn-define-state conn-rgrep-state (conn-read-thing-state)
+  :lighter "RGREP")
+
+(defun conn-rgrep-thing (thing arg transform &optional files dir confirm)
+  "`rgrep' for the string contained THING."
+  (interactive
+   (conn-read-args (conn-rgrep-state
+                    :prompt "Rgrep Thing")
+       ((`(,thing ,arg) (conn-grep-thing-argument))
+        (transform (conn-transform-argument))
+        (files (conn-grep-files-argument))
+        (directory (conn-grep-directory-argument))
+        (confirm
+         (conn-boolean-argument "confirm"
+                                'conn-grep-confirm
+                                conn-grep-confirm-argument-map
+                                :reference "Edit the grep command before it is run.")))
+     (list thing arg transform files directory confirm)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (rgrep (regexp-quote (buffer-substring-no-properties beg end))
+            files
+            dir
+            confirm)))
+  (conn-push-command-history 'conn-rgrep-thing
+                             thing
+                             arg
+                             transform
+                             files
+                             dir
+                             confirm))
+
+(defvar-keymap conn-occur-context-argument-map)
+(defvar-keymap conn-occur-restrict-to-thing-map)
+
+(conn-define-state conn-occur-state (conn-read-thing-state)
+  :lighter "OCCUR")
+
+(defun conn-occur-thing (thing arg transform &optional nlines restrict)
+  "`occur' for the string contained in THING."
+  (interactive
+   (conn-read-args (conn-occur-state
+                    :prompt "Occur Thing")
+       ((`(,thing ,arg) (conn-occur-thing-argument))
+        (transform (conn-transform-argument))
+        (nlines (conn-read-argument
+                 "context"
+                 'conn-occur-context-lines
+                 conn-occur-context-argument-map
+                 (lambda (_) (conn-read-args-consume-prefix-arg))
+                 :reference "Number of context lines to display around each line.  If the number is
+negative then only display that many context lines before each line."))
+        (restrict (conn-read-argument
+                   "restrict"
+                   'conn-occur-restrict-to-thing
+                   conn-occur-restrict-to-thing-map
+                   (lambda (_)
+                     (conn-read-args (conn-read-thing-state
+                                      :prompt "Restrict to Thing")
+                         ((`(,thing ,arg) (conn-thing-argument t))
+                          (transform (conn-transform-argument)))
+                       (list thing arg transform)))
+                   :reference "Restrict search to a thing.")))
+     (list thing arg transform nlines restrict)))
+  (pcase (conn-bounds-of thing arg)
+    ((conn-bounds `(,beg . ,end) transform)
+     (let ((search-string
+            (regexp-quote (buffer-substring-no-properties beg end))))
+       (pcase restrict
+         ((and `(,thing ,arg ,transform)
+               (let (conn-bounds region transform)
+                 (conn-bounds-of thing arg)))
+          (occur search-string nlines (list region)))
+         (_ (occur search-string nlines))))))
+  (conn-push-command-history 'conn-occur-thing
+                             thing
+                             arg
+                             transform
+                             nlines
+                             restrict))
 
 ;;;;; Mark
 

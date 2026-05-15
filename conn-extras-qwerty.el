@@ -444,6 +444,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'pdf-view-mode)
+  "C" 'pdf-view-center-in-window
+  "c" (conn-remap-key "C-c" t)
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
   "w" 'conn-wincontrol-one-command

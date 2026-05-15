@@ -113,8 +113,9 @@
   "e" 'conn-emacs-state-open-line-above
   "j" 'conn-join-lines
   "d" 'conn-emacs-state-open-line
-  "r" 'conn-narrow-to-thing
+  "w" 'conn-narrow-to-thing
   "o" 'conn-occur-thing
+  "r" 'conn-rgrep-thing
   "Y" 'yank-rectangle
   "S" 'conn-sort-things
   "v" 'diff-buffer-with-file
@@ -628,6 +629,26 @@
                         (conn--query-replace-read-transpose-from-to))))
 
 ;;;; Argument Keymaps
+
+(define-keymap
+  :keymap conn-occur-context-argument-map
+  "C" 'conn-occur-context-lines)
+
+(define-keymap
+  :keymap conn-occur-restrict-to-thing-map
+  "w" 'conn-occur-restrict-to-thing)
+
+(define-keymap
+  :keymap conn-grep-directory-argument-map
+  "d" 'conn-grep-directory)
+
+(define-keymap
+  :keymap conn-grep-files-argument-map
+  "w" 'conn-grep-files)
+
+(define-keymap
+  :keymap conn-grep-confirm-argument-map
+  "q" 'conn-grep-confirm)
 
 (define-keymap
   :keymap conn-register-argument-map

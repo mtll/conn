@@ -592,6 +592,7 @@
                      :min-width 66
                      :left-fringe 0
                      :right-fringe 0
+                     :min-height 2
                      :border-width conn-posframe-border-width
                      :border-color (face-background 'conn-posframe-border)
                      :poshandler conn-posframe-buffer-poshandler

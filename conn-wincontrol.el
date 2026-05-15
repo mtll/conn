@@ -61,6 +61,8 @@
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
+(defvar conn-wincontrol-one-command-mode)
+
 ;;;###autoload
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for wincontrol."
@@ -95,8 +97,6 @@
             (set-face-inverse-video 'mode-line-active t))
         ((debug error)
          (conn-wincontrol-mode -1)))
-    (when conn-wincontrol-one-command-mode
-      (conn-wincontrol-one-command-mode -1))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
@@ -105,7 +105,9 @@
     (remove-function after-focus-change-function 'wincontrol-mode-line)
     (remove-function eldoc-message-function #'conn--wincontrol-ignore)
     (message nil)
-    (set-face-inverse-video 'mode-line-active nil)))
+    (set-face-inverse-video 'mode-line-active nil)
+    (when conn-wincontrol-one-command-mode
+      (conn-wincontrol-one-command-mode -1))))
 
 (defun conn-wincontrol ()
   (interactive)
@@ -513,7 +515,7 @@
                          (lambda (elem)
                            (not (eq elem 'mode-line-front-space)))))
               (tail (drop-while pred mode-line-format)))
-    (setq mode-line-format (append (take-while pred mode-line-format)
+    (setf mode-line-format (append (take-while pred mode-line-format)
                                    (list (car tail))
                                    (list 'conn-wincontrol-mode-line-label)
                                    (cdr tail)))))
