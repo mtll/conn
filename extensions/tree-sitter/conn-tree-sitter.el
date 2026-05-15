@@ -561,6 +561,7 @@
              ((bind* (type-things (seq-intersection
                                    (get type :conn-ts--member-of)
                                    things))))
+             ((null type-things))
              ((not (alist-get beg bounds-alist))
               (push (make-bounds (cons beg end) type-things)
                     (alist-get beg bounds-alist))

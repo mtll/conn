@@ -338,8 +338,8 @@
        (eq (buffer-local-value 'major-mode
                                (window-buffer win))
            'dired-mode)))
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -492,8 +492,8 @@
        (eq (buffer-local-value 'major-mode
                                (window-buffer win))
            'ibuffer-mode)))
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -569,8 +569,8 @@
        (eq (buffer-local-value 'major-mode
                                (window-buffer win))
            'bookmark-bmenu-mode)))
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -640,8 +640,8 @@
         (eq 'Info-mode
             (buffer-local-value 'major-mode
                                 (window-buffer win)))))
-     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                   (conn-select-target)))
+     (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                  (conn-select-target)))
        (select-window window)
        (goto-char pt)
        (Info-follow-nearest-node)))

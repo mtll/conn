@@ -147,6 +147,7 @@
 
 (define-keymap
   :keymap conn-goto-map
+  "'" 'conn-kapply-on-errors
   "v" 'conn-previous-mark-command
   "e" 'conn-previous-emacs-state
   "E" 'conn-next-emacs-state

@@ -207,6 +207,14 @@ See also `conn-kapply-consume-region'."
 
 (defconst conn--kapply-region (make-vector 3 nil))
 
+(define-inline conn-kapply-bind-region (beg end buffer)
+  (inline-quote
+   (progn
+     (setf (aref conn--kapply-region 0) ,beg
+           (aref conn--kapply-region 1) ,end
+           (aref conn--kapply-region 2) ,buffer)
+     conn--kapply-region)))
+
 (defun conn-kapply-consume-region (ov)
   "Consume overlay OV and return a region for kapply pipeline functions.
 
@@ -216,11 +224,10 @@ This deletes the overlay OV.
 
 See also `conn-kapply-make-region'."
   (when ov
-    (setf (aref conn--kapply-region 0) (overlay-start ov)
-          (aref conn--kapply-region 1) (overlay-end ov)
-          (aref conn--kapply-region 2) (overlay-buffer ov))
-    (delete-overlay ov)
-    conn--kapply-region))
+    (prog1 (conn-kapply-bind-region (overlay-start ov)
+                                    (overlay-end ov)
+                                    (overlay-buffer ov))
+      (delete-overlay ov))))
 
 (defun conn-kapply-macro (applier iterator pipeline)
   "Apply a keyboard macro on a set of regions.
@@ -247,6 +254,37 @@ argument, an iterator, and return another iterator."
            (side-effect-free t))
   (lambda (_state)
     (vector (point) (point) (current-buffer))))
+
+(defun conn-kapply-error-iterator (&optional buffer)
+  (let ((buffer (or buffer (next-error-find-buffer)))
+        (found-fn (lambda (_from-buffer to-buffer)
+                    (conn-kapply-bind-region
+                     (point) (pos-eol)
+                     (current-buffer))))
+        (stay-flag nil)
+        (init nil))
+    (unless buffer (error "No error buffer"))
+    (lambda (state)
+      (save-current-buffer
+        (ignore-errors
+          (setf next-error-last-buffer buffer)
+          (let ((next-error-found-function next-error-found-function)
+                next-error-highlight
+                next-error-highlight-no-select)
+            (add-function :after next-error-found-function found-fn)
+            (pcase state
+              (:exit-current
+               (let ((cbuf (current-buffer)))
+                 (while (eq cbuf (aref conn--kapply-region 2))
+                   (next-error 1)))
+               (setf stay-flag t))
+              ((or :next :record)
+               (if (not (cl-shiftf init t))
+                   (condition-case _
+                       (next-error 0)
+                     (error (next-error 1)))
+                 (next-error (if (cl-shiftf stay-flag nil) 0 1)))
+               conn--kapply-region))))))))
 
 (defun conn-kapply-highlight-iterator (beg end)
   "Create an iterator over all highlights in the region from BEG to END.
@@ -2206,50 +2244,12 @@ finishing showing the buffers that were visited."))
    (conn-kapply-highlight-iterator (point-min) (point-max))
    :extra (conn-read-patterns-argument)))
 
-(defun conn-kapply-on-occur ()
+(defun conn-kapply-on-errors ()
   (interactive)
   (conn-<
-    (save-excursion
-      (goto-char (point-min))
-      (cl-loop for match = (text-property-search-forward 'occur-target)
-               while match
-               nconc (pcase (prop-match-value match)
-                       ((and pt (guard (markerp pt)))
-                        (list (conn-kapply-make-region
-                               pt pt (marker-buffer pt))))
-                       (regs
-                        (cl-loop for (beg . end) in regs
-                                 collect (conn-kapply-make-region
-                                          beg end
-                                          (marker-buffer beg)))))))
-    (conn-kapply-region-iterator)
-    (conn-kapply-on-iterator)))
-
-(defun conn-kapply-on-compilation ()
-  (interactive)
-  (declare-function compilation--message->loc "compile")
-  (conn-<
-    (save-excursion
-      (goto-char (point-min))
-      (cl-loop
-       for match = (text-property-search-forward 'compilation-message)
-       while match
-       collect (pcase (compilation--message->loc
-                       (prop-match-value match))
-                 (`(,col ,line (,file . ,_) . ,_)
-                  (with-current-buffer
-                      (let ((name (apply #'expand-file-name file)))
-                        (or (get-file-buffer name)
-                            (find-file-noselect name)))
-                    (goto-char (point-min))
-                    (save-excursion
-                      (forward-line (1- line))
-                      (forward-char (1- col))
-                      (conn-kapply-make-region
-                       (point)
-                       (line-end-position))))))))
-    (conn-kapply-region-iterator)
-    (conn-kapply-on-iterator :ibuffer t)))
+    (conn-kapply-error-iterator)
+    (conn-kapply-on-iterator :query t
+                             :ibuffer t)))
 
 ;;;;; Dispatch Kapply
 
