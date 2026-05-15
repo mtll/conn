@@ -49,24 +49,22 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-continuous-thing-other-end-handler (thing beg arg)
   "Mark the things which have been moved over."
-  (let ((thing (seq-find #'conn-simple-thing-p
-                         (conn-thing-all-parents thing))))
-    (ignore-errors
-      (cond ((= 0 (prefix-numeric-value arg)))
-            ((= (point) beg)
-             (pcase (bounds-of-thing-at-point thing)
-               (`(,beg . ,end)
-                (cond ((= (point) beg) end)
-                      ((= (point) end) beg)))))
-            ((let ((dir (pcase (- (point) beg)
-                          (0 0)
-                          ((pred (< 0)) 1)
-                          ((pred (> 0)) -1))))
-               (save-excursion
-                 (goto-char beg)
-                 (forward-thing thing dir)
-                 (forward-thing thing (- dir))
-                 (point))))))))
+  (ignore-errors
+    (let ((thing (seq-find #'conn-simple-thing-p
+                           (conn-thing-all-parents thing))))
+      (cond* ((= 0 (prefix-numeric-value arg)))
+             ((pcase* (or `(,(pred (= (point))) . ,other-end)
+                          `(,other-end . ,(pred (= (point))))
+                          (pred consp))
+                      (and (= (point) beg)
+                           (bounds-of-thing-at-point thing)))
+              other-end)
+             ((bind* (dir (cl-signum (- (point) beg))))
+              (save-excursion
+                (goto-char beg)
+                (forward-thing thing dir)
+                (forward-thing thing (- dir))
+                (point)))))))
 
 (defun conn-nestable-thing-other-end-handler (thing beg _arg)
   "Mark the things which have been moved over."

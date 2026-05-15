@@ -4306,8 +4306,8 @@ contain targets."
     (:no-history t)
     (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
                   (conn-select-target)))
-      (conn-dispatch-select-window window)
-      (run-hook-with-args-until-success 'conn-dispatch-button-functions pt))))
+      (with-selected-window window
+        (run-hook-with-args-until-success 'conn-dispatch-button-functions pt)))))
 
 (defun conn-dispatch-copy-to ()
   (declare (conn-dispatch-action)

@@ -2,7 +2,7 @@
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "30.1") (compat "31") conn)
+;; Package-Requires: ((emacs "30.1") (compat "31") (cond-star "1.0") conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -554,33 +554,31 @@
                                               (window-end)))
           (pcase-dolist (`(,type ,beg . ,end)
                          (conn-ts-capture vbeg vend))
-            (let (type-things ov bounds)
-              (cond
-               ((not (and
-                      (<= (window-start) beg (window-end))
-                      (or (null region-pred)
-                          (funcall region-pred beg end))
-                      (setf type-things (seq-intersection
-                                         (get type :conn-ts--member-of)
-                                         things)))))
-               ((not (alist-get beg bounds-alist))
-                (push (make-bounds (cons beg end) type-things)
-                      (alist-get beg bounds-alist))
-                (conn-make-target-overlay beg 0 :thing target-thing))
-               ((not (setf bounds (seq-find
-                                   (lambda (bounds)
-                                     (pcase bounds
-                                       ((conn-bounds `(,b . ,e))
-                                        (and (eql beg b) (eql end e)))))
-                                   (alist-get beg bounds-alist))))
-                (push (make-bounds (cons beg end) type-things)
-                      (alist-get beg bounds-alist)))
-               (t
-                (cl-callf2 seq-union
-                    type-things
-                    (conn-thing-get
-                     (conn-bounds-thing bounds)
-                     :types)))))))))))
+            (cond*
+             ((not (and (<= (window-start) beg (window-end))
+                        (or (null region-pred)
+                            (funcall region-pred beg end)))))
+             ((bind* (type-things (seq-intersection
+                                   (get type :conn-ts--member-of)
+                                   things))))
+             ((not (alist-get beg bounds-alist))
+              (push (make-bounds (cons beg end) type-things)
+                    (alist-get beg bounds-alist))
+              (conn-make-target-overlay beg 0 :thing target-thing))
+             ((bind-and* (bounds (seq-find
+                                  (lambda (bounds)
+                                    (pcase bounds
+                                      ((conn-bounds `(,b . ,e))
+                                       (and (eql beg b) (eql end e)))))
+                                  (alist-get beg bounds-alist))))
+              (cl-callf2 seq-union
+                  type-things
+                  (conn-thing-get
+                   (conn-bounds-thing bounds)
+                   :types)))
+             (t
+              (push (make-bounds (cons beg end) type-things)
+                    (alist-get beg bounds-alist))))))))))
 
 (conn-define-target-finder conn-ts-all-things
     ()
