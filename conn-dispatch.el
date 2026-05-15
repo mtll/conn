@@ -494,25 +494,26 @@ for dispatch."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
-  (when windows
-    (conn-with-window-labels
-        (labels (funcall conn-window-label-function windows))
-      (conn-with-dispatch-handlers
-        (:handler
-         ( :predicate (cmd)
-           (or (eq cmd 'act)
-               (eq cmd 'repeat-dispatch-at-mouse)))
-         ( :update (cmd _break)
-           (when (or (and (eq cmd 'act)
-                          (mouse-event-p last-input-event))
-                     (and (eq cmd 'repeat-dispatch-at-mouse)
-                          (eq 'dispatch-mouse-repeat
-                              (event-basic-type last-input-event))))
-             (let* ((posn (event-start last-input-event))
-                    (win (posn-window posn)))
-               (when (not (posn-area posn))
-                 (:return win))))))
-        (conn-label-select labels nil always-prompt)))))
+  (let (conn-wincontrol-mode)
+    (when windows
+      (conn-with-window-labels
+          (labels (funcall conn-window-label-function windows))
+        (conn-with-dispatch-handlers
+          (:handler
+           ( :predicate (cmd)
+             (or (eq cmd 'act)
+                 (eq cmd 'repeat-dispatch-at-mouse)))
+           ( :update (cmd _break)
+             (when (or (and (eq cmd 'act)
+                            (mouse-event-p last-input-event))
+                       (and (eq cmd 'repeat-dispatch-at-mouse)
+                            (eq 'dispatch-mouse-repeat
+                                (event-basic-type last-input-event))))
+               (let* ((posn (event-start last-input-event))
+                      (win (posn-window posn)))
+                 (when (not (posn-area posn))
+                   (:return win))))))
+          (conn-label-select labels nil always-prompt))))))
 
 ;;;;; Label Event Handlers
 
