@@ -257,7 +257,7 @@ argument, an iterator, and return another iterator."
 
 (defun conn-kapply-error-iterator (&optional buffer)
   (let ((buffer (or buffer (next-error-find-buffer)))
-        (found-fn (lambda (_from-buffer to-buffer)
+        (found-fn (lambda (_from-buffer _to-buffer)
                     (conn-kapply-bind-region
                      (point) (pos-eol)
                      (current-buffer))))

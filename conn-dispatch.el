@@ -366,6 +366,9 @@ themselves once the selection process has concluded."
 
 ;;;;; Window Header-line Labels
 
+(defvar conn-wincontrol-mode)
+(defvar conn-wincontrol-one-command-mode)
+
 (defface conn-window-label-face
   '((t (:inherit help-key-binding :height 2.5)))
   "Face for conn window prompt overlay."
@@ -718,9 +721,6 @@ buffer is a valid target.")
 (defvar conn-dispatch-label-function)
 (defvar conn-dispatch-action-reference)
 
-(defvar conn-wincontrol-mode)
-(defvar conn-wincontrol-one-command-mode)
-
 (defun conn--with-dispatch (body &optional suspend)
   (when suspend
     (conn-target-finder-suspend conn-dispatch-target-finder)
@@ -1039,15 +1039,16 @@ buffer is a valid target.")
                     (car body))
                   options)
                 (pop body))))
-      `(make-conn-action
-        :slots (cl-loop for slot in (list ,@(mapcar #'cadr slots))
-                        if (conn-action-slot-p slot) collect slot
-                        else collect (conn-action-slot slot))
-        :function (lambda (,@syms)
-                    (ignore ,@ignore)
-                    (cl-symbol-macrolet ,bindings
-                      ,@body))
-        ,@options))))
+      (let ((slots (mapcar (lambda (s) `(list ,@(cdr s))) slots)))
+        `(make-conn-action
+          :slots (cl-loop for (slot . options) in (list ,@slots)
+                          if (conn-action-slot-p slot) collect slot
+                          else collect (apply #'conn-action-slot slot options))
+          :function (lambda (,@syms)
+                      (ignore ,@ignore)
+                      (cl-symbol-macrolet ,bindings
+                        ,@body))
+          ,@options)))))
 
 (defmacro conn-action (slots &rest body)
   ;; If the body of an action captures then all copies share the same
@@ -3864,9 +3865,7 @@ contain targets."
                                 (push (point) pts))))
                           pts)))))
         (dolist (pt (cdr (alist-get (current-buffer) cache)))
-          (conn-make-target-overlay
-           pt 0
-           :properties '(no-hide t)))))))
+          (conn-make-target-overlay pt 0))))))
 
 (conn-define-target-finder conn-dispatch-all-defuns
     (conn-dispatch-focus-mixin)
@@ -4499,28 +4498,26 @@ it.")
 (defun conn-dispatch-register-load ()
   (declare (conn-dispatch-action)
            (important-return-value t))
-  (conn-action ((register (conn-action-slot
-                           (register-read-with-preview "Register: ")
-                           :read t))
-                (replace (conn-action-slot
-                          (conn-boolean-argument
-                           "replace"
-                           'dispatch-replace
-                           conn-dispatch-replace-argument-map)
-                          :read t)))
+  (conn-action ((register (register-read-with-preview "Register: ")
+                          :read t)
+                (replace (conn-boolean-argument
+                          "replace"
+                          'dispatch-replace
+                          conn-dispatch-replace-argument-map)
+                         :read t))
     (:description (format "Register <%c>" register))
     (:reference
      "Replace region selected by dispatch with contents of register.")
     (declare-function conn-register-load "conn-commands")
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                 (conn-select-target)))
       (with-selected-window window
         (conn-dispatch-change-group)
         (save-excursion
           (pcase (conn-bounds-of-dispatch thing arg pt)
-            ((conn-bounds `(,beg . ,end) transform)
-             (when replace
-               (delete-region beg end))
+            ((conn-dispatch-bounds `(,beg . ,end) transform)
+             (goto-char beg)
+             (when replace (delete-region beg end))
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
@@ -4538,8 +4535,8 @@ it.")
       (:description "Copy From")
       (:reference
        "Replace current region with text in region selected by dispatch.")
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
+      (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target)))
         (with-selected-window window
           (pcase (conn-bounds-of-dispatch thing arg pt)
             ((conn-bounds `(,beg . ,end) transform)
@@ -4624,21 +4621,21 @@ it.")
            (important-return-value t))
   (when command-history
     (conn-action
-        ((command (conn-action-slot
-                   (conn-read-argument
-                    "command"
-                    'read-previous-command
-                    (define-keymap "+" 'read-previous-command)
-                    (lambda (_cmd) (conn-read-from-command-history))
-                    :formatter (lambda (key-string name _val)
-                                 (concat
-                                  key-string
-                                  " "
-                                  (propertize
-                                   name 'face 'conn-argument-active-face)))
-                    :value (car conn-command-history)
-                    :always-read t)
-                   :read t)))
+        ((command
+          (conn-read-argument
+           "command"
+           'read-previous-command
+           (define-keymap "+" 'read-previous-command)
+           (lambda (_cmd) (conn-read-from-command-history))
+           :formatter (lambda (key-string name _val)
+                        (concat
+                         key-string
+                         " "
+                         (propertize
+                          name 'face 'conn-argument-active-face)))
+           :value (car conn-command-history)
+           :always-read t)
+          :read t))
       (:window-predicate
        (lambda (win)
          (not (buffer-local-value 'buffer-read-only
@@ -4665,8 +4662,8 @@ it.")
     (:description "Highlight Symbol")
     (declare-function conn-toggle-highlight-at-point "conn-commands")
     (declare-function conn--unhighlight-at-point "conn-commands")
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (conn-dispatch-change-group)
         (save-mark-and-excursion
@@ -4683,8 +4680,8 @@ it.")
   (conn-action ()
     (:description "DWIM")
     (declare-function conn--dwim-at-point-filter "conn-commands")
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (if-let* ((cmd (save-excursion
                          (goto-char pt)
@@ -4701,8 +4698,8 @@ it.")
   (conn-action ()
     (:description "DWIM alt")
     (declare-function conn--alt-dwim-at-point-filter "conn-commands")
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (if-let* ((cmd (save-excursion
                          (goto-char pt)
