@@ -4304,8 +4304,8 @@ contain targets."
     (:description "Push Button")
     (:reference "Push the selected button.")
     (:no-history t)
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (run-hook-with-args-until-success 'conn-dispatch-button-functions pt)))))
 
@@ -4335,9 +4335,9 @@ contain targets."
 this action copies the current region before the region selected by
 dispatch but if OTHER-END is non-nil then it copies the current region
 after the region selected by dispatch.")
-        (pcase-let* ((`(,replace ,separator) replace-and-separator)
-                     (`(,pt ,window ,thing ,arg ,transform)
-                      (conn-select-target)))
+        (pcase-let ((`(,replace ,separator) replace-and-separator)
+                    (`(,pt ,window ,thing ,arg ,transform)
+                     (conn-select-target)))
           (with-selected-window window
             (conn-dispatch-change-group)
             (save-mark-and-excursion
@@ -4375,9 +4375,9 @@ after the region selected by dispatch.")
 default this action inserts the text before the region selected by
 dispatch but if OTHER-END is non-nil then it inserts the text after the
 region selected by dispatch.")
-      (pcase-let* ((`(,replace ,separator) replace-and-separator)
-                   (`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
+      (pcase-let ((`(,replace ,separator) replace-and-separator)
+                  (`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
           (save-excursion
@@ -4415,9 +4415,9 @@ region selected by dispatch.")
 by dispatch.  By default this action inserts the string before the
 region selected by dispatch but if OTHER-END is non-nil then it inserts
 the string after the region selected by dispatch.")
-      (pcase-let* ((`(,replace ,separator) replace-and-separator)
-                   (`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
+      (pcase-let ((`(,replace ,separator) replace-and-separator)
+                  (`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
           (save-excursion
@@ -4473,9 +4473,9 @@ the string after the region selected by dispatch.")
       (:reference
        "Delete a thing at point and replace a region selected by dispatch with
 it.")
-      (pcase-let* ((`(,replace ,separator) replace-and-separator)
-                   (`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
+      (pcase-let ((`(,replace ,separator) replace-and-separator)
+                  (`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
           (save-excursion
@@ -4574,9 +4574,9 @@ it.")
                               (window-buffer win)))))
       (:reference
        "Kill the thing selected by dispatch and yank it at point.")
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target))
-                   (str nil))
+      (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target))
+                  (str nil))
         (conn-dispatch-change-group (current-buffer) (window-buffer window))
         (with-selected-window window
           (save-excursion
@@ -4603,8 +4603,8 @@ it.")
   (conn-action ()
     (:description "Jump")
     (:no-history t)
-    (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                 (conn-select-target)))
       (conn-dispatch-select-window window)
       (conn-dispatch-change-group)
       (if (or (conn-dispatch-other-end-p)
@@ -4641,8 +4641,8 @@ it.")
          (not (buffer-local-value 'buffer-read-only
                                   (window-buffer win)))))
       (:description "Repeat")
-      (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                    (conn-select-target)))
+      (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                   (conn-select-target)))
         (with-selected-window window
           (conn-dispatch-change-group)
           (save-mark-and-excursion
@@ -5236,8 +5236,8 @@ for the dispatch."
                (:window-predicate
                 (let ((win (selected-window)))
                   (lambda (window) (eq win window))))
-               (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                             (conn-select-target)))
+               (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                            (conn-select-target)))
                  (with-selected-window window
                    (pcase (conn-bounds-of-dispatch thing arg pt)
                      ((and (conn-dispatch-bounds `(,beg . ,end) transform)
@@ -5294,8 +5294,8 @@ for the dispatch."
                    (lambda (window) (eq win window))))
                 (:reference
                  "Bounds between the previous region and this region.")
-                (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                              (conn-select-target)))
+                (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                             (conn-select-target)))
                   (with-selected-window window
                     (pcase (conn-bounds-of-dispatch thing arg pt)
                       ((conn-dispatch-bounds `(,beg . ,end) transform)

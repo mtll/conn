@@ -802,6 +802,15 @@ for the meaning of prefix ARG."
         (outline-insert-heading)
         (recursive-edit)))))
 
+(defvar conn-error-repeat-map)
+
+(defun conn-repeat-kmacro-at-error (arg)
+  (interactive "p")
+  (kmacro-call-macro arg)
+  (set-transient-map conn-error-repeat-map)
+  (and (bound-and-true-p repeat-echo-function)
+       (funcall repeat-echo-function conn-error-repeat-map)))
+
 ;;;;; Transition Functions
 
 (defun conn-one-emacs-state ()
