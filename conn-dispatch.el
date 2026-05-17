@@ -4287,13 +4287,17 @@ contain targets."
 (defvar conn-dispatch-button-functions nil)
 
 (defun conn-dispatch-button-handler-default (pt)
-  (cond ((button-at pt)
-         (push-button pt)
-         t)
-        ((fboundp 'widget-apply-action)
-         (ignore-errors
-           (widget-apply-action (get-char-property pt 'button) pt)
-           t))))
+  (save-excursion
+    (goto-char pt)
+    (cond ((thing-at-point 'url t)
+           (browse-url-at-point))
+          ((button-at pt)
+           (push-button pt)
+           t)
+          ((fboundp 'widget-apply-action)
+           (ignore-errors
+             (widget-apply-action (get-char-property pt 'button) pt)
+             t)))))
 
 (add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default 50)
 
