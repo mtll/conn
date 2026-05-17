@@ -299,6 +299,9 @@ This skips executing the body of the `conn-read-args' form entirely."
 
 (defvar conn--read-args-maps nil)
 
+(defvar conn-wincontrol-mode)
+(defvar conn-wincontrol-one-command-mode)
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -334,7 +337,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                            (conn->f emulation-mode-map-alists
                              (delq 'conn--read-args-maps)
                              (cons 'conn--read-args-maps))
-                           (let ((overriding-local-map
+                           (let ((overriding-local-map nil)
+                                 (overriding-terminal-local-map
                                   (make-composed-keymap
                                    (current-minor-mode-maps)
                                    (current-local-map))))
@@ -345,7 +349,7 @@ This skips executing the body of the `conn-read-args' form entirely."
       (cl-labels
           ((timer-function ()
              (setf timer nil)
-             (display-message))
+             (with-keymaps (display-message)))
            (continue-p ()
              (cl-loop for arg in arguments
                       thereis (conn-argument-required-p arg)))
@@ -363,25 +367,23 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (when break (cl-return t))))))
            (read-command ()
              (let (partial-keymap cmd reading)
-               (dlet ((conn-wincontrol-mode nil)
-                      (conn-wincontrol-one-command-mode nil))
-                 (when timer
-                   (timer-set-function timer #'timer-function)
-                   (timer-set-idle-time timer conn-read-args-message-delay)
-                   (timer-activate-when-idle timer t))
-                 (cl-loop
-                  repeat 10 do
-                  (setf keyseq (let ((inhibit-quit t))
-                                 (read-key-sequence nil))
-                        cmd (key-binding keyseq 'accept-default))
-                  (if (arrayp cmd)
-                      (conn-add-unread-events cmd)
-                    (cl-return))
-                  finally (progn
-                            (discard-input)
-                            (error "Keyboard macro recursion limit exceeded")))
-                 (when timer
-                   (cancel-timer timer)))
+               (when timer
+                 (timer-set-function timer #'timer-function)
+                 (timer-set-idle-time timer conn-read-args-message-delay)
+                 (timer-activate-when-idle timer t))
+               (cl-loop
+                repeat 10 do
+                (setf keyseq (let ((inhibit-quit t))
+                               (read-key-sequence nil))
+                      cmd (key-binding keyseq 'accept-default))
+                (if (arrayp cmd)
+                    (conn-add-unread-events cmd)
+                  (cl-return))
+                finally (progn
+                          (discard-input)
+                          (error "Keyboard macro recursion limit exceeded")))
+               (when timer
+                 (cancel-timer timer))
                (cond ((eql (aref keyseq 0) quit-event)
                       (setf cmd 'keyboard-quit))
                      ((and (null cmd)
@@ -459,6 +461,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (conn--read-args-error-flag nil)
                      (conn--read-args-message nil)
                      (conn--read-args-message-timeout nil)
+                     (conn-wincontrol-mode nil)
+                     (conn-wincontrol-one-command-mode nil)
                      (emulation-mode-map-alists emulation-mode-map-alists)
                      (inhibit-message t)
                      (minibuffer-message-clear-timeout nil))

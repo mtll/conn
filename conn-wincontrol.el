@@ -55,6 +55,10 @@
 
 ;;;;; Wincontrol Internals
 
+(defconst conn--wincontrol-maps
+  `((conn-wincontrol-one-command-mode . ,conn-wincontrol-one-command-map)
+    (conn-wincontrol-mode . ,conn-wincontrol-map)))
+
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
 (defvar conn-wincontrol-one-command-mode)
@@ -82,7 +86,15 @@
                                          (prefix-numeric-value current-prefix-arg))
                   conn--wincontrol-arg-sign 1
                   conn--wincontrol-initial-window (selected-window)
-                  conn--wincontrol-initial-winconf (current-window-configuration))
+                  conn--wincontrol-initial-winconf (current-window-configuration)
+                  emulation-mode-map-alists `(conn--wincontrol-maps
+                                              ,@(delq 'conn--wincontrol-maps
+                                                      emulation-mode-map-alists)))
+            (internal-push-keymap conn-wincontrol-map
+                                  'overriding-terminal-local-map)
+            (when conn-wincontrol-one-command-mode
+              (internal-push-keymap conn-wincontrol-one-command-map
+                                    'overriding-terminal-local-map))
             (internal-push-keymap conn-wincontrol-map 'overriding-local-map)
             (if (eq (selected-window) (active-minibuffer-window))
                 (conn--wincontrol-minibuffer-setup)
@@ -91,7 +103,9 @@
             (set-face-inverse-video 'mode-line-active t))
         ((debug error)
          (conn-wincontrol-mode -1)))
-    (setf overriding-local-map nil)
+    (internal-pop-keymap conn-wincontrol-map
+                         'overriding-terminal-local-map)
+    (internal-pop-keymap conn-wincontrol-map 'overriding-local-map)
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
@@ -117,7 +131,10 @@
       (progn
         (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
         (conn-wincontrol-mode 1)
-        (internal-push-keymap conn-wincontrol-one-command-map 'overriding-local-map))
+        (internal-push-keymap conn-wincontrol-one-command-map
+                              'overriding-local-map))
+    (internal-pop-keymap conn-wincontrol-one-command-map
+                         'overriding-local-map)
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (when conn-wincontrol-mode
       (conn-wincontrol-mode -1))))
@@ -149,6 +166,9 @@
           (setf conn--wincontrol-arg nil
                 conn--wincontrol-arg-sign 1))
         (setf conn--wincontrol-preserve-arg nil)
+        (setf emulation-mode-map-alists
+              `(conn--wincontrol-maps
+                ,@(delq 'conn--wincontrol-maps emulation-mode-map-alists)))
         (let ((curr (current-message))
               (message-log-max nil))
           (cond ((minibuffer-window-active-p (selected-window)))
@@ -187,10 +207,19 @@
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
+    (internal-push-keymap conn-wincontrol-map
+                          'overriding-terminal-local-map)
+    (when conn-wincontrol-one-command-mode
+      (internal-push-keymap conn-wincontrol-one-command-map
+                            'overriding-terminal-local-map))
     (let ((message-log-max nil))
       (message "%s" (conn--wincontrol-message)))))
 
 (defun conn--wincontrol-minibuffer-setup ()
+  (internal-pop-keymap conn-wincontrol-map
+                       'overriding-terminal-local-map)
+  (internal-pop-keymap conn-wincontrol-one-command-map
+                       'overriding-terminal-local-map)
   (setq-local conn-wincontrol-mode nil
               conn-wincontrol-one-command-mode nil
               overriding-local-map nil)
