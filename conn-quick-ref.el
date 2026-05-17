@@ -17,6 +17,7 @@
 
 ;;; Code
 
+(require 'vtable)
 (require 'conn-utils)
 
 ;;;; Quick Reference

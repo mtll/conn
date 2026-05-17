@@ -18,12 +18,11 @@
 ;;; Code:
 
 (require 'compat)
+(require 'vtable)
 (require 'kmacro)
 (require 'conn-vars)
 (eval-when-compile
   (require 'subr-x))
-
-(autoload 'make-vtable "vtable")
 
 ;;;; Utilities
 

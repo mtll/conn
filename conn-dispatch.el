@@ -24,8 +24,6 @@
 (require 'conn-things)
 (require 'conn-jump-ring)
 
-(autoload 'pulse-momentary-highlight-overlay "pulse")
-
 ;;;; Labels
 
 (defcustom conn-simple-label-characters
@@ -719,6 +717,7 @@ buffer is a valid target.")
 (defvar conn--current-dispatch-buffers nil)
 
 (defvar conn-dispatch-label-function)
+
 (defvar conn-dispatch-action-reference)
 
 (defun conn--with-dispatch (body &optional suspend)
@@ -1284,7 +1283,7 @@ that slot's value and otherwise performs a shallow copy."
               (conn-reference-page
                 ,(substitute-command-keys
                   "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
-Complete the loop with \\[finish].
+End the loop and accept changes with \\[finish].
 Abort the loop and undo all changes with \\[keyboard-quit]."))))
     ((and (guard (function-get cmd :conn-dispatch-action)))
      (if-let* ((docstring (documentation cmd)))
@@ -1810,7 +1809,7 @@ Target overlays may override this default by setting the
               ;; exceptional conditions we want the label overlay to
               ;; be wider than the label string.
               (while (not end)
-                (cond
+                (cond*
                  ;; If we are at the end of a line than end the label overlay.
                  ((= line-end pt)
                   (if (and (not (invisible-p pt))
@@ -1854,20 +1853,19 @@ Target overlays may override this default by setting the
                         pixelwise nil))
                  ;; If the label overlay is wider than the label
                  ;; string we are done.
-                 ((let ((width
-                         (save-excursion
-                           (with-restriction beg pt
-                             (- (car (window-text-pixel-size window beg pt))
-                                ;; Subtract the width of any
-                                ;; before strings
-                                (with-memoization beg-width
-                                  (car (window-text-pixel-size window beg beg))))))))
-                    ;; FIXME: This doesn't handle zero length
-                    ;;        overlays with after strings.
-                    (when (or (= pt (point-max))
+                 ((match* (or (constrain width (= pt (point-max)))
                               (>= width display-width))
-                      (setf padding-width (max (- width display-width) 0)
-                            end pt))))
+                          (save-excursion
+                            (with-restriction beg pt
+                              (- (car (window-text-pixel-size
+                                       window beg pt))
+                                 ;; Subtract the width of any
+                                 ;; before strings
+                                 (with-memoization beg-width
+                                   (car (window-text-pixel-size
+                                         window beg beg)))))))
+                  (setf padding-width (max (- width display-width) 0)
+                        end pt))
                  ((cl-loop for ov in (conn--overlays-in-of-type
                                       pt (1+ pt) 'conn-target-overlay window)
                            thereis (not (eq ov target)))
@@ -1905,6 +1903,7 @@ Target overlays may override this default by setting the
                (display-width nil)
                (padding-width 0)
                (pixelwise t)
+               (beg-width nil)
                (ov nil))
     (unwind-protect
         (progn
@@ -1958,7 +1957,7 @@ Target overlays may override this default by setting the
                                (point)))
                    (pt beg))
               (while (not end)
-                (cond
+                (cond*
                  ((= line-beg pt)
                   (setf end pt))
                  ((and (/= pt (point-min))
@@ -1979,15 +1978,17 @@ Target overlays may override this default by setting the
                        (= pt (next-single-char-property-change
                               (1- pt) 'after-string nil (1+ pt))))
                   (setf end pt))
-                 ((let ((width
-                         (save-excursion
-                           (with-restriction pt beg
-                             (- (car (window-text-pixel-size window pt beg))
-                                (car (window-text-pixel-size window pt pt)))))))
-                    (when (or (= pt (point-min))
+                 ((match* (or (constrain width (= pt (point-max)))
                               (>= width display-width))
-                      (setf padding-width (max (- width display-width) 0)
-                            end pt))))
+                          (save-excursion
+                            (with-restriction pt beg
+                              (- (car (window-text-pixel-size
+                                       window pt beg))
+                                 (with-memoization beg-width
+                                   (car (window-text-pixel-size
+                                         window pt pt)))))))
+                  (setf padding-width (max (- width display-width) 0)
+                        end pt))
                  ((conn--overlays-in-of-type (1- pt) pt
                                              'conn-target-overlay
                                              window)
@@ -2480,6 +2481,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
 (defun conn-dispatch-action-pulse (beg end)
   "Momentarily highlight the region between BEG and END."
   (require 'pulse)
+  (declare-function pulse-momentary-highlight-overlay "pulse")
   (unless executing-kbd-macro
     (set-face-background
      'conn--dispatch-action-current-pulse-face

@@ -27,8 +27,6 @@
 (require 'conn-things)
 (require 'conn-dispatch)
 
-(autoload 'multi-isearch-read-files "misearch")
-
 ;;;; Kapply
 
 (defvar kmacro-step-edit-replace)
@@ -521,6 +519,8 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                                       delimited-flag
                                       string
                                       pipeline)
+  (require 'misearch)
+  (declare-function multi-isearch-read-files "misearch")
   (conn->f pipeline
     (conn--kapply-multi-file-matches
      (multi-isearch-read-files)

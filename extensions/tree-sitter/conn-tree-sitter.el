@@ -554,32 +554,32 @@
                                               (window-end)))
           (pcase-dolist (`(,type ,beg . ,end)
                          (conn-ts-capture vbeg vend))
-            (cond*
-             ((not (and (<= (window-start) beg (window-end))
-                        (or (null region-pred)
-                            (funcall region-pred beg end)))))
-             ((bind* (type-things (seq-intersection
-                                   (get type :conn-ts--member-of)
-                                   things))))
-             ((null type-things))
-             ((not (alist-get beg bounds-alist))
-              (push (make-bounds (cons beg end) type-things)
-                    (alist-get beg bounds-alist))
-              (conn-make-target-overlay beg 0 :thing target-thing))
-             ((bind-and* (bounds (seq-find
-                                  (lambda (bounds)
-                                    (pcase bounds
-                                      ((conn-bounds `(,b . ,e))
-                                       (and (eql beg b) (eql end e)))))
-                                  (alist-get beg bounds-alist))))
-              (cl-callf2 seq-union
-                  type-things
-                  (conn-thing-get
-                   (conn-bounds-thing bounds)
-                   :types)))
-             (t
-              (push (make-bounds (cons beg end) type-things)
-                    (alist-get beg bounds-alist))))))))))
+            (cond* ((not (and (<= (window-start) beg (window-end))
+                              (or (null region-pred)
+                                  (funcall region-pred beg end)))))
+                   ((bind* (type-things (seq-intersection
+                                         (get type :conn-ts--member-of)
+                                         things))))
+                   ((null type-things))
+                   ((bind* (bounds-at (alist-get beg bounds-alist))))
+                   ((null bounds-at)
+                    (push (make-bounds (cons beg end) type-things)
+                          (alist-get beg bounds-alist))
+                    (conn-make-target-overlay beg 0 :thing target-thing))
+                   ((bind-and* (b (seq-find
+                                   (lambda (bounds)
+                                     (pcase bounds
+                                       ((conn-bounds `(,b . ,e))
+                                        (and (eql beg b) (eql end e)))))
+                                   bounds-at)))
+                    (cl-callf2 seq-union
+                        type-things
+                        (conn-thing-get
+                         (conn-bounds-thing b)
+                         :types)))
+                   (t
+                    (push (make-bounds (cons beg end) type-things)
+                          (alist-get beg bounds-alist))))))))))
 
 (conn-define-target-finder conn-ts-all-things
     ()
@@ -635,21 +635,23 @@
                          (treesit-query-capture
                           (treesit-language-at (point))
                           query vbeg vend))
-            (if-let* ((bounds-at (alist-get beg bounds-alist)))
-                (if-let* ((b (seq-find
-                              (lambda (bound)
-                                (pcase bound
-                                  ((conn-bounds `(,b . ,e))
-                                   (and (eql beg b) (eql end e)))))
-                              bounds-at)))
+            (cond* ((bind* (bounds-at (alist-get beg bounds-alist))))
+                   ((null bounds-at)
+                    (push (make-bounds (cons beg end) thing type)
+                          (alist-get beg bounds-alist))
+                    (conn-make-target-overlay beg 0 :thing target-thing))
+                   ((bind-and* (b (seq-find
+                                   (lambda (bound)
+                                     (pcase bound
+                                       ((conn-bounds `(,b . ,e))
+                                        (and (eql beg b) (eql end e)))))
+                                   bounds-at)))
                     (cl-pushnew type (conn-thing-get
                                       (conn-bounds-thing b)
-                                      :types))
-                  (push (make-bounds (cons beg end) thing type)
-                        (alist-get beg bounds-alist)))
-              (push (make-bounds (cons beg end) thing type)
-                    (alist-get beg bounds-alist))
-              (conn-make-target-overlay beg 0 :thing target-thing))))))))
+                                      :types)))
+                   (t
+                    (push (make-bounds (cons beg end) thing type)
+                          (alist-get beg bounds-alist))))))))))
 
 (defun conn-ts--thing-predicate (thing)
   (with-memoization (gethash (cons 'conn-all-things thing)

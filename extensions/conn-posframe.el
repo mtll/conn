@@ -24,6 +24,7 @@
 (require 'conn)
 (require 'conn-quick-ref)
 (require 'conn-things)
+(require 'kmacro)
 (require 'posframe)
 (eval-when-compile
   (require 'cl-lib))
@@ -341,8 +342,6 @@
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--kmacro-ring-display-subr ()
-  (require 'kmacro)
-  (declare-function kmacro--keys "kmacro")
   (declare-function conn--kmacro-display "conn-transient")
   (let ((header
          (propertize (format " %s Kmacro Ring\n"

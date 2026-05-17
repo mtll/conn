@@ -19,6 +19,7 @@
 
 ;;; Code
 
+(require 'kmacro)
 (require 'conn-jump-ring)
 (require 'conn-vars)
 (require 'conn-utils)
@@ -31,14 +32,6 @@
 (eval-when-compile
   (require 'cl-lib))
 
-(autoload 'multi-isearch-read-files "misearch")
-(autoload 'multi-isearch-read-matching-files "misearch")
-(autoload 'multi-isearch-read-buffers "misearch")
-(autoload 'multi-isearch-read-matching-buffers "misearch")
-(autoload 'kmacro-ring-head "kmacro")
-(autoload 'pulse-momentary-highlight-overlay "pulse")
-(autoload 'hi-lock-regexp-okay "hi-lock")
-
 ;;;; Commands
 
 (defun conn-toggle-highlight-at-point (&optional read)
@@ -46,6 +39,7 @@
   (require 'hi-lock)
   (defvar hi-lock-auto-select-face)
   (declare-function hi-lock-read-face-name "hi-lock")
+  (declare-function hi-lock-regexp-okay "hi-lock")
   (let ((hi-lock-auto-select-face t)
         (regexps nil))
     (cond ((use-region-p)
@@ -261,6 +255,8 @@ Pulses line that was the first visible line before scrolling."
   (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
            (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive "P")
+  (require 'pulse)
+  (declare-function pulse-momentary-highlight-overlay "pulse")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
     (let ((start (window-start)))
@@ -281,6 +277,8 @@ Pulses line that was the last visible line before scrolling."
   (declare (conn-thing-command visible #'conn-discrete-thing-other-end-handler)
            (conn-jump #'conn-ignore-repeat-jump-handler))
   (interactive "P")
+  (require 'pulse)
+  (declare-function pulse-momentary-highlight-overlay "pulse")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
     (let ((end (window-end)))
@@ -2102,6 +2100,8 @@ with `conn-check-bounds' before deleting."
                                subregions-p
                                from
                                to)
+  (require 'misearch)
+  (declare-function multi-isearch-read-files "misearch")
   (let ((files (multi-isearch-read-files)))
     (unless (and (buffer-file-name)
                  (seq-find (lambda (f)
@@ -2239,6 +2239,8 @@ with `conn-check-bounds' before deleting."
                                      subregions-p
                                      from
                                      to)
+        (require 'misearch)
+        (declare-function multi-isearch-read-files "misearch")
         (let ((files (multi-isearch-read-files)))
           (unless (and (buffer-file-name)
                        (seq-find (lambda (f)
@@ -2474,6 +2476,9 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
+  (require 'misearch)
+  (declare-function multi-isearch-read-buffers "misearch")
+  (declare-function multi-isearch-read-matching-buffers "misearch")
   (let ((isearch-forward (not backward)))
     (multi-isearch-buffers
      (if arg
@@ -2487,6 +2492,9 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
+  (require 'misearch)
+  (declare-function multi-isearch-read-files "misearch")
+  (declare-function multi-isearch-read-matching-files "misearch")
   (let ((isearch-forward (not backward)))
     (multi-isearch-files
      (if arg
@@ -2500,6 +2508,7 @@ Exiting the recursive edit will resume the isearch."
                                         backward
                                         _regexp
                                         _subregions-p)
+  (require 'misearch)
   (declare-function project-files "project")
   (if-let* ((files (project-files (project-current))))
       (let ((isearch-forward (not backward)))
