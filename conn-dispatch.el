@@ -107,6 +107,7 @@ The value of this variable will be passed as the ALL-FRAMES argument to
                               prefix
                               suffix
                               setup-function
+                              padding-function
                               overlay
                               target
                               &aux
@@ -520,7 +521,8 @@ for dispatch."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
-  (let (conn-wincontrol-mode)
+  (let (overriding-local-map
+        conn-wincontrol-mode)
     (when windows
       (conn-with-window-labels
           (labels (funcall conn-window-label-function windows))
@@ -773,6 +775,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
   (unwind-protect
       (conn-protected-let*
           ((prev conn--dispatch-prev-state)
+           (overriding-local-map nil)
            (conn-wincontrol-mode nil)
            (conn-wincontrol-one-command-mode nil)
            (conn--dispatch-prev-state
@@ -1627,7 +1630,7 @@ with `conn-dispatch-thing-ignored-modes'."
   :type 'number)
 
 (defface conn-target-overlay-face
-  '((t (:inherit isearch)))
+  '((t (:inherit highlight)))
   "Face for matches when reading strings."
   :group 'conn-faces)
 

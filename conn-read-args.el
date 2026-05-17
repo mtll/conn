@@ -334,7 +334,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                            (conn->f emulation-mode-map-alists
                              (delq 'conn--read-args-maps)
                              (cons 'conn--read-args-maps))
-                           ,@body)
+                           (let ((overriding-local-map
+                                  (make-composed-keymap
+                                   (current-minor-mode-maps)
+                                   (current-local-map))))
+                             ,@body))
                        (cl-callf2 delq
                            'conn--read-args-maps
                            emulation-mode-map-alists))))

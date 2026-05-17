@@ -3355,7 +3355,7 @@ hook, which see."
     (when (eq hist conn-command-history)
       (apply #'conn-push-command-history 'conn-kill-thing args))))
 
-(cl-defmethod conn-kill-thing-do :around ((thing (conn-thing conn-thing-at-isearch))
+(cl-defmethod conn-kill-thing-do :around ((_thing (conn-thing conn-thing-at-isearch))
                                           &rest _)
   (save-excursion (cl-call-next-method)))
 
@@ -3898,7 +3898,7 @@ that place."
     (when (eq hist conn-command-history)
       (apply #'conn-push-command-history 'conn-copy-thing args))))
 
-(cl-defmethod conn-copy-thing-do :around ((thing (conn-thing conn-thing-at-isearch))
+(cl-defmethod conn-copy-thing-do :around ((_thing (conn-thing conn-thing-at-isearch))
                                           &rest _)
   (save-excursion (cl-call-next-method)))
 
