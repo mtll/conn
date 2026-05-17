@@ -800,6 +800,11 @@ for the meaning of prefix ARG."
         (outline-insert-heading)
         (recursive-edit)))))
 
+;; Create aliases so we do not overwrite the default repeat map
+;; property for these commands
+(defalias 'conn-next-error #'next-error)
+(defalias 'conn-previous-error #'previous-error)
+
 (defun conn-repeat-kmacro-at-error (arg)
   (interactive "p")
   (require 'repeat)

@@ -46,8 +46,8 @@
 
 (defvar-keymap conn-error-repeat-map
   :repeat (:continue (conn-repeat))
-  "i" 'previous-error
-  "k" 'next-error)
+  "i" 'conn-previous-error
+  "k" 'conn-next-error)
 (keymap-set conn-error-repeat-map "j" 'conn-repeat)
 (keymap-set conn-error-repeat-map "l" 'conn-repeat-kmacro-at-error)
 (keymap-set conn-error-repeat-map "b" 'conn-repeat)
@@ -152,8 +152,8 @@
   "O" 'conn-push-jump-ring
   "o" 'conn-pop-mark-ring
   "u" 'conn-unpop-mark-ring
-  "i" 'previous-error
-  "k" 'next-error
+  "i" 'conn-previous-error
+  "k" 'conn-next-error
   "n" 'pop-global-mark
   "m" 'imenu
   "r" 'xref-find-references

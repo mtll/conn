@@ -100,8 +100,33 @@ The value of this variable will be passed as the ALL-FRAMES argument to
 
 (defvar conn--dispatch-redisplay-prompt-flag nil)
 
-(cl-defstruct (conn-dispatch-label)
-  "State for a dispatch label."
+(cl-defstruct (conn-dispatch-label
+               (:constructor conn-dispatch-label
+                             (&key
+                              string
+                              prefix
+                              suffix
+                              setup-function
+                              overlay
+                              target
+                              &aux
+                              (narrowed-string string))))
+  "State for a dispatch label.
+
+STRING is the label string to use for the label.
+
+PREFIX and SUFFIX are either strings to be displayed before and after
+the label string or nil.
+
+TARGET is the dispatch target which is being labeled.
+
+OVERLAY is the overlay to use to display the label.
+
+SETUP-FUNCTION should take a label and setup OVERLAY to display the
+label.
+
+PADDING-FUNCTION should take three arguments OVERLAY, WIDTH, and FACE
+and pad overlay with WIDTH space and face FACE."
   (prefix nil :type (or string nil))
   (suffix nil :type (or string nil))
   (string nil :type string)
@@ -650,29 +675,43 @@ for dispatch."
 
 ;;;; Dispatch State
 
-(defvar conn-dispatch-target-finder nil)
+(defvar conn-dispatch-target-finder nil
+  "Current target finder for dispatch.")
 
 (defvar conn-dispatch-ring)
 
-(defvar conn-dispatch-always-prompt nil)
+(defvar conn-dispatch-always-prompt nil
+  "Always prompt for user to select a target.
+If nil then if there is only one target it is selected automatically.")
 
-(defvar conn-dispatch-repeating nil)
+(defvar conn-dispatch-repeating nil
+  "Whether the current dispatch is being performed in a loop.")
 
-(defvar conn-dispatch-iteration-count nil)
+(defvar conn-dispatch-iteration-count nil
+  "Number of iterations performed so far in the current dispatch loop.")
 
-(defvar conn-dispatch-quit-flag nil)
+(defvar conn-dispatch-quit-flag nil
+  "Non-nil when the current dispatch was not exited normally.")
 
-(defvar conn-dispatch-other-end nil)
+(defvar conn-dispatch-other-end nil
+  "Function which returns the other end state.
 
-(defvar conn-dispatch-action nil)
+The function is called by `conn-dispatch-other-end-p' and
+`conn-dispatch-no-other-end-p' with the value 1 and returns 1 if other
+end is non-nil, -1 if other end is nil and 0 if the current targets have
+no other end.")
 
-(defvar conn--dispatch-change-groups nil)
+(defvar conn-dispatch-action nil
+  "The current dispatch action.")
+
+(defvar conn--dispatch-change-groups nil
+  "List of change groups for each iteration of the current dispatch.")
 
 (defvar conn-targets nil
-  "Alist of (WINDOW . TARGETS).")
+  "Alist of (WINDOW . TARGETS) for the current dispatch.")
 
 (defvar conn-target-count nil
-  "Alist of (WINDOW . TARGET-COUNT).")
+  "Alist of (WINDOW . TARGET-COUNT) for the current dispatch.")
 
 (defvar conn-target-sort-function 'conn-target-sort-adjacent-then-nearest
   "Sort function for targets in each window.
@@ -688,7 +727,7 @@ A sort function should take two targets as arguments and return non-nil
 if the first should be sorted before the second.")
 
 (defvar conn-target-window-predicate 'conn-dispatch-ignored-mode-p
-  "Predicate windows must satisfy in order to be considered for dispatch.")
+  "Predicate windows must satisfy in order to be considered by dispatch.")
 
 (defvar conn-target-predicate
   (lambda (pt length window)
@@ -710,11 +749,18 @@ buffer is a valid target.")
 (defvar conn--dispatch-label-state nil
   "The state for `conn-dispatch-label-function' during dispatch.")
 
-(defvar conn--dispatch-suspend-labels #'ignore)
+(defvar conn--dispatch-suspend-labels #'ignore
+  "Function of no arguments to suspend display of dispatch labels.
 
-(defvar conn-dispatch-in-progress nil)
+Bound by `conn-with-dispatch-labels'.")
 
-(defvar conn--current-dispatch-buffers nil)
+(defvar conn-dispatch-in-progress nil
+  "Non-nil when dispatch is active.")
+
+(defvar conn--dispatch-buffer-opoints nil
+  "Hash table mapping buffers to buffer point at beginning of dispatch.
+When dispatch exits normally each buffers opoint is pushed to that
+buffers `conn-jump-ring' if opoint differs from point.")
 
 (defvar conn-dispatch-label-function)
 
@@ -749,7 +795,7 @@ buffer is a valid target.")
            (conn-dispatch-target-finder nil)
            (conn--dispatch-label-state nil)
            (conn--dispatch-change-groups nil)
-           (conn--current-dispatch-buffers
+           (conn--dispatch-buffer-opoints
             (and (not suspend)
                  (make-hash-table :test 'eq)))
            (conn-dispatch-in-progress (not suspend))
@@ -1682,32 +1728,39 @@ Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
 (defvar conn-pixelwise-labels-window-predicate
-  'conn--pixelwise-labels-window-p)
+  'conn--pixelwise-labels-window-p
+  "Predicate a window must satisfy for pixelwise labels to be used.")
 
 (defvar conn-dispatch-pixelwise-labels-line-limit 250
-  "Maximum position in a line for pixelwise labeling.")
+  "Maximum distance from beginning of line for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-target-predicate
-  'conn--pixelwise-labels-target-p)
+  'conn--pixelwise-labels-target-p
+  "Predicate a target must satisfy for pixelwise labels to be used.")
 
-(defvar conn--label-start-time nil)
+(defvar conn--label-start-time nil
+  "Time when labeling began.")
 
-(defconst conn--pixelwise-window-cache (make-hash-table :test 'eq))
+(defconst conn--pixelwise-window-cache (make-hash-table :test 'eq)
+  "Cache of line lengths in each dispatch window.")
 
 (defun conn--pixelwise-labels-window-p (win)
   (declare (important-return-value t))
   (eq (selected-frame) (window-frame win)))
 
-(defvar conn-pixelwise-label-timeout 0.1)
+(defvar conn-pixelwise-label-timeout 0.1
+  "Maximum time in seconds to spend creating pixelwise labels.
+If labeling takes longer than this amount of time then fall back to
+characterwise labels for all remaining labels.")
 
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
-  (and (< (save-excursion
+  (and (time-less-p (time-since conn--label-start-time)
+                    conn-pixelwise-label-timeout)
+       (< (save-excursion
             (goto-char (overlay-start target))
             (- (point) (pos-bol)))
-          conn-dispatch-pixelwise-labels-line-limit)
-       (time-less-p (time-since conn--label-start-time)
-                    conn-pixelwise-label-timeout)))
+          conn-dispatch-pixelwise-labels-line-limit)))
 
 (put 'conn-label-overlay 'priority 3000)
 
@@ -2182,7 +2235,7 @@ Target overlays may override this default by setting the
             (overlay-get ov 'window) window)
       (funcall
        (or (overlay-get target 'label-ctor)
-           #'make-conn-dispatch-label)
+           #'conn-dispatch-label)
        :setup-function (cond ((overlay-get target 'no-hide)
                               #'conn-before-string-label)
                              ((conn-dispatch-pixelwise-label-p ov)
@@ -2199,7 +2252,6 @@ Target overlays may override this default by setting the
                  (propertize pfx 'face face))
        :suffix (and-let* ((sfx (overlay-get target 'label-suffix)))
                  (propertize sfx 'face face))
-       :narrowed-string str
        :overlay ov
        :target target))))
 
@@ -2367,8 +2419,8 @@ depths will be sorted before greater depths.
 
 (defun conn-dispatch-select-window (window)
   (prog1 (select-window window)
-    (or (gethash (current-buffer) conn--current-dispatch-buffers)
-        (setf (gethash (current-buffer) conn--current-dispatch-buffers)
+    (or (gethash (current-buffer) conn--dispatch-buffer-opoints)
+        (setf (gethash (current-buffer) conn--dispatch-buffer-opoints)
               (point-marker)))))
 
 (defun conn-dispatch-goto-char (position &optional nopush)
@@ -2376,13 +2428,13 @@ depths will be sorted before greater depths.
   (recenter (conn-dispatch-get-display-line))
   (when-let* ((mk (and (not nopush)
                        (gethash (current-buffer)
-                                conn--current-dispatch-buffers))))
+                                conn--dispatch-buffer-opoints))))
     (unless (region-active-p)
       (push-mark mk))
     (unless (or (not conn-jump-ring-mode)
-                (gethash conn-jump-ring conn--current-dispatch-buffers))
+                (gethash conn-jump-ring conn--dispatch-buffer-opoints))
       (conn-push-jump-ring mk)
-      (setf (gethash conn-jump-ring conn--current-dispatch-buffers) t))
+      (setf (gethash conn-jump-ring conn--dispatch-buffer-opoints) t))
     (set-marker mk (point))))
 
 (defun conn--dispatch-loop ()
@@ -2390,7 +2442,7 @@ depths will be sorted before greater depths.
         (owconf (current-window-configuration))
         (oframe (selected-frame))
         (opoint (point)))
-    (setf (gethash (current-buffer) conn--current-dispatch-buffers)
+    (setf (gethash (current-buffer) conn--dispatch-buffer-opoints)
           (point-marker))
     (conn--unwind-protect-all
       (progn
@@ -2449,7 +2501,7 @@ depths will be sorted before greater depths.
       (maphash
        (lambda (_buf mk)
          (when (markerp mk) (set-marker mk nil)))
-       conn--current-dispatch-buffers)
+       conn--dispatch-buffer-opoints)
       (unless success
         (select-frame oframe)
         (set-window-configuration owconf)
@@ -2575,7 +2627,8 @@ the meaning of depth."
                (activate-input-method pim))))))
     (quit (car (last (current-input-mode))))))
 
-(defvar conn-dispatch-read-char-pre-functions nil)
+(defvar conn-dispatch-read-char-pre-functions nil
+  ":pre functions for `conn-read-args' during selection.")
 
 (conn-define-state conn-dispatch-read-char-state ()
   "State for reading label characters during dispatch."
@@ -3496,7 +3549,8 @@ to the key binding for that target."
   (setf (oref state string) nil))
 
 (defvar conn-dispatch-read-n-chars-re-alist
-  `((?, . "[^a-zA-A]")))
+  `((?, . "[^a-zA-A]"))
+  "Alist of (CHAR . REGEXP) for read-n-chars targets.")
 
 (conn-define-target-finder conn-dispatch-read-n-chars
     (conn-dispatch-string-targets)
@@ -4814,17 +4868,20 @@ it.")
                   (target-finder
                    (conn-target-finder-shelve conn-dispatch-target-finder))))
                (:copier conn--copy-previous-dispatch))
+  "State necessary to restart a dispatch."
   (action nil :type conn-action)
   (other-end nil :type symbol)
   (repeat nil :type boolean)
   (restrict-windows nil :type boolean)
   (target-finder nil))
 
-(defvar conn-dispatch-ring-max 12)
+(defvar conn-dispatch-ring-max 12
+  "Maximum number of previous dispatches to keep in `conn-dispatch-ring'.")
 
 (defvar conn-dispatch-ring
   (conn-make-ring conn-dispatch-ring-max
-                  :cleanup 'conn-dispatch-ring--cleanup))
+                  :cleanup 'conn-dispatch-ring--cleanup)
+  "Ring of previous dispatches.")
 
 (conn-define-dispatch-handler-command ((arg conn-dispatch-command-handler)
                                        (cmd (eql conn-repeat-last-dispatch)))
