@@ -1232,31 +1232,31 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
                               arg)
-  (conn-read-args (conn-read-thing-state
-                   :prompt "Thing at Isearch"
-                   :prefix arg)
-      ((`(,thing ,arg) (conn-thing-argument)))
-    (let ((bounds nil)
-          (quit (make-symbol "quit-hook")))
-      (fset quit (lambda ()
-                   (unless isearch-suspended
-                     (when (or isearch-mode-end-hook-quit
-                               (null isearch-other-end))
-                       (abort-recursive-edit))
-                     (setf bounds (conn-bounds-of thing arg)))))
-      (unwind-protect
-          (save-mark-and-excursion
-            (add-hook 'isearch-mode-end-hook quit)
-            (if (conn-thing-get cmd :command)
-                (progn
-                  (call-interactively cmd)
-                  (when isearch-mode
-                    (let ((isearch-recursive-edit t)
-                          (buffer-read-only t))
-                      (recursive-edit))))
-              (isearch-forward)))
-        (remove-hook 'isearch-mode-end-hook quit))
-      bounds)))
+  (let ((bounds nil)
+        (quit (make-symbol "quit-hook")))
+    (fset quit (lambda ()
+                 (unless isearch-suspended
+                   (when (or isearch-mode-end-hook-quit
+                             (null isearch-other-end))
+                     (abort-recursive-edit))
+                   (conn-read-args (conn-read-thing-state
+                                    :prompt "Thing at Isearch"
+                                    :prefix arg)
+                       ((`(,thing ,arg) (conn-thing-argument)))
+                     (setf bounds (conn-bounds-of thing arg))))))
+    (unwind-protect
+        (save-mark-and-excursion
+          (add-hook 'isearch-mode-end-hook quit)
+          (if (conn-thing-get cmd :command)
+              (progn
+                (call-interactively cmd)
+                (when isearch-mode
+                  (let ((isearch-recursive-edit t)
+                        (buffer-read-only t))
+                    (recursive-edit))))
+            (isearch-forward)))
+      (remove-hook 'isearch-mode-end-hook quit))
+    bounds))
 
 (conn-register-thing 'conn-thing-at-isearch)
 
