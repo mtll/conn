@@ -92,10 +92,6 @@
                                                       emulation-mode-map-alists)))
             (internal-push-keymap conn-wincontrol-map
                                   'overriding-terminal-local-map)
-            (when conn-wincontrol-one-command-mode
-              (internal-push-keymap conn-wincontrol-one-command-map
-                                    'overriding-terminal-local-map))
-            (internal-push-keymap conn-wincontrol-map 'overriding-local-map)
             (if (eq (selected-window) (active-minibuffer-window))
                 (conn--wincontrol-minibuffer-setup)
               (let ((message-log-max nil))
@@ -105,7 +101,6 @@
          (conn-wincontrol-mode -1)))
     (internal-pop-keymap conn-wincontrol-map
                          'overriding-terminal-local-map)
-    (internal-pop-keymap conn-wincontrol-map 'overriding-local-map)
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
@@ -132,9 +127,9 @@
         (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
         (conn-wincontrol-mode 1)
         (internal-push-keymap conn-wincontrol-one-command-map
-                              'overriding-local-map))
+                              'overriding-terminal-local-map))
     (internal-pop-keymap conn-wincontrol-one-command-map
-                         'overriding-local-map)
+                         'overriding-terminal-local-map)
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
     (when conn-wincontrol-mode
       (conn-wincontrol-mode -1))))
@@ -221,8 +216,7 @@
   (internal-pop-keymap conn-wincontrol-one-command-map
                        'overriding-terminal-local-map)
   (setq-local conn-wincontrol-mode nil
-              conn-wincontrol-one-command-mode nil
-              overriding-local-map nil)
+              conn-wincontrol-one-command-mode nil)
   (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
 
 (defvar conn-wincontrol-one-command-stay-command

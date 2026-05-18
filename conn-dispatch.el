@@ -521,27 +521,25 @@ for dispatch."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
-  (let (overriding-local-map
-        conn-wincontrol-mode)
-    (when windows
-      (conn-with-window-labels
-          (labels (funcall conn-window-label-function windows))
-        (conn-with-dispatch-handlers
-          (:handler
-           ( :predicate (cmd)
-             (or (eq cmd 'act)
-                 (eq cmd 'repeat-dispatch-at-mouse)))
-           ( :update (cmd _break)
-             (when (or (and (eq cmd 'act)
-                            (mouse-event-p last-input-event))
-                       (and (eq cmd 'repeat-dispatch-at-mouse)
-                            (eq 'dispatch-mouse-repeat
-                                (event-basic-type last-input-event))))
-               (let* ((posn (event-start last-input-event))
-                      (win (posn-window posn)))
-                 (when (not (posn-area posn))
-                   (:return win))))))
-          (conn-label-select labels nil always-prompt))))))
+  (when windows
+    (conn-with-window-labels
+        (labels (funcall conn-window-label-function windows))
+      (conn-with-dispatch-handlers
+        (:handler
+         ( :predicate (cmd)
+           (or (eq cmd 'act)
+               (eq cmd 'repeat-dispatch-at-mouse)))
+         ( :update (cmd _break)
+           (when (or (and (eq cmd 'act)
+                          (mouse-event-p last-input-event))
+                     (and (eq cmd 'repeat-dispatch-at-mouse)
+                          (eq 'dispatch-mouse-repeat
+                              (event-basic-type last-input-event))))
+             (let* ((posn (event-start last-input-event))
+                    (win (posn-window posn)))
+               (when (not (posn-area posn))
+                 (:return win))))))
+        (conn-label-select labels nil always-prompt)))))
 
 ;;;;; Label Event Handlers
 
@@ -775,9 +773,6 @@ buffers `conn-jump-ring' if opoint differs from point.")
   (unwind-protect
       (conn-protected-let*
           ((prev conn--dispatch-prev-state)
-           (overriding-local-map nil)
-           (conn-wincontrol-mode nil)
-           (conn-wincontrol-one-command-mode nil)
            (conn--dispatch-prev-state
             (list conn-target-window-predicate
                   conn-target-predicate
@@ -1196,7 +1191,8 @@ that slot's value and otherwise performs a shallow copy."
     (list change-group (point) (mark t) mark-active)))
 
 (defun conn--action-accept-change-group (change-group)
-  (pcase-let ((`(,handle ,_saved-point ,_saved-mark) change-group))
+  (pcase-let ((`(,handle ,_saved-point ,_saved-mark)
+               change-group))
     (accept-change-group handle)
     nil))
 
@@ -1221,11 +1217,13 @@ that slot's value and otherwise performs a shallow copy."
            (important-return-value t)))
 
 (defun conn-action-change-group ()
+  (declare (important-return-value t))
   (conn-action-slot (conn--action-buffer-change-group)
                     :accept #'conn--action-accept-change-group
                     :cancel #'conn--action-cancel-change-group))
 
 (defun conn-action-marker ()
+  (declare (important-return-value t))
   (conn-action-slot (conn-dispatch-marker-argument t)
                     :read t
                     :stale (lambda (mk) (buffer-live-p (marker-buffer mk)))
@@ -1233,6 +1231,7 @@ that slot's value and otherwise performs a shallow copy."
                     :copy #'copy-marker))
 
 (defun conn-action-separator ()
+  (declare (important-return-value t))
   (conn-action-slot (conn-separator-argument)
                     :read t))
 
@@ -1244,6 +1243,7 @@ that slot's value and otherwise performs a shallow copy."
   (string nil))
 
 (defun conn-action-replace ()
+  (declare (important-return-value t))
   (conn-action-slot (conn--dispatch-replace-argument)
                     :read t
                     :accept #'conn--action-accept-change-group
@@ -1289,6 +1289,7 @@ that slot's value and otherwise performs a shallow copy."
     (kill-new str)))
 
 (defun conn-action-repeatable-p (action)
+  (declare (important-return-value t))
   (or (eq (conn-action-repeat action) t)
       (eq (conn-action-repeat action) nil)))
 
@@ -2422,9 +2423,8 @@ depths will be sorted before greater depths.
 
 (defun conn-dispatch-select-window (window)
   (prog1 (select-window window)
-    (or (gethash (current-buffer) conn--dispatch-buffer-opoints)
-        (setf (gethash (current-buffer) conn--dispatch-buffer-opoints)
-              (point-marker)))))
+    (with-memoization (gethash (current-buffer) conn--dispatch-buffer-opoints)
+      (point-marker))))
 
 (defun conn-dispatch-goto-char (position &optional nopush)
   (goto-char position)
