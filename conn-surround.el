@@ -694,7 +694,7 @@
           (unwind-protect
               (progn
                 (conn-adjust-surround-mode 1)
-                (conn-bounds-of-recursive-edit-subr))
+                (funcall conn-bounds-recursive-edit-function))
             (conn-adjust-surround-mode -1))
           (if adjust
               (let ((beg (region-beginning))

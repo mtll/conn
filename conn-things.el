@@ -1127,10 +1127,11 @@ Returns a `conn-bounds' struct."
     (buffer-local-restore-state conn--eldoc-prev-msg-fn)
     (message nil)))
 
-(defun conn-bounds-of-recursive-edit-subr ()
-  (let ((buffer-read-only t)
-        (eldoc-message-function #'ignore))
-    (recursive-edit)))
+(defvar conn-bounds-recursive-edit-function
+  (lambda ()
+    (let ((buffer-read-only t)
+          (eldoc-message-function #'ignore))
+      (recursive-edit))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state

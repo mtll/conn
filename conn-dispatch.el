@@ -1756,7 +1756,7 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-label-timeout 0.1
   "Maximum time in seconds to spend creating pixelwise labels.
 If labeling takes longer than this amount of time then fall back to
-characterwise labels for all remaining labels.")
+characterwise labels for all remaining targets.")
 
 (defun conn--pixelwise-labels-target-p (target)
   (declare (important-return-value t))
