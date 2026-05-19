@@ -2868,6 +2868,8 @@ buffer."
        "this win"
        'face 'eldoc-highlight-function-argument)))))
 
+(eieio-declare-slots thing arg transform)
+
 (conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql act)))
   "Reset the current prefix argument."

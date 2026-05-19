@@ -50,48 +50,48 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (defun conn-continuous-thing-other-end-handler (thing beg arg)
   "Mark the things which have been moved over."
   (ignore-errors
-    (let ((thing (seq-find #'conn-simple-thing-p
-                           (conn-thing-all-parents thing))))
-      (cond* ((= 0 (prefix-numeric-value arg)))
-             ((pcase* (or `(,(pred (= (point))) . ,other-end)
-                          `(,other-end . ,(pred (= (point))))
-                          (pred consp))
-                      (and (= (point) beg)
-                           (bounds-of-thing-at-point thing)))
-              other-end)
-             ((bind* (dir (cl-signum (- (point) beg))))
-              (save-excursion
-                (goto-char beg)
-                (forward-thing thing dir)
-                (forward-thing thing (- dir))
-                (point)))))))
+    (cond* ((= 0 (prefix-numeric-value arg)))
+           ((bind* (thing (seq-find #'conn-simple-thing-p
+                                    (conn-thing-all-parents thing)))))
+           ((pcase* (or `(,(pred (= (point))) . ,other-end)
+                        `(,other-end . ,(pred (= (point))))
+                        (pred consp))
+                    (and (= (point) beg)
+                         (bounds-of-thing-at-point thing)))
+            other-end)
+           ((bind* (dir (cl-signum (- (point) beg))))
+            (save-excursion
+              (goto-char beg)
+              (forward-thing thing dir)
+              (forward-thing thing (- dir))
+              (point))))))
 
 (defun conn-nestable-thing-other-end-handler (thing beg _arg)
   "Mark the things which have been moved over."
-  (let ((thing (seq-find #'conn-simple-thing-p
-                         (conn-thing-all-parents thing))))
-    (ignore-errors
-      (cond ((< beg (point))
-             (let ((obeg (save-excursion
-                           (goto-char beg)
-                           (ignore-errors (forward-thing thing 1))
-                           (ignore-errors (forward-thing thing -1))
-                           (point))))
-               (save-excursion
-                 (while (< obeg (point))
-                   (forward-thing thing -1))
-                 (point))))
-            ((> beg (point))
-             (let ((obeg (save-excursion
-                           (goto-char beg)
-                           (ignore-errors (forward-thing thing -1))
-                           (ignore-errors (forward-thing thing 1))
-                           (point))))
-               (save-excursion
-                 (while (< (point) obeg)
-                   (forward-thing thing 1))
-                 (point))))
-            (t nil)))))
+  (ignore-errors
+    (cond* ((bind* (thing (seq-find #'conn-simple-thing-p
+                                    (conn-thing-all-parents thing)))))
+           ((< beg (point))
+            (let ((obeg (save-excursion
+                          (goto-char beg)
+                          (ignore-errors (forward-thing thing 1))
+                          (ignore-errors (forward-thing thing -1))
+                          (point))))
+              (save-excursion
+                (while (< obeg (point))
+                  (forward-thing thing -1))
+                (point))))
+           ((> beg (point))
+            (let ((obeg (save-excursion
+                          (goto-char beg)
+                          (ignore-errors (forward-thing thing -1))
+                          (ignore-errors (forward-thing thing 1))
+                          (point))))
+              (save-excursion
+                (while (< (point) obeg)
+                  (forward-thing thing 1))
+                (point))))
+           (t nil))))
 
 (defun conn-discrete-thing-other-end-handler (thing _beg _arg)
   "Mark the thing at point."
@@ -1127,6 +1127,11 @@ Returns a `conn-bounds' struct."
     (buffer-local-restore-state conn--eldoc-prev-msg-fn)
     (message nil)))
 
+(defun conn-bounds-of-recursive-edit-subr ()
+  (let ((buffer-read-only t)
+        (eldoc-message-function #'ignore))
+    (recursive-edit)))
+
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state
                                    'conn-bounds-of-recursive-edit-mode)
@@ -1139,8 +1144,7 @@ Returns a `conn-bounds' struct."
       (progn
         (conn-bounds-of-recursive-edit-mode 1)
         (conn-with-recursive-stack 'conn-command-state
-          (let ((buffer-read-only t))
-            (recursive-edit)))
+          (conn-bounds-of-recursive-edit-subr))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
@@ -1161,8 +1165,7 @@ Returns a `conn-bounds' struct."
             (conn-bounds-of-recursive-edit-mode 1)
             (conn--bounds-of-recursive-edit-message)
             (save-selected-window
-              (let ((buffer-read-only t))
-                (recursive-edit))))
+              (conn-bounds-of-recursive-edit-subr)))
           (conn-bounds-of 'region nil))
       (conn-bounds-of-recursive-edit-mode -1))))
 
@@ -1223,9 +1226,8 @@ Returns a `conn-bounds' struct."
               (progn
                 (call-interactively cmd)
                 (when isearch-mode
-                  (let ((isearch-recursive-edit t)
-                        (buffer-read-only t))
-                    (recursive-edit))))
+                  (let ((isearch-recursive-edit t))
+                    (conn-bounds-of-recursive-edit-subr))))
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
@@ -1251,9 +1253,8 @@ Returns a `conn-bounds' struct."
               (progn
                 (call-interactively cmd)
                 (when isearch-mode
-                  (let ((isearch-recursive-edit t)
-                        (buffer-read-only t))
-                    (recursive-edit))))
+                  (let ((isearch-recursive-edit t))
+                    (conn-bounds-of-recursive-edit-subr))))
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))

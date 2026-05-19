@@ -691,12 +691,11 @@
                               adjust nil)
                   (exit-recursive-edit)))
               "<remap> <conn-pop-state>" #'exit-recursive-edit)
-          (let ((buffer-read-only t))
-            (unwind-protect
-                (progn
-                  (conn-adjust-surround-mode 1)
-                  (recursive-edit))
-              (conn-adjust-surround-mode -1)))
+          (unwind-protect
+              (progn
+                (conn-adjust-surround-mode 1)
+                (conn-bounds-of-recursive-edit-subr))
+            (conn-adjust-surround-mode -1))
           (if adjust
               (let ((beg (region-beginning))
                     (end (region-end)))
