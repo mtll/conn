@@ -814,7 +814,8 @@ buffers `conn-jump-ring' if opoint differs from point.")
           (unless suspend
             (conn-clear-targets))))
     (when suspend
-      (conn--mark-targets 'conn-old-target))))
+      (conn--mark-targets 'conn-old-target))
+    (message nil)))
 
 (defmacro conn-with-dispatch (&rest body)
   (declare (indent 0))
@@ -2598,7 +2599,7 @@ the meaning of depth."
    (min beg end) (max beg end)
    'conn--dispatch-action-current-pulse-face))
 
-(defun conn--dispatch-read-char-prefix (arguments prompt suffix)
+(defun conn--dispatch-read-char-message (arguments prompt suffix)
   (conn-<
     (mapcar #'conn-argument-display arguments)
     flatten-tree
@@ -2668,43 +2669,41 @@ the meaning of depth."
                                 seconds
                                 prompt-suffix)
   (declare (important-return-value t))
-  (let ((message-fn (lambda (prompt arguments &optional _elide)
-                      (conn--dispatch-read-char-prefix
-                       arguments
-                       prompt
-                       prompt-suffix))))
-    (if seconds
-        (let ((inhibit-message nil)
-              (scroll-conservatively 100))
-          (conn--dispatch-read-char-prefix
-           (mapcar #'car
-                   (compat-call sort conn--dispatch-read-char-handlers
-                                :key #'cadr))
-           prompt prompt-suffix)
-          (and-let* ((ev (conn--dispatch-read-char-1 use-input-method seconds)))
-            (cond ((eql ev (car (last (current-input-mode))))
-                   (signal 'quit nil))
-                  ((characterp ev) ev))))
-      (let (conn-read-args-message-delay)
-        (conn-read-args (conn-dispatch-read-char-state
-                         :prompt prompt
-                         :command-handler (conn-dispatch-read-char-handlers)
-                         :display-handler message-fn
-                         :pre (lambda (cmd)
-                                (run-hook-with-args
-                                 'conn-dispatch-read-char-pre-functions
-                                 cmd)))
-            ((char (conn-dispatch-char-argument use-input-method)))
-          char)))))
+  (cond*
+   ((null seconds)
+    (let ((message-fn (lambda (prompt arguments &optional _elide)
+                        (conn--dispatch-read-char-message
+                         arguments
+                         prompt
+                         prompt-suffix)))
+          conn-read-args-message-delay)
+      (conn-read-args (conn-dispatch-read-char-state
+                       :prompt prompt
+                       :command-handler (conn-dispatch-read-char-handlers)
+                       :display-handler message-fn
+                       :pre (lambda (cmd)
+                              (run-hook-with-args
+                               'conn-dispatch-read-char-pre-functions
+                               cmd)))
+          ((char (conn-dispatch-char-argument use-input-method)))
+        char)))
+   ((bind* (ev (let ((inhibit-message nil)
+                     (scroll-conservatively 100))
+                 (conn--dispatch-read-char-message nil prompt prompt-suffix)
+                 (conn--dispatch-read-char-1 use-input-method seconds)))))
+   ((eql ev (car (last (current-input-mode))))
+    (signal 'quit nil))
+   ((characterp ev) ev)))
 
 (cl-defstruct (conn-dispatch-read-char-handlers
                (:include conn-composite-argument)
                ( :constructor conn-dispatch-read-char-handlers
                  (&aux
-                  (value (mapcar #'car
-                                 (compat-call sort
-                                              conn--dispatch-read-char-handlers
-                                              :key #'cadr)))))))
+                  (value (conn->
+                           (compat-call sort
+                                        conn--dispatch-read-char-handlers
+                                        :key #'cadr)
+                           (mapcar #'car)))))))
 
 (defvar-keymap conn-dispatch-prefix-arg-map
   "M-DEL" 'reset-arg
@@ -3239,14 +3238,16 @@ buffer."
             (and (save-excursion
                    (goto-char (overlay-end a))
                    (not (eolp)))
-                 (delq a (conn--overlays-in-of-type (overlay-end a)
-                                                    (+ 2 (overlay-end a))
-                                                    'conn-target-overlay
-                                                    (selected-window)))
-                 (not (delq b (conn--overlays-in-of-type (overlay-end b)
-                                                         (+ 2 (overlay-end b))
-                                                         'conn-target-overlay
-                                                         (selected-window))))))))
+                 (delq a (conn--overlays-in-of-type
+                          (overlay-end a)
+                          (+ 2 (overlay-end a))
+                          'conn-target-overlay
+                          (selected-window)))
+                 (not (delq b (conn--overlays-in-of-type
+                               (overlay-end b)
+                               (+ 2 (overlay-end b))
+                               'conn-target-overlay
+                               (selected-window))))))))
 
 (defun conn-dispatch-prompt-p ()
   (or conn--dispatch-redisplay-prompt-flag

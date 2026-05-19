@@ -403,6 +403,7 @@
   "U" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
+  "l" 'forward-char
   "<conn-thing-map> b" (conn-anonymous-thing
                          '(visual-line)
                          :target-finder ( :method (_self &rest _)
