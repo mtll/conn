@@ -1632,7 +1632,7 @@ with `conn-dispatch-thing-ignored-modes'."
   :type 'number)
 
 (defface conn-target-overlay-face
-  '((t (:inherit highlight)))
+  '((t (:inherit lazy-highlight)))
   "Face for matches when reading strings."
   :group 'conn-faces)
 
