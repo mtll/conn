@@ -1145,7 +1145,7 @@ Returns a `conn-bounds' struct."
       (progn
         (conn-bounds-of-recursive-edit-mode 1)
         (conn-with-recursive-stack 'conn-command-state
-          (conn-bounds-of-recursive-edit-subr))
+          (funcall conn-bounds-recursive-edit-function))
         (conn-bounds-of 'region nil))
     (conn-bounds-of-recursive-edit-mode -1)))
 
@@ -1166,7 +1166,7 @@ Returns a `conn-bounds' struct."
             (conn-bounds-of-recursive-edit-mode 1)
             (conn--bounds-of-recursive-edit-message)
             (save-selected-window
-              (conn-bounds-of-recursive-edit-subr)))
+              (funcall conn-bounds-recursive-edit-function)))
           (conn-bounds-of 'region nil))
       (conn-bounds-of-recursive-edit-mode -1))))
 
@@ -1228,7 +1228,7 @@ Returns a `conn-bounds' struct."
                 (call-interactively cmd)
                 (when isearch-mode
                   (let ((isearch-recursive-edit t))
-                    (conn-bounds-of-recursive-edit-subr))))
+                    (funcall conn-bounds-recursive-edit-function))))
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
@@ -1255,7 +1255,7 @@ Returns a `conn-bounds' struct."
                 (call-interactively cmd)
                 (when isearch-mode
                   (let ((isearch-recursive-edit t))
-                    (conn-bounds-of-recursive-edit-subr))))
+                    (funcall conn-bounds-recursive-edit-function))))
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
