@@ -505,20 +505,21 @@
   "Face for wincontrol mode-line window labels.")
 
 (defvar conn-wincontrol-mode-line-format-string
-  (propertize
-   (if (display-graphic-p)
-       (propertize " %s " 'display '(space-width 0.33))
-     "%s")
-   'face 'conn-wincontrol-mode-line-label-face))
+  (concat
+   (propertize
+    (if (display-graphic-p)
+        (propertize " %s " 'display '(space-width 0.33))
+      "%s")
+    'face 'conn-wincontrol-mode-line-label-face)
+   " "))
 
 (defun conn-window-label-mode-line ()
   (let ((win (selected-window)))
     (if-let* ((_ (conn--dispatch-window-predicate (selected-window)))
-              (str (progn
-                     (conn--ensure-simple-window-labels)
+              (str (let (conn-dispatch-label-input-method)
+                     (funcall conn-window-label-function)
                      (window-parameter win 'conn-label-string))))
-        (concat (format conn-wincontrol-mode-line-format-string str)
-                " ")
+        (format conn-wincontrol-mode-line-format-string str)
       "")))
 
 (defvar conn-wincontrol-mode-line-label

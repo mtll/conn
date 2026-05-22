@@ -78,7 +78,7 @@
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar conn-window-label-function 'conn-header-line-labels
+(defvar conn-window-label-display-function 'conn-header-line-labels
   "Function to label windows for `conn-prompt-for-window'.
 
 The function should accept a single argument, the list of windows to be
@@ -398,20 +398,10 @@ themselves once the selection process has concluded."
   "Face for conn window prompt overlay."
   :group 'conn-faces)
 
-(defun conn--centered-header-label ()
-  (when (window-parameter (selected-window) 'conn-window-labeled-p)
-    (let* ((window-width (window-width nil t))
-           (label (window-parameter nil 'conn-label-string))
-           (label-width (conn--string-pixel-width
-                         label
-                         (window-buffer (selected-window))))
-           (padding-width (floor (- window-width label-width) 2))
-           (padding (propertize " " 'display `(space :width (,padding-width)))))
-      (concat padding label))))
-
 (defvar conn--window-label-pool nil)
 
-(defun conn--ensure-simple-window-labels ()
+(defun conn--simple-window-labels ()
+  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
   (let* ((windows (conn-get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (or (null conn--window-label-pool)
@@ -437,9 +427,19 @@ themselves once the selection process has concluded."
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
-(defun conn--simple-window-labels ()
-  (setf conn-dispatch-label-input-method conn-simple-label-input-method)
-  (conn--ensure-simple-window-labels))
+(defvar conn-window-label-function
+  #'conn--simple-window-labels)
+
+(defun conn--centered-header-label ()
+  (when (window-parameter (selected-window) 'conn-window-labeled-p)
+    (let* ((window-width (window-width nil t))
+           (label (window-parameter nil 'conn-label-string))
+           (label-width (conn--string-pixel-width
+                         label
+                         (window-buffer (selected-window))))
+           (padding-width (floor (- window-width label-width) 2))
+           (padding (propertize " " 'display `(space :width (,padding-width)))))
+      (concat padding label))))
 
 (defun conn--setup-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
@@ -456,7 +456,6 @@ themselves once the selection process has concluded."
         (goto-char (window-start))))))
 
 (defun conn-header-line-labels (windows)
-  (conn--simple-window-labels)
   (cl-loop for win in windows
            collect (conn--setup-header-line-label
                     win (window-parameter win 'conn-label-string))))
@@ -523,7 +522,9 @@ for dispatch."
   (declare (important-return-value t))
   (when windows
     (conn-with-window-labels
-        (labels (funcall conn-window-label-function windows))
+        (labels (progn
+                  (funcall conn-window-label-function)
+                  (funcall conn-window-label-display-function windows)))
       (conn-with-dispatch-handlers
         (:handler
          ( :predicate (cmd)

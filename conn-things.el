@@ -95,11 +95,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-discrete-thing-other-end-handler (thing _beg _arg)
   "Mark the thing at point."
-  (let ((thing (seq-find #'conn-simple-thing-p
-                         (conn-thing-all-parents thing))))
-    (pcase (ignore-errors (bounds-of-thing-at-point thing))
-      (`(,beg . ,end)
-       (if (= (point) end) beg end)))))
+  (pcase (let ((thing (seq-find #'conn-simple-thing-p
+                                (conn-thing-all-parents thing))))
+           (ignore-errors (bounds-of-thing-at-point thing)))
+    (`(,beg . ,end)
+     (if (= (point) end) beg end))))
 
 (defun conn-inverse-op-other-end-handler (inverse)
   "Mark the thing at point."
@@ -421,11 +421,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
     (setf thing (conn-bounds-thing thing)))
   (let (v)
     (cond
-     ((when (conn-anonymous-thing-p thing)
-        (or (setf v (assq property (conn--anonymous-thing-properties thing)))
-            (progn
-              (setf thing (car (conn-thing-all-parents thing)))
-              nil)))
+     ((and (conn-anonymous-thing-p thing)
+           (or (setf v (assq property (conn--anonymous-thing-properties thing)))
+               (progn
+                 (setf thing (car (conn-thing-all-parents thing)))
+                 nil)))
       (cdr v))
      ((null (ignore-errors (conn--find-thing thing)))
       nil)
