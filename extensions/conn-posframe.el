@@ -533,7 +533,6 @@
 
 ;;;###autoload
 (defun conn-posframe-window-labels (windows)
-  (conn--simple-window-labels)
   (cl-loop for win in windows
            when (window-parameter win 'conn-label-string)
            collect (conn--setup-posframe-window-label win it)))
