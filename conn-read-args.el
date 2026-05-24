@@ -302,6 +302,8 @@ This skips executing the body of the `conn-read-args' form entirely."
 (defvar conn-wincontrol-mode)
 (defvar conn-wincontrol-one-command-mode)
 
+(defvar conn-read-args-around-function #'funcall)
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -485,7 +487,10 @@ This skips executing the body of the `conn-read-args' form entirely."
              (setf timer conn--read-args-timer))
            (conn--unwind-protect-all
              (let ((conn-read-args-last-prefix nil))
-               (if around (funcall around #'loop) (loop))
+               (if around
+                   (funcall around
+                            (lambda () (funcall conn-read-args-around-function #'loop)))
+                 (funcall conn-read-args-around-function #'loop))
                (setf argument-values (mapcar #'conn-argument-payload
                                              arglist)))
              (unless argument-values

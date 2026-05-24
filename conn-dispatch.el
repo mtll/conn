@@ -390,9 +390,6 @@ themselves once the selection process has concluded."
 
 ;;;;; Window Header-line Labels
 
-(defvar conn-wincontrol-mode)
-(defvar conn-wincontrol-one-command-mode)
-
 (defface conn-window-label-face
   '((t (:inherit help-key-binding :height 2.5)))
   "Face for conn window prompt overlay."

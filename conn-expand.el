@@ -152,7 +152,7 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of ((cmd (conn-thing expansion))
                               _arg)
   (conn--expand-create-expansions)
-  (let ((bounds))
+  (let (bounds)
     (conn-dispatch-setup
      (conn-action ()
        (:description "Bounds")
