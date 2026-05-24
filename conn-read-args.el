@@ -162,10 +162,6 @@ The duration of the message display is controlled by
                (cl-loop for arg in arguments
                         collect (conn-argument-display arg)))))
            (prompt-line (conn-read-args-prompt-line prompt elide)))
-       (cl-callf nconc
-           to-display
-         (make-list (mod (- (length to-display)) column-count)
-                    ""))
        (if (length> to-display column-count)
            (with-work-buffer
              (insert prompt-line)

@@ -667,7 +667,7 @@ If BUFFER is nil check `current-buffer'."
          (rows (ceiling len max-cols))
          (cols (ceiling len rows))
          (objs (make-list rows nil)))
-    (dotimes (i len)
+    (dotimes (i (* rows cols))
       (push (or (pop list) "")
             (nth (floor i cols) objs)))
     (with-current-buffer buffer
