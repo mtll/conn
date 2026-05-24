@@ -286,8 +286,8 @@
               (substring-no-properties fill-prefix))))
 
 (conn-transient-mode-suffix conn-auto-fill-suffix ()
-  "Auto Fill"
-  (auto-fill-mode auto-fill-function))
+                            "Auto Fill"
+                            (auto-fill-mode auto-fill-function))
 
 ;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()

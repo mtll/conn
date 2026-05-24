@@ -23,7 +23,7 @@
 (require 'conn)
 
 (define-conn-state conn-sort-state (conn-read-thing-state)
-                   :lighter "SORT")
+  :lighter "SORT")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-sort-state)
@@ -57,19 +57,19 @@
 
 (define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-numeric-fields)))
-                              "Sort by numeric fields.")
+  "Sort by numeric fields.")
 
 (define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-fields)))
-                              "Sort by fields.")
+  "Sort by fields.")
 
 (define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-columns)))
-                              "Sort columns.")
+  "Sort columns.")
 
 (define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-regexp-fields)))
-                              "Sort regexp fields.")
+  "Sort regexp fields.")
 
 (defun conn--sort-in-bounds (bounds
                              transform

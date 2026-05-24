@@ -4038,232 +4038,232 @@ contain targets."
        fixed-length))))
 
 (define-conn-target-finder conn-dispatch-things-with-re-prefix-targets
-                           ()
-                           ((prefix-regexp :initarg :prefix-regexp)
-                            (skip-prefix :initarg :skip-prefix
-                                         :initform nil)
-                            (fixed-length :initform nil
-                                          :initarg :fixed-length)
-                            (prefix-thing :initarg :prefix-thing))
-                           ( :default-update-handler (state)
-                             (let ((thing (oref state prefix-thing))
-                                   (prefix (oref state prefix-regexp))
-                                   (fixed-length (oref state fixed-length))
-                                   (skip-prefix (oref state skip-prefix)))
-                               (pcase-dolist (`(,beg . ,end)
-                                              (conn--visible-re-matches
-                                               prefix
-                                               (lambda (beg end)
-                                                 (save-excursion
-                                                   (goto-char beg)
-                                                   (pcase (ignore-errors (conn-bounds-of thing nil))
-                                                     ((conn-bounds `(,tbeg . ,tend))
-                                                      (and (= tbeg beg) (<= end tend))))))))
-                                 (conn-make-target-overlay
-                                  beg (or fixed-length (- end beg))
-                                  :point (when skip-prefix end))))))
+    ()
+    ((prefix-regexp :initarg :prefix-regexp)
+     (skip-prefix :initarg :skip-prefix
+                  :initform nil)
+     (fixed-length :initform nil
+                   :initarg :fixed-length)
+     (prefix-thing :initarg :prefix-thing))
+  ( :default-update-handler (state)
+    (let ((thing (oref state prefix-thing))
+          (prefix (oref state prefix-regexp))
+          (fixed-length (oref state fixed-length))
+          (skip-prefix (oref state skip-prefix)))
+      (pcase-dolist (`(,beg . ,end)
+                     (conn--visible-re-matches
+                      prefix
+                      (lambda (beg end)
+                        (save-excursion
+                          (goto-char beg)
+                          (pcase (ignore-errors (conn-bounds-of thing nil))
+                            ((conn-bounds `(,tbeg . ,tend))
+                             (and (= tbeg beg) (<= end tend))))))))
+        (conn-make-target-overlay
+         beg (or fixed-length (- end beg))
+         :point (when skip-prefix end))))))
 
 (define-conn-target-finder conn-dispatch-things-matching-re-targets
-                           ()
-                           ((regexp :initarg :prefix-regexp)
-                            (match-thing :initarg :match-thing)
-                            (fixed-length :initform nil
-                                          :initarg :fixed-length)
-                            (update-function
-                             :allocation :class
-                             :initform #'conn--things-matching-re-update))
-                           ( :default-update-handler (state)
-                             (let ((thing (oref state match-thing))
-                                   (regexp (oref state regexp))
-                                   (fixed-length (oref state fixed-length)))
-                               (pcase-dolist (`(,beg . ,end)
-                                              (conn--visible-re-matches
-                                               regexp
-                                               (lambda (beg end)
-                                                 (save-excursion
-                                                   (goto-char beg)
-                                                   (pcase (ignore-errors (conn-bounds-of thing nil))
-                                                     ((conn-bounds `(,tbeg . ,tend))
-                                                      (and (<= tbeg beg) (<= tend end))))))))
-                                 (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
+    ()
+    ((regexp :initarg :prefix-regexp)
+     (match-thing :initarg :match-thing)
+     (fixed-length :initform nil
+                   :initarg :fixed-length)
+     (update-function
+      :allocation :class
+      :initform #'conn--things-matching-re-update))
+  ( :default-update-handler (state)
+    (let ((thing (oref state match-thing))
+          (regexp (oref state regexp))
+          (fixed-length (oref state fixed-length)))
+      (pcase-dolist (`(,beg . ,end)
+                     (conn--visible-re-matches
+                      regexp
+                      (lambda (beg end)
+                        (save-excursion
+                          (goto-char beg)
+                          (pcase (ignore-errors (conn-bounds-of thing nil))
+                            ((conn-bounds `(,tbeg . ,tend))
+                             (and (<= tbeg beg) (<= tend end))))))))
+        (conn-make-target-overlay beg (or fixed-length (- end beg)))))))
 
 (define-conn-target-finder conn-dispatch-column-targets
-                           ()
-                           ((goal-column :initform nil)
-                            (window-predicate
-                             :initform (lambda (win) (eq win (selected-window)))))
-                           ( :default-update-handler (state)
-                             (let ((goal-col
-                                    (with-memoization (oref state goal-column)
-                                      ;; From `line-move-visual'
-                                      (let ((posn (posn-at-point))
-                                            (lnum-width (line-number-display-width t))
-                                            x-pos)
-                                        (cond
-                                         ;; Handle the `overflow-newline-into-fringe' case
-                                         ;; (left-fringe is for the R2L case):
-                                         ((memq (nth 1 posn) '(right-fringe left-fringe))
-                                          (window-width))
-                                         ((car (posn-x-y posn))
-                                          (setf x-pos (- (car (posn-x-y posn)) lnum-width))
-                                          ;; In R2L lines, the X pixel coordinate is measured from the
-                                          ;; left edge of the window, but columns are still counted
-                                          ;; from the logical-order beginning of the line, i.e. from
-                                          ;; the right edge in this case.  We need to adjust for that.
-                                          (if (eq (current-bidi-paragraph-direction) 'right-to-left)
-                                              (setf x-pos (- (window-body-width nil t) 1 x-pos)))
-                                          (/ (float x-pos)
-                                             (frame-char-width))))))))
-                               (save-excursion
-                                 (with-restriction (window-start) (window-end)
-                                   (goto-char (point-min))
-                                   (while (/= (point) (point-max))
-                                     (vertical-motion (cons goal-col 0))
-                                     (unless (and (eolp) (= (point) (point-min)))
-                                       (conn-make-target-overlay
-                                        (point) 0
-                                        :thing 'point
-                                        :padding-function (lambda (ov width _face)
-                                                            (conn--flush-left-padding ov width nil))))
-                                     (vertical-motion 1)))))))
+    ()
+    ((goal-column :initform nil)
+     (window-predicate
+      :initform (lambda (win) (eq win (selected-window)))))
+  ( :default-update-handler (state)
+    (let ((goal-col
+           (with-memoization (oref state goal-column)
+             ;; From `line-move-visual'
+             (let ((posn (posn-at-point))
+                   (lnum-width (line-number-display-width t))
+                   x-pos)
+               (cond
+                ;; Handle the `overflow-newline-into-fringe' case
+                ;; (left-fringe is for the R2L case):
+                ((memq (nth 1 posn) '(right-fringe left-fringe))
+                 (window-width))
+                ((car (posn-x-y posn))
+                 (setf x-pos (- (car (posn-x-y posn)) lnum-width))
+                 ;; In R2L lines, the X pixel coordinate is measured from the
+                 ;; left edge of the window, but columns are still counted
+                 ;; from the logical-order beginning of the line, i.e. from
+                 ;; the right edge in this case.  We need to adjust for that.
+                 (if (eq (current-bidi-paragraph-direction) 'right-to-left)
+                     (setf x-pos (- (window-body-width nil t) 1 x-pos)))
+                 (/ (float x-pos)
+                    (frame-char-width))))))))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (while (/= (point) (point-max))
+            (vertical-motion (cons goal-col 0))
+            (unless (and (eolp) (= (point) (point-min)))
+              (conn-make-target-overlay
+               (point) 0
+               :thing 'point
+               :padding-function (lambda (ov width _face)
+                                   (conn--flush-left-padding ov width nil))))
+            (vertical-motion 1)))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-column-targets))
   nil)
 
 (define-conn-target-finder conn-dispatch-line-targets
-                           () ()
-                           ( :default-update-handler (_state)
-                             (let ((col (if (= 0 (window-hscroll)) 0 1)))
-                               (save-excursion
-                                 (goto-char (window-start))
-                                 (vertical-motion (cons col 0))
-                                 (when (< (point) (window-end))
-                                   (conn-make-target-overlay
-                                    (point) 0
-                                    :padding-function #'conn--flush-left-padding))
-                                 (while (progn
-                                          (vertical-motion (cons col 1))
-                                          (< (point) (window-end)))
-                                   (conn-make-target-overlay
-                                    (point) 0
-                                    :padding-function #'conn--flush-left-padding))))))
+    () ()
+  ( :default-update-handler (_state)
+    (let ((col (if (= 0 (window-hscroll)) 0 1)))
+      (save-excursion
+        (goto-char (window-start))
+        (vertical-motion (cons col 0))
+        (when (< (point) (window-end))
+          (conn-make-target-overlay
+           (point) 0
+           :padding-function #'conn--flush-left-padding))
+        (while (progn
+                 (vertical-motion (cons col 1))
+                 (< (point) (window-end)))
+          (conn-make-target-overlay
+           (point) 0
+           :padding-function #'conn--flush-left-padding))))))
 
 (cl-defmethod conn-target-finder-label-faces ((_ conn-dispatch-line-targets))
   nil)
 
 (define-conn-target-finder conn-dispatch-end-of-line-targets
-                           ()
-                           ((other-end :initform t))
-                           ( :default-update-handler (_state)
-                             (conn-for-each-visible (window-start) (window-end)
-                               (goto-char (point-min))
-                               (move-end-of-line nil)
-                               (when (and (eolp) (not (invisible-p (point))))
-                                 (conn-make-target-overlay (point) 0))
-                               (while (/= (point) (point-max))
-                                 (forward-line)
-                                 (move-end-of-line nil)
-                                 (when (and (eolp)
-                                            (not (invisible-p (point)))
-                                            (not (invisible-p (1- (point)))))
-                                   (if (= (point-max) (point))
-                                       (conn-make-target-overlay
-                                        (point) 0
-                                        ;; hack to get the label displayed on its own line
-                                        :properties `(after-string
-                                                      ,(propertize " " 'display '(space :width 0))))
-                                     (conn-make-target-overlay (point) 0)))))))
+    ()
+    ((other-end :initform t))
+  ( :default-update-handler (_state)
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (move-end-of-line nil)
+      (when (and (eolp) (not (invisible-p (point))))
+        (conn-make-target-overlay (point) 0))
+      (while (/= (point) (point-max))
+        (forward-line)
+        (move-end-of-line nil)
+        (when (and (eolp)
+                   (not (invisible-p (point)))
+                   (not (invisible-p (1- (point)))))
+          (if (= (point-max) (point))
+              (conn-make-target-overlay
+               (point) 0
+               ;; hack to get the label displayed on its own line
+               :properties `(after-string
+                             ,(propertize " " 'display '(space :width 0))))
+            (conn-make-target-overlay (point) 0)))))))
 
 (define-conn-target-finder conn-dispatch-inner-line-targets
-                           () ()
-                           ( :default-update-handler (_state)
-                             (let ((thing (conn-anonymous-thing
-                                            '(conn-forward-inner-line)
-                                            :pretty-print ( :method (_self) "inner-line")
-                                            :bounds-op ( :method (_self _arg)
-                                                         (save-excursion
-                                                           (goto-char (pos-bol))
-                                                           (cl-call-next-method))))))
-                               (conn-for-each-visible (window-start) (window-end)
-                                 (goto-char (point-max))
-                                 (while (let ((pt (point)))
-                                          (forward-line -1)
-                                          (back-to-indentation)
-                                          (/= (point) pt))
-                                   (unless (= (pos-bol) (pos-eol))
-                                     (conn-make-target-overlay
-                                      (point) 0
-                                      :thing thing)))))))
+    () ()
+  ( :default-update-handler (_state)
+    (let ((thing (conn-anonymous-thing
+                   '(conn-forward-inner-line)
+                   :pretty-print ( :method (_self) "inner-line")
+                   :bounds-op ( :method (_self _arg)
+                                (save-excursion
+                                  (goto-char (pos-bol))
+                                  (cl-call-next-method))))))
+      (conn-for-each-visible (window-start) (window-end)
+        (goto-char (point-max))
+        (while (let ((pt (point)))
+                 (forward-line -1)
+                 (back-to-indentation)
+                 (/= (point) pt))
+          (unless (= (pos-bol) (pos-eol))
+            (conn-make-target-overlay
+             (point) 0
+             :thing thing)))))))
 
 (define-conn-target-finder conn-dispatch-end-of-inner-line-targets
-                           ()
-                           ((other-end :initform t))
-                           ( :default-update-handler (_state)
-                             (let ((thing (conn-anonymous-thing
-                                            '(conn-forward-inner-line)
-                                            :pretty-print ( :method (_self) "end-of-inner-line")
-                                            :bounds-op ( :method (_self _arg)
-                                                         (save-excursion
-                                                           (goto-char (pos-bol))
-                                                           (cl-call-next-method))))))
-                               (conn-for-each-visible (window-start) (window-end)
-                                 (goto-char (point-min))
-                                 (when (looking-at-p "\n")
-                                   (forward-line 1))
-                                 (while (not (eobp))
-                                   (conn--end-of-inner-line-1)
-                                   (unless (= (pos-bol) (pos-eol))
-                                     (conn-make-target-overlay
-                                      (point) 0
-                                      :properties `(label-before t)
-                                      :thing thing))
-                                   (forward-line 1))))))
+    ()
+    ((other-end :initform t))
+  ( :default-update-handler (_state)
+    (let ((thing (conn-anonymous-thing
+                   '(conn-forward-inner-line)
+                   :pretty-print ( :method (_self) "end-of-inner-line")
+                   :bounds-op ( :method (_self _arg)
+                                (save-excursion
+                                  (goto-char (pos-bol))
+                                  (cl-call-next-method))))))
+      (conn-for-each-visible (window-start) (window-end)
+        (goto-char (point-min))
+        (when (looking-at-p "\n")
+          (forward-line 1))
+        (while (not (eobp))
+          (conn--end-of-inner-line-1)
+          (unless (= (pos-bol) (pos-eol))
+            (conn-make-target-overlay
+             (point) 0
+             :properties `(label-before t)
+             :thing thing))
+          (forward-line 1))))))
 
 (define-conn-target-finder conn-dispatch-visual-line-targets
-                           () ()
-                           ( :default-update-handler (_state)
-                             (conn-for-each-visible (window-start) (window-end)
-                               (goto-char (point-min))
-                               (if (looking-at-p "\n")
-                                   (vertical-motion 1)
-                                 (vertical-motion 0))
-                               (conn-make-target-overlay
-                                (point) 0
-                                :padding-function (lambda (ov width _face)
-                                                    (conn--flush-left-padding ov width nil)))
-                               (vertical-motion 1)
-                               (cl-loop
-                                (when (bolp)
-                                  (conn-make-target-overlay
-                                   (point) 0
-                                   :padding-function (lambda (ov width _face)
-                                                       (conn--flush-left-padding ov width nil))))
-                                (when (eobp) (cl-return nil))
-                                (vertical-motion 1)))))
+    () ()
+  ( :default-update-handler (_state)
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (if (looking-at-p "\n")
+          (vertical-motion 1)
+        (vertical-motion 0))
+      (conn-make-target-overlay
+       (point) 0
+       :padding-function (lambda (ov width _face)
+                           (conn--flush-left-padding ov width nil)))
+      (vertical-motion 1)
+      (cl-loop
+       (when (bolp)
+         (conn-make-target-overlay
+          (point) 0
+          :padding-function (lambda (ov width _face)
+                              (conn--flush-left-padding ov width nil))))
+       (when (eobp) (cl-return nil))
+       (vertical-motion 1)))))
 
 (define-conn-target-finder conn-dispatch-end-of-visual-line-targets
-                           () ()
-                           ( :default-update-handler (_state)
-                             (conn-for-each-visible (window-start) (window-end)
-                               (goto-char (point-min))
-                               (if (looking-at-p "\n")
-                                   (vertical-motion 2)
-                                 (vertical-motion 1))
-                               (conn-make-target-overlay
-                                (if (bolp) (1- (point)) (point))
-                                0
-                                :padding-function (lambda (ov width _face)
-                                                    (conn--flush-left-padding ov width nil))
-                                :properties `(label-before t))
-                               (cl-loop
-                                (conn-make-target-overlay
-                                 (if (bolp) (1- (point)) (point))
-                                 0
-                                 :properties `(label-before t)
-                                 :padding-function (lambda (ov width _face)
-                                                     (conn--flush-left-padding ov width nil)))
-                                (when (eobp) (cl-return nil))
-                                (vertical-motion 1)))))
+    () ()
+  ( :default-update-handler (_state)
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (if (looking-at-p "\n")
+          (vertical-motion 2)
+        (vertical-motion 1))
+      (conn-make-target-overlay
+       (if (bolp) (1- (point)) (point))
+       0
+       :padding-function (lambda (ov width _face)
+                           (conn--flush-left-padding ov width nil))
+       :properties `(label-before t))
+      (cl-loop
+       (conn-make-target-overlay
+        (if (bolp) (1- (point)) (point))
+        0
+        :properties `(label-before t)
+        :padding-function (lambda (ov width _face)
+                            (conn--flush-left-padding ov width nil)))
+       (when (eobp) (cl-return nil))
+       (vertical-motion 1)))))
 
 ;;;;; Dispatch Labels
 
@@ -4889,17 +4889,17 @@ it.")
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-command-handler)
                                        (cmd (eql conn-repeat-last-dispatch)))
-                                      "Cycle the dispatch ring to the next most recent dispatch."
-                                      ( :update (_break)
-                                        (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))
-                                            (if (conn-action-stale-p (conn-previous-dispatch-action prev))
-                                                (progn
-                                                  (conn-dispatch-ring-remove-stale)
-                                                  (conn-read-args-error "Last dispatch action stale"))
-                                              (conn-read-args-return
-                                                (conn-dispatch-setup-previous
-                                                 prev (conn-read-args-consume-prefix-arg))))
-                                          (conn-read-args-error "Dispatch ring empty"))))
+  "Cycle the dispatch ring to the next most recent dispatch."
+  ( :update (_break)
+    (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))
+        (if (conn-action-stale-p (conn-previous-dispatch-action prev))
+            (progn
+              (conn-dispatch-ring-remove-stale)
+              (conn-read-args-error "Last dispatch action stale"))
+          (conn-read-args-return
+            (conn-dispatch-setup-previous
+             prev (conn-read-args-consume-prefix-arg))))
+      (conn-read-args-error "Dispatch ring empty"))))
 
 (defun conn-previous-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -5218,20 +5218,20 @@ for the dispatch."
    :must-prompt t))
 
 (define-conn-target-finder conn-isearch-targets () ()
-                           ( :update-method (state)
-                             (conn-dispatch-call-update-handlers state))
-                           ( :default-update-handler (state)
-                             (with-restriction (window-start) (window-end)
-                               (let* ((matches (conn--isearch-matches))
-                                      (thing (conn-anonymous-thing
-                                               '(region)
-                                               :bounds-op ( :method (_self arg)
-                                                            (and-let* ((bd (assq (point) matches)))
-                                                              (conn-make-bounds 'region arg bd))))))
-                                 (pcase-dolist (`(,beg . ,end) matches)
-                                   (conn-make-target-overlay
-                                    beg (- end beg)
-                                    :thing thing))))))
+  ( :update-method (state)
+    (conn-dispatch-call-update-handlers state))
+  ( :default-update-handler (state)
+    (with-restriction (window-start) (window-end)
+      (let* ((matches (conn--isearch-matches))
+             (thing (conn-anonymous-thing
+                      '(region)
+                      :bounds-op ( :method (_self arg)
+                                   (and-let* ((bd (assq (point) matches)))
+                                     (conn-make-bounds 'region arg bd))))))
+        (pcase-dolist (`(,beg . ,end) matches)
+          (conn-make-target-overlay
+           beg (- end beg)
+           :thing thing))))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."

@@ -354,30 +354,30 @@ See also `conn-repeat'.")
               do (setf (nth 2 (symbol-value remap)) nil))))
 
 (define-conn-remap-keymap conn-search-remap
-                          "Conn Search Map"
-                          [conn-search-map]
-                          conn-search-map
-                          (:without-conn-maps "M-s"))
+    "Conn Search Map"
+  [conn-search-map]
+  conn-search-map
+  (:without-conn-maps "M-s"))
 
 (define-conn-remap-keymap conn-goto-remap
-                          "Conn Goto Map"
-                          [conn-goto-map]
-                          conn-goto-map
-                          (:without-conn-maps "M-g"))
+    "Conn Goto Map"
+  [conn-goto-map]
+  conn-goto-map
+  (:without-conn-maps "M-g"))
 
 (define-conn-remap-keymap conn-thing-remap
-                          "Conn Thing Map"
-                          [conn-thing-map]
-                          conn-default-thing-map)
+    "Conn Thing Map"
+  [conn-thing-map]
+  conn-default-thing-map)
 
 (define-conn-remap-keymap conn-thing-inner-remap
-                          "Conn Inner Thing Map"
-                          [conn-inner-thing-map]
-                          conn-default-inner-thing-map)
+    "Conn Inner Thing Map"
+  [conn-inner-thing-map]
+  conn-default-inner-thing-map)
 
 (define-conn-remap-keymap conn-edit-remap
-                          "Conn Edit Map"
-                          [conn-edit-map]
-                          conn-default-edit-map)
+    "Conn Edit Map"
+  [conn-edit-map]
+  conn-default-edit-map)
 
 (provide 'conn-vars)

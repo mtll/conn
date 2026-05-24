@@ -1469,58 +1469,58 @@ Returns a `conn-bounds' struct."
 
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (eql conn-things-in-region)))
-                              "Operatate on the things in the region."
-                              ( :update (break)
-                                (cl-callf not (conn-thing-argument-in-region arg))
-                                (funcall break)))
+  "Operatate on the things in the region."
+  ( :update (break)
+    (cl-callf not (conn-thing-argument-in-region arg))
+    (funcall break)))
 
 (defvar conn--last-thing-kbd-macro nil)
 
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing kbd-macro)))
-                              "Operatate on the things in the region."
-                              ( :update (break)
-                                (if (and conn--last-thing-kbd-macro
-                                         (memq cmd '(kmacro-call-macro
-                                                     call-last-kbd-macro
-                                                     kmacro-end-and-call-macro)))
-                                    (setf (conn-argument-set-flag arg) t
-                                          (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
-                                  (setf (conn-argument-set-flag arg) t
-                                        (conn-argument-value arg)
-                                        (list
-                                         (conn-anonymous-thing
-                                           (list 'kbd-macro)
-                                           :bounds-op
-                                           ( :method (self _arg)
-                                             (prog1
-                                                 (save-mark-and-excursion
-                                                   (save-current-buffer
-                                                     (let ((buffer-read-only t)
-                                                           (buf (current-buffer))
-                                                           (conn-command-history conn-command-history))
-                                                       (if-let* ((macro (conn-thing-get self :kmacro)))
-                                                           (conn-with-recursive-stack 'conn-command-state
-                                                             (execute-kbd-macro macro))
-                                                         (let ((last-kbd-macro nil))
-                                                           (conn-with-recursive-stack 'conn-command-state
-                                                             (start-kbd-macro nil)
-                                                             (recursive-edit))
-                                                           (if defining-kbd-macro
-                                                               (end-kbd-macro)
-                                                             (error "Not defining kbd macro"))
-                                                           (setf (conn-thing-get self :kmacro) last-kbd-macro)))
-                                                       (if (eq buf (current-buffer))
-                                                           (conn-make-bounds
-                                                            self nil
-                                                            (cons (region-beginning) (region-end))
-                                                            :subregions
-                                                            (cl-loop for r in (region-bounds)
-                                                                     collect (conn-make-bounds cmd nil r)))
-                                                         (error "Buffer change during keyboard macro")))))
-                                               (setf conn--last-thing-kbd-macro self))))
-                                         nil)))
-                                (funcall break)))
+  "Operatate on the things in the region."
+  ( :update (break)
+    (if (and conn--last-thing-kbd-macro
+             (memq cmd '(kmacro-call-macro
+                         call-last-kbd-macro
+                         kmacro-end-and-call-macro)))
+        (setf (conn-argument-set-flag arg) t
+              (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
+      (setf (conn-argument-set-flag arg) t
+            (conn-argument-value arg)
+            (list
+             (conn-anonymous-thing
+               (list 'kbd-macro)
+               :bounds-op
+               ( :method (self _arg)
+                 (prog1
+                     (save-mark-and-excursion
+                       (save-current-buffer
+                         (let ((buffer-read-only t)
+                               (buf (current-buffer))
+                               (conn-command-history conn-command-history))
+                           (if-let* ((macro (conn-thing-get self :kmacro)))
+                               (conn-with-recursive-stack 'conn-command-state
+                                 (execute-kbd-macro macro))
+                             (let ((last-kbd-macro nil))
+                               (conn-with-recursive-stack 'conn-command-state
+                                 (start-kbd-macro nil)
+                                 (recursive-edit))
+                               (if defining-kbd-macro
+                                   (end-kbd-macro)
+                                 (error "Not defining kbd macro"))
+                               (setf (conn-thing-get self :kmacro) last-kbd-macro)))
+                           (if (eq buf (current-buffer))
+                               (conn-make-bounds
+                                self nil
+                                (cons (region-beginning) (region-end))
+                                :subregions
+                                (cl-loop for r in (region-bounds)
+                                         collect (conn-make-bounds cmd nil r)))
+                             (error "Buffer change during keyboard macro")))))
+                   (setf conn--last-thing-kbd-macro self))))
+             nil)))
+    (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-argument))
   (when (conn-thing-argument-in-region arg)
@@ -1716,19 +1716,19 @@ words."))
 
 (define-conn-argument-command ((arg conn-reformat-argument)
                                (cmd (eql reformat)))
-                              "Toggle whether the buffer is reformated around the kill."
-                              ( :update (break)
-                                (cl-callf null (conn-argument-value arg))
-                                (funcall break)))
+  "Toggle whether the buffer is reformated around the kill."
+  ( :update (break)
+    (cl-callf null (conn-argument-value arg))
+    (funcall break)))
 
 (define-conn-argument-command ((arg conn-reformat-argument)
                                (cmd (eql set-reformat)))
-                              "Toggle whether the buffer is reformated around the kill.
+  "Toggle whether the buffer is reformated around the kill.
 Also sets the buffer local default value of the reformat argument."
-                              ( :update (break)
-                                (cl-callf null (conn-argument-value arg))
-                                (setq-local conn-reformat-default (conn-argument-value arg))
-                                (funcall break)))
+  ( :update (break)
+    (cl-callf null (conn-argument-value arg))
+    (setq-local conn-reformat-default (conn-argument-value arg))
+    (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-reformat-argument))
   (substitute-command-keys
@@ -1871,8 +1871,8 @@ not be delete.  The the value returned by each function is ignored.")
 ;;;;; Multi Things
 
 (define-conn-state conn-multi-thing-select-state ()
-                   "State for selecting a tree sit node."
-                   :lighter "THING")
+  "State for selecting a tree sit node."
+  :lighter "THING")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-multi-thing-select-state)
@@ -1957,67 +1957,67 @@ Only the background color is used."
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql conn-expand)))
-                              "Expand the region to the next candidate thing."
-                              ( :update (break)
-                                (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
-                                                     (bounds (conn-multi-thing-argument-bounds arg))
-                                                     (size (conn-multi-thing-argument-size arg)))
-                                  (setf curr (mod (1+ curr) size))
-                                  (pcase (nth curr bounds)
-                                    ((conn-bounds `(,beg . ,end))
-                                     (goto-char (if (< (point) (mark)) beg end))
-                                     (push-mark (if (< (point) (mark)) end beg)))))
-                                (funcall break)))
+  "Expand the region to the next candidate thing."
+  ( :update (break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg))
+                         (size (conn-multi-thing-argument-size arg)))
+      (setf curr (mod (1+ curr) size))
+      (pcase (nth curr bounds)
+        ((conn-bounds `(,beg . ,end))
+         (goto-char (if (< (point) (mark)) beg end))
+         (push-mark (if (< (point) (mark)) end beg)))))
+    (funcall break)))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql conn-contract)))
-                              "Contract the region to the previous candidate thing."
-                              ( :update (break)
-                                (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
-                                                     (bounds (conn-multi-thing-argument-bounds arg))
-                                                     (size (conn-multi-thing-argument-size arg)))
-                                  (setf curr (mod (1- curr) size))
-                                  (pcase (nth curr bounds)
-                                    ((conn-bounds `(,beg . ,end))
-                                     (goto-char (if (< (point) (mark)) beg end))
-                                     (push-mark (if (< (point) (mark)) end beg) t))))
-                                (funcall break)))
+  "Contract the region to the previous candidate thing."
+  ( :update (break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg))
+                         (size (conn-multi-thing-argument-size arg)))
+      (setf curr (mod (1- curr) size))
+      (pcase (nth curr bounds)
+        ((conn-bounds `(,beg . ,end))
+         (goto-char (if (< (point) (mark)) beg end))
+         (push-mark (if (< (point) (mark)) end beg) t))))
+    (funcall break)))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql abort)))
-                              "Abort selecting from the current set of candidates."
-                              (:update (_break) (user-error "Aborted")))
+  "Abort selecting from the current set of candidates."
+  (:update (_break) (user-error "Aborted")))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql conn-exchange-mark-command)))
-                              "Exchange the point and mark."
-                              ( :update (break)
-                                (exchange-point-and-mark)
-                                (funcall break)))
+  "Exchange the point and mark."
+  ( :update (break)
+    (exchange-point-and-mark)
+    (funcall break)))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql select)))
-                              "Select the current thing."
-                              ( :update (break)
-                                (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
-                                                     (bounds (conn-multi-thing-argument-bounds arg)))
-                                  (let ((bound (nth curr bounds)))
-                                    (setf (conn-bounds-get bound :direction) -1
-                                          (conn-argument-value arg) bound
-                                          (conn-argument-set-flag arg) t)))
-                                (funcall break)))
+  "Select the current thing."
+  ( :update (break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg)))
+      (let ((bound (nth curr bounds)))
+        (setf (conn-bounds-get bound :direction) -1
+              (conn-argument-value arg) bound
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
                                (cmd (eql select-other-end)))
-                              "Exchange the point and mark and select the current thing."
-                              ( :update (break)
-                                (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
-                                                     (bounds (conn-multi-thing-argument-bounds arg)))
-                                  (let ((bound (nth curr bounds)))
-                                    (setf (conn-bounds-get bound :direction) 1
-                                          (conn-argument-value arg) bound
-                                          (conn-argument-set-flag arg) t)))
-                                (funcall break)))
+  "Exchange the point and mark and select the current thing."
+  ( :update (break)
+    (cl-symbol-macrolet ((curr (conn-multi-thing-argument-index arg))
+                         (bounds (conn-multi-thing-argument-bounds arg)))
+      (let ((bound (nth curr bounds)))
+        (setf (conn-bounds-get bound :direction) 1
+              (conn-argument-value arg) bound
+              (conn-argument-set-flag arg) t)))
+    (funcall break)))
 
 (defun conn-multi-thing-select (things)
   (let ((bounds (compat-call sort things

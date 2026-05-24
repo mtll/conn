@@ -26,7 +26,7 @@
         'grep-mode))
 
 (define-conn-state conn-special-state ()
-                   :lighter "S")
+  :lighter "S")
 
 (defun conn-setup-special-state ()
   (when (derived-mode-p conn-special-state-modes)
@@ -158,9 +158,9 @@
 ;;;; Dired
 
 (define-conn-state conn-dired-dispatch-state (conn-dispatch-state)
-                   "State for dispatch in `dired-mode'."
-                   :cursor 'box
-                   :suppress-input-method t)
+  "State for dispatch in `dired-mode'."
+  :cursor 'box
+  :suppress-input-method t)
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -402,9 +402,9 @@
 ;;;; Ibuffer
 
 (define-conn-state conn-ibuffer-dispatch-state (conn-dispatch-targets-state)
-                   "State for dispatch in `ibuffer-mode'."
-                   :cursor '(bar . 4)
-                   :suppress-input-method t)
+  "State for dispatch in `ibuffer-mode'."
+  :cursor '(bar . 4)
+  :suppress-input-method t)
 
 (defun conn-ibuffer-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -543,8 +543,8 @@
 (declare-function bookmark-bmenu-mark "bookmark")
 
 (define-conn-state conn-bmenu-dispatch-state (conn-dispatch-targets-state)
-                   "State for dispatch in `bookmark-bmenu-mode'."
-                   :suppress-input-method t)
+  "State for dispatch in `bookmark-bmenu-mode'."
+  :suppress-input-method t)
 
 (defun conn-bmenu-dispatch-state (&optional initial-arg)
   (interactive "P")

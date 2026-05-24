@@ -4666,7 +4666,7 @@ Interactively REPEAT is given by the prefix argument."
 
 (define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql conn-emacs-state-record-insert)))
-                              "Enter emacs state with a record region.")
+  "Enter emacs state with a record region.")
 
 (cl-defgeneric conn-change-thing-do (thing
                                      arg
@@ -5028,7 +5028,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 ;;;;;; Record Insertion
 
 (define-conn-state conn-record-set-region-state (conn-read-thing-state)
-                   :lighter "SETREC")
+  :lighter "SETREC")
 
 (defun conn-record-set-region ()
   (interactive)
@@ -5086,7 +5086,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 ;;;;; Indent
 
 (define-conn-state conn-indent-state (conn-read-thing-state)
-                   :lighter "INDENT")
+  :lighter "INDENT")
 
 (defvar-keymap conn-indent-cleanup-whitespace-map)
 
@@ -5269,7 +5269,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (set-marker (conn-narrowing-point narrowing) nil))
 
 (define-conn-state conn-narrow-state (conn-read-thing-state)
-                   :lighter "NARROW")
+  :lighter "NARROW")
 
 (cl-defmethod conn-bounds-of ((_thing (conn-thing narrow-ring))
                               _arg)
@@ -5493,7 +5493,7 @@ The region is added to `conn-narrow-ring'."
 ;;;;; Join Lines
 
 (define-conn-state conn-join-lines-state (conn-read-thing-state)
-                   :lighter "JOIN")
+  :lighter "JOIN")
 
 (cl-defstruct (conn-join-lines-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -5549,7 +5549,7 @@ subregion."
 (defvar-keymap conn-shell-command-replace-map)
 
 (define-conn-state conn-shell-command-state (conn-read-thing-state)
-                   :lighter "SHELL")
+  :lighter "SHELL")
 
 (cl-defstruct (conn-shell-command-on-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -5622,7 +5622,7 @@ subregion."
 ;;;;; Case
 
 (define-conn-state conn-case-state (conn-read-thing-state)
-                   :lighter "CASE")
+  :lighter "CASE")
 
 (cl-defstruct (conn-case-thing-argument
                (:include conn-thing-argument)
@@ -5658,7 +5658,7 @@ subregion."
 
 (define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql upcase)))
-                              "Change case of thing to UPPER CASE.")
+  "Change case of thing to UPPER CASE.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql upcase))
                                     arg
@@ -5673,7 +5673,7 @@ subregion."
 
 (define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql downcase)))
-                              "Change case of thing to lower case.")
+  "Change case of thing to lower case.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql downcase))
                                     arg
@@ -5688,7 +5688,7 @@ subregion."
 
 (define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql capitalize)))
-                              "Change case of thing to Capitalize.")
+  "Change case of thing to Capitalize.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql capitalize))
                                     arg

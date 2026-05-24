@@ -336,32 +336,32 @@
 
 (define-conn-argument-command ((arg conn-surround-with-argument)
                                cmd)
-                              ( :reference :extra "conn-org" (break)
-                                (when (memq cmd '(org-quote
-                                                  org-center
-                                                  org-comment
-                                                  org-src
-                                                  org-verse
-                                                  org-export-ascii
-                                                  org-export-html
-                                                  org-export-latex
-                                                  org-export
-                                                  org-example))
-                                  (funcall break
-                                           (conn-reference-page
-                                             ,(format "Operate on a %s" cmd)))))
-                              ( :predicate :extra "conn-org" ()
-                                (or (memq cmd '(org-quote
-                                                org-center
-                                                org-comment
-                                                org-src
-                                                org-verse
-                                                org-export-ascii
-                                                org-export-html
-                                                org-export-latex
-                                                org-export
-                                                org-example))
-                                    (cl-call-next-method))))
+  ( :reference :extra "conn-org" (break)
+    (when (memq cmd '(org-quote
+                      org-center
+                      org-comment
+                      org-src
+                      org-verse
+                      org-export-ascii
+                      org-export-html
+                      org-export-latex
+                      org-export
+                      org-example))
+      (funcall break
+               (conn-reference-page
+                 ,(format "Operate on a %s" cmd)))))
+  ( :predicate :extra "conn-org" ()
+    (or (memq cmd '(org-quote
+                    org-center
+                    org-comment
+                    org-src
+                    org-verse
+                    org-export-ascii
+                    org-export-html
+                    org-export-latex
+                    org-export
+                    org-example))
+        (cl-call-next-method))))
 
 (cl-defmethod conn-surround-do ((_cmd (eql org-quote))
                                 _arg
