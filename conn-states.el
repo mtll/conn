@@ -1070,7 +1070,7 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
 
 ;;;;; Definitions
 
-(defun conn--define-state (name parents properties)
+(defun define--conn-state (name parents properties)
   (let ((props (cl-loop with kvs = properties
                         for (k v) on kvs by #'cddr
                         collect (cons k v))))
@@ -1155,7 +1155,7 @@ can only be changed by redefining a state and are not inherited.
        (unless (cl-loop for parent in ',parents
                         never (memq ',name (conn-state-all-parents parent)))
          (error "Cycle detected in %s inheritance hierarchy" ',name))
-       (conn--define-state
+       (define--conn-state
         ',name
         (list ,@(mapcar (lambda (p) `',(or (car-safe p) p)) parents))
         (list ,@(cl-loop for (key value) on properties by #'cddr

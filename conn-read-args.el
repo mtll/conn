@@ -672,7 +672,7 @@ be displayed in the echo area during `conn-read-args'."
            (ignore ,@(cdr (cl--generic-split-args fixed-args)))
            ,@body))))
 
-  (defun conn--define-argument-command (argument-and-command
+  (defun define--conn-argument-command (argument-and-command
                                         docstring
                                         body)
     (unless (assq :predicate body)
@@ -718,7 +718,7 @@ be displayed in the echo area during `conn-read-args'."
   (pcase argument-and-command
     (`((,_handler ,_spec) ,_cmd))
     (_ (error "Invalid argument form")))
-  (conn--define-argument-command argument-and-command docstring body))
+  (define--conn-argument-command argument-and-command docstring body))
 
 ;;;;; Anonymous Argument
 

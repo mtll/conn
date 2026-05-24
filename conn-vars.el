@@ -302,7 +302,7 @@ See also `conn-repeat'.")
 (defvar conn--remap-keymaps nil)
 
 (eval-and-compile
-  (defun conn--define-remap-keymap (description keys)
+  (defun define--conn-remap-keymap (description keys)
     (let (maps default-maps)
       (dolist (key keys)
         (pcase key
@@ -333,7 +333,7 @@ See also `conn-repeat'.")
   `(progn
      (cl-pushnew ',name conn--remap-keymaps)
      (defvar ,name
-       ,(conn--define-remap-keymap description keys)
+       ,(define--conn-remap-keymap description keys)
        ,description)))
 
 ;; A hack but it allows the binding display in quick ref looks nice

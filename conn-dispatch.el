@@ -3136,7 +3136,7 @@ buffer."
   :abstract t)
 
 (eval-and-compile
-  (defun conn--define-target-finder (name
+  (defun define--conn-target-finder (name
                                      superclasses
                                      slots
                                      docstring
@@ -3185,7 +3185,7 @@ buffer."
   (let (docstring)
     (when (stringp (car rest))
       (setf docstring (pop rest)))
-    (conn--define-target-finder name superclasses slots docstring rest)))
+    (define--conn-target-finder name superclasses slots docstring rest)))
 
 (defun conn-add-update-handler (target-finder function &optional depth)
   (unless depth (setf depth 0))
