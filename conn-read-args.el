@@ -297,12 +297,11 @@ This skips executing the body of the `conn-read-args' form entirely."
 
 (defconst conn--read-args-timer (timer-create))
 
-(defvar conn--read-args-maps nil)
-
-(defvar conn-wincontrol-mode)
-(defvar conn-wincontrol-one-command-mode)
-
-(defvar conn-read-args-around-function #'funcall)
+(defvar conn-read-args-around-function
+  (lambda (cont)
+    (dlet ((conn-wincontrol-mode nil)
+           (conn-wincontrol-one-command-mode nil))
+      (funcall cont))))
 
 (cl-defun conn--read-args (state
                            arglist
@@ -323,31 +322,24 @@ This skips executing the body of the `conn-read-args' form entirely."
         (prompt (or prompt "Read Args"))
         (quit-event (car (last (current-input-mode))))
         (argument-values nil)
-        (conn--read-args-maps nil)
         (keyseq nil)
         (timer nil))
     (cl-macrolet ((with-keymaps (&rest body)
-                    `(prog1
-                         (progn
-                           (setf (cdar conn--read-args-maps)
-                                 (thread-last
-                                   (mapcar #'conn-argument-compose-keymap
-                                           arguments)
-                                   (cons overriding-map)
-                                   (delq nil)
-                                   (make-composed-keymap)))
-                           (conn->f emulation-mode-map-alists
-                             (delq 'conn--read-args-maps)
-                             (cons 'conn--read-args-maps))
-                           (let ((overriding-terminal-local-map
-                                  (make-composed-keymap
-                                   (let (minor-mode-overriding-map-alist
-                                         minor-mode-map-alist)
-                                     (current-minor-mode-maps)))))
-                             ,@body))
-                       (cl-callf2 delq
-                           'conn--read-args-maps
-                           emulation-mode-map-alists))))
+                    `(let* ((emulation-mode-map-alists
+                             `(((,state
+                                 ,@(thread-last
+                                     (mapcar #'conn-argument-compose-keymap
+                                             arguments)
+                                     (cons overriding-map)
+                                     (delq nil)
+                                     (make-composed-keymap))))
+                               ,@emulation-mode-map-alists))
+                            (overriding-terminal-local-map
+                             (make-composed-keymap
+                              (let (minor-mode-overriding-map-alist
+                                    minor-mode-map-alist)
+                                (current-minor-mode-maps)))))
+                       ,@body)))
       (cl-labels
           ((timer-function ()
              (setf timer nil)
@@ -463,12 +455,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (conn--read-args-error-flag nil)
                      (conn--read-args-message nil)
                      (conn--read-args-message-timeout nil)
-                     (conn-wincontrol-mode nil)
-                     (conn-wincontrol-one-command-mode nil)
-                     (emulation-mode-map-alists emulation-mode-map-alists)
                      (inhibit-message t)
                      (minibuffer-message-clear-timeout nil))
-                 (setf conn--read-args-maps `((,state . nil)))
                  (while (continue-p)
                    (catch 'conn-read-args-error
                      (execute-command
@@ -489,7 +477,8 @@ This skips executing the body of the `conn-read-args' form entirely."
              (let ((conn-read-args-last-prefix nil))
                (if around
                    (funcall around
-                            (lambda () (funcall conn-read-args-around-function #'loop)))
+                            (lambda ()
+                              (funcall conn-read-args-around-function #'loop)))
                  (funcall conn-read-args-around-function #'loop))
                (setf argument-values (mapcar #'conn-argument-payload
                                              arglist)))
