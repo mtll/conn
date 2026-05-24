@@ -252,46 +252,46 @@
            (unless curr-file (next))
            (conn-kapply-consume-region (pop curr-file))))))))
 
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql conn-consult-line-thing)))
-  "Invert the prefix argument."
-  ( :update (_break)
-    (conn-with-dispatch-suspended
-      (call-interactively #'conn-consult-line-thing))
-    (conn-dispatch-redisplay)))
+                                      "Invert the prefix argument."
+                                      ( :update (_break)
+                                        (conn-with-dispatch-suspended
+                                          (call-interactively #'conn-consult-line-thing))
+                                        (conn-dispatch-redisplay)))
 
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql conn-consult-ripgrep-thing)))
-  "Invert the prefix argument."
-  ( :update (_break)
-    (conn-with-dispatch-suspended
-      (call-interactively #'conn-consult-ripgrep-thing))
-    (conn-dispatch-redisplay)))
+                                      "Invert the prefix argument."
+                                      ( :update (_break)
+                                        (conn-with-dispatch-suspended
+                                          (call-interactively #'conn-consult-ripgrep-thing))
+                                        (conn-dispatch-redisplay)))
 
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-ripgrep)))
-  "Invert the prefix argument."
-  ( :update (_break)
-    (conn-with-dispatch-suspended
-      (call-interactively #'consult-ripgrep))
-    (conn-dispatch-redisplay)))
+                                      "Invert the prefix argument."
+                                      ( :update (_break)
+                                        (conn-with-dispatch-suspended
+                                          (call-interactively #'consult-ripgrep))
+                                        (conn-dispatch-redisplay)))
 
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-line)))
-  "Invert the prefix argument."
-  ( :update (_break)
-    (conn-with-dispatch-suspended
-      (call-interactively #'consult-line))
-    (conn-dispatch-redisplay)))
+                                      "Invert the prefix argument."
+                                      ( :update (_break)
+                                        (conn-with-dispatch-suspended
+                                          (call-interactively #'consult-line))
+                                        (conn-dispatch-redisplay)))
 
-(conn-define-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-imenu)))
-  "Invert the prefix argument."
-  ( :update (_break)
-    (declare-function consult-imenu "consult-imenu")
-    (conn-with-dispatch-suspended
-      (call-interactively #'consult-imenu))
-    (conn-dispatch-redisplay)))
+                                      "Invert the prefix argument."
+                                      ( :update (_break)
+                                        (declare-function consult-imenu "consult-imenu")
+                                        (conn-with-dispatch-suspended
+                                          (call-interactively #'consult-imenu))
+                                        (conn-dispatch-redisplay)))
 
 (provide 'conn-consult)
 

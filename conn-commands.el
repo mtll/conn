@@ -1250,7 +1250,7 @@ Currently selected window remains selected afterwards."
                 (&aux
                  (keymap conn-grep-directory-argument-map)))))
 
-(conn-define-argument-command ((arg conn-grep-directory-argument)
+(define-conn-argument-command ((arg conn-grep-directory-argument)
                                (cmd (eql conn-grep-directory)))
   "Search for thing within a directory."
   ( :update (break)
@@ -1283,7 +1283,7 @@ Currently selected window remains selected afterwards."
                               (keymap conn-grep-files-argument-map)
                               (value "*.*")))))
 
-(conn-define-argument-command ((arg conn-grep-files-argument)
+(define-conn-argument-command ((arg conn-grep-files-argument)
                                (cmd (eql conn-grep-files)))
   "Search for thing in files matching wildcard."
   ( :update (break)
@@ -1303,7 +1303,7 @@ Currently selected window remains selected afterwards."
 
 (defvar-keymap conn-grep-confirm-argument-map)
 
-(conn-define-state conn-rgrep-state (conn-read-thing-state)
+(define-conn-state conn-rgrep-state (conn-read-thing-state)
   :lighter "RGREP")
 
 (defun conn-rgrep-thing (thing arg transform &optional files dir confirm)
@@ -1338,7 +1338,7 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-occur-context-argument-map)
 (defvar-keymap conn-occur-restrict-to-thing-map)
 
-(conn-define-state conn-occur-state (conn-read-thing-state)
+(define-conn-state conn-occur-state (conn-read-thing-state)
   :lighter "OCCUR")
 
 (defun conn-occur-thing (thing arg transform &optional nlines restrict)
@@ -1386,7 +1386,7 @@ negative then only display that many context lines before each line."))
 
 ;;;;; Mark
 
-(conn-define-state conn-mark-thing-state (conn-read-thing-state)
+(define-conn-state conn-mark-thing-state (conn-read-thing-state)
   :lighter "MARK")
 
 (cl-defstruct (conn-mark-thing-argument
@@ -1394,7 +1394,7 @@ negative then only display that many context lines before each line."))
                ( :constructor conn-mark-thing-argument
                  (&aux (required t)))))
 
-(conn-define-argument-command ((arg conn-mark-thing-argument)
+(define-conn-argument-command ((arg conn-mark-thing-argument)
                                (cmd (eql conn-exchange-mark-command)))
   "Activate the mark and exchange the point and mark.")
 
@@ -1432,7 +1432,7 @@ negative then only display that many context lines before each line."))
   (cl-call-next-method)
   (rectangle-mark-mode 1))
 
-(conn-define-state conn-mark-dispatch-state (conn-dispatch-bounds-state))
+(define-conn-state conn-mark-dispatch-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -1516,7 +1516,7 @@ negative then only display that many context lines before each line."))
 
 ;;;;; Yank Replace
 
-(conn-define-state conn-yank-replace-state (conn-read-thing-state)
+(define-conn-state conn-yank-replace-state (conn-read-thing-state)
   "State for `conn-yank-replace'."
   :lighter "YANK-REPLACE")
 
@@ -1651,7 +1651,7 @@ negative then only display that many context lines before each line."))
                (yank))))))
     (cl-call-next-method)))
 
-(conn-define-state conn-yank-replace-dispatch-state (conn-dispatch-bounds-state))
+(define-conn-state conn-yank-replace-dispatch-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-yank-replace-do ((_thing (conn-thing dispatch))
                                     arg
@@ -1848,7 +1848,7 @@ with `conn-check-bounds' before deleting."
 
 (defvar conn--replace-bounds nil)
 
-(conn-define-state conn-replace-state (conn-read-thing-state)
+(define-conn-state conn-replace-state (conn-read-thing-state)
   "State for `conn-replace'."
   :lighter "REPLACE")
 
@@ -1887,7 +1887,7 @@ with `conn-check-bounds' before deleting."
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command ((arg conn-replace-thing-argument)
+(define-conn-argument-command ((arg conn-replace-thing-argument)
                                (cmd (eql kapply)))
   "Kapply on matches.")
 
@@ -2046,7 +2046,7 @@ with `conn-check-bounds' before deleting."
                              from
                              to))
 
-(conn-define-argument-command ((arg conn-replace-thing-argument)
+(define-conn-argument-command ((arg conn-replace-thing-argument)
                                (cmd (eql project)))
   "Replace matches within the current project.")
 
@@ -2091,7 +2091,7 @@ with `conn-check-bounds' before deleting."
                              from
                              to))
 
-(conn-define-argument-command ((arg conn-replace-thing-argument)
+(define-conn-argument-command ((arg conn-replace-thing-argument)
                                (cmd (eql multi-file)))
   "Replace matches within multiple files.")
 
@@ -2147,7 +2147,7 @@ with `conn-check-bounds' before deleting."
   (without-restriction
     (cl-call-next-method)))
 
-(conn-define-argument-command ((arg conn-replace-thing-argument)
+(define-conn-argument-command ((arg conn-replace-thing-argument)
                                (cmd (eql conn-emacs-state)))
   "Call `conn-change-thing'.")
 
@@ -2196,7 +2196,7 @@ with `conn-check-bounds' before deleting."
                                    from
                                    to))
 
-      (conn-define-argument-command ((arg conn-replace-thing-argument)
+      (define-conn-argument-command ((arg conn-replace-thing-argument)
                                      (cmd (eql as-diff-in-project)))
         "Replaces matches as a diff in the current project.")
 
@@ -2230,7 +2230,7 @@ with `conn-check-bounds' before deleting."
                                    from
                                    to))
 
-      (conn-define-argument-command ((arg conn-replace-thing-argument)
+      (define-conn-argument-command ((arg conn-replace-thing-argument)
                                      (cmd (eql as-diff)))
         "Replace matches as a diff.")
 
@@ -2270,7 +2270,7 @@ with `conn-check-bounds' before deleting."
                                      from
                                      to)))
 
-      (conn-define-argument-command ((arg conn-replace-thing-argument)
+      (define-conn-argument-command ((arg conn-replace-thing-argument)
                                      (cmd (eql multi-file-as-diff)))
         "Replace matches in multiple files as a diff.")))
 
@@ -2341,7 +2341,7 @@ For more information about how the replacement is carried out see
 
 ;;;;; Isearch
 
-(conn-define-state conn-isearch-state (conn-read-thing-state)
+(define-conn-state conn-isearch-state (conn-read-thing-state)
   :lighter "ISEARCH-IN")
 
 (conn-add-keymap-reference
@@ -2622,7 +2622,7 @@ Exiting the recursive edit will resume the isearch."
 
 ;;;;; Transpose
 
-(conn-define-state conn-transpose-state (conn-read-thing-state)
+(define-conn-state conn-transpose-state (conn-read-thing-state)
   :lighter "TRANSPOSE")
 
 (conn-add-keymap-reference
@@ -2632,7 +2632,7 @@ Exiting the recursive edit will resume the isearch."
    :depth -10
    ((("symbol" forward-symbol)))))
 
-(conn-define-state conn-dispatch-transpose-state
+(define-conn-state conn-dispatch-transpose-state
     (conn-dispatch-bounds-state))
 
 (defun conn-transpose-repeat ()
@@ -2764,7 +2764,7 @@ Exiting the recursive edit will resume the isearch."
     (goto-char beg)
     (conn--dispatch-transpose-subr bounds1 bounds2)))
 
-(conn-define-state conn-transpose-dispatch-state (conn-dispatch-bounds-state))
+(define-conn-state conn-transpose-dispatch-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-transpose-things-do ((_thing (conn-thing dispatch))
                                         arg
@@ -2905,7 +2905,7 @@ region after a `recursive-edit'."
 
 (defvar conn-kill-reformat-default t)
 
-(conn-define-state conn-kill-state (conn-read-thing-state)
+(define-conn-state conn-kill-state (conn-read-thing-state)
   :lighter "KILL")
 
 (defvar-keymap conn-kill-append-argument-map)
@@ -2955,7 +2955,7 @@ place."))
      (funcall break))
     (_ (cl-call-next-method))))
 
-(conn-define-argument-command ((arg conn-kill-append-argument)
+(define-conn-argument-command ((arg conn-kill-append-argument)
                                (cmd (eql append-on-repeat)))
   "Set APPEND to 'repeat.
 If APPEND is 'repeat then the first invocation sets the place which is
@@ -3053,7 +3053,7 @@ that place.")
                   &aux
                   (required t)))))
 
-(conn-define-argument-command ((arg conn-kill-thing-argument)
+(define-conn-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql buffer-filename)))
   "Copy buffer filename.
 
@@ -3062,19 +3062,19 @@ conn-bounds-after-point:  file name without directory component
 conn-bounds-before-point: only the directory component of file name
 conn-bounds-trim:         file name sans extension")
 
-(conn-define-argument-command ((arg conn-kill-thing-argument)
+(define-conn-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql project-filename)))
   "Copy project filename.")
 
-(conn-define-argument-command ((arg conn-kill-thing-argument)
+(define-conn-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql keep-lines)))
   "Call `keep-lines'.")
 
-(conn-define-argument-command ((arg conn-kill-thing-argument)
+(define-conn-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql kill-matching-lines)))
   "Kill matching lines.")
 
-(conn-define-argument-command ((arg conn-kill-thing-argument)
+(define-conn-argument-command ((arg conn-kill-thing-argument)
                                (cmd (eql copy)))
   "Call `conn-copy-thing'.")
 
@@ -3493,7 +3493,7 @@ hook, which see."
 
 (defvar-keymap conn-kill-dispatch-append-map)
 
-(conn-define-state conn-kill-dispatch-state (conn-dispatch-bounds-state))
+(define-conn-state conn-kill-dispatch-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-kill-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -3772,7 +3772,7 @@ hook, which see."
 
 ;;;;; Copy
 
-(conn-define-state conn-copy-state (conn-read-thing-state)
+(define-conn-state conn-copy-state (conn-read-thing-state)
   :lighter "COPY")
 
 (conn-add-keymap-reference
@@ -3836,15 +3836,15 @@ hook, which see."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
-(conn-define-argument-command ((arg conn-copy-thing-argument)
+(define-conn-argument-command ((arg conn-copy-thing-argument)
                                (cmd (eql buffer-filename)))
   "Copy buffer filename.")
 
-(conn-define-argument-command ((arg conn-copy-thing-argument)
+(define-conn-argument-command ((arg conn-copy-thing-argument)
                                (cmd (eql project-filename)))
   "Copy project filename.")
 
-(conn-define-argument-command ((arg conn-copy-thing-argument)
+(define-conn-argument-command ((arg conn-copy-thing-argument)
                                (cmd (eql copy-matching-lines)))
   "Copy matching lines.")
 
@@ -3999,7 +3999,7 @@ that place."
         (message "Yanked \"%s\"" str))
     (user-error "Buffer does not have a project")))
 
-(conn-define-state conn-copy-dispatch-state (conn-dispatch-bounds-state))
+(define-conn-state conn-copy-dispatch-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-copy-thing-do ((_thing (conn-thing dispatch))
                                   arg
@@ -4094,7 +4094,7 @@ that place."
 
 ;;;;; How Many
 
-(conn-define-state conn-how-many-state (conn-read-thing-state)
+(define-conn-state conn-how-many-state (conn-read-thing-state)
   :lighter "HOW-MANY")
 
 (defvar-keymap conn-how-many-in-thing-argument-map)
@@ -4148,7 +4148,7 @@ The regexp is read interactively."
 
 ;;;;; Comment
 
-(conn-define-state conn-comment-state (conn-read-thing-state)
+(define-conn-state conn-comment-state (conn-read-thing-state)
   :lighter "COMMENT")
 
 (cl-defgeneric conn-comment-thing-do (thing arg transform)
@@ -4194,7 +4194,7 @@ For how they are used to define the region see `conn-bounds-of' and
 
 ;;;;; Duplicate
 
-(conn-define-state conn-duplicate-state (conn-read-thing-state)
+(define-conn-state conn-duplicate-state (conn-read-thing-state)
   :lighter "DUPLICATE")
 
 (defvar-keymap conn-duplicate-repeat-map)
@@ -4595,7 +4595,7 @@ Only available during repeating duplicate."
                            (list 'region nil)))
                   (set-flag (use-region-p))))))
 
-(conn-define-argument-command ((arg conn-duplicate-thing-argument)
+(define-conn-argument-command ((arg conn-duplicate-thing-argument)
                                (cmd (eql copy-from-above-command)))
   "Call `copy-from-above-command'.")
 
@@ -4618,7 +4618,7 @@ Interactively REPEAT is given by the prefix argument."
 
 ;;;;; Change
 
-(conn-define-state conn-change-state (conn-read-thing-state)
+(define-conn-state conn-change-state (conn-read-thing-state)
   :lighter "CHANGE")
 
 (conn-add-keymap-reference
@@ -4648,25 +4648,25 @@ Interactively REPEAT is given by the prefix argument."
                                  (not (or defining-kbd-macro
                                           executing-kbd-macro))))))))
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql conn-emacs-state-overwrite-binary)))
   "Enter emacs state and `overwrite-mode-binary'.")
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql conn-emacs-state-overwrite)))
   "Enter emacs state and `overwrite-mode'.")
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql conn-replace)))
   "Call `conn-replace-thing'.")
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql yank-replace)))
   "Call `conn-yank-replace'.")
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql conn-emacs-state-record-insert)))
-  "Enter emacs state with a record region.")
+                              "Enter emacs state with a record region.")
 
 (cl-defgeneric conn-change-thing-do (thing
                                      arg
@@ -4793,7 +4793,7 @@ Interactively REPEAT is given by the prefix argument."
          thing nil nil nil nil kbd-macro-query))
     (cl-call-next-method)))
 
-(conn-define-state conn-dispatch-change-state (conn-dispatch-bounds-state))
+(define-conn-state conn-dispatch-change-state (conn-dispatch-bounds-state))
 
 (cl-defmethod conn-change-thing-do ((_thing (conn-thing dispatch))
                                     arg
@@ -5027,8 +5027,8 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 
 ;;;;;; Record Insertion
 
-(conn-define-state conn-record-set-region-state (conn-read-thing-state)
-  :lighter "SETREC")
+(define-conn-state conn-record-set-region-state (conn-read-thing-state)
+                   :lighter "SETREC")
 
 (defun conn-record-set-region ()
   (interactive)
@@ -5085,8 +5085,8 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 
 ;;;;; Indent
 
-(conn-define-state conn-indent-state (conn-read-thing-state)
-  :lighter "INDENT")
+(define-conn-state conn-indent-state (conn-read-thing-state)
+                   :lighter "INDENT")
 
 (defvar-keymap conn-indent-cleanup-whitespace-map)
 
@@ -5268,8 +5268,8 @@ If CLEANUP-WHITESPACE is non-nil then also run
   (set-marker (conn-narrowing-end narrowing) nil)
   (set-marker (conn-narrowing-point narrowing) nil))
 
-(conn-define-state conn-narrow-state (conn-read-thing-state)
-  :lighter "NARROW")
+(define-conn-state conn-narrow-state (conn-read-thing-state)
+                   :lighter "NARROW")
 
 (cl-defmethod conn-bounds-of ((_thing (conn-thing narrow-ring))
                               _arg)
@@ -5492,8 +5492,8 @@ The region is added to `conn-narrow-ring'."
 
 ;;;;; Join Lines
 
-(conn-define-state conn-join-lines-state (conn-read-thing-state)
-  :lighter "JOIN")
+(define-conn-state conn-join-lines-state (conn-read-thing-state)
+                   :lighter "JOIN")
 
 (cl-defstruct (conn-join-lines-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -5548,8 +5548,8 @@ subregion."
 
 (defvar-keymap conn-shell-command-replace-map)
 
-(conn-define-state conn-shell-command-state (conn-read-thing-state)
-  :lighter "SHELL")
+(define-conn-state conn-shell-command-state (conn-read-thing-state)
+                   :lighter "SHELL")
 
 (cl-defstruct (conn-shell-command-on-thing-argument
                (:include conn-thing-with-subregions-argument)
@@ -5621,8 +5621,8 @@ subregion."
 
 ;;;;; Case
 
-(conn-define-state conn-case-state (conn-read-thing-state)
-  :lighter "CASE")
+(define-conn-state conn-case-state (conn-read-thing-state)
+                   :lighter "CASE")
 
 (cl-defstruct (conn-case-thing-argument
                (:include conn-thing-argument)
@@ -5656,9 +5656,9 @@ subregion."
      ;;   (-1 (goto-char beg)))
      )))
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql upcase)))
-  "Change case of thing to UPPER CASE.")
+                              "Change case of thing to UPPER CASE.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql upcase))
                                     arg
@@ -5671,9 +5671,9 @@ subregion."
        (transform (conn-transform-argument transform)))
     (conn-case-thing-do thing arg transform #'upcase-region)))
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql downcase)))
-  "Change case of thing to lower case.")
+                              "Change case of thing to lower case.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql downcase))
                                     arg
@@ -5686,9 +5686,9 @@ subregion."
        (transform (conn-transform-argument transform)))
     (conn-case-thing-do thing arg transform #'downcase-region)))
 
-(conn-define-argument-command ((arg conn-change-thing-argument)
+(define-conn-argument-command ((arg conn-change-thing-argument)
                                (cmd (eql capitalize)))
-  "Change case of thing to Capitalize.")
+                              "Change case of thing to Capitalize.")
 
 (cl-defmethod conn-change-thing-do ((_thing (eql capitalize))
                                     arg

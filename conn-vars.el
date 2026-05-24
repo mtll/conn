@@ -269,7 +269,7 @@ See also `conn-repeat'.")
 
 (defvar conn--key-remaps nil)
 
-(defmacro conn-define-key-remap (name
+(defmacro define-conn-key-remap (name
                                  from-keys
                                  &optional
                                  without-conn-maps
@@ -280,24 +280,24 @@ See also `conn-repeat'.")
        (conn-remap-key ,from-keys ,without-conn-maps ,no-accept-default))
      (cl-pushnew ',name conn--key-remaps)))
 
-(conn-define-key-remap conn-forward-word-remap conn-forward-word-keys t)
-(conn-define-key-remap conn-forward-sexp-remap conn-forward-sexp-keys t)
-(conn-define-key-remap conn-previous-line-remap conn-previous-line-keys t)
-(conn-define-key-remap conn-backward-paragraph-remap conn-backward-paragraph-keys t)
-(conn-define-key-remap conn-forward-sentence-remap conn-forward-sentence-keys t)
-(conn-define-key-remap conn-backward-sentence-remap conn-backward-sentence-keys t)
-(conn-define-key-remap conn-down-list-remap conn-down-list-keys t)
-(conn-define-key-remap conn-backward-up-list-remap conn-backward-up-list-keys t)
-(conn-define-key-remap conn-forward-list-remap conn-forward-list-keys t)
-(conn-define-key-remap conn-backward-list-remap conn-backward-list-keys t)
-(conn-define-key-remap conn-backward-word-remap conn-backward-word-keys t)
-(conn-define-key-remap conn-backward-char-remap conn-backward-char-keys t)
-(conn-define-key-remap conn-forward-paragraph-remap conn-forward-paragraph-keys t)
-(conn-define-key-remap conn-next-line-remap conn-next-line-keys t)
-(conn-define-key-remap conn-forward-char-remap conn-forward-char-keys t)
-(conn-define-key-remap conn-end-of-defun-remap conn-end-of-defun-keys t)
-(conn-define-key-remap conn-beginning-of-defun-remap conn-beginning-of-defun-keys t)
-(conn-define-key-remap conn-backward-sexp-remap conn-backward-sexp-keys t)
+(define-conn-key-remap conn-forward-word-remap conn-forward-word-keys t)
+(define-conn-key-remap conn-forward-sexp-remap conn-forward-sexp-keys t)
+(define-conn-key-remap conn-previous-line-remap conn-previous-line-keys t)
+(define-conn-key-remap conn-backward-paragraph-remap conn-backward-paragraph-keys t)
+(define-conn-key-remap conn-forward-sentence-remap conn-forward-sentence-keys t)
+(define-conn-key-remap conn-backward-sentence-remap conn-backward-sentence-keys t)
+(define-conn-key-remap conn-down-list-remap conn-down-list-keys t)
+(define-conn-key-remap conn-backward-up-list-remap conn-backward-up-list-keys t)
+(define-conn-key-remap conn-forward-list-remap conn-forward-list-keys t)
+(define-conn-key-remap conn-backward-list-remap conn-backward-list-keys t)
+(define-conn-key-remap conn-backward-word-remap conn-backward-word-keys t)
+(define-conn-key-remap conn-backward-char-remap conn-backward-char-keys t)
+(define-conn-key-remap conn-forward-paragraph-remap conn-forward-paragraph-keys t)
+(define-conn-key-remap conn-next-line-remap conn-next-line-keys t)
+(define-conn-key-remap conn-forward-char-remap conn-forward-char-keys t)
+(define-conn-key-remap conn-end-of-defun-remap conn-end-of-defun-keys t)
+(define-conn-key-remap conn-beginning-of-defun-remap conn-beginning-of-defun-keys t)
+(define-conn-key-remap conn-backward-sexp-remap conn-backward-sexp-keys t)
 
 (defvar conn--remap-keymaps nil)
 
@@ -328,7 +328,7 @@ See also `conn-repeat'.")
                        (make-composed-keymap
                         (delq nil (list ,@(nreverse maps)))))))))
 
-(defmacro conn-define-remap-keymap (name description &rest keys)
+(defmacro define-conn-remap-keymap (name description &rest keys)
   (declare (indent 2))
   `(progn
      (cl-pushnew ',name conn--remap-keymaps)
@@ -353,31 +353,31 @@ See also `conn-repeat'.")
      (cl-loop for remap in conn--key-remaps
               do (setf (nth 2 (symbol-value remap)) nil))))
 
-(conn-define-remap-keymap conn-search-remap
-    "Conn Search Map"
-  [conn-search-map]
-  conn-search-map
-  (:without-conn-maps "M-s"))
+(define-conn-remap-keymap conn-search-remap
+                          "Conn Search Map"
+                          [conn-search-map]
+                          conn-search-map
+                          (:without-conn-maps "M-s"))
 
-(conn-define-remap-keymap conn-goto-remap
-    "Conn Goto Map"
-  [conn-goto-map]
-  conn-goto-map
-  (:without-conn-maps "M-g"))
+(define-conn-remap-keymap conn-goto-remap
+                          "Conn Goto Map"
+                          [conn-goto-map]
+                          conn-goto-map
+                          (:without-conn-maps "M-g"))
 
-(conn-define-remap-keymap conn-thing-remap
-    "Conn Thing Map"
-  [conn-thing-map]
-  conn-default-thing-map)
+(define-conn-remap-keymap conn-thing-remap
+                          "Conn Thing Map"
+                          [conn-thing-map]
+                          conn-default-thing-map)
 
-(conn-define-remap-keymap conn-thing-inner-remap
-    "Conn Inner Thing Map"
-  [conn-inner-thing-map]
-  conn-default-inner-thing-map)
+(define-conn-remap-keymap conn-thing-inner-remap
+                          "Conn Inner Thing Map"
+                          [conn-inner-thing-map]
+                          conn-default-inner-thing-map)
 
-(conn-define-remap-keymap conn-edit-remap
-    "Conn Edit Map"
-  [conn-edit-map]
-  conn-default-edit-map)
+(define-conn-remap-keymap conn-edit-remap
+                          "Conn Edit Map"
+                          [conn-edit-map]
+                          conn-default-edit-map)
 
 (provide 'conn-vars)

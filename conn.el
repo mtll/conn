@@ -152,9 +152,9 @@
 (cl-pushnew (list nil (concat "^\\s-*("
                               (eval-when-compile
                                 (regexp-opt
-                                 '("conn-define-state"
-                                   "conn-define-kapplier"
-                                   "conn-define-target-finder")
+                                 '("define-conn-state"
+                                   "define-conn-kapplier"
+                                   "define-conn-target-finder")
                                  t))
                               "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
                   2)
@@ -164,8 +164,8 @@
                   (concat "^\\s-*("
                           (eval-when-compile
                             (regexp-opt
-                             '("conn-define-key-remap"
-                               "conn-define-remap-keymap")
+                             '("define-conn-key-remap"
+                               "define-conn-remap-keymap")
                              t))
                           "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
                   2)

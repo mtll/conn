@@ -82,9 +82,9 @@
 
 ;;;;; Bounds
 
-(conn-define-state conn-surround-with-state ()
-  :lighter "WITH"
-  :full-keymap t)
+(define-conn-state conn-surround-with-state ()
+                   :lighter "WITH"
+                   :full-keymap t)
 
 (let ((map (conn-get-state-map 'conn-surround-with-state)))
   (set-char-table-range (nth 1 map)
@@ -102,8 +102,8 @@
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
 
-(conn-define-state conn-surrounding-state (conn-surround-with-state)
-  :lighter "SURROUNDING")
+(define-conn-state conn-surrounding-state (conn-surround-with-state)
+                   :lighter "SURROUNDING")
 
 (defvar-keymap conn-surround-property-argument-map
   "w" :whole
@@ -121,13 +121,13 @@
                   &aux
                   (keymap conn-surround-property-argument-map)))))
 
-(conn-define-argument-command ((arg conn-surround-property-argument)
+(define-conn-argument-command ((arg conn-surround-property-argument)
                                (cmd (eql :whole)))
-  "The whole region.")
+                              "The whole region.")
 
-(conn-define-argument-command ((arg conn-surround-property-argument)
+(define-conn-argument-command ((arg conn-surround-property-argument)
                                (cmd (eql :inner)))
-  "The inner region.")
+                              "The inner region.")
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd
@@ -150,8 +150,8 @@
                   (required t)
                   (annotation "surrounded by")))))
 
-(conn-define-state conn-surround-bounds-state (conn-surround-with-state)
-  :lighter "SURROUND")
+(define-conn-state conn-surround-bounds-state (conn-surround-with-state)
+                   :lighter "SURROUND")
 
 (conn-register-thing 'conn-surround)
 
@@ -334,8 +334,8 @@
 
 ;;;;; Surround
 
-(conn-define-state conn-surround-thing-state (conn-read-thing-state)
-  :lighter "SURROUND")
+(define-conn-state conn-surround-thing-state (conn-read-thing-state)
+                   :lighter "SURROUND")
 
 (put 'conn-surround-overlay 'face 'region)
 (put 'conn-surround-overlay 'priority 2000)
@@ -514,8 +514,8 @@
 
 ;;;;;; Change Surround
 
-(conn-define-state conn-change-surround-state (conn-surround-with-state)
-  :lighter "CHG-SURROUND")
+(define-conn-state conn-change-surround-state (conn-surround-with-state)
+                   :lighter "CHG-SURROUND")
 
 (cl-defstruct (conn-change-surround-argument
                (:include conn-argument)
@@ -655,8 +655,8 @@
 
 ;;;; Adjust Surround
 
-(conn-define-state conn-adjust-surround-state (conn-change-surround-state)
-  :lighter "ADJUST")
+(define-conn-state conn-adjust-surround-state (conn-change-surround-state)
+                   :lighter "ADJUST")
 
 (defvar-keymap conn-surround-trim-argument-map)
 

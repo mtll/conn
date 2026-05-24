@@ -501,7 +501,7 @@
         (<= (car bd) (point) (cdr bd)))))
    'conn-ts-thing))
 
-(conn-define-target-finder conn-ts-query-targets
+(define-conn-target-finder conn-ts-query-targets
     ()
     ((things :initarg :things)
      (region-predicate :initarg :region-predicate)
@@ -581,7 +581,7 @@
                     (push (make-bounds (cons beg end) type-things)
                           (alist-get beg bounds-alist))))))))))
 
-(conn-define-target-finder conn-ts-all-things
+(define-conn-target-finder conn-ts-all-things
     ()
     ((thing :initarg :thing)
      (window-predicate

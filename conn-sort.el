@@ -22,8 +22,8 @@
 (require 'sort)
 (require 'conn)
 
-(conn-define-state conn-sort-state (conn-read-thing-state)
-  :lighter "SORT")
+(define-conn-state conn-sort-state (conn-read-thing-state)
+                   :lighter "SORT")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-sort-state)
@@ -55,21 +55,21 @@
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command ((arg conn-sort-thing-argument)
+(define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-numeric-fields)))
-  "Sort by numeric fields.")
+                              "Sort by numeric fields.")
 
-(conn-define-argument-command ((arg conn-sort-thing-argument)
+(define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-fields)))
-  "Sort by fields.")
+                              "Sort by fields.")
 
-(conn-define-argument-command ((arg conn-sort-thing-argument)
+(define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-columns)))
-  "Sort columns.")
+                              "Sort columns.")
 
-(conn-define-argument-command ((arg conn-sort-thing-argument)
+(define-conn-argument-command ((arg conn-sort-thing-argument)
                                (cmd (eql sort-regexp-fields)))
-  "Sort regexp fields.")
+                              "Sort regexp fields.")
 
 (defun conn--sort-in-bounds (bounds
                              transform

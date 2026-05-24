@@ -133,9 +133,9 @@ Expansions and contractions are provided by functions in
 
 ;;;;; Bounds of expansion
 
-(conn-define-state conn-expand-state ()
-  "State for expanding."
-  :lighter "EXPAND")
+(define-conn-state conn-expand-state ()
+                   "State for expanding."
+                   :lighter "EXPAND")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
@@ -168,38 +168,38 @@ Expansions and contractions are provided by functions in
      :other-end :no-other-end)
     bounds))
 
-(conn-define-target-finder conn-expansion-targets
-    (conn-dispatch-focus-mixin)
-    ((hide :initform nil :initarg :hide)
-     (expansions :initform nil)
-     (context-lines
-      :initform 1
-      :initarg :context-lines)
-     (window-predicate
-      :initform (lambda (win) (eq win (selected-window)))))
-  ( :default-update-handler (state &optional len)
-    (let* ((bounds nil)
-           (thing
-            (conn-anonymous-thing
-              '(region)
-              :multi-thing-p (lambda (_self target)
-                               (length> (alist-get (overlay-start target) bounds)
-                                        1))
-              :pretty-print ( :method (self) "Expansion")
-              :bounds-op ( :method (_ _)
-                           (conn-multi-thing-select
-                            (alist-get (point) bounds))))))
-      (pcase-dolist ((and cons `(,beg . ,end))
-                     (with-memoization (oref state expansions)
-                       (if (region-active-p)
-                           (conn--expand-create-expansions)
-                         (push-mark nil t t)
-                         (unwind-protect
-                             (conn--expand-create-expansions)
-                           (deactivate-mark)))))
-        (push (conn-make-bounds 'region nil cons)
-              (alist-get beg bounds))
-        (conn-make-target-overlay beg 0 :thing thing)))))
+(define-conn-target-finder conn-expansion-targets
+                           (conn-dispatch-focus-mixin)
+                           ((hide :initform nil :initarg :hide)
+                            (expansions :initform nil)
+                            (context-lines
+                             :initform 1
+                             :initarg :context-lines)
+                            (window-predicate
+                             :initform (lambda (win) (eq win (selected-window)))))
+                           ( :default-update-handler (state &optional len)
+                             (let* ((bounds nil)
+                                    (thing
+                                     (conn-anonymous-thing
+                                       '(region)
+                                       :multi-thing-p (lambda (_self target)
+                                                        (length> (alist-get (overlay-start target) bounds)
+                                                                 1))
+                                       :pretty-print ( :method (self) "Expansion")
+                                       :bounds-op ( :method (_ _)
+                                                    (conn-multi-thing-select
+                                                     (alist-get (point) bounds))))))
+                               (pcase-dolist ((and cons `(,beg . ,end))
+                                              (with-memoization (oref state expansions)
+                                                (if (region-active-p)
+                                                    (conn--expand-create-expansions)
+                                                  (push-mark nil t t)
+                                                  (unwind-protect
+                                                      (conn--expand-create-expansions)
+                                                    (deactivate-mark)))))
+                                 (push (conn-make-bounds 'region nil cons)
+                                       (alist-get beg bounds))
+                                 (conn-make-target-overlay beg 0 :thing thing)))))
 
 (cl-defmethod conn-target-finder-select ((target-finder conn-expansion-targets))
   (conn-with-dispatch-handlers

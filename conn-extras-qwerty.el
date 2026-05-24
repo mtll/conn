@@ -84,19 +84,19 @@
   "w" 'conn-dispatch-dired-kill-line
   "d" 'conn-dispatch-dired-kill-subdir)
 
-(conn-define-remap-keymap conn-dired-regexp-remap
-    "Conn Dired Regexp Map"
-  "%")
+(define-conn-remap-keymap conn-dired-regexp-remap
+                          "Conn Dired Regexp Map"
+                          "%")
 
-(conn-define-remap-keymap conn-dired-mark-remap
-    "Conn Dired Mark Map"
-  "*")
+(define-conn-remap-keymap conn-dired-mark-remap
+                          "Conn Dired Mark Map"
+                          "*")
 
-(conn-define-remap-keymap conn-dired-search-remap
-    "Conn Dired Search Map"
-  [conn-dired-search-map]
-  [conn-search-map]
-  "M-s")
+(define-conn-remap-keymap conn-dired-search-remap
+                          "Conn Dired Search Map"
+                          [conn-dired-search-map]
+                          [conn-search-map]
+                          "M-s")
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'dired-mode)

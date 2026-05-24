@@ -232,7 +232,7 @@ See also `conn-kapply-make-region'."
 
 APPLIER is a function that will be called with one argument, an
 iterator, and should apply a keyboard on regions returned by the
-iterator.  See also `conn-define-kapplier'.
+iterator.  See also `define-conn-kapplier'.
 
 ITERATOR is a function that will be called with one argument, the state
 of the current iteration.  If the state is :cleanup then ITERATOR should
@@ -1242,7 +1242,7 @@ After kapply has finished restore the previous window configuration."
           (funcall iterator :cleanup)
           (run-hooks 'conn-kmacro-apply-end-hook))))))
 
-(defmacro conn-define-kapplier (name arglist &rest body)
+(defmacro define-conn-kapplier (name arglist &rest body)
   "Define a macro application function.
 
 The iterator must be the first argument in ARGLIST.
@@ -1258,7 +1258,7 @@ The iterator must be the first argument in ARGLIST.
        (conn--perform-kapply ,(car arglist)
                              (lambda (,(car arglist)) ,@exps)))))
 
-(conn-define-kapplier conn-kmacro-apply (iterator &optional count macro)
+(define-conn-kapplier conn-kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
     ((pred kmacro-p)
      (funcall macro (or count 0)))
@@ -1278,7 +1278,7 @@ The iterator must be the first argument in ARGLIST.
            (user-error "New keyboard macro not defined"))
          (kmacro-call-macro (or count 0)))))))
 
-(conn-define-kapplier conn-kmacro-apply-append (iterator &optional count skip-exec)
+(define-conn-kapplier conn-kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
     (let ((kmacro-execute-before-append t))
       (kmacro-start-macro (if skip-exec '(16) '(4))))
@@ -1290,7 +1290,7 @@ The iterator must be the first argument in ARGLIST.
       (when defining-kbd-macro (kmacro-end-macro nil)))
     (kmacro-call-macro (or count 0))))
 
-(conn-define-kapplier conn-kmacro-apply-step-edit (iterator &optional count)
+(define-conn-kapplier conn-kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
     (let* ((apply nil)
            (hook (lambda () (setf apply kmacro-step-edit-replace))))
@@ -1304,7 +1304,7 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;; Arguments
 
-(conn-define-state conn-kapply-state ()
+(define-conn-state conn-kapply-state ()
   :lighter "KAPPLY")
 
 (conn-add-keymap-reference
@@ -1343,7 +1343,7 @@ The iterator must be the first argument in ARGLIST.
             (propertize (format "<%c>" reg)
                         'face 'conn-argument-active-face))))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql record)))
   "Record a new keyboard macro."
   ( :update (break)
@@ -1351,7 +1351,7 @@ The iterator must be the first argument in ARGLIST.
           (conn-argument-set-flag arg) t)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql apply)))
   "Apply the last keyboard macro."
   ( :update (break)
@@ -1362,7 +1362,7 @@ The iterator must be the first argument in ARGLIST.
             (conn-argument-set-flag arg) t)
       (funcall break))))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql append)))
   "Apply the last keyboard macro and then append to it."
   ( :update (break)
@@ -1373,7 +1373,7 @@ The iterator must be the first argument in ARGLIST.
             (conn-argument-set-flag arg) t)
       (funcall break))))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql append-skip-exec)))
   "Append to the last keyboard macro."
   ( :update (break)
@@ -1384,7 +1384,7 @@ The iterator must be the first argument in ARGLIST.
             (conn-argument-set-flag arg) t)
       (funcall break))))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql step-edit)))
   "Step edit the last keyboard macro."
   ( :update (break)
@@ -1395,7 +1395,7 @@ The iterator must be the first argument in ARGLIST.
             (conn-argument-set-flag arg) t)
       (funcall break))))
 
-(conn-define-argument-command ((arg conn-kapply-macro-argument)
+(define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql register)))
   "Step edit the last keyboard macro."
   ( :update (break)
@@ -1680,7 +1680,7 @@ finishing showing the buffers that were visited."))
       (conn-read-args-message
        (conn--kmacro-display last-kbd-macro 30 "Kmacro ring emtpy")))))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-cycle-ring-next)))
   "Cycle the kapply ring to the next most recently used kapply."
   ( :update (break)
@@ -1688,7 +1688,7 @@ finishing showing the buffers that were visited."))
     (conn--kapply-display-ring)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-cycle-ring-previous)))
   "Cycle the kapply ring to the next least recently used kapply."
   ( :update (break)
@@ -1696,14 +1696,14 @@ finishing showing the buffers that were visited."))
     (conn--kapply-display-ring)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql conn-display-kmacro-ring)))
   "Display the kapply ring."
   ( :update (break)
     (conn--kapply-display-ring)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-delete-ring-head)))
   "Delete the macro at the head of the kmacro ring."
   ( :update (break)
@@ -1711,7 +1711,7 @@ finishing showing the buffers that were visited."))
     (conn--kapply-display-ring)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-swap-ring)))
   "Swap the current keyboard macro and the head of the kmacro ring."
   ( :update (break)
@@ -1719,7 +1719,7 @@ finishing showing the buffers that were visited."))
     (conn--kapply-display-ring)
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-set-counter)))
   "Set the kmacro counter."
   ( :update (break)
@@ -1730,7 +1730,7 @@ finishing showing the buffers that were visited."))
       (quit nil))
     (funcall break)))
 
-(conn-define-argument-command ((arg conn-kapply-command-handler)
+(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-set-format)))
   "Set the kmacro format string."
   ( :update (break)
@@ -1817,7 +1817,7 @@ finishing showing the buffers that were visited."))
                        (let ((macro (kmacro-ring-head)))
                          (lambda (it) (conn-kmacro-apply it nil macro)))))))
 
-(conn-define-state conn-kapply-matches-state (conn-read-thing-state)
+(define-conn-state conn-kapply-matches-state (conn-read-thing-state)
   :lighter "MATCHES")
 
 (conn-add-keymap-reference
@@ -1850,11 +1850,11 @@ finishing showing the buffers that were visited."))
                    (and (use-region-p)
                         (bound-and-true-p rectangle-mark-mode)))))))
 
-(conn-define-argument-command ((arg conn-kapply-matches-thing-argument)
+(define-conn-argument-command ((arg conn-kapply-matches-thing-argument)
                                (cmd (eql project)))
   "Kapply on matches in the current project.")
 
-(conn-define-argument-command ((arg conn-kapply-matches-thing-argument)
+(define-conn-argument-command ((arg conn-kapply-matches-thing-argument)
                                (cmd (eql multi-file)))
   "Kapply on matches in multiple files.")
 
@@ -1889,7 +1889,7 @@ finishing showing the buffers that were visited."))
      regexp-flag
      delimited)))
 
-(conn-define-state conn-kapply-on-things-state (conn-read-thing-state))
+(define-conn-state conn-kapply-on-things-state (conn-read-thing-state))
 
 (cl-defstruct (conn-kapply-on-thing-argument
                (:include conn-thing-argument)
@@ -1902,7 +1902,7 @@ finishing showing the buffers that were visited."))
 
 (cl-defgeneric conn-kapply-on-things-do (thing arg transform &optional pipeline))
 
-(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+(define-conn-argument-command ((arg conn-kapply-on-thing-argument)
                                (cmd (eql conn-kapply-on-word)))
   "Kapply on all matching words in a thing.")
 
@@ -1933,7 +1933,7 @@ finishing showing the buffers that were visited."))
             pipeline)))))
     pipeline))
 
-(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+(define-conn-argument-command ((arg conn-kapply-on-thing-argument)
                                (cmd (eql conn-kapply-on-symbol)))
   "Kapply on all matching words in a thing.")
 
@@ -1966,7 +1966,7 @@ finishing showing the buffers that were visited."))
             pipeline)))))
     pipeline))
 
-(conn-define-argument-command ((arg conn-kapply-on-thing-argument)
+(define-conn-argument-command ((arg conn-kapply-on-thing-argument)
                                (cmd (eql conn-kapply-on-highlights-in-thing)))
   "Kapply on all matching words in a thing.")
 

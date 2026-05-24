@@ -173,7 +173,7 @@ function may setup any other necessary state as well.")
   (defun conn-declare-state-property (property doc-string &optional static)
     "Declare a state property PROPERTY.
 
-DOC-STRING is displayed in the `conn-define-state' doc-string when
+DOC-STRING is displayed in the `define-conn-state' doc-string when
 non-nil.
 
 If STATIC is non-nil then the property is declared static.  Static state
@@ -182,7 +182,7 @@ inherited."
     (setf (get property :conn-static-property) static)
     (when doc-string
       (setf (alist-get property
-                       (get 'conn-define-state :known-properties))
+                       (get 'define-conn-state :known-properties))
             doc-string)))
 
   (define-inline conn-property-static-p (property)
@@ -1126,7 +1126,7 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
                                        "No child states"
                                      cs)))))))
 
-(defmacro conn-define-state (name parents &rest properties)
+(defmacro define-conn-state (name parents &rest properties)
   "Define a conn state named NAME.
 
 Defines a variable NAME which is non-nil when the state is active.
@@ -1170,14 +1170,14 @@ can only be changed by redefining a state and are not inherited.
        ',name)))
 
 (defun conn--make-define-state-docstring ()
-  (let* ((main (documentation (symbol-function 'conn-define-state) 'raw))
-         (ud (help-split-fundoc main 'conn-define-state)))
+  (let* ((main (documentation (symbol-function 'define-conn-state) 'raw))
+         (ud (help-split-fundoc main 'define-conn-state)))
     (require 'help-fns)
     (with-temp-buffer
       (insert (or (cdr ud) main ""))
       (insert "\n\n\tKnown properties for states:\n\n")
       (pcase-dolist (`(,property . ,doc-string)
-                     (reverse (get 'conn-define-state :known-properties)))
+                     (reverse (get 'define-conn-state :known-properties)))
         (insert (format "`%s' (static: %s)\n %s"
                         (upcase (symbol-name property))
                         (conn-property-static-p property)
@@ -1188,7 +1188,7 @@ can only be changed by redefining a state and are not inherited.
             (help-add-fundoc-usage combined-doc (car ud))
           combined-doc)))))
 
-(put 'conn-define-state 'function-documentation
+(put 'define-conn-state 'function-documentation
      '(conn--make-define-state-docstring))
 
 (conn-declare-state-property
@@ -1232,31 +1232,31 @@ from and should not be entered.  `conn-enter-state' will signal an error
 if it is called with an abstract state."
    t))
 
-(conn-define-state conn-null-state ()
+(define-conn-state conn-null-state ()
   "An empty state.
 
 For use in buffers that should not have any other state."
   :no-keymap t
   :lighter "Ø")
 
-(conn-define-state conn-command-state ()
+(define-conn-state conn-command-state ()
   "A state for editing commands."
   :lighter "C"
   :suppress-input-method t
   :cursor 'box
   :full-keymap t)
 
-(conn-define-state conn-outline-state ()
+(define-conn-state conn-outline-state ()
   "A state for editing outline sections."
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t
   :full-keymap t)
 
-(conn-define-state conn-org-state (conn-outline-state)
+(define-conn-state conn-org-state (conn-outline-state)
   "A state for structural editing of `org-mode' buffers.")
 
-(conn-define-state conn-emacs-state ()
+(define-conn-state conn-emacs-state ()
   "A state for inserting text.
 
 By default `conn-emacs-state' does not bind anything except
@@ -1271,7 +1271,7 @@ By default `conn-emacs-state' does not bind anything except
   "Returns the cursor to be used in `conn-read-thing-common-state'."
   `(hbar . ,(floor (default-line-height) 2.5)))
 
-(conn-define-state conn-read-thing-common-state (conn-command-state)
+(define-conn-state conn-read-thing-common-state (conn-command-state)
   "Common elements of thing reading states."
   :cursor #'conn-read-thing-cursor
   :suppress-input-method t
@@ -1282,7 +1282,7 @@ By default `conn-emacs-state' does not bind anything except
 (oclosure-define (conn-stack-autopop
                   (:parent conn-stack-pop)))
 
-(conn-define-state conn-autopop-state ()
+(define-conn-state conn-autopop-state ()
   "Abstract state that automatically pops the state after executing a command.
 
 The :pop-predicate state property is called at the end of
@@ -1352,12 +1352,12 @@ command was a prefix command.")
          (conn--pop-state-1))))
     (cl-call-next-method)))
 
-(conn-define-state conn-one-command-state (conn-command-state
+(define-conn-state conn-one-command-state (conn-command-state
                                            conn-autopop-state)
   "Execute one command in `conn-command-state'."
   :lighter "1C")
 
-(conn-define-state conn-one-emacs-state (conn-emacs-state
+(define-conn-state conn-one-emacs-state (conn-emacs-state
                                          conn-autopop-state)
   "Execute one command in `conn-emacs-state'."
   :lighter "1E")
@@ -1397,10 +1397,10 @@ command was a prefix command.")
 
 ;;;;;; Record Emacs State
 
-(conn-define-state conn-record-emacs-state (conn-emacs-state)
+(define-conn-state conn-record-emacs-state (conn-emacs-state)
   :lighter "REC")
 
-(conn-define-state conn-record-emacs-recursive-state (conn-record-emacs-state))
+(define-conn-state conn-record-emacs-recursive-state (conn-record-emacs-state))
 
 (defvar-local conn-insertion-recording-other-end nil)
 (defvar conn-insertion-recording-last-insertion nil)
@@ -1531,7 +1531,7 @@ command was a prefix command.")
 
 (defvar conn--mark-state-rmm nil)
 
-(conn-define-state conn-mark-state (conn-command-state
+(define-conn-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
   :lighter "M"
   :pop-predicate (lambda ()

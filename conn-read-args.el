@@ -710,7 +710,7 @@ be displayed in the echo area during `conn-read-args'."
                          body)))
        ,@macroexpand-all-environment))))
 
-(defmacro conn-define-argument-command (argument-and-command
+(defmacro define-conn-argument-command (argument-and-command
                                         docstring
                                         &rest
                                         body)
@@ -1102,16 +1102,16 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-compose-keymap ((_arg conn-read-args-command-handler))
   conn-read-args-map)
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql recenter-top-bottom)))
-  "Recenter the screen."
-  ( :update (break)
-    (let ((this-command 'recenter-top-bottom)
-          (last-command 'recenter-top-bottom))
-      (recenter-top-bottom (conn-read-args-consume-prefix-arg))
-      (unless executing-kbd-macro
-        (pulse-momentary-highlight-one-line))
-      (funcall break))))
+                              "Recenter the screen."
+                              ( :update (break)
+                                (let ((this-command 'recenter-top-bottom)
+                                      (last-command 'recenter-top-bottom))
+                                  (recenter-top-bottom (conn-read-args-consume-prefix-arg))
+                                  (unless executing-kbd-macro
+                                    (pulse-momentary-highlight-one-line))
+                                  (funcall break))))
 
 (cl-defmethod conn-argument-update :before ((_arg conn-read-args-command-handler)
                                             cmd
@@ -1119,46 +1119,46 @@ be displayed in the echo area during `conn-read-args'."
   (unless (eq cmd 'recenter-top-bottom)
     (setf recenter-last-op nil)))
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql digit-argument)))
-  "Add a digit to the next prefix argument."
-  ( :update (break)
-    (let* ((char (if (integerp last-input-event)
-                     last-input-event
-                   (get last-input-event 'ascii-character)))
-           (digit (- (logand char ?\177) ?0)))
-      (setf conn--read-args-prefix-mag
-            (if (integerp conn--read-args-prefix-mag)
-                (+ (* 10 conn--read-args-prefix-mag) digit)
-              digit)))
-    (funcall break)))
+                              "Add a digit to the next prefix argument."
+                              ( :update (break)
+                                (let* ((char (if (integerp last-input-event)
+                                                 last-input-event
+                                               (get last-input-event 'ascii-character)))
+                                       (digit (- (logand char ?\177) ?0)))
+                                  (setf conn--read-args-prefix-mag
+                                        (if (integerp conn--read-args-prefix-mag)
+                                            (+ (* 10 conn--read-args-prefix-mag) digit)
+                                          digit)))
+                                (funcall break)))
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql backward-delete-arg)))
-  "Delete the most recent prefix argument digit."
-  ( :update (break)
-    (when conn--read-args-prefix-mag
-      (cl-callf floor conn--read-args-prefix-mag 10))
-    (funcall break)))
+                              "Delete the most recent prefix argument digit."
+                              ( :update (break)
+                                (when conn--read-args-prefix-mag
+                                  (cl-callf floor conn--read-args-prefix-mag 10))
+                                (funcall break)))
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql reset-arg)))
-  "Reset the prefix argument."
-  ( :update (break)
-    (setf conn--read-args-prefix-mag nil)
-    (funcall break)))
+                              "Reset the prefix argument."
+                              ( :update (break)
+                                (setf conn--read-args-prefix-mag nil)
+                                (funcall break)))
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql negative-argument)))
-  "Invert the sign of the current prefix argument."
-  ( :update (break)
-    (cl-callf not conn--read-args-prefix-sign)
-    (funcall break)))
+                              "Invert the sign of the current prefix argument."
+                              ( :update (break)
+                                (cl-callf not conn--read-args-prefix-sign)
+                                (funcall break)))
 
-(conn-define-argument-command ((arg conn-read-args-command-handler)
+(define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql keyboard-quit)))
-  "Call `keyboard-quit'."
-  ( :update (_break) (signal 'quit nil)))
+                              "Call `keyboard-quit'."
+                              ( :update (_break) (signal 'quit nil)))
 
 ;;;;; Protected Argument
 
