@@ -43,7 +43,6 @@
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--wincontrol-initial-window nil)
-(defvar conn--wincontrol-initial-winconf nil)
 
 (function-put 'keyboard-quit :conn-wincontrol-preserve-arg t)
 (function-put 'balance-windows :conn-wincontrol-preserve-arg t)
@@ -86,7 +85,6 @@
                                          (prefix-numeric-value current-prefix-arg))
                   conn--wincontrol-arg-sign 1
                   conn--wincontrol-initial-window (selected-window)
-                  conn--wincontrol-initial-winconf (current-window-configuration)
                   emulation-mode-map-alists `(conn--wincontrol-maps
                                               ,@(delq 'conn--wincontrol-maps
                                                       emulation-mode-map-alists)))
@@ -400,29 +398,11 @@
   (when conn--wincontrol-arg
     (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
-;;;;; Wincontrol Quiting
-
 (defun conn-wincontrol-exit ()
   "Exit `conn-wincontrol-mode'."
   (interactive)
   (when conn-wincontrol-mode
     (conn-wincontrol-mode -1)))
-
-(defun conn-wincontrol-abort ()
-  "Exit `conn-wincontrol-mode'."
-  (interactive)
-  (when conn-wincontrol-mode
-    (conn-wincontrol-mode -1)
-    (when conn--wincontrol-initial-winconf
-      (set-window-configuration conn--wincontrol-initial-winconf))))
-
-(defun conn-wincontrol-exit-to-initial-win ()
-  "Exit `conn-wincontrol-mode' and select initial window."
-  (interactive)
-  (when conn-wincontrol-mode
-    (conn-wincontrol-mode -1)
-    (when (window-live-p conn--wincontrol-initial-window)
-      (select-window conn--wincontrol-initial-window))))
 
 ;;;;; Wincontrol Isearch
 

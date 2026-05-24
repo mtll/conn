@@ -1013,12 +1013,10 @@
   "7" 'conn-wincontrol-digit-argument
   "8" 'conn-wincontrol-digit-argument
   "9" 'conn-wincontrol-digit-argument
-  ";" 'conn-wincontrol-exit-to-initial-win
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward
   "C-M-d" 'delete-other-frames
   "M-r" 'move-to-window-line-top-bottom
-  "C-]" 'conn-wincontrol-abort
   "C-u" 'conn-wincontrol-universal-arg
   "DEL" 'conn-wincontrol-backward-delete-arg
   "<backspace>" 'conn-wincontrol-backward-delete-arg
