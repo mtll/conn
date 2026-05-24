@@ -185,7 +185,7 @@ Expansions and contractions are provided by functions in
               :multi-thing-p (lambda (_self target)
                                (length> (alist-get (overlay-start target) bounds)
                                         1))
-              :pretty-print ( :method (self) "Expansion")
+              :pretty-print ( :method (_self) "Expansion")
               :bounds-op ( :method (_ _)
                            (conn-multi-thing-select
                             (alist-get (point) bounds))))))
