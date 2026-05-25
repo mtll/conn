@@ -50,6 +50,7 @@
   '(:eval (substitute-command-keys
            "\\<conn-quick-ref-map>\\[next] Next; \\[previous] Previous; \\[close] Close"))
   "Keybinding hints for `conn-quick-reference-header-line-format'.")
+(put 'conn-quick-reference-header-key-description 'risky-local-variable t)
 
 (defvar conn-quick-reference-header-line-format
   `(" "
@@ -61,7 +62,7 @@
     "  "
     ,(propertize "Quick Reference" 'face '(:weight bold))
     "  ("
-    ,conn-quick-reference-header-key-description
+    conn-quick-reference-header-key-description
     ") ")
   "Template for `header-line-format' in quick reference buffers.")
 

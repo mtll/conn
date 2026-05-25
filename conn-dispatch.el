@@ -270,8 +270,9 @@ returned."
   (pcase-let* (((cl-struct conn-window-label window string state) label)
                (`(,pt ,vscroll ,hscroll) state))
     (with-current-buffer (window-buffer window)
-      (when (eq 'conn-mode (car-safe (car-safe header-line-format)))
-        (setq-local header-line-format (cadadr header-line-format))))
+      (when conn--saved-header-line-format
+        (setf header-line-format (car conn--saved-header-line-format)
+              conn--saved-header-line-format nil)))
     (set-window-point window pt)
     (set-window-hscroll window hscroll)
     (set-window-vscroll window vscroll)
@@ -428,34 +429,34 @@ themselves once the selection process has concluded."
   #'conn--simple-window-labels)
 
 (defun conn--centered-header-label ()
-  (when (window-parameter (selected-window) 'conn-window-labeled-p)
+  (when (window-parameter nil 'conn-window-labeled-p)
     (let* ((window-width (window-width nil t))
-           (label (window-parameter nil 'conn-label-string))
-           (label-width (conn--string-pixel-width
-                         label
-                         (window-buffer (selected-window))))
+           (label (propertize (window-parameter nil 'conn-label-string)
+                              'face 'conn-window-label-face))
+           (label-width (conn--string-pixel-width label (window-buffer)))
            (padding-width (floor (- window-width label-width) 2))
            (padding (propertize " " 'display `(space :width (,padding-width)))))
       (concat padding label))))
 
+(defvar conn-header-line-label-format
+  '("" (:eval (conn--centered-header-label))))
+(put 'conn-header-line-label-format 'risky-local-variable t)
+
+(defvar-local conn--saved-header-line-format nil)
+
 (defun conn--setup-header-line-label (window string)
-  "Label WINDOWS using `head-line-format'."
-  (let ((header-line-label
-         '(conn-mode (:eval (conn--centered-header-label)))))
-    (set-window-parameter window 'conn-window-labeled-p t)
-    (with-selected-window window
-      (unless (equal header-line-label (car header-line-format))
-        (setq-local header-line-format
-                    `(,header-line-label (nil ,header-line-format))))
-      (prog1
-          (conn-window-label (propertize string 'face 'conn-window-label-face)
-                             window)
-        (goto-char (window-start))))))
+  (set-window-parameter window 'conn-window-labeled-p t)
+  (with-selected-window window
+    (unless conn--saved-header-line-format
+      (setf conn--saved-header-line-format (list header-line-format)
+            header-line-format conn-header-line-label-format))
+    (prog1 (conn-window-label string window)
+      (goto-char (window-start)))))
 
 (defun conn-header-line-labels (windows)
   (cl-loop for win in windows
-           collect (conn--setup-header-line-label
-                    win (window-parameter win 'conn-label-string))))
+           for str = (window-parameter win 'conn-label-string)
+           when str collect (conn--setup-header-line-label win str)))
 
 ;; From ace-window
 (defun conn--dispatch-window-predicate (window &optional ignore-dedicated)
@@ -518,10 +519,9 @@ for dispatch."
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
   (when windows
+    (funcall conn-window-label-function)
     (conn-with-window-labels
-        (labels (progn
-                  (funcall conn-window-label-function)
-                  (funcall conn-window-label-display-function windows)))
+        (labels (funcall conn-window-label-display-function windows))
       (conn-with-dispatch-handlers
         (:handler
          ( :predicate (cmd)
@@ -561,8 +561,8 @@ for dispatch."
   (pcase argument-and-command
     (`((,handler ,_spec) ,_cmd)
      (pcase (alist-get :update body)
-       (`(,_args . ,update-body)
-        (setf (cdr (alist-get :update body))
+       ((and `(,_args . ,update-body) cons)
+        (setf (cdr cons)
               (conn--dispatch-expand-handler-update handler update-body)))))
     (_ (error "Invalid argument form")))
   `(define-conn-argument-command ,argument-and-command
@@ -4620,12 +4620,12 @@ it.")
                    (do ()
                      (conn-dispatch-change-group)
                      (goto-char opoint)
-                     (when (and (not (conn-dispatch-other-end-p))
-                                separator)
+                     (when (and separator
+                                (not (conn-dispatch-other-end-p)))
                        (insert-sep))
                      (insert-for-yank str)
-                     (when (and (conn-dispatch-other-end-p)
-                                separator)
+                     (when (and separator
+                                (conn-dispatch-other-end-p))
                        (insert-sep))))
           (with-current-buffer (marker-buffer opoint)
             (if (= (point) opoint)
@@ -4668,12 +4668,12 @@ it.")
                            (conn-dispatch-undo-case
                              (:undo (setf init nil)))))))
           (with-current-buffer (marker-buffer opoint)
-            (when (and (not (conn-dispatch-other-end-p))
-                       separator)
+            (when (and separator
+                       (not (conn-dispatch-other-end-p)))
               (insert-sep))
             (insert-for-yank str)
-            (when (and (conn-dispatch-other-end-p)
-                       separator)
+            (when (and separator
+                       (conn-dispatch-other-end-p))
               (insert-sep))))))))
 
 (defun conn-dispatch-jump ()
