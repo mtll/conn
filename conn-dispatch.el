@@ -139,7 +139,15 @@ and pad overlay with WIDTH space and face FACE."
 
 (cl-defstruct (conn-window-label
                (:constructor nil)
-               ( :constructor conn-window-label
+               ( :constructor conn-window-label (string window)))
+  "State for a window label."
+  (string nil :type string)
+  (window nil :type window))
+
+(cl-defstruct (conn-window-header-line-label
+               (:constructor nil)
+               (:include conn-window-label)
+               ( :constructor conn-window-header-line-label
                  (string
                   window
                   &aux
@@ -147,8 +155,6 @@ and pad overlay with WIDTH space and face FACE."
                                (window-vscroll window)
                                (window-hscroll window))))))
   "State for a window label."
-  (string nil :type string)
-  (window nil :type window)
   (state nil :type list))
 
 (defun conn-get-dispatch-windows ()
@@ -267,7 +273,18 @@ returned."
                         (conn-window-label-string label)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
-  (pcase-let* (((cl-struct conn-window-label window string state) label)
+  (pcase-let (((cl-struct conn-window-label
+                          window
+                          string)
+               label))
+    (set-window-parameter window 'conn-label-string string)))
+
+(cl-defmethod conn-label-delete ((label conn-window-header-line-label))
+  (pcase-let* (((cl-struct conn-window-header-line-label
+                           window
+                           string
+                           state)
+                label)
                (`(,pt ,vscroll ,hscroll) state))
     (with-current-buffer (window-buffer window)
       (when conn--saved-header-line-format
@@ -276,8 +293,8 @@ returned."
     (set-window-point window pt)
     (set-window-hscroll window hscroll)
     (set-window-vscroll window vscroll)
-    (set-window-parameter window 'conn-label-string string)
-    (set-window-parameter window 'conn-window-labeled-p nil)))
+    (set-window-parameter window 'conn-window-labeled-p nil)
+    (cl-call-next-method)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label)
                                  prefix-char)
@@ -450,13 +467,18 @@ themselves once the selection process has concluded."
     (unless conn--saved-header-line-format
       (setf conn--saved-header-line-format (list header-line-format)
             header-line-format conn-header-line-label-format))
-    (prog1 (conn-window-label string window)
+    (prog1 (conn-window-header-line-label string window)
       (goto-char (window-start)))))
 
 (defun conn-header-line-labels (windows)
   (cl-loop for win in windows
            for str = (window-parameter win 'conn-label-string)
            when str collect (conn--setup-header-line-label win str)))
+
+(defun conn-mode-line-labels (windows)
+  (cl-loop for win in windows
+           for str = (window-parameter win 'conn-label-string)
+           when str collect (conn-window-label str win)))
 
 ;; From ace-window
 (defun conn--dispatch-window-predicate (window &optional ignore-dedicated)
