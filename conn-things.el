@@ -243,17 +243,17 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                               result))))))
       (while properties
         (cond* ((pcase* `(,key ,val) properties))
-               ((bind-and* (gfn (alist-get key known)))
-                (let ((method (macroexpand-all
-                               `(cons ',gfn ,val)
-                               `((:method . ,method-expander)
-                                 ,@macroexpand-all-environment))))
-                  (push (if (memq gfn defined)
-                            (macroexp-warn-and-return
-                             "Anonymous thing method shadows previous definition"
-                             method nil nil key)
-                          method)
-                        mlist))
+               ((bind-and* (gfn (alist-get key known))
+                           (method (macroexpand-all
+                                    `(cons ',gfn ,val)
+                                    `((:method . ,method-expander)
+                                      ,@macroexpand-all-environment))))
+                (push (if (memq gfn defined)
+                          (macroexp-warn-and-return
+                           "Anonymous thing method shadows previous definition"
+                           method nil nil key)
+                        method)
+                      mlist)
                 (push gfn defined))
                (t (push `(cons ,key ,val) alist)))
         (cl-callf2 drop 2 properties))
@@ -633,19 +633,19 @@ command moves over."
 ;;;; Bounds of Thing
 
 (defun conn-bounds (bounds &optional transform)
-  (declare (gv-setter
+  (declare (important-return-value t)
+           (gv-setter
             (lambda (val)
               (ignore transform)
               `(setf (conn-bounds--whole ,bounds) ,val)))
            (compiler-macro
             (lambda (_exp)
-              `(let* ((bounds ,bounds)
-                      (w (conn-bounds--whole
-                          ,(if transform
-                               `(conn-transform-bounds bounds ,transform)
-                             'bounds))))
-                 (if (conn--bounds-delayed-p w) (funcall w bounds) w))))
-           (important-return-value t))
+              (macroexp-let2* nil (bounds)
+                `(let* ((w (conn-bounds--whole
+                            ,(if transform
+                                 `(conn-transform-bounds ,bounds ,transform)
+                               bounds))))
+                   (if (conn--bounds-delayed-p w) (funcall w ,bounds) w))))))
   (let ((w (conn-bounds--whole
             (if transform
                 (conn-transform-bounds bounds transform)
@@ -655,7 +655,7 @@ command moves over."
 (defun conn-make-bounds (thing arg whole &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
-              (macroexp-let2 nil thing thing
+              (macroexp-let2* nil (thing)
                 `(conn--make-bounds
                   :thing (pcase ,thing
                            ((pred conn-bounds-p)
@@ -683,17 +683,18 @@ command moves over."
 (defun conn-make-transformed-bounds (transform from to &rest properties)
   (declare (compiler-macro
             (lambda (_exp)
-              `(conn--make-bounds-transform
-                :thing (conn-bounds-thing ,from)
-                :arg (conn-bounds-arg ,from)
-                :buffer (conn-bounds-buffer ,from)
-                :tick (conn-bounds--tick ,from)
-                :whole ,to
-                :properties (nconc (list ,@properties)
-                                   (conn-bounds--properties ,from))
-                :transforms (append (when (conn-transformed-bounds-p ,from)
-                                      (conn-transformed-bounds-transforms ,from))
-                                    (list ,transform))))))
+              (macroexp-let2* nil (from)
+                `(conn--make-bounds-transform
+                  :thing (conn-bounds-thing ,from)
+                  :arg (conn-bounds-arg ,from)
+                  :buffer (conn-bounds-buffer ,from)
+                  :tick (conn-bounds--tick ,from)
+                  :whole ,to
+                  :properties (nconc (list ,@properties)
+                                     (conn-bounds--properties ,from))
+                  :transforms (append (when (conn-transformed-bounds-p ,from)
+                                        (conn-transformed-bounds-transforms ,from))
+                                      (list ,transform)))))))
   (conn--make-bounds-transform
    :thing (conn-bounds-thing from)
    :arg (conn-bounds-arg from)

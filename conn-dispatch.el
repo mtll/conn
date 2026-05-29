@@ -100,6 +100,8 @@ The value of this variable will be passed as the ALL-FRAMES argument to
 
 (defvar conn--dispatch-redisplay-prompt-flag nil)
 
+(defvar-local conn--saved-header-line-format nil)
+
 (cl-defstruct (conn-dispatch-label
                ( :constructor conn-dispatch-label
                  (&key
@@ -282,7 +284,6 @@ returned."
 (cl-defmethod conn-label-delete ((label conn-window-header-line-label))
   (pcase-let* (((cl-struct conn-window-header-line-label
                            window
-                           string
                            state)
                 label)
                (`(,pt ,vscroll ,hscroll) state))
@@ -458,8 +459,6 @@ themselves once the selection process has concluded."
 (defvar conn-header-line-label-format
   '("" (:eval (conn--centered-header-label))))
 (put 'conn-header-line-label-format 'risky-local-variable t)
-
-(defvar-local conn--saved-header-line-format nil)
 
 (defun conn--setup-header-line-label (window string)
   (set-window-parameter window 'conn-window-labeled-p t)
@@ -834,8 +833,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
           (unless suspend
             (conn-clear-targets))))
     (when suspend
-      (conn--mark-targets 'conn-old-target))
-    (message nil)))
+      (conn--mark-targets 'conn-old-target))))
 
 (defmacro conn-with-dispatch (&rest body)
   (declare (indent 0))
@@ -2535,12 +2533,22 @@ depths will be sorted before greater depths.
         (goto-char opoint))
       (clrhash conn--dispatch-window-lines-cache))))
 
+(defvar conn-dispatch-selecting nil)
+
+(defvar conn-dispatch-select-mode-line
+  (propertize " SELECT" 'face 'font-lock-warning-face)
+  "String displayed in the mode line during dispatch selecting.")
+(put 'conn-dispatch-select-mode-line 'risky-local-variable t)
+
+(setf (alist-get 'conn-dispatch-selecting minor-mode-alist)
+      (list 'conn-dispatch-select-mode-line))
+
 (defun conn-select-target ()
   "Prompt the user to select a target during dispatch.
 
 Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
   (unwind-protect
-      (progn
+      (let ((conn-dispatch-selecting t))
         (dolist (win (conn-get-dispatch-windows))
           (with-selected-window win
             (add-to-invisibility-spec 'conn-dispatch-invisible)
@@ -2659,7 +2667,6 @@ the meaning of depth."
 
 (define-conn-state conn-dispatch-read-char-state ()
   "State for reading label characters during dispatch."
-  :lighter "SELECT"
   :suppress-input-method t)
 
 (conn-add-keymap-reference

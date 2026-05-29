@@ -891,10 +891,12 @@ CLONE will be non-nil, otherwise CLONE will nil."
     (let ((lighter (conn-state-get conn-current-state :lighter)))
       (dolist (elem (cdr conn--state-stack))
         (setf lighter (if elem
-                          (concat (conn-state-get elem :lighter)
-                                  conn-state-lighter-separator
-                                  lighter)
-                        (concat "[" lighter "]"))))
+                          (when-let* ((el (conn-state-get elem :lighter)))
+                            (concat el
+                                    (when lighter conn-state-lighter-separator)
+                                    lighter))
+                        (when lighter
+                          (concat "[" lighter "]")))))
       (concat " [" lighter "]"))))
 
 (defun conn-update-lighter (&optional buffer)
@@ -1598,11 +1600,7 @@ command was a prefix command.")
   (condition-case err
       (or (run-hook-with-args-until-success 'conn-setup-state-functions)
           (conn-push-state 'conn-emacs-state))
-    (error
-     (conn-local-mode -1)
-     (error "Error in conn-setup-state-functions: %s"
-            (error-message-string err)))
-    ((debug quit)
+    ((error debug quit)
      (conn-local-mode -1)
      (signal err))))
 
