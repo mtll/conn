@@ -66,7 +66,7 @@
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for wincontrol."
   :global t
-  :lighter " WinC"
+  :lighter #(" WinC" 0 5 (face font-lock-warning-face))
   :interactive nil
   (if conn-wincontrol-mode
       (condition-case _
@@ -76,10 +76,6 @@
             (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
             (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
             (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-            (add-function :after after-focus-change-function
-                          (lambda (&rest _)
-                            (set-face-inverse-video 'mode-line-active t))
-                          '((name . wincontrol-mode-line)))
             (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
             (setf conn--wincontrol-arg (when current-prefix-arg
                                          (prefix-numeric-value current-prefix-arg))
@@ -94,7 +90,7 @@
                 (conn--wincontrol-minibuffer-setup)
               (let ((message-log-max nil))
                 (message "%s" (conn--wincontrol-message))))
-            (set-face-inverse-video 'mode-line-active t))
+            (force-mode-line-update t))
         ((debug error)
          (conn-wincontrol-mode -1)))
     (internal-pop-keymap conn-wincontrol-map
@@ -104,10 +100,9 @@
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
     (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
     (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-    (remove-function after-focus-change-function 'wincontrol-mode-line)
     (remove-function eldoc-message-function #'conn--wincontrol-ignore)
     (message nil)
-    (set-face-inverse-video 'mode-line-active nil)
+    (force-mode-line-update t)
     (when conn-wincontrol-one-command-mode
       (conn-wincontrol-one-command-mode -1))))
 

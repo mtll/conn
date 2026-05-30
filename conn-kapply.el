@@ -1067,9 +1067,8 @@ When kapply finishes restore the previous point in each buffer."
                 (save-mark-and-excursion--restore saved)))))
          (:record
           (setf (alist-get (current-buffer) saved-excursions)
-                (let ((pt (point-marker)))
-                  (set-marker-insertion-type pt t)
-                  (cons pt (save-mark-and-excursion--save))))
+                (cons (copy-marker (point) t)
+                      (save-mark-and-excursion--save)))
           (funcall iterator state))
          (:next
           (if saved-excursions
@@ -1214,6 +1213,9 @@ After kapply has finished restore the previous window configuration."
 (defvar conn-kapply-suppress-message nil
   "Suppress message displayed after finishing a kapply.")
 
+(defvar conn-kapply-mode-line-defining-kbd-macro
+  (propertize " Kapply-Def" 'face 'font-lock-warning-face))
+
 (defun conn--perform-kapply (iterator body)
   (let* ((undo-outer-limit nil)
          (undo-limit most-positive-fixnum)
@@ -1223,6 +1225,7 @@ After kapply has finished restore the previous window configuration."
          (conn--kbd-query-automatic-flags nil)
          (iterations 0)
          (success nil)
+         (mode-line-defining-kbd-macro conn-kapply-mode-line-defining-kbd-macro)
          (iterator (lambda (&optional state)
                      (and (vectorp (funcall iterator (or state :next)))
                           (incf iterations)))))

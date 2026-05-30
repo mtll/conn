@@ -443,8 +443,7 @@ themselves once the selection process has concluded."
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
-(defvar conn-window-label-function
-  #'conn--simple-window-labels)
+(defvar conn-window-label-function #'conn--simple-window-labels)
 
 (defun conn--centered-header-label ()
   (when (window-parameter nil 'conn-window-labeled-p)

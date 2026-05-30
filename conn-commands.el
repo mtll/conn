@@ -475,12 +475,11 @@ The command to be stored is read from `command-history'."
                ( :constructor conn--make-tab-register
                  (&aux
                   (cookie
-                   (with-memoization
-                       (alist-get 'conn-tab-cookie
-                                  (thread-first
-                                    (funcall tab-bar-tabs-function)
-                                    tab-bar--current-tab-find
-                                    cdr))
+                   (with-memoization (conn->
+                                       (funcall tab-bar-tabs-function)
+                                       tab-bar--current-tab-find
+                                       cdr
+                                       (alist-get 'conn-tab-cookie))
                      (gensym "conn-tab-cookie")))
                   (frame (selected-frame)))))
   (cookie nil :read-only t)

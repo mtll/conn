@@ -579,6 +579,9 @@
 
 ;;;; Quick Ref
 
+(defvar conn-quick-ref-posframe-fringe 4)
+(defvar conn-quick-ref-posframe-min-width 66)
+
 ;;;###autoload
 (defun conn-quick-ref-posframe (buffer &optional initialized teardown)
   (if teardown
@@ -587,18 +590,18 @@
     ;; header-line the first time.
     (unless initialized
       (posframe-show buffer
-                     :min-width 66
-                     :left-fringe 0
-                     :right-fringe 0
+                     :min-width conn-quick-ref-posframe-min-width
+                     :left-fringe conn-quick-ref-posframe-fringe
+                     :right-fringe conn-quick-ref-posframe-fringe
                      :min-height 2
                      :border-width conn-posframe-border-width
                      :border-color (face-background 'conn-posframe-border)
                      :poshandler conn-posframe-buffer-poshandler
                      :respect-header-line t))
     (posframe-show buffer
-                   :min-width 66
-                   :left-fringe 0
-                   :right-fringe 0
+                   :min-width conn-quick-ref-posframe-min-width
+                   :left-fringe conn-quick-ref-posframe-fringe
+                   :right-fringe conn-quick-ref-posframe-fringe
                    :border-width conn-posframe-border-width
                    :border-color (face-background 'conn-posframe-border)
                    :poshandler conn-posframe-buffer-poshandler
