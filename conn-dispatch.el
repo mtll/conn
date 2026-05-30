@@ -2536,7 +2536,7 @@ depths will be sorted before greater depths.
 (defvar conn-dispatch-selecting nil)
 
 (defvar conn-dispatch-select-mode-line
-  (propertize " SELECT" 'face 'font-lock-warning-face)
+  (propertize " Select" 'face 'font-lock-warning-face)
   "String displayed in the mode line during dispatch selecting.")
 (put 'conn-dispatch-select-mode-line 'risky-local-variable t)
 
@@ -2868,6 +2868,7 @@ buffer."
   "C-h o" 'conn-describe-symbol
   "C-w" 'restrict-windows
   "M-SPC" 'repeat-dispatch
+  "S-SPC" 'repeat-dispatch
   "M-s" conn-search-remap
   "M-g" conn-goto-remap
   "M-h" conn-edit-remap
@@ -4209,47 +4210,43 @@ contain targets."
 (define-conn-target-finder conn-dispatch-inner-line-targets
     () ()
   ( :default-update-handler (_state)
-    (let ((thing (conn-anonymous-thing
-                   '(conn-forward-inner-line)
-                   :pretty-print ( :method (_self) "inner-line")
-                   :bounds-op ( :method (_self _arg)
-                                (save-excursion
-                                  (goto-char (pos-bol))
-                                  (cl-call-next-method))))))
-      (conn-for-each-visible (window-start) (window-end)
-        (goto-char (point-max))
-        (while (let ((pt (point)))
-                 (forward-line -1)
-                 (back-to-indentation)
-                 (/= (point) pt))
-          (unless (= (pos-bol) (pos-eol))
-            (conn-make-target-overlay
-             (point) 0
-             :thing thing)))))))
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-max))
+      (while (let ((pt (point)))
+               (forward-line -1)
+               (back-to-indentation)
+               (/= (point) pt))
+        (unless (= (pos-bol) (pos-eol))
+          (conn-make-target-overlay
+           (point) 0
+           :thing thing))))))
 
 (define-conn-target-finder conn-dispatch-end-of-inner-line-targets
     ()
     ((other-end :initform t))
   ( :default-update-handler (_state)
-    (let ((thing (conn-anonymous-thing
-                   '(conn-forward-inner-line)
-                   :pretty-print ( :method (_self) "end-of-inner-line")
-                   :bounds-op ( :method (_self _arg)
-                                (save-excursion
-                                  (goto-char (pos-bol))
-                                  (cl-call-next-method))))))
-      (conn-for-each-visible (window-start) (window-end)
-        (goto-char (point-min))
-        (when (looking-at-p "\n")
-          (forward-line 1))
-        (while (not (eobp))
-          (conn--end-of-inner-line-1)
-          (unless (= (pos-bol) (pos-eol))
-            (conn-make-target-overlay
-             (point) 0
-             :properties `(label-before t)
-             :thing thing))
-          (forward-line 1))))))
+    (conn-for-each-visible (window-start) (window-end)
+      (goto-char (point-min))
+      (while (not (eobp))
+        (conn--end-of-inner-line-1)
+        (cond
+         ((= (pos-bol) (pos-eol)))
+         ((= (pos-bol) (point))
+          (conn-make-target-overlay
+           (point) 0
+           :point (save-excursion
+                    (back-to-indentation)
+                    (point))
+           :thing 'conn-forward-inner-line))
+         (t
+          (conn-make-target-overlay
+           (point) 0
+           :point (save-excursion
+                    (back-to-indentation)
+                    (point))
+           :properties `(label-before t)
+           :thing 'conn-forward-inner-line)))
+        (forward-line 1)))))
 
 (define-conn-target-finder conn-dispatch-visual-line-targets
     () ()

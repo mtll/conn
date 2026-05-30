@@ -4717,18 +4717,18 @@ Interactively REPEAT is given by the prefix argument."
                            (conn-record-one-insertion)
                          (accept-change-group cg))
                      (conn-record-insertion t cg pt)))))
+               ((and (= (abs (- end beg)) 1)
+                     (or (conn-subthing-p thing 'char)
+                         (conn-subthing-p thing 'point)))
+                (push-hist (unwind-protect
+                               (conn-record-one-insertion)
+                             (accept-change-group cg))))
                (t
-                (if (and (= (abs (- end beg)) 1)
-                         (or (conn-subthing-p thing 'char)
-                             (conn-subthing-p thing 'point)))
-                    (push-hist (unwind-protect
-                                   (conn-record-one-insertion)
-                                 (accept-change-group cg)))
-                  (conn-record-insertion nil cg pt)
-                  (conn-state-unwind clone
-                    (when (not clone)
-                      (when-let* ((text (conn-insertion-recording-text)))
-                        (push-hist text))))))))))
+                (conn-record-insertion nil cg pt)
+                (conn-state-unwind clone
+                  (when-let* ((text (and (not clone)
+                                         (conn-insertion-recording-text))))
+                    (push-hist text))))))))
     (_ (error "No thing at point"))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-emacs-state-record-insert))
@@ -5053,7 +5053,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
   (unless (conn-insertion-recording-p)
     (user-error "Not replacing"))
   (goto-char
-   (prog1 conn-insertion-recording-other-end
+   (prog1 (marker-position conn-insertion-recording-other-end)
      (set-marker conn-insertion-recording-other-end (point)))))
 
 (defun conn-insertion-end-recording ()
@@ -5327,21 +5327,20 @@ If CLEANUP-WHITESPACE is non-nil then also run
 
 (defun conn--narrow-ring-record (beg end &optional point)
   (conn--narrow-ring-ensure)
-  (pcase-let (((or 'nil (cl-struct conn-narrowing (start bf) (end ef)))
-               (conn-ring-head conn-narrow-ring))
-              ((or 'nil (cl-struct conn-narrowing (start bb) (end eb)))
-               (conn-ring-tail conn-narrow-ring)))
-    (cond
-     ((and bf (= beg bf) (= end ef)))
-     ((and bb (= beg bb) (= end eb))
-      (conn-ring-rotate-forward conn-narrow-ring))
-     (t (conn-ring-insert-front
-         conn-narrow-ring
-         (conn-narrowing
-          (conn--create-marker beg)
-          (conn--create-marker end)
-          :point (or (copy-marker point)
-                     (make-marker))))))))
+  (cond* ((pcase* (or (cl-struct conn-narrowing (start bf) (end ef)) _)
+                  (conn-ring-head conn-narrow-ring)))
+         ((pcase* (or (cl-struct conn-narrowing (start bb) (end eb)) _)
+                  (conn-ring-tail conn-narrow-ring)))
+         ((and bf (= beg bf) (= end ef)))
+         ((and bb (= beg bb) (= end eb))
+          (conn-ring-rotate-forward conn-narrow-ring))
+         (t (conn-ring-insert-front
+             conn-narrow-ring
+             (conn-narrowing
+              (conn--create-marker beg)
+              (conn--create-marker end)
+              :point (or (copy-marker point)
+                         (make-marker)))))))
 
 (defun conn-narrow-ring-previous (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
