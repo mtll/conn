@@ -1459,8 +1459,8 @@ negative then only display that many context lines before each line."))
     (conn-dispatch-setup
      (conn-action ()
        (:description "Mark")
-       (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
-                     (conn-select-target)))
+       (pcase-let ((`(,pt ,window ,thing ,arg ,dtform)
+                    (conn-select-target)))
          (conn-protected-let* ((owin (selected-window)
                                      (select-window owin)))
            (select-window window)
@@ -1483,8 +1483,8 @@ negative then only display that many context lines before each line."))
   (conn-dispatch-setup
    (conn-action ()
      (:description "Mark")
-     (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
-                   (conn-select-target)))
+     (pcase-let ((`(,pt ,window ,thing ,arg ,dtform)
+                  (conn-select-target)))
        (conn-protected-let* ((owin (selected-window)
                                    (select-window owin)))
          (select-window window)
@@ -1721,8 +1721,8 @@ negative then only display that many context lines before each line."))
             "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it.")
            (:description "Yank and Replace To")
-           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                         (conn-select-target)))
+           (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                        (conn-select-target)))
              (unless stay
                (select-window window))
              (with-selected-window window
@@ -1780,8 +1780,8 @@ selected by dispatch with it.")
        (:reference
         "Yank the the last killed text from the kill ring and replace the region
 selected by dispatch with it.")
-       (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
-                     (conn-select-target)))
+       (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
+                    (conn-select-target)))
          (conn-dispatch-change-group)
          (pcase (conn-bounds-of-dispatch thing arg pt)
            ((conn-bounds `(,b . ,e) `(,@transform
@@ -2797,8 +2797,8 @@ Exiting the recursive edit will resume the isearch."
             (lambda (win)
               (not (buffer-local-value 'buffer-read-only
                                        (window-buffer win)))))
-           (pcase-let* ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
-                         (conn-select-target)))
+           (pcase-let ((`(,pt2 ,window2 ,thing2 ,arg2 ,_transform)
+                        (conn-select-target)))
              (conn--dispatch-transpose-subr
               (with-current-buffer (window-buffer window2)
                 (conn-bounds-of-dispatch thing2 arg2 pt2))
@@ -3579,8 +3579,8 @@ hook, which see."
           (conn-dispatch-setup
            (conn-action ()
              (:description "Kill")
-             (pcase-let* ((`(,pt ,window ,thing ,arg ,dtform)
-                           (conn-select-target)))
+             (pcase-let ((`(,pt ,window ,thing ,arg ,dtform)
+                          (conn-select-target)))
                (unless stay
                  (select-window window))
                (with-selected-window window
@@ -3669,8 +3669,8 @@ hook, which see."
      (conn-action ()
        (:description "Kill")
        (:repeat :not-repeatable)
-       (pcase-let* ((`(,pt ,_window ,thing ,arg ,_dtform)
-                     (conn-select-target)))
+       (pcase-let ((`(,pt ,_window ,thing ,arg ,_dtform)
+                    (conn-select-target)))
          (conn-dispatch-change-group)
          (pcase (conn-bounds-of-dispatch thing arg pt)
            ((and bounds
@@ -4054,8 +4054,8 @@ that place."
         (conn-dispatch-setup
          (conn-action ()
            (:description "Copy")
-           (pcase-let* ((`(,pt ,window ,thing ,arg ,transform)
-                         (conn-select-target)))
+           (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
+                        (conn-select-target)))
              (with-selected-window window
                (conn-dispatch-change-group)
                (save-mark-and-excursion

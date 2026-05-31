@@ -2241,10 +2241,10 @@ characterwise labels for all remaining targets.")
 
 (defun conn-dispatch-pixelwise-label-p (ov)
   (declare (important-return-value t))
-  (and (display-graphic-p)
-       (funcall conn-pixelwise-labels-window-predicate
-                (overlay-get ov 'window))
-       (funcall conn-pixelwise-labels-target-predicate ov)))
+  (or (not (display-graphic-p))
+      (and (funcall conn-pixelwise-labels-window-predicate
+                    (overlay-get ov 'window))
+           (funcall conn-pixelwise-labels-target-predicate ov))))
 
 (defun conn-dispatch-create-label (target string)
   (declare (important-return-value t))

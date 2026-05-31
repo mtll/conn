@@ -175,12 +175,12 @@
 (defun conn-bounds-of--self-insert (ev arg)
   (catch 'return
     (save-mark-and-excursion
-      (pcase-let* ((opoint (point))
-                   ((or `(,_cmd ,open ,close)
-                        `(,open ,close))
-                    (or (assoc ev insert-pair-alist)
-                        (list ev ev)))
-                   (n (prefix-numeric-value arg)))
+      (pcase-let ((opoint (point))
+                  ((or `(,_cmd ,open ,close)
+                       `(,open ,close))
+                   (or (assoc ev insert-pair-alist)
+                       (list ev ev)))
+                  (n (prefix-numeric-value arg)))
         (push-mark nil t t)
         (condition-case _err
             (while t

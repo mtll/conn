@@ -302,8 +302,8 @@
        (eq (buffer-local-value 'major-mode
                                (window-buffer win))
            'dired-mode)))
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (let ((regexp (dired-marker-regexp)))
@@ -322,8 +322,8 @@
        (eq (buffer-local-value 'major-mode
                                (window-buffer win))
            'dired-mode)))
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (goto-char pt)

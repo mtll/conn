@@ -189,8 +189,8 @@
   (declare (conn-dispatch-action))
   (conn-action ()
     (:description "Open Link")
-    (pcase-let* ((`(,pt ,window ,_thing ,_arg ,_transform)
-                  (conn-select-target)))
+    (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
+                 (conn-select-target)))
       (with-selected-window window
         (save-excursion
           (goto-char pt)

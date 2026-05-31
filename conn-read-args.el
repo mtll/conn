@@ -549,7 +549,7 @@ echo area help message.
            (debug (([sexp &rest keywordp form])
                    ([&rest sexp form])
                    def-body)))
-  (pcase-let* (((or `(,state . ,keys) state) state-and-keys))
+  (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     (cl-check-type state symbol)
     `(conn--read-args
       ',state
