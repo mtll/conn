@@ -441,32 +441,27 @@ of highlighting."
                       (push (conn-kapply-make-region mb me)
                             matches)))))))
            (setf matches (funcall sort-function matches)))
-         (check-buffer (buffer)
-           (with-current-buffer buffer
-             (save-excursion
-               (goto-char (point-min))
-               (replace-search string (point-max) regexp-flag
-                               delimited-flag case-fold-search))))
+         (check-file (file)
+           (with-work-buffer
+             (condition-case err
+                 (insert-file-contents file nil)
+               (file-missing nil)
+               (file-error
+                (let ((msg (error-message-string err)))
+                  (unless (string-search file msg)
+                    (setf msg (format "%s: %s" file msg)))
+                  (delay-warning 'file-error msg :error))
+                nil))
+             (goto-char (point-min))
+             (replace-search string (point-max) regexp-flag
+                             delimited-flag case-fold-search)))
          (next ()
-           (while (and files (null matches))
-             (cond* ((bind* (next (pop files))))
-                    ((null next) nil)
-                    ((bind-and* (buffer (get-file-buffer next)))
-                     (when (check-buffer buffer)
-                       (collect-matches buffer)))
-                    ((with-work-buffer
-                       (condition-case err
-                           (insert-file-contents next nil)
-                         (file-missing nil)
-                         (file-error
-                          (let ((msg (error-message-string err)))
-                            (unless (string-search next msg)
-                              (setf msg (format "%s: %s" next msg)))
-                            (delay-warning 'file-error msg :error))
-                          nil))
-                       (check-buffer (current-buffer)))
-                     (collect-matches (find-file-noselect next)))
-                    (t (next))))))
+           (while-let ((next (and (null matches)
+                                  (pop files))))
+             (cond* ((bind-and* (buffer (get-file-buffer next)))
+                     (collect-matches buffer))
+                    ((check-file next)
+                     (collect-matches (find-file-noselect next)))))))
       (apply #'conn-kapply-on-iterator
              (lambda (state)
                (pcase state
@@ -1889,11 +1884,10 @@ finishing showing the buffers that were visited."))
                                'delimited
                                conn-delimited-argument-map
                                :value delimited)))
-    (conn-kapply-on-matches
-     thing arg transform
-     subregions-p
-     regexp-flag
-     delimited)))
+    (conn-kapply-on-matches thing arg transform
+                            subregions-p
+                            regexp-flag
+                            delimited)))
 
 (define-conn-state conn-kapply-on-things-state (conn-read-thing-state))
 
@@ -1932,11 +1926,10 @@ finishing showing the buffers that were visited."))
       (when pipeline
         (conn-push-command-history
          (lambda ()
-           (conn-kapply-on-matches
-            thing arg transform
-            nil nil t
-            (thing-at-point 'word)
-            pipeline)))))
+           (conn-kapply-on-matches thing arg transform
+                                   nil nil t
+                                   (thing-at-point 'word)
+                                   pipeline)))))
     pipeline))
 
 (define-conn-argument-command ((arg conn-kapply-on-thing-argument)
@@ -1957,19 +1950,19 @@ finishing showing the buffers that were visited."))
       (let (conn-kapply-query-on-record
             conn-command-history)
         (conn->f pipeline
-          (conn-kapply-on-matches
-           thing arg transform
-           nil t nil
-           (format "\\_<%s\\_>"
-                   (regexp-quote (thing-at-point 'symbol))))))
+          (conn-kapply-on-matches thing arg transform
+                                  nil t nil
+                                  (conn->
+                                    (thing-at-point 'symbol)
+                                    (regexp-quote)
+                                    (format "\\_<%s\\_>")))))
       (when pipeline
         (conn-push-command-history
          (lambda ()
-           (conn-kapply-on-matches
-            thing arg transform
-            nil nil t
-            (thing-at-point 'word)
-            pipeline)))))
+           (conn-kapply-on-matches thing arg transform
+                                   nil nil t
+                                   (thing-at-point 'word)
+                                   pipeline)))))
     pipeline))
 
 (define-conn-argument-command ((arg conn-kapply-on-thing-argument)
@@ -1993,10 +1986,11 @@ finishing showing the buffers that were visited."))
                 (conn-kapply-highlight-iterator beg end)
                 :extra (conn-read-patterns-argument)))
        (when pipeline
-         (conn-push-command-history
-          'conn-kapply-on-things-do
-          'conn-kapply-on-highlights-in-thing
-          arg transform pipeline))
+         (conn-push-command-history 'conn-kapply-on-things-do
+                                    'conn-kapply-on-highlights-in-thing
+                                    arg
+                                    transform
+                                    pipeline))
        pipeline))))
 
 (cl-defmethod conn-kapply-on-things-do ((thing (conn-thing t))
@@ -2100,14 +2094,15 @@ finishing showing the buffers that were visited."))
        ,@pipeline))
     (conn-push-command-history
      (lambda ()
-       (conn-kapply-macro
-        (lambda (iterator)
-          (funcall applier iterator (or conn-read-args-last-prefix 0)))
-        (conn-kapply-infinite-iterator)
-        `(conn-kapply-relocate-to-region
-          conn-kapply-open-invisible
-          conn-kapply-pulse-region
-          ,@pipeline))))))
+       (conn-kapply-macro (lambda (iterator)
+                            (funcall applier
+                                     iterator
+                                     (or conn-read-args-last-prefix 0)))
+                          (conn-kapply-infinite-iterator)
+                          `(conn-kapply-relocate-to-region
+                            conn-kapply-open-invisible
+                            conn-kapply-pulse-region
+                            ,@pipeline))))))
 
 (defvar-keymap conn-restrict-argument-map)
 
@@ -2189,13 +2184,12 @@ finishing showing the buffers that were visited."))
                 (applier (conn-kapply-macro-argument)))
              (setf restrict rst)
              (collect-matches)
-             (conn-kapply-macro
-              applier
-              iterator
-              `(conn-kapply-relocate-to-region
-                conn-kapply-open-invisible
-                conn-kapply-pulse-region
-                ,@pipeline))
+             (conn-kapply-macro applier
+                                iterator
+                                `(conn-kapply-relocate-to-region
+                                  conn-kapply-open-invisible
+                                  conn-kapply-pulse-region
+                                  ,@pipeline))
              (setf curr (current-buffer))))
         (setf isearch-window-configuration nil)
         (isearch-done)
@@ -2213,7 +2207,7 @@ finishing showing the buffers that were visited."))
             (completing-read-multiple
              "Regexps for kapply: "
              (mapcar (lambda (pattern)
-                       (thread-first
+                       (conn-<
                          (rassq pattern hi-lock-interactive-lighters)
                          car
                          (or (car pattern))
