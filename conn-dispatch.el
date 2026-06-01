@@ -3321,6 +3321,12 @@ buffer."
     (let ((inhibit-message t))
       (cl-call-next-method))))
 
+(defvar-keymap conn-kapply-kbd-macro-query-map
+  "C-e" 'exit
+  "RET" 'exit
+  "<return>" 'exit
+  "C-n" 'skip)
+
 (cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil)
         (conn--dispatch-redisplay-prompt-flag nil))
@@ -3338,11 +3344,7 @@ buffer."
                        "\\[skip] skip iteration"))
                ( :predicate (cmd)
                  (or (eq cmd 'exit) (eq cmd 'skip)))
-               (:keymap (define-keymap
-                          "C-e" 'exit
-                          "RET" 'exit
-                          "<return>" 'exit
-                          "C-n" 'skip))
+               (:keymap conn-kapply-kbd-macro-query-map)
                ( :update (cmd _break)
                  (pcase cmd
                    ('skip
