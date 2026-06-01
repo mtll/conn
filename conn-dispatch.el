@@ -403,7 +403,41 @@ themselves once the selection process has concluded."
        ,@macroexpand-all-environment))))
 
 (defmacro conn-with-dispatch-handlers (&rest body)
-  "Bind a dispatch event handler."
+  "Bind dispatch event handlers.
+
+Two macros are locally defined within body for binding handlers:
+
+- (:with HANDLER &key DEPTH) binds HANDLER. HANDLER should be a
+  dispatch command handler defined with
+  `define-conn-dispatch-handler-command'. The optional keyword
+  argument depth should be an integer between -100 and 100, and
+  specifies the sort depth for the handler. By default depth is 0.
+
+- (:handler &rest BODY) defines and binds an anonymous handler.  The
+  anonymous handler is defined with the following macros locally defined
+  within body:
+
+  - (:update BREAK &rest BODY) defines the update method for the
+    handler. BREAK is the break function which should be called when
+    the handler handles the command, see also `conn-read-args'. Inside
+    BODY the macro (:return &optional VALUE) is defined locally which
+    causes the enclosing `conn-with-dispatch-handler' form to return
+    VALUE.
+
+  - (:predicate COMMAND) defines the predicate method for the handler.
+    See also `conn-argument-predicate'.
+
+  - (:display) defines the display method for the handler. See also
+    `conn-argument-display'.
+
+  - (:annotation COMMAND) defines the annotation method for the handler.
+    See also `conn-argument-annotation'.
+
+  - (:reference COMMAND BREAK) defines the command reference method for
+    the handler.  See also `conn-argument-command-reference'.
+
+  - (:keymap KEYMAP) defines the keymap for the command handler.  See
+    also `conn-argument-compose-keymap'."
   (declare (indent 0))
   (conn--with-dispatch-handlers (gensym "handler") body))
 

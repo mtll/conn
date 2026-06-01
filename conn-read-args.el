@@ -576,10 +576,26 @@ echo area help message.
              :read-only t))
 
 (cl-defgeneric conn-argument-cancel (argument)
+  "Cancel ARGUMENT after `conn-read-args' has been aborted.
+See also `conn-argument-accept'."
   ( :method (_arg) nil))
 
 (cl-defgeneric conn-argument-accept (argument)
+  "Accept ARGUMENT after `conn-read-args' has exited normally.
+This function is called after `conn-argument-payload' has succeeded for
+all arguments.  See also `conn-argument-cancel'."
   ( :method (_arg) nil))
+
+(cl-defgeneric conn-argument-payload (argument)
+  "Extract ARGUMENT's value.
+Note that any cleanup which depends on whether `conn-read-args'
+succeeded or failed should be done in either `conn-argument-accept' or
+`conn-argument-cancel', respectively, since `conn-argument-payload' may
+error."
+  (declare (important-return-value t))
+  ( :method (arg) arg)
+  ( :method ((arg conn-argument))
+    (conn-argument-value arg)))
 
 (cl-defgeneric conn-argument-required-p (argument)
   (declare (important-return-value t)
@@ -589,15 +605,11 @@ echo area help message.
     (and (conn-argument-required arg)
          (not (conn-argument-set-flag arg)))))
 
-(cl-defgeneric conn-argument-update (argument form break)
-  ( :method (_arg _form _break) nil))
-
-(cl-defgeneric conn-argument-payload (argument)
-  "Extract ARGUMENT's value."
-  (declare (important-return-value t))
-  ( :method (arg) arg)
-  ( :method ((arg conn-argument))
-    (conn-argument-value arg)))
+(cl-defgeneric conn-argument-update (argument command break)
+  "Update ARGUMENT in response to COMMAND.
+BREAK is a function which when called prevents any further arguments
+update methods being called with COMMAND."
+  ( :method (_arg _cmd _break) nil))
 
 (cl-defgeneric conn-argument-display (argument)
   "Display string in `conn-read-args-message' for ARGUMENT.
@@ -617,16 +629,18 @@ be displayed in the echo area during `conn-read-args'."
        str))))
 
 (cl-defgeneric conn-argument-compose-keymap (argument)
+  "Return keymap for ARGUMENT."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
     (conn-argument-keymap arg)))
 
-(cl-defgeneric conn-argument-predicate (argument value)
+(cl-defgeneric conn-argument-predicate (argument command)
+  "Return non-nil if ARGUMENT accepts COMMAND."
   (declare (important-return-value t)
            (side-effect-free t))
-  ( :method (_arg _val) nil))
+  ( :method (_arg _cmd) nil))
 
 (cl-defgeneric conn-argument-completion-annotation (argument value)
   (declare (important-return-value t)
