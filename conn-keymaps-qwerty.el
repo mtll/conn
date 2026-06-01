@@ -25,11 +25,12 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "<" 'conn-surround
   "h" 'end-of-buffer
   "C-e" 'conn-forward-outer-line
   "C-a" 'conn-backward-outer-line
-  ";" 'conn-things-in-region)
+  ";" 'conn-things-in-region
+  ">" 'forward-line
+  "<" 'conn-backward-line)
 
 (define-keymap
   :keymap conn-other-end-argument-map

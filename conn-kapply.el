@@ -448,24 +448,25 @@ of highlighting."
                (replace-search string (point-max) regexp-flag
                                delimited-flag case-fold-search))))
          (next ()
-           (when-let* ((next (pop files)))
-             (let ((buffer (get-file-buffer next)))
-               (cond (buffer
-                      (when (check-buffer buffer)
-                        (collect-matches buffer)))
-                     ((with-work-buffer
-                        (condition-case err
-                            (insert-file-contents next nil)
-                          (file-missing nil)
-                          (file-error
-                           (let ((msg (error-message-string err)))
-                             (unless (string-search next msg)
-                               (setf msg (format "%s: %s" next msg)))
-                             (delay-warning 'file-error msg :error))
-                           nil))
-                        (check-buffer (current-buffer)))
-                      (collect-matches (find-file-noselect next)))
-                     (t (next)))))))
+           (while (and files (null matches))
+             (cond* ((bind* (next (pop files))))
+                    ((null next) nil)
+                    ((bind-and* (buffer (get-file-buffer next)))
+                     (when (check-buffer buffer)
+                       (collect-matches buffer)))
+                    ((with-work-buffer
+                       (condition-case err
+                           (insert-file-contents next nil)
+                         (file-missing nil)
+                         (file-error
+                          (let ((msg (error-message-string err)))
+                            (unless (string-search next msg)
+                              (setf msg (format "%s: %s" next msg)))
+                            (delay-warning 'file-error msg :error))
+                          nil))
+                       (check-buffer (current-buffer)))
+                     (collect-matches (find-file-noselect next)))
+                    (t (next))))))
       (apply #'conn-kapply-on-iterator
              (lambda (state)
                (pcase state
@@ -1075,9 +1076,11 @@ When kapply finishes restore the previous point in each buffer."
               (prog1 (funcall iterator state)
                 (unless (alist-get (current-buffer) saved-excursions)
                   (setf (alist-get (current-buffer) saved-excursions)
-                        (cons (point-marker) (save-mark-and-excursion--save)))))
+                        (cons (copy-marker (point) t)
+                              (save-mark-and-excursion--save)))))
             (setf (alist-get (current-buffer) saved-excursions)
-                  (cons (point-marker) (save-mark-and-excursion--save)))
+                  (cons (copy-marker (point) t)
+                        (save-mark-and-excursion--save)))
             (funcall iterator state)))
          (_ (funcall iterator state)))))
    `((depth . ,(alist-get 'kapply-excursions conn--kapply-pipeline-depths))

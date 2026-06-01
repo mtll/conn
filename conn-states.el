@@ -1304,6 +1304,11 @@ popped and nil otherwise.  The default value is `always'.  Note that the
 function is not called and the state stays active if the previous
 command was a prefix command.")
 
+(conn-declare-state-property
+ :autopop-satisfies
+ "A predicate which must be satisfied immediately after the state has been
+entered.  If the predicate is not satisfied then the state is popped.")
+
 (cl-defmethod conn-enter-state :around ((state (conn-substate conn-autopop-state))
                                         transition)
   (when (or (eq 'conn-stack-enter-recursive
@@ -1311,7 +1316,10 @@ command was a prefix command.")
             (null conn--state-stack))
     (error "%s cannot be the base state" state))
   (cl-check-type (conn-state-get state :pop-predicate) function)
-  (cl-call-next-method))
+  (cl-call-next-method)
+  (when-let* ((pred (conn-state-get state :autopop-satisfies))
+              (_ (not (funcall pred))))
+    (conn-pop-state)))
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state))
                                 _transition)
@@ -1536,6 +1544,7 @@ command was a prefix command.")
 (define-conn-state conn-mark-state (conn-command-state
                                     conn-autopop-state)
   :lighter "M"
+  :autopop-satisfies #'region-active-p
   :pop-predicate (lambda ()
                    (or (not (region-active-p))
                        deactivate-mark
@@ -1566,15 +1575,11 @@ command was a prefix command.")
                                              rmm)))))))
   (conn-ring-insert-front conn-mark-state-ring state))
 
-(defun conn-mark-state-keep-mark-active-p (transition)
-  "When non-nil keep the mark active when exiting `conn-mark-state'."
-  (or (conn-substate-p conn-next-state 'conn-emacs-state)
-      (eq (oclosure-type transition) 'conn-stack-enter-recursive)))
-
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-mark-state))
-                                _transition)
+                                transition)
   (cl-call-next-method)
-  (unless (region-active-p)
+  (when (and (not (region-active-p))
+             (cl-typep transition 'conn-stack-push))
     (activate-mark))
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
   (conn-state-unwind clone

@@ -321,34 +321,38 @@ This skips executing the body of the `conn-read-args' form entirely."
         (keyseq nil)
         (timer nil))
     (cl-macrolet ((with-keymaps (&rest body)
-                    `(let* ((emulation-mode-map-alists
-                             `(((,state
-                                 ,@(thread-last
-                                     (mapcar #'conn-argument-compose-keymap
-                                             arguments)
-                                     (cons overriding-map)
-                                     (delq nil)
-                                     (make-composed-keymap))))
-                               ,@emulation-mode-map-alists))
-                            (overriding-terminal-local-map
+                    `(let ((emulation-mode-map-alists
+                            `(((,state
+                                ,@(thread-last
+                                    (mapcar #'conn-argument-compose-keymap
+                                            arguments)
+                                    (cons overriding-map)
+                                    (delq nil)
+                                    (make-composed-keymap))))
+                              ,@emulation-mode-map-alists)))
+                       ,@body))
+                  (with-overriding-keymaps (&rest body)
+                    `(with-keymaps
+                      (let ((overriding-terminal-local-map
                              (make-composed-keymap
                               (let (minor-mode-overriding-map-alist
                                     minor-mode-map-alist)
                                 (current-minor-mode-maps)))))
-                       ,@body)))
+                        ,@body))))
       (cl-labels
           ((timer-function ()
              (setf timer nil)
-             (with-keymaps (display-message)))
+             (display-message))
            (continue-p ()
              (cl-loop for arg in arguments
                       thereis (conn-argument-required-p arg)))
            (display-message ()
-             (unless executing-kbd-macro
-               (let ((inhibit-message conn-read-args-inhibit-message)
-                     (message-log-max nil)
-                     (scroll-conservatively 100))
-                 (funcall display-handler prompt arguments (and timer t)))))
+             (with-overriding-keymaps
+              (unless executing-kbd-macro
+                (let ((inhibit-message conn-read-args-inhibit-message)
+                      (message-log-max nil)
+                      (scroll-conservatively 100))
+                  (funcall display-handler prompt arguments (and timer t))))))
            (update-args (cmd)
              (cl-block nil
                (let ((break nil))
@@ -361,17 +365,18 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (timer-set-function timer #'timer-function)
                  (timer-set-idle-time timer conn-read-args-message-delay)
                  (timer-activate-when-idle timer t))
-               (cl-loop
-                repeat 10 do
-                (setf keyseq (let ((inhibit-quit t))
-                               (read-key-sequence nil))
-                      cmd (key-binding keyseq 'accept-default))
-                (if (arrayp cmd)
-                    (conn-add-unread-events cmd)
-                  (cl-return))
-                finally (progn
-                          (discard-input)
-                          (error "Keyboard macro recursion limit exceeded")))
+               (with-overriding-keymaps
+                (cl-loop
+                 repeat 10 do
+                 (setf keyseq (let ((inhibit-quit t))
+                                (read-key-sequence nil))
+                       cmd (key-binding keyseq 'accept-default))
+                 (if (arrayp cmd)
+                     (conn-add-unread-events cmd)
+                   (cl-return))
+                 finally (progn
+                           (discard-input)
+                           (error "Keyboard macro recursion limit exceeded"))))
                (when timer
                  (cancel-timer timer))
                (cond ((eql (aref keyseq 0) quit-event)
@@ -413,7 +418,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (when timer
                   (cancel-timer timer)
                   (setf timer nil))
-                (with-keymaps
+                (with-overriding-keymaps
                  (condition-case err
                      (conn-quick-reference
                       (conn-get-quick-ref-pages)
@@ -424,7 +429,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (when timer
                   (cancel-timer timer)
                   (setf timer nil))
-                (with-keymaps
+                (with-overriding-keymaps
                  (conn--read-args-describe-key
                   arguments
                   (lambda (&optional str)
@@ -455,10 +460,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (minibuffer-message-clear-timeout nil))
                  (while (continue-p)
                    (catch 'conn-read-args-error
-                     (execute-command
-                      (with-keymaps
-                       (display-message)
-                       (read-command)))))
+                     (display-message)
+                     (execute-command (read-command))))
                  (setf unread-command-events nil ;should this be smarter?
                        conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
         (apply
