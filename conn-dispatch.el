@@ -4218,7 +4218,7 @@ contain targets."
         (unless (= (pos-bol) (pos-eol))
           (conn-make-target-overlay
            (point) 0
-           :thing thing))))))
+           :thing 'conn-forward-inner-line))))))
 
 (define-conn-target-finder conn-dispatch-end-of-inner-line-targets
     ()
