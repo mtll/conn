@@ -40,29 +40,29 @@
   (defvar hi-lock-auto-select-face)
   (declare-function hi-lock-read-face-name "hi-lock")
   (declare-function hi-lock-regexp-okay "hi-lock")
-  (let ((hi-lock-auto-select-face t)
-        (regexps nil))
-    (cond ((use-region-p)
-           (let ((re (hi-lock-regexp-okay
-                      (regexp-quote
-                       (buffer-substring-no-properties
-                        (region-beginning)
-                        (region-end))))))
-             (hi-lock-face-buffer
-              (if (not read) re
-                (read-regexp "Regexp" re 'regexp-history))
-              (hi-lock-read-face-name)))
-           (deactivate-mark))
-          ((setf regexps (and (fboundp 'hi-lock--regexps-at-point)
-                              (hi-lock--regexps-at-point)))
-           (mapc #'hi-lock-unface-buffer regexps))
-          (t
-           (hi-lock-face-buffer
-            (if (not read) (find-tag-default-as-symbol-regexp)
-              (read-regexp "Regexp"
-                           (find-tag-default-as-symbol-regexp)
-                           'regexp-history))
-            (hi-lock-read-face-name))))))
+  (cond*
+   ((bind* (hi-lock-auto-select-face t)))
+   ((use-region-p)
+    (let ((re (hi-lock-regexp-okay
+               (regexp-quote
+                (buffer-substring-no-properties
+                 (region-beginning)
+                 (region-end))))))
+      (hi-lock-face-buffer
+       (if (not read) re
+         (read-regexp "Regexp" re 'regexp-history))
+       (hi-lock-read-face-name)))
+    (deactivate-mark))
+   ((bind-and* (regexps (and (fboundp 'hi-lock--regexps-at-point)
+                             (hi-lock--regexps-at-point))))
+    (mapc #'hi-lock-unface-buffer regexps))
+   (t
+    (hi-lock-face-buffer
+     (if (not read) (find-tag-default-as-symbol-regexp)
+       (read-regexp "Regexp"
+                    (find-tag-default-as-symbol-regexp)
+                    'regexp-history))
+     (hi-lock-read-face-name)))))
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
@@ -71,8 +71,8 @@ This binding will be inactive during keyboard macro definition and
 execution."
   (interactive)
   (if (or defining-kbd-macro executing-kbd-macro)
-      (if defining-kbd-macro
-          (message "Cannot save macro while defining it."))
+      (when defining-kbd-macro
+        (message "Cannot save macro while defining it."))
     (unless last-kbd-macro
       (error "No keyboard macro defined"))
     (let* ((key-seq (read-key-sequence "Bind last macro to key: "))
@@ -3393,6 +3393,30 @@ hook, which see."
        (funcall conn-kill-reformat-function bounds)))
     (_ (user-error "No thing found"))))
 
+(define-conn-argument-command ((arg conn-kill-thing-argument)
+                               (cmd (eql copy-rectangle-to-kill-ring)))
+  "Copy rectangle to kill ring.")
+
+(cl-defmethod conn-kill-thing-do ((_thing (eql copy-rectangle-to-kill-ring))
+                                  _arg
+                                  _transform
+                                  &optional
+                                  append
+                                  _delete
+                                  register
+                                  separator
+                                  _reformat
+                                  _check-bounds)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (conn--kill-string (string-join (extract-rectangle beg end) "\n")
+                           append
+                           register
+                           separator)
+        (setf deactivate-mark t))
+    (error "Rectangle mark mode not active")))
+
 (cl-defmethod conn-kill-thing-do ((_thing (eql buffer-filename))
                                   _arg
                                   transform
@@ -3936,6 +3960,41 @@ that place."
         register
         separator)))
     (_ (user-error "No thing found"))))
+
+(cl-defmethod conn-copy-thing-do :extra "rmm" ((_thing (conn-thing region))
+                                               _arg
+                                               &optional
+                                               _transform
+                                               _append
+                                               register
+                                               _separator)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (cond (register (copy-rectangle-to-register register beg end))
+              (t (copy-rectangle-as-kill beg end))))
+    (cl-call-next-method)))
+
+(define-conn-argument-command ((arg conn-copy-thing-argument)
+                               (cmd (eql copy-rectangle-to-kill-ring)))
+  "Copy rectangle to kill ring.")
+
+(cl-defmethod conn-copy-thing-do ((_thing (eql copy-rectangle-to-kill-ring))
+                                  _arg
+                                  &optional
+                                  _transform
+                                  append
+                                  register
+                                  separator)
+  (if (bound-and-true-p rectangle-mark-mode)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (conn--kill-string (string-join (extract-rectangle beg end) "\n")
+                           append
+                           register
+                           separator)
+        (setf deactivate-mark t))
+    (error "Rectangle mark mode not active")))
 
 (cl-defmethod conn-copy-thing-do ((_thing (eql copy-matching-lines))
                                   arg

@@ -54,7 +54,7 @@
 (keymap-set conn-error-repeat-map "b" 'conn-repeat)
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
+  :keymap (conn-get-minor-mode-map 'conn-mark-state 'rectangle-mark-mode)
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
@@ -594,6 +594,14 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-copy-state)
   "j" 'move-end-of-line)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-kill-state 'rectangle-mark-mode)
+  "W" 'copy-rectangle-to-kill-ring)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-copy-state 'rectangle-mark-mode)
+  "W" 'copy-rectangle-to-kill-ring)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-duplicate-state)
