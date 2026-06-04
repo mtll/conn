@@ -160,31 +160,39 @@
 ;;;; Narrow Ring Prefix
 
 (defun conn--narrow-ring-save-state ()
-  (list (point) (save-mark-and-excursion--save)
+  (list (current-buffer)
+        (point) (save-mark-and-excursion--save)
         (point-min) (point-max)
-        (and-let* ((_(conn-ring-p conn-narrow-ring))
-                   (ring (conn-copy-ring conn-narrow-ring)))
-          (setf (conn-ring-copier ring) (pcase-lambda ((cl-struct conn-narrowing
-                                                                  start
-                                                                  end
-                                                                  point))
-                                          (conn-narrowing
-                                           (marker-position start)
-                                           (marker-position end)
-                                           :point (marker-position point)))
-                ring (conn-copy-ring ring)
-                (conn-ring-copier ring) #'conn-copy-narrowing)
-          ring)))
+        (conn-map-ring (pcase-lambda ((cl-struct conn-narrowing
+                                                 start
+                                                 end
+                                                 point))
+                         (conn-narrowing
+                          (marker-position start)
+                          (marker-position end)
+                          :point (marker-position point)))
+                       conn-narrow-ring)))
 
 (defun conn--narrow-ring-restore-state (state)
   (widen)
   (pcase state
-    (`(,point ,mark ,min ,max ,ring)
-     (narrow-to-region min max)
-     (goto-char point)
-     (save-mark-and-excursion--restore mark)
-     (conn-clear-narrow-ring)
-     (setf conn-narrow-ring (conn-copy-ring ring)))))
+    (`(,buffer ,point ,mark ,min ,max ,ring)
+     (with-current-buffer buffer
+       (narrow-to-region min max)
+       (goto-char point)
+       (save-mark-and-excursion--restore mark)
+       (when ring
+         (conn-clear-narrow-ring)
+         (setf conn-narrow-ring
+               (conn-map-ring (pcase-lambda ((cl-struct conn-narrowing
+                                                        start
+                                                        end
+                                                        point))
+                                (conn-narrowing
+                                 (copy-marker start)
+                                 (copy-marker end)
+                                 :point (copy-marker point)))
+                              ring)))))))
 
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
@@ -202,30 +210,30 @@
                              (marker-position end)))))))
 
 (defun conn--narrow-ring-display ()
-  (let ((len (length (when (conn-ring-p conn-narrow-ring)
-                       (conn-ring-list conn-narrow-ring)))))
+  (let* ((list (and (conn-ring-p conn-narrow-ring)
+                    (conn-ring-list conn-narrow-ring)))
+         (len (length list)))
     (concat
      (propertize "Narrow Ring: " 'face 'transient-heading)
      (propertize (format "[%s]" len)
                  'face 'transient-value)
      " - "
-     (when (> len 2)
-       (format "%s, " (conn--format-narrowing
-                       (conn-ring-tail conn-narrow-ring))))
      (when (> len 0)
-       (pcase (conn-ring-head conn-narrow-ring)
+       (pcase (car list)
          ('nil (propertize "nil" 'face 'transient-value))
-         ((and reg `(,beg . ,end)
-               (guard (and (= (point-min) beg)
+         ((and reg
+               (cl-struct conn-narrowing start end)
+               (guard (and (= (point-min) start)
                            (= (point-max) end))))
           (propertize (conn--format-narrowing reg)
                       'face 'transient-value))
-         (reg
-          (propertize (conn--format-narrowing reg)
-                      'face 'bold))))
-     (when (> len 1)
-       (format ", %s" (conn--format-narrowing
-                       (cadr (conn-ring-list conn-narrow-ring))))))))
+         (reg (conn--format-narrowing reg))))
+     " "
+     (when (cdr list)
+       (mapconcat #'conn--format-narrowing
+                  (take 4 (cdr list))
+                  " "))
+     (when (> len 4) " ..."))))
 
 ;;;###autoload (autoload 'conn-narrow-ring-prefix "conn-transients" nil t)
 (transient-define-prefix conn-narrow-ring-prefix ()
@@ -251,11 +259,10 @@
                (win (selected-window)))
            (widen)
            (conn--narrow-indirect-to-region beg end)
-           (with-current-buffer buf
-             (if (eq (window-buffer win) buf)
-                 (with-selected-window win
-                   (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
+           (if (eq (window-buffer win) buf)
+               (with-selected-window win
+                 (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
+             (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))))
       ("t" "Add Region" conn-thing-to-narrow-ring)]]
   (interactive)
   (transient-setup 'conn-narrow-ring-prefix nil nil

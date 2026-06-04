@@ -364,19 +364,23 @@ See `quail-add-unread-command-events'."
        (delq ,item)
        (cons ,item)))))
 
-(defun conn-copy-ring (ring)
+(cl-defun conn-map-ring (function ring &key cleanup copier capacity)
   (when (conn-ring-p ring)
     (let* ((new-ring (conn--copy-ring ring))
-           (copier (conn-ring-copier ring))
-           (new-list (cl-loop for elem in (conn-ring-list new-ring)
-                              collect (funcall copier elem)))
+           (new-list (mapcar function (conn-ring-list new-ring)))
            (new-hist (cl-loop with old-list = (conn-ring-list ring)
                               for elem in (conn-ring-history ring)
                               when (seq-position old-list elem #'eq)
                               collect (nth it new-list))))
       (setf (conn-ring-list new-ring) new-list
             (conn-ring-history new-ring) new-hist)
+      (when capacity (setf (conn-ring-capacity new-ring) capacity))
+      (when cleanup (setf (conn-ring-cleanup new-ring) cleanup))
+      (when copier (setf (conn-ring-copier new-ring) copier))
       new-ring)))
+
+(defun conn-copy-ring (ring)
+  (conn-map-ring (conn-ring-copier ring) ring))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
@@ -455,6 +459,11 @@ If ring is (1 2 3 4) 4 would be returned."
            (setf (conn-ring-list ring) list
                  (conn-ring-history ring) hist)
            (mapc (conn-ring-cleanup ring) remove)))
+
+(defun conn-ring-delete-all (ring)
+  (mapc (conn-ring-cleanup ring) (conn-ring-list ring))
+  (setf (conn-ring-list ring) nil
+        (conn-ring-history ring) nil))
 
 ;;;;; Region Utils
 

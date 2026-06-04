@@ -40,29 +40,28 @@
   (defvar hi-lock-auto-select-face)
   (declare-function hi-lock-read-face-name "hi-lock")
   (declare-function hi-lock-regexp-okay "hi-lock")
-  (cond*
-   ((bind* (hi-lock-auto-select-face t)))
-   ((use-region-p)
-    (let ((re (hi-lock-regexp-okay
-               (regexp-quote
-                (buffer-substring-no-properties
-                 (region-beginning)
-                 (region-end))))))
-      (hi-lock-face-buffer
-       (if (not read) re
-         (read-regexp "Regexp" re 'regexp-history))
-       (hi-lock-read-face-name)))
-    (deactivate-mark))
-   ((bind-and* (regexps (and (fboundp 'hi-lock--regexps-at-point)
-                             (hi-lock--regexps-at-point))))
-    (mapc #'hi-lock-unface-buffer regexps))
-   (t
-    (hi-lock-face-buffer
-     (if (not read) (find-tag-default-as-symbol-regexp)
-       (read-regexp "Regexp"
-                    (find-tag-default-as-symbol-regexp)
-                    'regexp-history))
-     (hi-lock-read-face-name)))))
+  (cond* ((bind* (hi-lock-auto-select-face t)))
+         ((use-region-p)
+          (let ((re (hi-lock-regexp-okay
+                     (regexp-quote
+                      (buffer-substring-no-properties
+                       (region-beginning)
+                       (region-end))))))
+            (hi-lock-face-buffer
+             (if (not read) re
+               (read-regexp "Regexp" re 'regexp-history))
+             (hi-lock-read-face-name)))
+          (deactivate-mark))
+         ((bind-and* (regexps (and (fboundp 'hi-lock--regexps-at-point)
+                                   (hi-lock--regexps-at-point))))
+          (mapc #'hi-lock-unface-buffer regexps))
+         (t
+          (hi-lock-face-buffer
+           (if (not read) (find-tag-default-as-symbol-regexp)
+             (read-regexp "Regexp"
+                          (find-tag-default-as-symbol-regexp)
+                          'regexp-history))
+           (hi-lock-read-face-name)))))
 
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
@@ -191,46 +190,44 @@ Respects the current restriction."
                                (conn-inverse-op-other-end-handler
                                 (lambda () (conn-forward-up-inner-list 1)))))
   (interactive "p")
-  (cond
-   ((= 0 arg))
-   ((> 0 arg)
-    (conn-forward-up-inner-list (abs arg)))
-   (t
-    (conn-protected-let* ((pt (point) (goto-char pt)))
-      (backward-up-list (1- arg) t t)
-      (if (conn--point-in-comment-or-string-p)
-          (progn
-            (while (conn--point-in-comment-or-string-p)
-              (backward-up-list 1 t t))
-            (skip-syntax-forward (rx (syntax string-quote))))
-        (backward-up-list 1 t t)
-        (down-list 1))
-      (when (= (point) pt)
-        (backward-up-list 2 t t)
-        (down-list 1))))))
+  (cond ((= 0 arg))
+        ((> 0 arg)
+         (conn-forward-up-inner-list (abs arg)))
+        (t
+         (conn-protected-let* ((pt (point) (goto-char pt)))
+           (backward-up-list (1- arg) t t)
+           (if (conn--point-in-comment-or-string-p)
+               (progn
+                 (while (conn--point-in-comment-or-string-p)
+                   (backward-up-list 1 t t))
+                 (skip-syntax-forward (rx (syntax string-quote))))
+             (backward-up-list 1 t t)
+             (down-list 1))
+           (when (= (point) pt)
+             (backward-up-list 2 t t)
+             (down-list 1))))))
 
 (defun conn-forward-up-inner-list (arg)
   (declare (conn-thing-command inner-list
                                (conn-inverse-op-other-end-handler
                                 (lambda () (conn-backward-up-inner-list 1)))))
   (interactive "p")
-  (cond
-   ((= 0 arg))
-   ((> 0 arg)
-    (conn-backward-up-inner-list (abs arg)))
-   (t
-    (conn-protected-let* ((pt (point) (goto-char pt)))
-      (backward-up-list (- (1- arg)) t t)
-      (if (conn--point-in-comment-or-string-p)
-          (progn
-            (while (conn--point-in-comment-or-string-p)
-              (backward-up-list -1 t t))
-            (skip-syntax-backward (rx (syntax string-quote))))
-        (backward-up-list -1 t t)
-        (down-list -1))
-      (when (= (point) pt)
-        (backward-up-list -2 t t)
-        (down-list -1))))))
+  (cond ((= 0 arg))
+        ((> 0 arg)
+         (conn-backward-up-inner-list (abs arg)))
+        (t
+         (conn-protected-let* ((pt (point) (goto-char pt)))
+           (backward-up-list (- (1- arg)) t t)
+           (if (conn--point-in-comment-or-string-p)
+               (progn
+                 (while (conn--point-in-comment-or-string-p)
+                   (backward-up-list -1 t t))
+                 (skip-syntax-backward (rx (syntax string-quote))))
+             (backward-up-list -1 t t)
+             (down-list -1))
+           (when (= (point) pt)
+             (backward-up-list -2 t t)
+             (down-list -1))))))
 
 (defun conn-forward-defun (N)
   "Move forward by defuns.
@@ -2846,18 +2843,17 @@ Exiting the recursive edit will resume the isearch."
          (to-end   (point-max))
          (beg      (use-region-beginning))
          (end      (use-region-end)))
-    (cond
-     ((or (not from-end) (not to-beg))
-      (user-error "No query-replace separator to transpose around"))
-     ((or (not beg) (not end))
-      (transpose-regions from-beg from-end to-beg to-end))
-     (t
-      ;; Calculate intersection of FROM and TO with active region.
-      (when (< from-beg beg from-end) (setf from-beg beg))
-      (when (< from-beg end from-end) (setf from-end end))
-      (when (< to-beg beg to-end)     (setf to-beg beg))
-      (when (< to-beg end to-end)     (setf to-end end))
-      (transpose-regions from-beg from-end to-beg to-end)))))
+    (cond ((or (not from-end) (not to-beg))
+           (user-error "No query-replace separator to transpose around"))
+          ((or (not beg) (not end))
+           (transpose-regions from-beg from-end to-beg to-end))
+          (t
+           ;; Calculate intersection of FROM and TO with active region.
+           (when (< from-beg beg from-end) (setf from-beg beg))
+           (when (< from-beg end from-end) (setf from-end end))
+           (when (< to-beg beg to-end)     (setf to-beg beg))
+           (when (< to-beg end to-end)     (setf to-end end))
+           (transpose-regions from-beg from-end to-beg to-end)))))
 
 (defvar-keymap conn-transpose-thing-argument-map)
 
@@ -5425,8 +5421,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
                     (null (marker-position point)))
          (push-mark (point) t)
          (goto-char (or (marker-position point) start)))
-       (narrow-to-region start end))
-      (_ (user-error "Narrow ring empty")))))
+       (narrow-to-region start end)))))
 
 (defun conn-narrow-ring-next (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -5467,17 +5462,13 @@ of `conn-narrow-ring'."
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
   (conn--narrow-ring-ensure)
-  (mapc (conn-ring-cleanup conn-narrow-ring)
-        (conn-ring-list conn-narrow-ring))
-  (setf (conn-ring-list conn-narrow-ring) nil
-        (conn-ring-history conn-narrow-ring) nil))
+  (conn-ring-delete-all conn-narrow-ring))
 
 (defun conn-pop-narrow-ring ()
   "Pop `conn-narrow-ring'."
   (interactive)
   (conn--narrow-ring-ensure)
   (pcase (conn-ring-head conn-narrow-ring)
-    ('nil (widen))
     ((and (cl-struct conn-narrowing start end)
           (guard (= (point-min) start))
           (guard (= (point-max) end))
@@ -5489,7 +5480,11 @@ of `conn-narrow-ring'."
           (push-mark (point) t)
           (goto-char (or (marker-position point) start)))
         (narrow-to-region start end))
-       (_ (widen))))))
+       (_ (widen))))
+    ((and (cl-struct conn-narrowing start end)
+          narrowing)
+     (conn-narrow-ring-previous 1))
+    ('nil (widen))))
 
 (defun conn--narrow-to-region (beg end &optional record)
   (narrow-to-region beg end)

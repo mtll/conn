@@ -144,8 +144,15 @@
   "o" 'conn-pop-mark-ring
   "u" 'conn-unpop-mark-ring)
 
+(defvar-keymap conn-narrow-ring-cycle-repeat-map
+  :repeat t
+  "I" 'conn-narrow-ring-next
+  "K" 'conn-narrow-ring-previous)
+
 (define-keymap
   :keymap conn-goto-map
+  "I" 'conn-narrow-ring-next
+  "K" 'conn-narrow-ring-previous
   "'" 'conn-kapply-on-errors
   "v" 'conn-previous-mark-command
   "e" 'conn-previous-emacs-state
