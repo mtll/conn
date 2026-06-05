@@ -5481,8 +5481,7 @@ of `conn-narrow-ring'."
           (goto-char (or (marker-position point) start)))
         (narrow-to-region start end))
        (_ (widen))))
-    ((and (cl-struct conn-narrowing start end)
-          narrowing)
+    ((cl-type conn-narrowing)
      (conn-narrow-ring-previous 1))
     ('nil (widen))))
 

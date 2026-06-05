@@ -428,7 +428,7 @@ of highlighting."
                                         pipeline)
   (let ((sort-function #'nreverse)
         matches)
-    (cl-labels
+    (cl-flet*
         ((collect-matches (buffer)
            (with-current-buffer buffer
              (save-excursion
