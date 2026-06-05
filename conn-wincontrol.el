@@ -62,11 +62,17 @@
 
 (defvar conn-wincontrol-one-command-mode)
 
-;;;###autoload
+(defvar conn-wincontrol-mode-lighter
+  (propertize " WinC" 'face 'font-lock-warning-face))
+(put 'conn-wincontrol-mode-lighter 'risky-local-variable t)
+
+(defvar conn-wincontrol-one-command-mode-lighter
+  (propertize " WinC-1" 'face 'font-lock-warning-face))
+(put 'conn-wincontrol-one-command-mode-lighter 'risky-local-variable t)
+
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for wincontrol."
   :global t
-  :lighter #(" WinC" 0 5 (face font-lock-warning-face))
   :interactive nil
   (if conn-wincontrol-mode
       (condition-case _
@@ -90,6 +96,12 @@
                 (conn--wincontrol-minibuffer-setup)
               (let ((message-log-max nil))
                 (message "%s" (conn--wincontrol-message))))
+            (conn->f minor-mode-alist
+              (assq-delete-all 'conn-wincontrol-mode)
+              (cons (list 'conn-wincontrol-mode
+                          (if conn-wincontrol-one-command-mode
+                              'conn-wincontrol-one-command-mode-lighter
+                            'conn-wincontrol-mode-lighter))))
             (force-mode-line-update t))
         ((debug error)
          (conn-wincontrol-mode -1)))
@@ -106,11 +118,6 @@
     (when conn-wincontrol-one-command-mode
       (conn-wincontrol-one-command-mode -1))))
 
-(defun conn-wincontrol ()
-  (interactive)
-  (conn-wincontrol-mode 1))
-
-;;;###autoload
 (define-minor-mode conn-wincontrol-one-command-mode
   "Global minor mode for wincontrol one command."
   :global t
@@ -127,6 +134,12 @@
     (when conn-wincontrol-mode
       (conn-wincontrol-mode -1))))
 
+;;;###autoload
+(defun conn-wincontrol ()
+  (interactive)
+  (conn-wincontrol-mode 1))
+
+;;;###autoload
 (defun conn-wincontrol-one-command ()
   (interactive)
   (conn-wincontrol-one-command-mode 1))
