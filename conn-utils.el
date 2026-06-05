@@ -380,7 +380,8 @@ See `quail-add-unread-command-events'."
       new-ring)))
 
 (defun conn-copy-ring (ring)
-  (conn-map-ring (conn-ring-copier ring) ring))
+  (when (conn-ring-p ring)
+    (conn-map-ring (conn-ring-copier ring) ring)))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."

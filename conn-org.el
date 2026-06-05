@@ -36,8 +36,18 @@
 (add-hook 'conn-dispatch-button-functions 'conn-dispatch-org-button-handler)
 
 (cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-element))
-                                        _arg)
-  (org-transpose-element))
+                                        _arg
+                                        _at-point-and-mark)
+  (org-drag-element-forward)
+  (conn-transpose-setup-repeat-map #'org-drag-element-forward
+                                   #'org-drag-element-backward))
+
+(cl-defmethod conn-transpose-things-do ((_cmd (conn-thing org-backward-element))
+                                        _arg
+                                        _at-point-and-mark)
+  (org-drag-element-backward)
+  (conn-transpose-setup-repeat-map #'org-drag-element-backward
+                                   #'org-drag-element-forward))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-state)
