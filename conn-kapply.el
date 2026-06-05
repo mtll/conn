@@ -444,17 +444,18 @@ of highlighting."
          (check-file (file)
            (with-work-buffer
              (condition-case err
-                 (insert-file-contents file nil)
+                 (progn
+                   (insert-file-contents file nil)
+                   (goto-char (point-min))
+                   (replace-search string (point-max) regexp-flag
+                                   delimited-flag case-fold-search))
                (file-missing nil)
                (file-error
                 (let ((msg (error-message-string err)))
                   (unless (string-search file msg)
                     (setf msg (format "%s: %s" file msg)))
                   (delay-warning 'file-error msg :error))
-                nil))
-             (goto-char (point-min))
-             (replace-search string (point-max) regexp-flag
-                             delimited-flag case-fold-search)))
+                nil))))
          (next ()
            (while-let ((next (and (null matches)
                                   (pop files))))
