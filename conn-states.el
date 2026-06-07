@@ -1073,41 +1073,42 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
 ;;;;; Definitions
 
 (defun define--conn-state (name parents properties)
-  (let ((props (cl-loop with kvs = properties
-                        for (k v) on kvs by #'cddr
-                        collect (cons k v))))
-    (if-let* ((state-obj (conn--find-state name)))
-        (let ((prev-parents (conn-state--parents state-obj)))
-          (remhash name conn--state-all-parents-cache)
-          (setf (conn-state--properties state-obj) props
-                (conn-state--parents state-obj) parents)
-          (dolist (former (seq-difference prev-parents parents))
-            (cl-callf2 delq name (conn-state--children
-                                  (conn--find-state former))))
-          (let (new-mode-maps)
-            (dolist (parent (seq-difference parents prev-parents))
-              (pcase-dolist (`(,mode . ,_)
-                             (cdr (conn-state-minor-mode-maps-alist parent)))
-                (unless (gethash (cons name mode) conn--minor-mode-maps-cache)
-                  (conn--ensure-minor-mode-map name mode)
-                  (push mode new-mode-maps))))
-            (conn--rebuild-state-keymaps name)
-            (dolist (child (conn-state-all-children name))
-              (remhash child conn--state-all-parents-cache)
-              (dolist (mode new-mode-maps)
-                (conn--ensure-minor-mode-map child mode))
-              (conn--rebuild-state-keymaps child))))
-      (let ((state-obj (conn--make-state name parents)))
-        (setf (conn--find-state name) state-obj
-              (conn-state--properties state-obj) props)
-        (dolist (parent parents)
-          (cl-pushnew name (conn-state--children
-                            (conn--find-state parent))))
-        (unless (conn-state-get name :no-keymap)
-          (dolist (parent parents)
-            (pcase-dolist (`(,mode . ,_)
-                           (cdr (conn-state-minor-mode-maps-alist parent)))
-              (conn--ensure-minor-mode-map name mode))))))))
+  (cond*
+   ((bind* (props (cl-loop with kvs = properties
+                           for (k v) on kvs by #'cddr
+                           collect (cons k v)))))
+   ((bind-and* (state-obj (conn--find-state name)))
+    (let ((prev-parents (conn-state--parents state-obj)))
+      (remhash name conn--state-all-parents-cache)
+      (setf (conn-state--properties state-obj) props
+            (conn-state--parents state-obj) parents)
+      (dolist (former (seq-difference prev-parents parents))
+        (cl-callf2 delq name (conn-state--children
+                              (conn--find-state former))))
+      (let (new-mode-maps)
+        (dolist (parent (seq-difference parents prev-parents))
+          (pcase-dolist (`(,mode . ,_)
+                         (cdr (conn-state-minor-mode-maps-alist parent)))
+            (unless (gethash (cons name mode) conn--minor-mode-maps-cache)
+              (conn--ensure-minor-mode-map name mode)
+              (push mode new-mode-maps))))
+        (conn--rebuild-state-keymaps name)
+        (dolist (child (conn-state-all-children name))
+          (remhash child conn--state-all-parents-cache)
+          (dolist (mode new-mode-maps)
+            (conn--ensure-minor-mode-map child mode))
+          (conn--rebuild-state-keymaps child)))))
+   ((bind* (state-obj (conn--make-state name parents)))
+    (setf (conn--find-state name) state-obj
+          (conn-state--properties state-obj) props)
+    (dolist (parent parents)
+      (cl-pushnew name (conn-state--children
+                        (conn--find-state parent))))
+    (unless (conn-state-get name :no-keymap)
+      (dolist (parent parents)
+        (pcase-dolist (`(,mode . ,_)
+                       (cdr (conn-state-minor-mode-maps-alist parent)))
+          (conn--ensure-minor-mode-map name mode)))))))
 
 (defun conn--make-state-docstring (state docstring)
   (put state 'variable-documentation
@@ -1311,8 +1312,7 @@ entered.  If the predicate is not satisfied then the state is popped.")
 
 (cl-defmethod conn-enter-state :around ((state (conn-substate conn-autopop-state))
                                         transition)
-  (when (or (eq 'conn-stack-enter-recursive
-                (oclosure-type transition))
+  (when (or (cl-typep transition 'conn-stack-enter-recursive)
             (null conn--state-stack))
     (error "%s cannot be the base state" state))
   (cl-check-type (conn-state-get state :pop-predicate) function)
@@ -1356,10 +1356,9 @@ entered.  If the predicate is not satisfied then the state is popped.")
     (add-hook 'pre-command-hook pre 99 t)
     (conn-state-on-exit transition
       (remove-hook 'pre-command-hook pre t)
-      (pcase transition
-        ((cl-type conn-stack-enter-recursive))
-        ((cl-type conn-stack-push)
-         (conn--pop-state-1))))
+      (cl-typecase transition
+        (conn-stack-enter-recursive)
+        (conn-stack-push (conn--pop-state-1))))
     (cl-call-next-method)))
 
 (define-conn-state conn-one-command-state (conn-command-state

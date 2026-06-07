@@ -3460,18 +3460,16 @@ buffer."
         (multi-face2 'conn-dispatch-label-multi-alt-face))
     (pcase-dolist (`(,_window . ,targets) conn-targets)
       (dolist (tar (compat-call sort targets :key #'overlay-start))
-        (unless (overlay-get tar 'label-face)
-          (if-let* ((thing (overlay-get tar 'thing))
-                    (_ (and (conn-anonymous-thing-p thing)
-                            (pcase (conn-thing-get thing :multi-thing-p)
-                              ((and fn (pred functionp))
-                               (funcall fn thing tar))
-                              (val val)))))
-              (progn
-                (overlay-put tar 'label-face multi-face1)
-                (cl-rotatef multi-face1 multi-face2))
-            (overlay-put tar 'label-face face1)
-            (cl-rotatef face1 face2)))))))
+        (cond ((overlay-get tar 'label-face))
+              ((and-let* ((thing (overlay-get tar 'thing))
+                          (val (conn-thing-get thing :multi-thing-p)))
+                 (or (not (cl-functionp val))
+                     (funcall val thing tar)))
+               (overlay-put tar 'label-face multi-face1)
+               (cl-rotatef multi-face1 multi-face2))
+              (t
+               (overlay-put tar 'label-face face1)
+               (cl-rotatef face1 face2)))))))
 
 (defun conn-clear-targets ()
   (conn-target-finder-clear conn-dispatch-target-finder))
@@ -4962,15 +4960,15 @@ it.")
                                        (cmd (eql conn-repeat-last-dispatch)))
   "Cycle the dispatch ring to the next most recent dispatch."
   ( :update (_break)
-    (if-let* ((prev (conn-ring-extract-head conn-dispatch-ring)))
-        (if (conn-action-stale-p (conn-previous-dispatch-action prev))
-            (progn
-              (conn-dispatch-ring-remove-stale)
-              (conn-read-args-error "Last dispatch action stale"))
-          (conn-read-args-return
-            (conn-dispatch-setup-previous
-             prev (conn-read-args-consume-prefix-arg))))
-      (conn-read-args-error "Dispatch ring empty"))))
+    (cond* ((bind* (prev (conn-ring-extract-head conn-dispatch-ring))))
+           ((null prev) (conn-read-args-error "Dispatch ring empty"))
+           ((conn-action-stale-p (conn-previous-dispatch-action prev))
+            (conn-dispatch-ring-remove-stale)
+            (conn-read-args-error "Last dispatch action stale"))
+           (t
+            (conn-read-args-return
+              (conn-dispatch-setup-previous
+               prev (conn-read-args-consume-prefix-arg)))))))
 
 (defun conn-previous-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -4984,15 +4982,12 @@ it.")
 
 (defun conn-describe-dispatch (dispatch)
   (declare (side-effect-free t))
-  (pcase-let ((thing
-               (oref (conn-previous-dispatch-target-finder dispatch)
+  (let ((thing (oref (conn-previous-dispatch-target-finder dispatch)
                      thing))
-              (arg
-               (oref (conn-previous-dispatch-target-finder dispatch)
-                     arg))
-              (transform
-               (oref (conn-previous-dispatch-target-finder dispatch)
-                     transform)))
+        (arg (oref (conn-previous-dispatch-target-finder dispatch)
+                   arg))
+        (transform (oref (conn-previous-dispatch-target-finder dispatch)
+                         transform)))
     (format "%s @ %s <%s%s>"
             (or (conn-action-description
                  (conn-previous-dispatch-action dispatch))

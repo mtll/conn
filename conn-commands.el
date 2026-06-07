@@ -2377,8 +2377,7 @@ For more information about how the replacement is carried out see
 Exiting the recursive edit will resume the isearch."
   (interactive)
   ;; Binding these to nil prevents `with-isearch-suspended' from
-  ;; defaulting to the previous search if this is called before a
-  ;; search string has been entered.
+  ;; defaulting to the previous search if the search string is empty.
   (let (regexp-search-ring
         search-ring)
     (save-selected-window
@@ -2429,8 +2428,7 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-restrict-to-thing ()
   (interactive)
   ;; Binding these to nil prevents `with-isearch-suspended' from
-  ;; defaulting to the previous search if this is called before a
-  ;; search string has been entered.
+  ;; defaulting to the previous search if the search string is empty.
   (let (regexp-search-ring
         search-ring)
     (with-isearch-suspended

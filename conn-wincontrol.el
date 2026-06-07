@@ -96,6 +96,7 @@
                 (conn--wincontrol-minibuffer-setup)
               (let ((message-log-max nil))
                 (message "%s" (conn--wincontrol-message))))
+            ;; Ensure wincontrol lighter is at the front
             (conn->f minor-mode-alist
               (assq-delete-all 'conn-wincontrol-mode)
               (cons (list 'conn-wincontrol-mode
@@ -489,7 +490,7 @@
     (quit-window)))
 
 (defface conn-wincontrol-mode-line-label-face
-  '((t ( :bold t :inherit highlight)))
+  '((t (:bold t :inherit highlight)))
   "Face for wincontrol mode-line window labels.")
 
 (defvar conn-wincontrol-mode-line-format-string

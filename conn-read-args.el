@@ -344,18 +344,18 @@ This skips executing the body of the `conn-read-args' form entirely."
                                 (current-minor-mode-maps)))))
                         ,@body))))
       (cl-labels
-          ((timer-function ()
+          ((message-timer-function ()
              (setf timer nil)
              (display-message))
+           (start-message-timer ()
+             (when timer
+               (timer-set-function timer #'message-timer-function)
+               (timer-set-idle-time timer conn-read-args-message-delay)
+               (timer-activate-when-idle timer t)))
            (cancel-message-timer ()
              (when timer
                (cancel-timer timer)
                (setf timer nil)))
-           (start-message-timer ()
-             (when timer
-               (timer-set-function timer #'timer-function)
-               (timer-set-idle-time timer conn-read-args-message-delay)
-               (timer-activate-when-idle timer t)))
            (stop-message-timer ()
              (when timer
                (cancel-timer timer)))
@@ -453,7 +453,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (if (symbolp cmd) cmd "_")
                      (key-description keyseq)))))
              (when post (funcall post cmd)))
-           (loop ()
+           (command-loop ()
              (conn-with-recursive-stack state
                (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
                      (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
@@ -482,8 +482,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                (if around
                    (funcall around
                             (lambda ()
-                              (funcall conn-read-args-around-function #'loop)))
-                 (funcall conn-read-args-around-function #'loop))
+                              (funcall conn-read-args-around-function
+                                       #'command-loop)))
+                 (funcall conn-read-args-around-function #'command-loop))
                (setf argument-values (mapcar #'conn-argument-payload
                                              arglist)))
              (cancel-message-timer)
@@ -626,12 +627,8 @@ be displayed in the echo area during `conn-read-args'."
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
     (pcase (conn-argument-name arg)
-      ((and (pred stringp) str)
-       str)
-      ((and fn (pred functionp)
-            (let (and str (pred stringp))
-              (funcall fn arg)))
-       str))))
+      ((and (pred stringp) str) str)
+      ((and (pred functionp) fn) (funcall fn arg)))))
 
 (cl-defgeneric conn-argument-compose-keymap (argument)
   "Return keymap for ARGUMENT."
@@ -654,13 +651,10 @@ be displayed in the echo area during `conn-read-args'."
   ( :method ((arg conn-argument) value)
     (and-let* ((ann (conn-argument-annotation arg))
                (_ (conn-argument-predicate arg value)))
-      (pcase ann
-        ((and (pred stringp) str)
-         (concat " (" str ")"))
-        ((and fn (pred functionp)
-              (let (and str (pred stringp))
-                (funcall fn arg)))
-         (concat " (" str ")"))))))
+      (cl-typecase ann
+        (string (concat " (" ann ")"))
+        (function (and-let* ((str (funcall ann arg)))
+                    (concat " (" str ")")))))))
 
 (cl-defgeneric conn-argument-command-reference (arg command break)
   (declare (side-effect-free t))
@@ -782,12 +776,8 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defmethod conn-argument-display ((arg conn-anonymous-argument))
   (pcase (conn-anonymous-argument-name arg)
-    ((and (pred stringp) str)
-     str)
-    ((and fn (pred functionp)
-          (let (and str (pred stringp))
-            (funcall fn arg)))
-     str)))
+    ((and (pred stringp) str) str)
+    ((and (pred functionp) fn) (funcall fn arg))))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-anonymous-argument))
   (conn-anonymous-argument-keymap arg))
@@ -801,13 +791,10 @@ be displayed in the echo area during `conn-read-args'."
                                                    value)
   (and-let* ((ann (conn-anonymous-argument--annotation arg))
              (_ (funcall (conn-anonymous-argument--predicate arg) value)))
-    (pcase ann
-      ((and (pred stringp) str)
-       (concat " (" str ")"))
-      ((and fn (pred functionp)
-            (let (and str (pred stringp))
-              (funcall fn arg)))
-       (concat " (" str ")")))))
+    (cl-typecase ann
+      (string (concat " (" ann ")"))
+      (function (and-let* ((str (funcall ann arg)))
+                  (concat " (" str ""))))))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-anonymous-argument)
                                                cmd
