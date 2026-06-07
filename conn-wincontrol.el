@@ -502,13 +502,13 @@
    " "))
 
 (defun conn-window-label-mode-line ()
-  (let ((win (selected-window)))
-    (if-let* ((_ (conn--dispatch-window-predicate (selected-window)))
-              (str (let (conn-dispatch-label-input-method)
-                     (funcall conn-window-label-function)
-                     (window-parameter win 'conn-label-string))))
-        (format conn-wincontrol-mode-line-format-string str)
-      "")))
+  (if-let* ((_ (conn--dispatch-window-predicate (selected-window)))
+            (str (let (conn-dispatch-label-input-method)
+                   (funcall conn-window-label-function)
+                   (window-parameter (selected-window)
+                                     'conn-label-string))))
+      (format conn-wincontrol-mode-line-format-string str)
+    ""))
 
 (defvar conn-wincontrol-mode-line-label
   '(conn-wincontrol-mode-line-label-mode

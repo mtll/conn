@@ -280,6 +280,10 @@ The duration of the message display is controlled by
       (user-error
        (conn-read-args-error (error-message-string err))))))
 
+(defun conn--read-args-set-error-message (cstr &rest args)
+  (setf conn--read-args-error-message
+        (apply #'format cstr args)))
+
 (defmacro conn-read-args-return (&rest body)
   "Evaluate body and return the result from the current `conn-read-args'.
 
@@ -343,6 +347,18 @@ This skips executing the body of the `conn-read-args' form entirely."
           ((timer-function ()
              (setf timer nil)
              (display-message))
+           (cancel-message-timer ()
+             (when timer
+               (cancel-timer timer)
+               (setf timer nil)))
+           (start-message-timer ()
+             (when timer
+               (timer-set-function timer #'timer-function)
+               (timer-set-idle-time timer conn-read-args-message-delay)
+               (timer-activate-when-idle timer t)))
+           (stop-message-timer ()
+             (when timer
+               (cancel-timer timer)))
            (continue-p ()
              (cl-loop for arg in arguments
                       thereis (conn-argument-required-p arg)))
@@ -361,10 +377,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                    (when break (cl-return t))))))
            (read-command ()
              (let (partial-keymap cmd reading)
-               (when timer
-                 (timer-set-function timer #'timer-function)
-                 (timer-set-idle-time timer conn-read-args-message-delay)
-                 (timer-activate-when-idle timer t))
+               (start-message-timer)
                (with-overriding-keymaps
                 (cl-loop
                  repeat 10 do
@@ -377,8 +390,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                  finally (progn
                            (discard-input)
                            (error "Keyboard macro recursion limit exceeded"))))
-               (when timer
-                 (cancel-timer timer))
+               (stop-message-timer)
                (cond ((eql (aref keyseq 0) quit-event)
                       (setf cmd 'keyboard-quit))
                      ((and (null cmd)
@@ -405,9 +417,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                                            (key-description keyseq))
                      (read-command))
                  cmd)))
-           (set-error-message (cstr &rest args)
-             (setf conn--read-args-error-message
-                   (apply #'format cstr args)))
            (execute-command (cmd)
              (when pre (funcall pre cmd))
              (pcase cmd
@@ -415,20 +424,17 @@ This skips executing the body of the `conn-read-args' form entirely."
                     'keyboard-escape-quit)
                 (signal 'quit nil))
                ('reference
-                (when timer
-                  (cancel-timer timer)
-                  (setf timer nil))
+                (cancel-message-timer)
                 (with-overriding-keymaps
                  (condition-case err
                      (conn-quick-reference
                       (conn-get-quick-ref-pages)
                       (lambda (&rest _) (display-message)))
                    (user-error
-                    (set-error-message (error-message-string err))))))
+                    (conn--read-args-set-error-message
+                     (error-message-string err))))))
                ((or 'describe-key 'conn-describe-key)
-                (when timer
-                  (cancel-timer timer)
-                  (setf timer nil))
+                (cancel-message-timer)
                 (with-overriding-keymaps
                  (conn--read-args-describe-key
                   arguments
@@ -436,17 +442,16 @@ This skips executing the body of the `conn-read-args' form entirely."
                     (let ((conn--read-args-error-message (or str "")))
                       (display-message))))))
                ((or 'describe-symbol 'conn-describe-symbol)
-                (when timer
-                  (cancel-timer timer)
-                  (setf timer nil))
+                (cancel-message-timer)
                 (with-keymaps
                  (conn--read-args-describe-symbol arguments
                                                   #'display-message)))
                ((pred identity)
                 (or (update-args cmd)
-                    (set-error-message "Invalid command: %s <%s>"
-                                       (if (symbolp cmd) cmd "_")
-                                       (key-description keyseq)))))
+                    (conn--read-args-set-error-message
+                     "Invalid command: %s <%s>"
+                     (if (symbolp cmd) cmd "_")
+                     (key-description keyseq)))))
              (when post (funcall post cmd)))
            (loop ()
              (conn-with-recursive-stack state
@@ -481,14 +486,14 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (funcall conn-read-args-around-function #'loop))
                (setf argument-values (mapcar #'conn-argument-payload
                                              arglist)))
+             (cancel-message-timer)
              (unless argument-values
                (mapc #'conn-argument-cancel arguments))
              (unless executing-kbd-macro
                (let ((inhibit-message conn-read-args-inhibit-message)
                      (message-log-max nil)
                      (scroll-conservatively 100))
-                 (message nil)))
-             (when timer (cancel-timer timer)))
+                 (message nil))))
            (mapc #'conn-argument-accept arguments)
            (cons callback argument-values)))))))
 

@@ -728,7 +728,8 @@ Possibilities: \\<query-replace-map>
                                    (inhibit-message nil)
                                    (message-log-max nil))
                                (message "%s" msg)
-                               (lookup-key multi-query-replace-map (vector (read-event))))
+                               (lookup-key multi-query-replace-map
+                                           (vector (read-event))))
                         ('act (cl-return res))
                         ('skip (setf res (funcall iterator state)))
                         ('exit-current

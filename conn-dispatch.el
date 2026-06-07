@@ -450,7 +450,7 @@ Two macros are locally defined within body for binding handlers:
 
 (defvar conn--window-label-pool nil)
 
-(defun conn--simple-window-labels ()
+(defun conn-simple-window-labels ()
   (setf conn-dispatch-label-input-method conn-simple-label-input-method)
   (let* ((windows (conn-get-windows nil 'nomini t))
          (window-count (length windows)))
@@ -477,7 +477,7 @@ Two macros are locally defined within body for binding handlers:
                        (set-window-parameter win 'conn-label-string
                                              (pop available))))))
 
-(defvar conn-window-label-function #'conn--simple-window-labels)
+(defvar conn-window-label-function #'conn-simple-window-labels)
 
 (defun conn--centered-header-label ()
   (when (window-parameter nil 'conn-window-labeled-p)
@@ -548,25 +548,26 @@ for dispatch."
                          (funcall predicate win)))
            collect win))
 
+(defun conn--with-window-labels (labels body)
+  (conn-with-dispatch-input-buffer
+    (let ((conn-dispatch-label-input-method nil)
+          (timer (run-with-idle-timer
+                  0 t (lambda ()
+                        (while-no-input
+                          (conn-redisplay-labels labels))))))
+      (unwind-protect
+          (progn
+            (while-no-input
+              (conn-redisplay-labels labels))
+            (funcall body labels))
+        (when timer (cancel-timer timer))
+        (mapc #'conn-label-delete labels)))))
+
 (defmacro conn-with-window-labels (binder &rest body)
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
-     (cl-with-gensyms (timer)
-       `(conn-with-dispatch-input-buffer
-          (let* ((conn-dispatch-label-input-method nil)
-                 (,var ,val)
-                 (,timer (run-with-idle-timer
-                          0 t (lambda ()
-                                (while-no-input
-                                  (conn-redisplay-labels ,var))))))
-            (unwind-protect
-                (progn
-                  (while-no-input
-                    (conn-redisplay-labels ,var))
-                  ,@body)
-              (when ,timer (cancel-timer ,timer))
-              (mapc #'conn-label-delete ,var))))))
+     `(conn--with-window-labels ,val (lambda (,var) ,@body)))
     (_ (error "Unexpected binding form %s" binder))))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
@@ -881,11 +882,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
   `(progn
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
-     (conn--with-dispatch
-      (lambda ()
-        (message nil)
-        ,@body)
-      'suspend)
+     (conn--with-dispatch (lambda () (message nil) ,@body) 'suspend)
      (ignore-errors (conn-dispatch-redisplay))))
 
 (define-inline conn-dispatch-other-end-p ()
@@ -965,12 +962,13 @@ buffers `conn-jump-ring' if opoint differs from point.")
    'separator
    conn-separator-argument-map
    (lambda (val)
-     (if (or (stringp val)
-             (eq 'default val))
-         nil
-       (let ((s (read-string "Separator (RET for default): " nil
-                             'conn-separator-history nil t)))
-         (if (equal s "") 'default s))))
+     (cond* ((or (stringp val)
+                 (eq 'default val))
+             nil)
+            ((bind* (s (read-string "Separator (RET for default): "
+                                    nil 'conn-separator-history nil t))))
+            ((string-empty-p s) 'default)
+            (t s)))
    :value initial-value
    :reference "Read a separator to be inserted between each string."))
 
@@ -1627,9 +1625,8 @@ nearest to point.  Can only be used during `conn-dispatch'."
               (cons beg origin)
             (cons (min origin end)
                   (max origin end)))
-        (if (conn-dispatch-other-end-p)
-            (cons origin end)
-          (cons origin beg)))))
+        (cons origin
+              (if (conn-dispatch-other-end-p) end beg)))))
     (_ bounds)))
 
 (cl-defgeneric conn-dispatch-bounds-between (bounds)
@@ -3545,9 +3542,7 @@ to the key binding for that target."
                     for key = (conn-dispatch-label-string label)
                     do (keymap-set map key label))
            map)))
-      (ignore (conn-dispatch-read-char "Register"))
-      (while t
-        (ignore (conn-dispatch-read-char "Register"))))))
+      (while t (ignore (conn-dispatch-read-char "Register"))))))
 
 (defclass conn-dispatch-retargetable-mixin ()
   ((always-retarget :initform nil

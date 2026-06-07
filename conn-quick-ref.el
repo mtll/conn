@@ -226,7 +226,7 @@
                         ((and (pred consp) col)
                          (push (process-col col keymap) result))))
                     (nreverse result)))
-                (insert-ref-string (str)
+                (insert-ref (str)
                   (with-current-buffer ref-buffer
                     (with-silent-modifications
                       (insert str "\n")))))
@@ -235,11 +235,11 @@
           (while definition
             (pcase (pop definition)
               ((and (pred stringp) row)
-               (insert-ref-string
+               (insert-ref
                 (substitute-command-keys row)))
               (`(:heading . ,fn)
                (when-let* ((str (funcall fn)))
-                 (insert-ref-string
+                 (insert-ref
                   (propertize str 'face 'conn-quick-ref-heading-face))))
               (`(:eval . ,fn)
                (push (funcall fn) definition))

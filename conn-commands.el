@@ -645,9 +645,8 @@ If the mark is already active then deactivate it instead."
   (setf conn--popping-marks t)
   (if (null conn--unpoped-marks)
       (user-error "No marks to unpop")
-    (when conn--unpoped-marks
-      (push-mark (pop conn--unpoped-marks))
-      (goto-char (mark t)))))
+    (push-mark (pop conn--unpoped-marks))
+    (goto-char (mark t))))
 
 ;;;;; Line Commands
 
@@ -953,19 +952,18 @@ Current Window: `conn-this-window-prefix'"
 If there are more than 2 windows prompt with `conn-prompt-for-window' to
 determine which window to display the buffer in."
   (interactive "P")
-  (if this-window
-      (conn-this-window-prefix)
-    (let ((windows (conn-get-windows nil 'nomini)))
-      (if (length< windows 3)
-          (other-window-prefix)
-        (display-buffer-override-next-command
-         (lambda (_ _)
-           (cons (conn-prompt-for-window
-                  (conn-get-windows nil 'nomini nil nil
-                                    (lambda (win)
-                                      (not (eq win (selected-window))))))
-                 'reuse)))
-        (message "Display next command in selected buffer…")))))
+  (cond* (this-window (conn-this-window-prefix))
+         ((bind* (windows (conn-get-windows nil 'nomini))))
+         ((length< windows 3) (other-window-prefix))
+         (t (display-buffer-override-next-command
+             (lambda (_ _)
+               (conn-<
+                 (conn-get-windows
+                  nil 'nomini nil nil
+                  (lambda (win) (not (eq win (selected-window)))))
+                 (conn-prompt-for-window)
+                 (cons 'reuse))))
+            (message "Display next command in selected buffer…"))))
 
 (defun conn-other-window-prompt-prefix ()
   "Display next buffer in a window selected by `conn-prompt-for-window'."
@@ -1078,23 +1076,21 @@ Currently selected window remains selected afterwards."
     :filter ,#'conn--alt-dwim-at-point-filter))
 
 (defun conn-dwim-heading ()
-  (when (and (bound-and-true-p outline-regexp)
-             (bound-and-true-p outline-minor-mode))
-    (let ((beg (line-beginning-position)))
-      (when (save-excursion
-              (goto-char beg)
-              (and (bolp)
-                   (looking-at outline-regexp)))
-        'outline-cycle))))
+  (and (bound-and-true-p outline-regexp)
+       (bound-and-true-p outline-minor-mode)
+       (save-excursion
+         (goto-char (line-beginning-position))
+         (and (bolp)
+              (looking-at outline-regexp)))
+       'outline-cycle))
 
 (defun conn-dwim-alt-heading ()
   (and (bound-and-true-p outline-regexp)
        (bound-and-true-p outline-minor-mode)
-       (let ((beg (line-beginning-position)))
-         (save-excursion
-           (goto-char beg)
-           (and (bolp)
-                (looking-at outline-regexp))))
+       (save-excursion
+         (goto-char (line-beginning-position))
+         (and (bolp)
+              (looking-at outline-regexp)))
        'conn-outline-state))
 
 (defun conn-dwim-eval-sexp ()
@@ -1603,21 +1599,22 @@ negative then only display that many context lines before each line."))
                           (when check-bounds
                             (list 'conn-check-bounds))))
      (atomic-change-group
-       (if register
-           (let ((str (cond (swap (filter-buffer-substring beg end t))
-                            ((and (eq thing 'region)
-                                  (bound-and-true-p rectangle-mark-mode))
-                             (delete-rectangle (region-beginning)
-                                               (region-end)))
-                            (t (delete-region beg end)))))
-             (register-val-insert (get-register register))
-             (when swap (set-register register str)))
-         (goto-char beg)
-         (if swap
-             (let ((str (filter-buffer-substring beg end t)))
-               (yank)
-               (kill-new str))
-           (conn-yank-replace-subr beg end)))))))
+       (cond*
+        (register
+         (let ((str (cond (swap (filter-buffer-substring beg end t))
+                          ((and (eq thing 'region)
+                                (bound-and-true-p rectangle-mark-mode))
+                           (delete-rectangle (region-beginning)
+                                             (region-end)))
+                          (t (delete-region beg end)))))
+           (register-val-insert (get-register register))
+           (when swap (set-register register str))))
+        (t (goto-char beg))
+        (swap
+         (let ((str (filter-buffer-substring beg end t)))
+           (yank)
+           (kill-new str)))
+        (t (conn-yank-replace-subr beg end)))))))
 
 (cl-defmethod conn-yank-replace-do ((thing (conn-thing region))
                                     arg
