@@ -556,17 +556,20 @@
   "C-M-." 'conn-record-set-region
   "M-C" 'conn-command-state
   "M-<escape>" 'conn-insertion-end-recording
-  "C-M-<escape>" 'conn-insertion-abort-recording)
+  "C-M-<escape>" 'conn-insertion-abort-recording
+  "M-?" 'conn-record-insertion-quick-ref)
 
 (define-keymap
   :keymap conn-record-insertion-transient-map
   "<escape>" #'conn-insertion-abort-recording
-  "M-p" #'conn-insertion-insert-previous)
+  "M-p" #'conn-insertion-insert-previous
+  "M-?" #'conn-record-insertion-quick-ref)
 
 (define-keymap
   :keymap conn-record-insertion-recursive-transient-map
   "<escape>" #'abort-recursive-edit
-  "M-p" #'conn-insertion-insert-previous)
+  "M-p" #'conn-insertion-insert-previous
+  "M-?" #'conn-record-insertion-quick-ref)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)

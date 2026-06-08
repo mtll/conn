@@ -314,6 +314,8 @@
         (mapc #'bindings (current-active-maps t)))
       (flatten-tree (nreverse result)))))
 
+(defvar conn-quick-ref-start-hook nil)
+
 (defun conn--quick-ref-loop (pages loop-fn)
   (let ((inhibit-message t)
         (state nil)
@@ -329,6 +331,7 @@
                                              (mode-line-inactive mode-line)
                                              ,@face-remapping-alist)))
         (conn-quick-ref-insert-pages pages buf)
+        (run-hooks 'conn-quick-ref-start-hook)
         (when loop-fn (funcall loop-fn))
         (conn->f state
           (funcall conn-quick-ref-display-function buf))

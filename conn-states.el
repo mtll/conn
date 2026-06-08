@@ -1498,7 +1498,8 @@ entered.  If the predicate is not satisfied then the state is popped.")
                               'face 'minibuffer-prompt)
                              "\\<conn-record-insertion-transient-map>"
                              "\\[conn-insertion-abort-recording] abort, "
-                             "\\[conn-insertion-insert-previous] insert previous")))
+                             "\\[conn-insertion-insert-previous] insert previous, "
+                             "\\[conn-record-insertion-quick-ref] reference")))
         (conn-push-state 'conn-record-emacs-state))
     (set-transient-map conn-record-insertion-recursive-transient-map
                        nil nil
@@ -1509,7 +1510,8 @@ entered.  If the predicate is not satisfied then the state is popped.")
                           'face 'minibuffer-prompt)
                          "\\<conn-record-insertion-recursive-transient-map>"
                          "\\[abort-recursive-edit] abort, "
-                         "\\[conn-insertion-insert-previous] insert previous")))
+                         "\\[conn-insertion-insert-previous] insert previous, "
+                         "\\[conn-record-insertion-quick-ref] reference")))
     (conn-with-recursive-stack 'conn-record-emacs-recursive-state
       (atomic-change-group
         (save-current-buffer

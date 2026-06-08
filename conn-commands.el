@@ -5132,6 +5132,26 @@ For how the region is determined using THING, ARG, and TRANSFORM see
     (insert conn-insertion-recording-last-insertion)
     (conn-pop-state)))
 
+(defvar conn-record-insertion-reference
+  (list
+   (conn-reference-page
+     :name 'conn-record-insertion
+     ((("exchange recording region bounds" conn-record-exhange)))
+     ((("set record region" conn-record-set-region)
+       ("command state" conn-command-state))
+      (:eval
+       (if conn-record-emacs-recursive-state
+           (conn-reference-quote
+             (("abort recording" abort-recursive-edit)
+              ("end recording" exit-recursive-edit)))
+         (conn-reference-quote
+           (("abort recording" conn-insertion-end-recording)
+            ("end recording" conn-insertion-abort-recording)))))))))
+
+(defun conn-record-insertion-quick-ref ()
+  (interactive)
+  (conn-quick-reference conn-record-insertion-reference))
+
 ;;;;; Indent
 
 (define-conn-state conn-indent-state (conn-read-thing-state)
