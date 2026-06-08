@@ -329,25 +329,26 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (cl-loop for arg in arguments
                               thereis (conn-argument-display arg))
                      conn--read-args-timer)))
-    (cl-macrolet ((with-keymaps (&rest body)
-                    `(let ((emulation-mode-map-alists
-                            `(((,state
-                                ,@(thread-last
-                                    (mapcar #'conn-argument-compose-keymap
-                                            arguments)
-                                    (cons overriding-map)
-                                    (delq nil)
-                                    (make-composed-keymap))))
-                              ,@emulation-mode-map-alists)))
-                       ,@body))
-                  (with-overriding-keymaps (&rest body)
-                    `(with-keymaps
-                      (let ((overriding-terminal-local-map
-                             (make-composed-keymap
-                              (let (minor-mode-overriding-map-alist
-                                    minor-mode-map-alist)
-                                (current-minor-mode-maps)))))
-                        ,@body))))
+    (cl-macrolet
+        ((with-keymaps (&rest body)
+           `(let ((emulation-mode-map-alists
+                   `(((,state
+                       ,@(thread-last
+                           (mapcar #'conn-argument-compose-keymap
+                                   arguments)
+                           (cons overriding-map)
+                           (delq nil)
+                           (make-composed-keymap))))
+                     ,@emulation-mode-map-alists)))
+              ,@body))
+         (with-overriding-keymaps (&rest body)
+           `(with-keymaps
+             (let ((overriding-terminal-local-map
+                    (make-composed-keymap
+                     (let (minor-mode-overriding-map-alist
+                           minor-mode-map-alist)
+                       (current-minor-mode-maps)))))
+               ,@body))))
       (cl-labels
           ((message-timer-function ()
              (setf timer nil)

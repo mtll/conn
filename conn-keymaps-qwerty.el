@@ -286,6 +286,8 @@
         '(expansion)
         :pretty-print ( :method (_) "expansion")
         :target-finder (:method (_self &rest _) (conn-expansion-targets)))
+  "<right>" 'forward-char
+  "<left>" 'backward-char
   "k" 'forward-line
   "i" 'conn-backward-line
   "L" 'conn-forward-inner-line
@@ -882,11 +884,8 @@
   "a" 'conn-dispatch-bounds-anchored
   "B" 'conn-dispatch-bounds-between
   "^" 'conn-bounds-trim
-  "<down>" 'conn-bounds-trim
   "C-b" 'conn-bounds-untrim-left
-  "<left>" 'conn-bounds-untrim-left
   "C-f" 'conn-bounds-untrim-right
-  "<right>" 'conn-bounds-untrim-right
   "c" 'conn-dispatch-bounds-over
   "C-t" 'conn-transform-reset
   "g" 'conn-bounds-upto-next
@@ -923,11 +922,8 @@
 (define-keymap
   :keymap conn-transform-map
   "^" 'conn-bounds-trim
-  "<down>" 'conn-bounds-trim
   "C-b" 'conn-bounds-untrim-left
-  "<left>" 'conn-bounds-untrim-left
   "C-f" 'conn-bounds-untrim-right
-  "<right>" 'conn-bounds-untrim-right
   "a" 'conn-bounds-after-point
   "A" 'conn-bounds-after-point-exclusive
   "b" 'conn-bounds-before-point

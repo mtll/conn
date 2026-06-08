@@ -92,7 +92,7 @@
                   (`(,'\, ,def) def)
                   ((pred consp)
                    `(list ,@(mapcar #'process-definition def)))
-                  (_ `(quote ,def)))))
+                  (_ (macroexp-quote def)))))
     `(list ,@(cl-loop for elem in form
                       if (listp elem)
                       collect (process-definition elem)
@@ -120,7 +120,7 @@
                     (`(,'\, ,exp) exp)
                     ((pred consp)
                      `(list ,@(mapcar #'process-definition def)))
-                    (_ `(quote ,def)))))
+                    (_ (macroexp-quote def)))))
       `(conn--make-reference-page
         ,(or name `(quote ,(make-symbol "anonymous-page")))
         ,depth
