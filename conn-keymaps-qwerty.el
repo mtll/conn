@@ -554,6 +554,7 @@
   :keymap (conn-get-state-map 'conn-record-emacs-state)
   "C-." 'conn-record-exhange
   "C-M-." 'conn-record-set-region
+  "M-C" 'conn-command-state
   "M-<escape>" 'conn-insertion-end-recording
   "C-M-<escape>" 'conn-insertion-abort-recording)
 
