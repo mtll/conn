@@ -595,12 +595,7 @@
   "/" 'buffer-filename
   "P" 'project-filename
   "*" 'kill-matching-lines
-  "%" 'keep-lines
-  "j" 'move-end-of-line)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-copy-state)
-  "j" 'move-end-of-line)
+  "%" 'keep-lines)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-kill-state 'rectangle-mark-mode)

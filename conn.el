@@ -86,7 +86,7 @@
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :lighter " Conn" ;; (:eval (conn-mode-line-lighter))
+  :lighter " Conn"
   :group 'conn
   :keymap conn-local-mode-map
   :after-hook (funcall conn-mode-line-state-stack-setup-function)
