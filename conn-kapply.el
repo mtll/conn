@@ -49,7 +49,8 @@
 
 (defvar conn--kbd-query-automatic-flags)
 
-(defvar conn-kapply-query-on-record t)
+(defvar conn-kapply-query-on-record t
+  "Query user before recording kbd macro during kapply.")
 
 (defun conn-kapply-clear-automatic-flags (&optional force)
   (when (or force (eq conn--kapply-automatic-flag t))

@@ -1191,8 +1191,8 @@ Returns a `conn-bounds' struct."
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing isearch))
                               arg)
-  (let* ((bounds nil)
-         (quit (make-symbol "quit")))
+  (let ((bounds nil)
+        (quit (make-symbol "quit")))
     (fset quit
           (lambda ()
             (unless isearch-suspended
@@ -1648,25 +1648,26 @@ words."))
 (cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
                                     cmd
                                     break)
-  (cond ((conn-thing-with-subregions-argument-subregions-explicit-flag arg)
-         (cl-call-next-method))
-        ((conn-thing-argument-in-region arg)
-         (cl-call-next-method)
-         (setf (conn-thing-with-subregions-argument-subregions arg) t))
-        ((conn-subthing-p cmd 'conn-things-in-region)
-         (unwind-protect
-             (cl-call-next-method)
-           (setf (conn-thing-with-subregions-argument-subregions arg)
-                 (conn-thing-argument-in-region arg))))
-        (t
-         (let* ((updated nil)
-                (bfn (lambda () (setf updated t))))
-           (cl-call-next-method arg cmd bfn)
-           (when updated
-             (when (conn-argument-value arg)
-               (setf (conn-thing-with-subregions-argument-subregions arg)
-                     (conn-subregions-argument-default (car (conn-argument-value arg)))))
-             (funcall break))))))
+  (cond* ((conn-thing-with-subregions-argument-subregions-explicit-flag arg)
+          (cl-call-next-method))
+         ((conn-thing-argument-in-region arg)
+          (cl-call-next-method)
+          (setf (conn-thing-with-subregions-argument-subregions arg) t))
+         ((conn-subthing-p cmd 'conn-things-in-region)
+          (unwind-protect
+              (cl-call-next-method)
+            (setf (conn-thing-with-subregions-argument-subregions arg)
+                  (conn-thing-argument-in-region arg))))
+         ((bind* (updated nil)
+                 (bfn (lambda () (setf updated t))))
+          (cl-call-next-method arg cmd bfn)
+          (when updated
+            (when (conn-argument-value arg)
+              (setf (conn-thing-with-subregions-argument-subregions arg)
+                    (conn-> (conn-argument-value arg)
+                            car
+                            (conn-subregions-argument-default))))
+            (funcall break)))))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
   (cons (concat
@@ -1795,18 +1796,20 @@ not be delete.  The the value returned by each function is ignored.")
  (conn-reference-page
    :name 'conn-transform
    (:heading "Transformations")
-   ((("after point/exclusive"
+   ((("trim" conn-bounds-trim)
+     ("<untrim" conn-bounds-untrim-left)
+     ("untrim>" conn-bounds-untrim-right))
+    (("last" conn-bounds-last)
+     ("reset" conn-transform-reset)
+     ("upto next/prev"
+      conn-bounds-upto-next
+      conn-bounds-upto-previous))
+    (("after point/exclusive"
       conn-bounds-after-point
       conn-bounds-after-point-exclusive)
      ("before point/exclusive"
       conn-bounds-before-point
-      conn-bounds-before-point-exclusive))
-    (("last" conn-bounds-last)
-     ("trim" conn-bounds-trim))
-    (("reset" conn-transform-reset)
-     ("upto next/prev"
-      conn-bounds-upto-next
-      conn-bounds-upto-previous)))))
+      conn-bounds-before-point-exclusive)))))
 
 (cl-defstruct (conn-transform-argument
                (:include conn-argument)

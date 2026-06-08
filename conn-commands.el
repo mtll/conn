@@ -1497,7 +1497,7 @@ negative then only display that many context lines before each line."))
   (conn-push-state 'conn-mark-state))
 
 (defun conn-mark-thing (thing arg transform)
-  "Mark the region defined by THING, ARG, and TRANSFORM"
+  "Mark the region defined by THING, ARG, and TRANSFORM."
   (interactive
    (conn-read-args (conn-mark-thing-state
                     :prompt "Mark Thing")

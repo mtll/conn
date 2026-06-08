@@ -315,9 +315,9 @@
       (flatten-tree (nreverse result)))))
 
 (defun conn--quick-ref-loop (pages loop-fn)
-  (let* ((inhibit-message t)
-         (state nil)
-         (buf (generate-new-buffer " *conn-quick-ref*")))
+  (let ((inhibit-message t)
+        (state nil)
+        (buf (generate-new-buffer " *conn-quick-ref*")))
     (conn--unwind-protect-all
       (progn
         (with-current-buffer buf
