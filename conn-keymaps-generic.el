@@ -308,7 +308,7 @@
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-thing
   "/" (conn-remap-key conn-undo-keys t)
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "'" 'conn-kapply-on-things
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command

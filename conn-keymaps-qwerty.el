@@ -365,7 +365,7 @@
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-thing
   "/" (conn-remap-key conn-undo-keys t)
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "'" 'conn-kapply-on-things
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
@@ -699,7 +699,7 @@
 
 (define-keymap
   :keymap conn-backward-argument-map
-  "z" 'backward)
+  "Z" 'backward)
 
 (define-keymap
   :keymap conn-transpose-point-and-mark-argument-map

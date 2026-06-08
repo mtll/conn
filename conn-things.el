@@ -1659,15 +1659,15 @@ words."))
             (setf (conn-thing-with-subregions-argument-subregions arg)
                   (conn-thing-argument-in-region arg))))
          ((bind* (updated nil)
-                 (bfn (lambda () (setf updated t))))
-          (cl-call-next-method arg cmd bfn)
-          (when updated
-            (when (conn-argument-value arg)
-              (setf (conn-thing-with-subregions-argument-subregions arg)
-                    (conn-> (conn-argument-value arg)
-                            car
-                            (conn-subregions-argument-default))))
-            (funcall break)))))
+                 (bfn (lambda () (setf updated t)))))
+         (t (cl-call-next-method arg cmd bfn)
+            (when updated
+              (when (conn-argument-value arg)
+                (setf (conn-thing-with-subregions-argument-subregions arg)
+                      (conn-< (conn-argument-value arg)
+                              car
+                              (conn-subregions-argument-default))))
+              (funcall break)))))
 
 (cl-defmethod conn-argument-display ((arg conn-thing-with-subregions-argument))
   (cons (concat

@@ -70,80 +70,71 @@
   (propertize " WinC-1" 'face 'font-lock-warning-face))
 (put 'conn-wincontrol-one-command-mode-lighter 'risky-local-variable t)
 
-(define-minor-mode conn-wincontrol-mode
-  "Global minor mode for wincontrol."
-  :global t
-  :interactive nil
-  (if conn-wincontrol-mode
-      (condition-case _
-          (progn
-            (add-hook 'set-message-functions #'conn-wincontrol-message-function)
-            ;; Must be before 'repeat-post-hook
-            (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
-            (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-            (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-            (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
-            (setf conn--wincontrol-arg (when current-prefix-arg
-                                         (prefix-numeric-value current-prefix-arg))
-                  conn--wincontrol-arg-sign 1
-                  conn--wincontrol-initial-window (selected-window)
-                  emulation-mode-map-alists `(conn--wincontrol-maps
-                                              ,@(delq 'conn--wincontrol-maps
-                                                      emulation-mode-map-alists)))
-            (internal-push-keymap conn-wincontrol-map
-                                  'overriding-terminal-local-map)
-            (if (eq (selected-window) (active-minibuffer-window))
-                (conn--wincontrol-minibuffer-setup)
-              (let ((message-log-max nil))
-                (message "%s" (conn--wincontrol-message))))
-            ;; Ensure wincontrol lighter is at the front
-            (conn->f minor-mode-alist
-              (assq-delete-all 'conn-wincontrol-mode)
-              (cons (list 'conn-wincontrol-mode
-                          (if conn-wincontrol-one-command-mode
-                              'conn-wincontrol-one-command-mode-lighter
-                            'conn-wincontrol-mode-lighter))))
-            (force-mode-line-update t))
-        ((debug error)
-         (conn-wincontrol-mode -1)))
-    (internal-pop-keymap conn-wincontrol-map
-                         'overriding-terminal-local-map)
-    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
-    (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-    (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-    (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-    (remove-function eldoc-message-function #'conn--wincontrol-ignore)
-    (message nil)
-    (force-mode-line-update t)
-    (when conn-wincontrol-one-command-mode
-      (conn-wincontrol-one-command-mode -1))))
-
-(define-minor-mode conn-wincontrol-one-command-mode
-  "Global minor mode for wincontrol one command."
-  :global t
-  :interactive nil
-  (if conn-wincontrol-one-command-mode
-      (progn
-        (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-        (conn-wincontrol-mode 1)
-        (internal-push-keymap conn-wincontrol-one-command-map
-                              'overriding-terminal-local-map))
-    (internal-pop-keymap conn-wincontrol-one-command-map
-                         'overriding-terminal-local-map)
-    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (when conn-wincontrol-mode
-      (conn-wincontrol-mode -1))))
+(defvar-local conn-wincontrol-mode nil)
+(defvar-local conn-wincontrol-one-command-mode nil)
 
 ;;;###autoload
-(defun conn-wincontrol ()
+(defun conn-wincontrol-mode (&optional one-command)
   (interactive)
-  (conn-wincontrol-mode 1))
+  (condition-case _
+      (progn
+        (setf conn-wincontrol-mode t
+              conn-wincontrol-one-command-mode (and one-command t))
+        (add-hook 'set-message-functions #'conn-wincontrol-message-function)
+        ;; Must be before 'repeat-post-hook
+        (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
+        (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
+        (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+        (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
+        (setf conn--wincontrol-arg (when current-prefix-arg
+                                     (prefix-numeric-value current-prefix-arg))
+              conn--wincontrol-arg-sign 1
+              conn--wincontrol-initial-window (selected-window)
+              emulation-mode-map-alists `(conn--wincontrol-maps
+                                          ,@(delq 'conn--wincontrol-maps
+                                                  emulation-mode-map-alists)))
+        (internal-push-keymap conn-wincontrol-map
+                              'overriding-terminal-local-map)
+        (when conn-wincontrol-one-command-mode
+          (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+          (internal-push-keymap conn-wincontrol-one-command-map
+                                'overriding-terminal-local-map))
+        (if (eq (selected-window) (active-minibuffer-window))
+            (conn--wincontrol-minibuffer-setup)
+          (let ((message-log-max nil))
+            (message "%s" (conn--wincontrol-message))))
+        ;; Ensure wincontrol lighter is at the front
+        (conn->f minor-mode-alist
+          (assq-delete-all 'conn-wincontrol-mode)
+          (cons (list 'conn-wincontrol-mode
+                      (if conn-wincontrol-one-command-mode
+                          'conn-wincontrol-one-command-mode-lighter
+                        'conn-wincontrol-mode-lighter))))
+        (force-mode-line-update t))
+    ((debug error)
+     (conn-wincontrol-exit))))
 
 ;;;###autoload
 (defun conn-wincontrol-one-command ()
   (interactive)
-  (conn-wincontrol-one-command-mode 1))
+  (conn-wincontrol-mode t))
+
+(defun conn-wincontrol-exit ()
+  (interactive)
+  (internal-pop-keymap conn-wincontrol-one-command-map
+                       'overriding-terminal-local-map)
+  (internal-pop-keymap conn-wincontrol-map
+                       'overriding-terminal-local-map)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+  (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
+  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+  (remove-function eldoc-message-function #'conn--wincontrol-ignore)
+  (message nil)
+  (setf conn-wincontrol-mode nil
+        conn-wincontrol-one-command-mode nil)
+  (force-mode-line-update t))
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
@@ -181,7 +172,7 @@
                                          t curr))
                  (message "%s %s" (conn--wincontrol-message) curr)))))
     ((debug error)
-     (conn-wincontrol-mode -1))))
+     (conn-wincontrol-exit))))
 
 (defalias 'conn--wincontrol-ignore 'ignore)
 
@@ -204,7 +195,7 @@
         string)
        (t (concat (conn--wincontrol-message) " " string)))
     ((debug error)
-     (conn-wincontrol-mode -1))))
+     (conn-wincontrol-exit))))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
@@ -241,7 +232,7 @@
   (when (and conn-wincontrol-one-command-mode
              (not (conn-wincontrol-one-command-stay-p)))
     (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
-    (conn-wincontrol-mode -1)))
+    (conn-wincontrol-exit)))
 
 ;;;;; Wincontrol Quick Ref
 
@@ -407,12 +398,6 @@
   (when conn--wincontrol-arg
     (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
-(defun conn-wincontrol-exit ()
-  "Exit `conn-wincontrol-mode'."
-  (interactive)
-  (when conn-wincontrol-mode
-    (conn-wincontrol-mode -1)))
-
 ;;;;; Wincontrol Isearch
 
 (defun conn-wincontrol-isearch-other-window (arg)
@@ -560,8 +545,7 @@
                  (message-log-max nil))
              (message "%s" (conn--wincontrol-message))))))
     (quit
-     (when conn-wincontrol-one-command-mode
-       (conn-wincontrol-mode -1))
+     (conn-wincontrol-exit)
      (message "Quit"))))
 
 (defun conn-wincontrol-other-window-scroll-down ()

@@ -27,7 +27,7 @@
   "<escape>" 'conn-pop-state
   "M-j" 'conn-command-state
   "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol
+  ";" 'conn-wincontrol-mode
   "`" 'conn-wincontrol-mru-window)
 
 ;;; Load Extensions
