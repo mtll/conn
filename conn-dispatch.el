@@ -356,38 +356,46 @@ themselves once the selection process has concluded."
 
 (eval-and-compile
   (defun conn--expand-dispatch-handler (tag body)
-    (cl-with-gensyms (self)
-      `(let ((handler
-              (conn-dispatch-handler
-               ,(pcase (alist-get :update body)
-                  (`(,args . ,update-body)
-                   (macroexpand-all
-                    `(lambda ,(cons self args)
-                       (ignore ,self)
-                       ,@update-body)
-                    `((:return
-                       . ,(lambda (&optional value)
-                            `(conn-<
-                               conn--dispatch-read-char-handlers
-                               (:> (alist-get ,self) cdr)
-                               (throw ,value))))
-                      ,@macroexpand-all-environment))))
-               ,(if-let* ((v (alist-get :predicate body)))
-                    `(lambda ,@v)
-                  '#'ignore)
-               :display ,(if-let* ((v (alist-get :display body)))
-                             `(lambda ,@v)
-                           '#'ignore)
-               :annotation ,(if-let* ((v (alist-get :annotation body)))
-                                `(lambda ,@v)
-                              '#'ignore)
-               :reference ,(if-let* ((v (alist-get :reference body)))
-                               `(lambda ,@v)
-                             '#'ignore)
-               :keymap ,(car (alist-get :keymap body)))))
-         (push (cons handler
-                     (cons ,(or (car (alist-get :depth body)) 0) ',tag))
-               conn--dispatch-read-char-handlers))))
+    (cl-with-gensyms (self methods depth keymap)
+      (macroexpand-all
+       `(let ((,methods nil)
+              (,depth 0)
+              (,keymap nil))
+          ,@body
+          (push (cons (conn-dispatch-handler
+                       (alist-get :update ,methods #'ignore)
+                       (alist-get :predicate ,methods #'ignore)
+                       :display (alist-get :display ,methods #'ignore)
+                       :annotation (alist-get :annotation ,methods #'ignore)
+                       :reference (alist-get :reference ,methods #'ignore)
+                       :keymap ,keymap)
+                      (cons ,depth ',tag))
+                conn--dispatch-read-char-handlers))
+       `(,@(cl-loop for method in '(:annotation
+                                    :reference
+                                    :predicate
+                                    :display)
+                    collect (cons method
+                                  (let ((m method))
+                                    (lambda (arglist &rest body)
+                                      `(setf (alist-get ,m ,methods)
+                                             (lambda ,arglist ,@body))))))
+         (:update . ,(lambda (arglist &rest body)
+                       (macroexpand-all
+                        `(setf (alist-get :update ,methods)
+                               (lambda ,(cons self arglist)
+                                 (ignore ,self)
+                                 ,@body))
+                        `((:return
+                           . ,(lambda (&optional value)
+                                `(conn-<
+                                   conn--dispatch-read-char-handlers
+                                   (:> (alist-get ,self) cdr)
+                                   (throw ,value))))
+                          ,@macroexpand-all-environment))))
+         (:depth . ,(lambda (n) `(setf ,depth ,n)))
+         (:keymap . ,(lambda (map) `(setf ,keymap ,map)))
+         ,@macroexpand-all-environment))))
 
   (defun conn--with-dispatch-handlers (tag body)
     (macroexpand-all
@@ -413,31 +421,31 @@ Two macros are locally defined within body for binding handlers:
   argument depth should be an integer between -100 and 100, and
   specifies the sort depth for the handler. By default depth is 0.
 
-- (:handler &rest BODY) defines and binds an anonymous handler.  The
-  anonymous handler is defined with the following macros locally defined
-  within body:
+- (:handler &rest HANDLER-DEF) defines and binds an anonymous handler.  The
+  anonymous handler is defined with the following macros defined locally
+  within HANDLER-DEF:
 
-  - (:update BREAK &rest BODY) defines the update method for the
-    handler. BREAK is the break function which should be called when
+  - (:update (COMMAND BREAK) &rest BODY) defines the update method for
+    the handler. BREAK is the break function which should be called when
     the handler handles the command, see also `conn-read-args'. Inside
     BODY the macro (:return &optional VALUE) is defined locally which
     causes the enclosing `conn-with-dispatch-handler' form to return
     VALUE.
 
-  - (:predicate COMMAND) defines the predicate method for the handler.
-    See also `conn-argument-predicate'.
+  - (:predicate (COMMAND) &rest BODY) defines the predicate method for
+    the handler.  See also `conn-argument-predicate'.
 
-  - (:display) defines the display method for the handler. See also
-    `conn-argument-display'.
+  - (:display () &rest BODY) defines the display method for the
+    handler. See also `conn-argument-display'.
 
-  - (:annotation COMMAND) defines the annotation method for the handler.
-    See also `conn-argument-annotation'.
+  - (:annotation (COMMAND) &rest BODY) defines the annotation method for
+    the handler.  See also `conn-argument-annotation'.
 
-  - (:reference COMMAND BREAK) defines the command reference method for
-    the handler.  See also `conn-argument-command-reference'.
+  - (:reference (COMMAND BREAK) &rest BODY) defines the command
+    reference method for the handler.  See also
+    `conn-argument-command-reference'.
 
-  - (:keymap KEYMAP) defines the keymap for the command handler.  See
-    also `conn-argument-compose-keymap'."
+  - (:keymap KEYMAP) defines the keymap for the command handler."
   (declare (indent 0))
   (conn--with-dispatch-handlers (gensym "handler") body))
 

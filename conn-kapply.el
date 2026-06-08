@@ -575,15 +575,14 @@ iterating over them.  SORT-FUNCTION should take a list of overlays.")
                                       string
                                       pipeline)
   (let* ((regions
-          (prog1
-              (pcase (conn-bounds-of thing arg)
-                ((and (guard subregions)
-                      (conn-bounds-get :subregions
-                                       transform
-                                       (and sr (pred identity))))
-                 (mapcar #'conn-bounds sr))
-                ((conn-bounds whole transform)
-                 (list whole)))
+          (prog1 (pcase (conn-bounds-of thing arg)
+                   ((and (guard subregions)
+                         (conn-bounds-get :subregions
+                                          transform
+                                          (and sr (pred identity))))
+                    (mapcar #'conn-bounds sr))
+                   ((conn-bounds whole transform)
+                    (list whole)))
             (deactivate-mark)))
          (string (or string (conn--kapply-read-from-with-preview
                              (if regexp-flag "Regexp: " "String: ")
@@ -906,8 +905,7 @@ application."
             (accept-change-group handle)
             (undo-amalgamate-change-group handle)))
          ((or :record :next)
-          (prog1
-              (funcall iterator state)
+          (prog1 (funcall iterator state)
             (unless (or (alist-get (current-buffer) undo-handles)
                         (eq buffer-undo-list t))
               (activate-change-group
@@ -936,8 +934,7 @@ Changes will be undone if an error is signaled during macro application."
               (accept-change-group handle)
               (undo-amalgamate-change-group handle))))
          ((or :record :next)
-          (prog1
-              (funcall iterator state)
+          (prog1 (funcall iterator state)
             (unless (or (alist-get (current-buffer) undo-handles)
                         (eq buffer-undo-list t))
               (activate-change-group
@@ -957,8 +954,7 @@ Changes will be undone if an error is signaled during macro application."
      (lambda (iterator state)
        (pcase state
          (:record
-          (prog1
-              (funcall iterator state)
+          (prog1 (funcall iterator state)
             (unless (eq buffer-undo-list t)
               (setf handle (prepare-change-group))
               (activate-change-group handle))))
@@ -971,8 +967,7 @@ Changes will be undone if an error is signaled during macro application."
           (when handle
             (accept-change-group handle)
             (undo-amalgamate-change-group handle))
-          (prog1
-              (funcall iterator state)
+          (prog1 (funcall iterator state)
             (if (eq buffer-undo-list t)
                 (setf handle nil)
               (undo-boundary)
@@ -1101,8 +1096,7 @@ When kapply finishes restore the restrictions in each buffer."
               (narrow-to-region (or beg (point-min))
                                 (or end (point-max))))))
          ((or :record :next)
-          (prog1
-              (funcall iterator state)
+          (prog1 (funcall iterator state)
             (pcase (alist-get (current-buffer) kapply-saved-restrictions)
               ('nil
                (let ((beg (point-min-marker))
@@ -1254,11 +1248,11 @@ The iterator must be the first argument in ARGLIST.
            (doc-string 3)
            (indent 2)
            (autoload-macro expand))
-  (pcase-let ((`(,decls . ,exps) (macroexp-parse-body body)))
+  (pcase-let ((`(,decls . ,body) (macroexp-parse-body body)))
     `(defun ,name ,arglist
        ,@decls
        (conn--perform-kapply ,(car arglist)
-                             (lambda (,(car arglist)) ,@exps)))))
+                             (lambda (,(car arglist)) ,@body)))))
 
 (define-conn-kapplier conn-kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
@@ -1401,16 +1395,16 @@ The iterator must be the first argument in ARGLIST.
                                (cmd (eql register)))
   "Step edit the last keyboard macro."
   ( :update (break)
-    (if (conn-kapply-macro-argument-register arg)
-        (setf (conn-kapply-macro-argument-register arg) nil)
-      (when-let* ((reg (condition-case err
-                           (register-read-with-preview
-                            "Kmacro Register:"
-                            #'kmacro-p)
-                         (quit nil)
-                         (error (conn-read-args-error
-                                 (error-message-string err))))))
-        (setf (conn-kapply-macro-argument-register arg) reg)))
+    (cond* ((conn-kapply-macro-argument-register arg)
+            (setf (conn-kapply-macro-argument-register arg) nil))
+           ((bind-and* (reg (condition-case err
+                                (register-read-with-preview
+                                 "Kmacro Register:"
+                                 #'kmacro-p)
+                              (quit nil)
+                              (error (conn-read-args-error
+                                      (error-message-string err))))))
+            (setf (conn-kapply-macro-argument-register arg) reg)))
     (funcall break)))
 
 (cl-defmethod conn-argument-payload ((arg conn-kapply-macro-argument))

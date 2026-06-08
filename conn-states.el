@@ -96,6 +96,7 @@ function may setup any other necessary state as well.")
 
 (define-inline conn--find-state (state)
   (declare (important-return-value t)
+           (side-effect-free t)
            (gv-setter
             (lambda (val)
               (macroexp-let2 nil val val

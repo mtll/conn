@@ -315,15 +315,20 @@ This skips executing the body of the `conn-read-args' form entirely."
                            prefix
                            pre
                            post)
-  (let ((arguments (if command-handler
-                       (cons command-handler arglist)
-                     arglist))
-        (prefix (when prefix (prefix-numeric-value prefix)))
-        (prompt (or prompt "Read Args"))
-        (quit-event (car (last (current-input-mode))))
-        (argument-values nil)
-        (keyseq nil)
-        (timer nil))
+  (let* ((arguments (if command-handler
+                        (cons command-handler arglist)
+                      arglist))
+         (prefix (when prefix (prefix-numeric-value prefix)))
+         (prompt (or prompt "Read Args"))
+         (quit-event (car (last (current-input-mode))))
+         (argument-values nil)
+         (keyseq nil)
+         (timer (and (not executing-kbd-macro)
+                     conn-read-args-message-delay
+                     (> conn-read-args-message-delay 0)
+                     (cl-loop for arg in arguments
+                              thereis (conn-argument-display arg))
+                     conn--read-args-timer)))
     (cl-macrolet ((with-keymaps (&rest body)
                     `(let ((emulation-mode-map-alists
                             `(((,state
@@ -471,12 +476,6 @@ This skips executing the body of the `conn-read-args' form entirely."
                        conn-read-args-last-prefix (conn-read-args-prefix-arg))))))
         (apply
          (catch 'conn-read-args-return
-           (when (and (not executing-kbd-macro)
-                      conn-read-args-message-delay
-                      (> conn-read-args-message-delay 0)
-                      (cl-loop for arg in arguments
-                               thereis (conn-argument-display arg)))
-             (setf timer conn--read-args-timer))
            (conn--unwind-protect-all
              (let ((conn-read-args-last-prefix nil))
                (if around
@@ -485,8 +484,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                               (funcall conn-read-args-around-function
                                        #'command-loop)))
                  (funcall conn-read-args-around-function #'command-loop))
-               (setf argument-values (mapcar #'conn-argument-payload
-                                             arglist)))
+               (setf argument-values (mapcar #'conn-argument-payload arglist)))
              (cancel-message-timer)
              (unless argument-values
                (mapc #'conn-argument-cancel arguments))
@@ -604,8 +602,7 @@ error."
     (conn-argument-value arg)))
 
 (cl-defgeneric conn-argument-required-p (argument)
-  (declare (important-return-value t)
-           (side-effect-free t))
+  (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
     (and (conn-argument-required arg)
@@ -622,8 +619,7 @@ update methods being called with COMMAND."
 
 Return value should be a string or a list of strings, each of which will
 be displayed in the echo area during `conn-read-args'."
-  (declare (important-return-value t)
-           (side-effect-free t))
+  (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
     (pcase (conn-argument-name arg)
@@ -632,21 +628,18 @@ be displayed in the echo area during `conn-read-args'."
 
 (cl-defgeneric conn-argument-compose-keymap (argument)
   "Return keymap for ARGUMENT."
-  (declare (important-return-value t)
-           (side-effect-free t))
+  (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
     (conn-argument-keymap arg)))
 
 (cl-defgeneric conn-argument-predicate (argument command)
   "Return non-nil if ARGUMENT accepts COMMAND."
-  (declare (important-return-value t)
-           (side-effect-free t))
+  (declare (important-return-value t))
   ( :method (_arg _cmd) nil))
 
 (cl-defgeneric conn-argument-completion-annotation (argument value)
-  (declare (important-return-value t)
-           (side-effect-free t))
+  (declare (important-return-value t))
   (:method (&rest _) nil)
   ( :method ((arg conn-argument) value)
     (and-let* ((ann (conn-argument-annotation arg))
@@ -657,7 +650,7 @@ be displayed in the echo area during `conn-read-args'."
                     (concat " (" str ")")))))))
 
 (cl-defgeneric conn-argument-command-reference (arg command break)
-  (declare (side-effect-free t))
+  (declare (important-return-value t))
   (:method (_arg _cmd _break) nil))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-argument)
