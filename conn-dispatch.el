@@ -1141,8 +1141,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
                           (ignore ,@ignore)
                           (cl-symbol-macrolet ,bindings
                             ,value)))
-                    (car body))
-                  options)
+                    (car body)))
                 (pop body))))
       (let ((slots (mapcar (lambda (s) `(list ,@(cdr s))) slots)))
         `(make-conn-action
