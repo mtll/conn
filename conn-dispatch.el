@@ -4570,58 +4570,57 @@ the string after the region selected by dispatch.")
   (declare (conn-dispatch-action)
            (important-return-value t))
   (declare-function conn-kill-thing "conn-commands")
-  (let* ((change-group (conn-action-change-group))
-         (str
-          (conn-read-args (conn-kill-state
-                           :prompt "Send Thing")
-              ((`(,thing ,arg)
-                (conn-thing-argument-dwim))
-               (transform (conn-transform-argument))
-               (fixup (conn-reformat-argument
-                       (not (region-active-p))))
-               (check-bounds
-                (conn-boolean-argument "check bounds"
-                                       'check-bounds
-                                       conn-check-bounds-argument-map
-                                       :value t)))
-            (save-excursion
-              (conn-kill-thing thing arg transform
-                               nil nil nil nil
-                               fixup check-bounds)
-              (current-kill 0)))))
-    (conn-action ((_cg change-group)
-                  (replace-and-separator
-                   (conn-dispatch-to-how-argument)))
-      (:description "Send")
-      (:window-predicate
-       (lambda (win)
-         (not
-          (buffer-local-value 'buffer-read-only
-                              (window-buffer win)))))
-      (:reference
-       "Delete a thing at point and replace a region selected by dispatch with
+  (conn-action ((_cg (conn-action-change-group))
+                (str (conn-read-args (conn-kill-state
+                                      :prompt "Send Thing")
+                         ((`(,thing ,arg)
+                           (conn-thing-argument-dwim))
+                          (transform (conn-transform-argument))
+                          (fixup (conn-reformat-argument
+                                  (not (region-active-p))))
+                          (check-bounds
+                           (conn-boolean-argument
+                            "check bounds"
+                            'check-bounds
+                            conn-check-bounds-argument-map
+                            :value t)))
+                       (save-excursion
+                         (conn-kill-thing thing arg transform
+                                          nil nil nil nil
+                                          fixup check-bounds)
+                         (current-kill 0))))
+                (replace-and-separator
+                 (conn-dispatch-to-how-argument)))
+    (:description "Send")
+    (:window-predicate
+     (lambda (win)
+       (not
+        (buffer-local-value 'buffer-read-only
+                            (window-buffer win)))))
+    (:reference
+     "Delete a thing at point and replace a region selected by dispatch with
 it.")
-      (pcase-let ((`(,replace ,separator) replace-and-separator)
-                  (`(,pt ,window ,thing ,arg ,transform)
-                   (conn-select-target)))
-        (with-selected-window window
-          (conn-dispatch-change-group)
-          (save-excursion
-            (pcase (conn-bounds-of-dispatch thing arg pt)
-              ((conn-bounds `(,beg . ,end) transform)
-               (if (and replace (<= beg (point) end))
-                   (conn-dispatch-goto-char beg 'nopush)
-                 (goto-char beg))
-               (cond (replace
-                      (delete-region beg end))
-                     ((and separator (< end beg))
-                      (insert (conn-kill-separator-for-strings str separator))))
-               (insert-for-yank str)
-               (conn-dispatch-action-pulse
-                (- (point) (length str)) (point))
-               (when (and separator (not replace) (not (< end beg)))
-                 (insert (conn-kill-separator-for-strings str separator))))
-              (_ (user-error "Cannot find thing at point")))))))))
+    (pcase-let ((`(,replace ,separator) replace-and-separator)
+                (`(,pt ,window ,thing ,arg ,transform)
+                 (conn-select-target)))
+      (with-selected-window window
+        (conn-dispatch-change-group)
+        (save-excursion
+          (pcase (conn-bounds-of-dispatch thing arg pt)
+            ((conn-bounds `(,beg . ,end) transform)
+             (if (and replace (<= beg (point) end))
+                 (conn-dispatch-goto-char beg 'nopush)
+               (goto-char beg))
+             (cond (replace
+                    (delete-region beg end))
+                   ((and separator (< end beg))
+                    (insert (conn-kill-separator-for-strings str separator))))
+             (insert-for-yank str)
+             (conn-dispatch-action-pulse
+              (- (point) (length str)) (point))
+             (when (and separator (not replace) (not (< end beg)))
+               (insert (conn-kill-separator-for-strings str separator))))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (defun conn-dispatch-register-load ()
   (declare (conn-dispatch-action)
