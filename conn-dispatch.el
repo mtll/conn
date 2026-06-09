@@ -5064,26 +5064,25 @@ it.")
           :depth -97)
         ( :with (conn-read-char-input-method)
           :depth -96)
-        (let ((conn-dispatch-in-progress t))
-          (conn-target-finder-setup target-finder)
-          (conn-action-setup action (xor repeat invert-repeat))
-          (when restrict-windows
-            (add-function :after-while conn-target-window-predicate
-                          'conn--dispatch-restrict-windows
-                          '((name . restrict-windows))))
-          (conn--dispatch-loop)
-          (conn-action-accept conn-dispatch-action)
-          (setf (conn-previous-dispatch-repeat prev-dispatch)
-                conn-dispatch-repeating)
-          (setf (conn-previous-dispatch-other-end prev-dispatch)
-                conn-dispatch-other-end)
-          (setf (conn-previous-dispatch-target-finder prev-dispatch)
-                conn-dispatch-target-finder)
-          (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
-                (advice-function-member-p
-                 'restrict-windows
-                 conn-target-window-predicate))
-          (conn-dispatch-push-history prev-dispatch))))))
+        (conn-target-finder-setup target-finder)
+        (conn-action-setup action (xor repeat invert-repeat))
+        (when restrict-windows
+          (add-function :after-while conn-target-window-predicate
+                        'conn--dispatch-restrict-windows
+                        '((name . restrict-windows))))
+        (conn--dispatch-loop)
+        (conn-action-accept conn-dispatch-action)
+        (setf (conn-previous-dispatch-repeat prev-dispatch)
+              conn-dispatch-repeating)
+        (setf (conn-previous-dispatch-other-end prev-dispatch)
+              conn-dispatch-other-end)
+        (setf (conn-previous-dispatch-target-finder prev-dispatch)
+              conn-dispatch-target-finder)
+        (setf (conn-previous-dispatch-restrict-windows prev-dispatch)
+              (advice-function-member-p
+               'restrict-windows
+               conn-target-window-predicate))
+        (conn-dispatch-push-history prev-dispatch)))))
 
 ;;;;; Dispatch Commands
 
