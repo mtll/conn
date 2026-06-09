@@ -839,6 +839,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
                   conn-target-predicate
                   conn-target-sort-function
                   inhibit-message))
+           (conn--dispatch-read-char-handlers nil)
            (conn-dispatch-hide-labels nil)
            (conn-dispatch-quit-flag nil)
            (conn-target-window-predicate conn-target-window-predicate)
@@ -3527,8 +3528,7 @@ to the key binding for that target."
               labels)))
     labels))
 
-(cl-defmethod conn-target-finder-select ((_target-finder
-                                          conn-dispatch-target-key-labels-mixin))
+(cl-defmethod conn-target-finder-select ((_tf conn-dispatch-target-key-labels-mixin))
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-handlers
