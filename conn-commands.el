@@ -472,11 +472,11 @@ The command to be stored is read from `command-history'."
                ( :constructor conn--make-tab-register
                  (&aux
                   (cookie
-                   (with-memoization (conn->
-                                       (funcall tab-bar-tabs-function)
-                                       tab-bar--current-tab-find
-                                       cdr
-                                       (alist-get 'conn-tab-cookie))
+                   (with-memoization
+                       (conn-> (funcall tab-bar-tabs-function)
+                               tab-bar--current-tab-find
+                               cdr
+                               (alist-get 'conn-tab-cookie))
                      (gensym "conn-tab-cookie")))
                   (frame (selected-frame)))))
   (cookie nil :read-only t)
@@ -538,7 +538,7 @@ If the mark is already active then deactivate it instead."
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-previous-mark-command ()
-  "Push, and mark the region from the previous, `conn-mark-state'."
+  "Mark the region from the previous `conn-mark-state'."
   (interactive)
   (if conn-mark-state-ring
       (pcase (conn-ring-extract-head conn-mark-state-ring)
@@ -553,6 +553,7 @@ If the mark is already active then deactivate it instead."
     (user-error "Mark state ring empty")))
 
 (defun conn-mark-ring-previous (arg)
+  "Cycle the `conn-mark-state' ring backward."
   (interactive "p")
   (unless (conn-ring-head conn-mark-state-ring)
     (user-error "No previous mark state"))
@@ -570,6 +571,7 @@ If the mark is already active then deactivate it instead."
          (conn-previous-mark-command))))
 
 (defun conn-mark-ring-next (arg)
+  "Cycle the `conn-mark-state' ring forward."
   (interactive "p")
   (unless (conn-ring-head conn-mark-state-ring)
     (user-error "No previous mark state"))
@@ -588,20 +590,16 @@ If the mark is already active then deactivate it instead."
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' and push `conn-mark-state' if mark is activated."
   (interactive "P")
-  (static-if (version<= emacs-version "31")
-      (exchange-point-and-mark (xor arg (not (region-active-p))))
-    (let ((exchange-point-and-mark-highlight-region t))
-      (exchange-point-and-mark (xor arg (not (region-active-p))))))
+  (dlet ((exchange-point-and-mark-highlight-region t))
+    (exchange-point-and-mark (xor arg (not (region-active-p)))))
   (when (and (region-active-p)
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
 
 (defun conn-exchange-and-mark-command ()
   (interactive)
-  (static-if (version<= emacs-version "31")
-      (exchange-point-and-mark (region-active-p))
-    (let ((exchange-point-and-mark-highlight-region t))
-      (exchange-point-and-mark (region-active-p))))
+  (dlet ((exchange-point-and-mark-highlight-region t))
+    (exchange-point-and-mark (region-active-p)))
   (when (and (region-active-p)
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
@@ -1094,8 +1092,7 @@ Currently selected window remains selected afterwards."
        'conn-outline-state))
 
 (defun conn-dwim-eval-sexp ()
-  (and (derived-mode-p '(emacs-lisp-mode
-                         lisp-interaction-mode))
+  (and (derived-mode-p 'emacs-lisp-mode)
        (eql (point)
             (cdr (bounds-of-thing-at-point 'sexp)))
        'pp-eval-last-sexp))
@@ -1107,8 +1104,7 @@ Currently selected window remains selected afterwards."
     (user-error "No symbol at point")))
 
 (defun conn-dwim-describe-symbol ()
-  (and-let* ((_ (derived-mode-p '(emacs-lisp-mode
-                                  lisp-interaction-mode)))
+  (and-let* ((_ (derived-mode-p 'emacs-lisp-mode))
              (sym (intern-soft (thing-at-point 'symbol))))
     #'conn-describe-symbol-at-point))
 

@@ -1019,11 +1019,26 @@ buffers `conn-jump-ring' if opoint differs from point.")
 (cl-defstruct (conn-dispatch-marker-argument
                (:include conn-argument)
                (:constructor conn-dispatch-marker-argument
-                             (&optional type)))
-  (type nil :type boolean :read-only t))
+                             ( &optional type
+                               &aux (start (point-marker)))))
+  (type nil :type boolean :read-only t)
+  (start nil :type marker :read-only t))
 
 (cl-defmethod conn-argument-payload ((arg conn-dispatch-marker-argument))
   (copy-marker (point) (conn-dispatch-marker-argument-type arg)))
+
+(define-inline conn-dispatch-marker-argument-cleanup (arg)
+  (inline-quote
+   (let ((mk (conn-dispatch-marker-argument-start ,arg)))
+     (with-current-buffer (marker-buffer mk)
+       (goto-char mk))
+     (set-marker mk nil))))
+
+(cl-defmethod conn-argument-accept ((arg conn-dispatch-marker-argument))
+  (conn-dispatch-marker-argument-cleanup arg))
+
+(cl-defmethod conn-argument-cancel ((arg conn-dispatch-marker-argument))
+  (conn-dispatch-marker-argument-cleanup arg))
 
 ;;;;;; Dispatch Quick Ref
 
@@ -4712,7 +4727,8 @@ it.")
     (pcase-let ((`(,pt ,window ,thing ,arg ,transform)
                  (conn-select-target))
                 (str nil))
-      (conn-dispatch-change-group (current-buffer) (window-buffer window))
+      (conn-dispatch-change-group (marker-buffer opoint)
+                                  (window-buffer window))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
