@@ -5645,7 +5645,8 @@ subregion."
           "replace"
           'replace
           conn-shell-command-replace-map
-          :reference "Replace the thing with the result of the shell command.")))
+          :reference "Replace the thing with the result of the shell command."
+          :value t)))
      (list thing arg transform replace subregions)))
   (conn-shell-command-on-thing-do thing arg transform replace subregions))
 

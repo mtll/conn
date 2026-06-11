@@ -363,7 +363,7 @@ exist."
 
 ;;;;;; Major Mode Maps
 
-(defvar-local conn--active-major-mode-maps nil)
+(defvar-local conn-active-major-mode-maps nil)
 
 (defconst conn--composed-major-mode-maps-cache
   (make-hash-table :test 'equal))
@@ -595,27 +595,28 @@ then an error is signaled."
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
-  (when (and conn-local-mode
-             (not conn-disable-input-method-hooks))
-    (let (input-method-activate-hook
-          input-method-deactivate-hook)
-      (pcase (conn-state-get conn-current-state :suppress-input-method)
-        ((and 'nil (guard current-input-method))
-         (setf conn--input-method current-input-method
-               conn--input-method-title current-input-method-title))
-        ((and 'nil (guard conn--input-method))
-         (activate-input-method conn--input-method))
-        ((guard (and current-input-method
-                     conn--input-method
-                     deactivate-current-input-method-function))
-         (setf conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))
-        ((guard (and current-input-method
-                     deactivate-current-input-method-function))
-         (setf conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))))))
+  (cond* ((or (not conn-local-mode)
+              conn-disable-input-method-hooks))
+         ((bind* (sim (conn-state-get conn-current-state
+                                      :suppress-input-method))
+                 (input-method-activate-hook nil)
+                 (input-method-deactivate-hook nil)))
+         ((and (null sim) current-input-method)
+          (setf conn--input-method current-input-method
+                conn--input-method-title current-input-method-title))
+         ((and (null sim) conn--input-method)
+          (activate-input-method conn--input-method))
+         ((and current-input-method
+               conn--input-method
+               deactivate-current-input-method-function)
+          (setf conn--input-method current-input-method
+                conn--input-method-title current-input-method-title)
+          (deactivate-input-method))
+         ((and current-input-method
+               deactivate-current-input-method-function)
+          (setf conn--input-method current-input-method
+                conn--input-method-title current-input-method-title)
+          (deactivate-input-method))))
 (put 'conn--activate-input-method 'permanent-local-hook t)
 
 (defun conn--deactivate-input-method ()
@@ -907,21 +908,32 @@ If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
+(defun conn-state-major-mode-maps-alist ()
+  (when conn-current-state
+    `((conn-local-mode
+       . ,(make-composed-keymap
+           (mapcar (lambda (mode)
+                     (conn--compose-major-mode-map
+                      conn-current-state
+                      mode))
+                   conn-active-major-mode-maps))))))
+
 (defun conn-set-major-mode-maps (maps)
   "Set buffers activate conn major mode maps to MAPS."
-  (setf conn--active-major-mode-maps maps
-        conn--major-mode-map `((conn-local-mode
-                                . ,(make-composed-keymap
-                                    (mapcar (lambda (mode)
-                                              (conn--compose-major-mode-map
-                                               conn-current-state
-                                               mode))
-                                            conn--active-major-mode-maps))))))
+  (setf conn-active-major-mode-maps maps
+        conn--major-mode-map (conn-state-major-mode-maps-alist)))
 
 (defun conn-get-major-mode-maps ()
   "Return a list of the currently active conn major mode maps."
   (declare (gv-setter conn-set-major-mode-maps))
-  (copy-sequence conn--active-major-mode-maps))
+  (copy-sequence conn-active-major-mode-maps))
+
+(cl-defgeneric conn-setup-major-mode-maps (mmode))
+
+(cl-defmethod conn-setup-major-mode-maps (mmode)
+  (cl-callf2 append
+      (conn--derived-mode-all-parents mmode)
+      (conn-get-major-mode-maps)))
 
 (defun conn--setup-state-keymaps ()
   (if (conn-state-get conn-current-state :no-keymap)
@@ -929,20 +941,14 @@ If BUFFER is nil then use the current buffer."
             conn--major-mode-map nil
             conn--minor-mode-maps nil)
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
-          conn--major-mode-map `((conn-local-mode
-                                  . ,(make-composed-keymap
-                                      (mapcar (lambda (mode)
-                                                (conn--compose-major-mode-map
-                                                 conn-current-state
-                                                 mode))
-                                              conn--active-major-mode-maps))))
           conn--minor-mode-maps (conn-state-minor-mode-maps-alist
-                                 conn-current-state))))
+                                 conn-current-state)
+          conn--major-mode-map (conn-state-major-mode-maps-alist))))
 
 (defun conn--setup-state-properties ()
   (setf cursor-type
         (let ((c (conn-state-get conn-current-state :cursor nil t)))
-          (if (functionp c) (funcall c) c))))
+          (if (cl-functionp c) (funcall c) c))))
 
 (cl-defgeneric conn-enter-state (state transition)
   "Enter STATE.
@@ -1602,8 +1608,7 @@ entered.  If the predicate is not satisfied then the state is popped.")
       (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
     (setf conn--state-stack nil))
   (unless no-major-mode-maps
-    (setf conn--active-major-mode-maps
-          (conn--derived-mode-all-parents major-mode)))
+    (conn-setup-major-mode-maps major-mode))
   (condition-case err
       (or (run-hook-with-args-until-success 'conn-setup-state-functions)
           (conn-push-state 'conn-emacs-state))

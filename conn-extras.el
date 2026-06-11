@@ -47,36 +47,27 @@
 ;;;; Grep
 
 (defvar-local conn--grep-edit-stack-handle nil)
-
-(with-eval-after-load 'wgrep
-  (defun conn--wgrep-cleanup ()
-    (when-let* ((handle (cl-shiftf conn--grep-edit-stack-handle nil)))
-      (conn-set-major-mode-maps
-       (conn--derived-mode-all-parents major-mode))
-      (conn-exit-recursive-stack handle)))
-  (advice-add 'wgrep-to-original-mode :after 'conn--wgrep-cleanup)
-
-  (defun conn--wgrep-setup ()
-    (conn-set-major-mode-maps (list 'wgrep-mode))
-    (setq-local conn--grep-edit-stack-handle
-                (conn-enter-recursive-stack 'conn-command-state)))
-  (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--wgrep-setup))
+(defvar-local conn--grep-edit-mmode-maps nil)
 
 (static-when (>= emacs-major-version 31)
   (with-eval-after-load 'grep
     (defun conn--exit-grep-edit-mode (&rest _)
       (when-let* ((handle (cl-shiftf conn--grep-edit-stack-handle nil)))
-        (conn-set-major-mode-maps
-         (conn--derived-mode-all-parents major-mode))
-        (conn-exit-recursive-stack handle)))
+        (conn-exit-recursive-stack handle))
+      (when-let* ((mmode-maps (cl-shiftf conn--grep-edit-mmode-maps nil)))
+        (conn-set-major-mode-maps mmode-maps)))
     (advice-add 'grep-edit-save-changes :after 'conn--exit-grep-edit-mode)
 
     (defun conn--setup-grep-edit-mode ()
-      (conn-set-major-mode-maps
-       (conn--derived-mode-all-parents major-mode))
+      (setq-local conn--grep-edit-mmode-maps conn-active-major-mode-maps)
+      (conn-set-major-mode-maps (conn--derived-mode-all-parents major-mode))
       (setq-local conn--grep-edit-stack-handle
                   (conn-enter-recursive-stack 'conn-command-state)))
     (add-hook 'grep-edit-mode-hook 'conn--setup-grep-edit-mode)))
+
+(with-eval-after-load 'wgrep
+  (advice-add 'wgrep-to-original-mode :after 'conn--exit-grep-edit-mode)
+  (advice-add 'wgrep-change-to-wgrep-mode :after 'conn--setup-grep-edit-mode))
 
 ;;;; Calc
 
@@ -346,15 +337,17 @@
           (dired-kill-subdir))))))
 
 (defvar-local conn--wdired-stack-handle nil)
+(defvar-local conn--wdired-mmode-maps nil)
 
 (with-eval-after-load 'wdired
   (defun conn--wdired-cleanup ()
-    (conn-set-major-mode-maps
-     (conn--derived-mode-all-parents major-mode))
-    (conn-exit-recursive-stack conn--wdired-stack-handle))
+    (conn-exit-recursive-stack conn--wdired-stack-handle)
+    (when-let* ((mmode-map (cl-shiftf conn--wdired-mmode-maps nil)))
+      (conn-set-major-mode-maps mmode-map)))
   (advice-add 'wdired-change-to-dired-mode :after 'conn--wdired-cleanup)
 
   (defun conn--wdired-setup ()
+    (setf conn--wdired-mmode-maps conn-active-major-mode-maps)
     (conn-set-major-mode-maps (list 'wdired-mode))
     (setf conn--wdired-stack-handle
           (conn-enter-recursive-stack 'conn-command-state)))
