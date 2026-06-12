@@ -175,7 +175,7 @@ Label strings are constructed by concatenating elements of
   (let* ((blen (floor (1+ (log count (length conn-simple-label-characters)))))
          (buckets (make-vector blen nil))
          (i 0))
-    (setf (aref buckets i) (thread-last
+    (setf (aref buckets i) (conn->
                              (take count conn-simple-label-characters)
                              (mapcar #'copy-sequence)
                              (nreverse)))
@@ -324,11 +324,11 @@ has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
   (declare (important-return-value t))
-  (let* ((prompt (propertize (or prompt "Chars: ")
-                             'face 'minibuffer-prompt))
-         (prompt-flag always-prompt)
-         (current candidates)
-         (partial nil))
+  (let ((prompt (propertize (or prompt "Chars: ")
+                            'face 'minibuffer-prompt))
+        (prompt-flag always-prompt)
+        (current candidates)
+        (partial nil))
     (cl-loop
      (pcase current
        ('nil
@@ -472,16 +472,16 @@ Two macros are locally defined within body for binding handlers:
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
              for label = (window-parameter win 'conn-label-string)
-             when (cond ((null label))
-                        ((member label available)
-                         (cl-callf2 delete label available)
-                         nil)
-                        ((and-let* ((new (seq-find (lambda (str)
-                                                     (string-prefix-p label str))
-                                                   available)))
-                           (cl-callf2 delq new available)
-                           (not (set-window-parameter
-                                 win 'conn-label-string new)))))
+             when (cond* ((null label))
+                         ((member label available)
+                          (cl-callf2 delete label available)
+                          nil)
+                         ((bind-and* (new (seq-find (lambda (str)
+                                                      (string-prefix-p label str))
+                                                    available)))
+                          (cl-callf2 delq new available)
+                          (not (set-window-parameter
+                                win 'conn-label-string new))))
              collect win into unlabeled
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label-string
@@ -1729,7 +1729,8 @@ Optionally the overlay may have an associated THING."
   (unless window (setf window (selected-window)))
   (when (funcall conn-target-predicate pt length window)
     (conn-protected-let*
-        ((line-bounds
+        ((throw-on-input nil)
+         (line-bounds
           (save-excursion
             (goto-char pt)
             (cons (pos-bol) (pos-eol))))
@@ -3632,12 +3633,11 @@ to the key binding for that target."
      (regex-p :initform nil
               :initarg :regex-p))
   ( :default-update-handler (state &optional len)
-    (while-no-input
-      (let ((string (oref state string))
-            (predicate (oref state predicate)))
-        (if (oref state regex-p)
-            (conn-make-re-target-overlays string predicate len)
-          (conn-make-string-target-overlays string predicate len))))))
+    (let ((string (oref state string))
+          (predicate (oref state predicate)))
+      (if (oref state regex-p)
+          (conn-make-re-target-overlays string predicate len)
+        (conn-make-string-target-overlays string predicate len)))))
 
 (cl-defmethod conn-target-finder-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
@@ -4409,7 +4409,8 @@ contain targets."
     (unless (length< narrowed-string 1)
       (overlay-put target 'face 'conn-target-overlay-face)
       (with-selected-window (overlay-get overlay 'window)
-        (funcall setup-function label)))))
+        (let ((throw-on-input nil))
+          (funcall setup-function label))))))
 
 (cl-defmethod conn-label-display ((label conn-dispatch-label))
   (pcase-let* (((cl-struct conn-dispatch-label overlay) label)
