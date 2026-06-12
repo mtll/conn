@@ -90,6 +90,7 @@
                                      (prefix-numeric-value current-prefix-arg))
               conn--wincontrol-arg-sign 1
               conn--wincontrol-initial-window (selected-window)
+              conn--wincontrol-preserve-arg t
               emulation-mode-map-alists `(conn--wincontrol-maps
                                           ,@(delq 'conn--wincontrol-maps
                                                   emulation-mode-map-alists)))
@@ -426,11 +427,17 @@
 
 (defalias 'conn-other-window 'other-window)
 
-(defun conn-goto-window ()
+(defvar conn-wincontrol-goto-window-other-frames t)
+
+(defun conn-goto-window (&optional invert-other-frames)
   "Prompt for a window and then select it."
-  (interactive)
+  (interactive "P")
   (let ((windows (delq (selected-window)
-                       (conn-get-windows nil 'nomini 'visible))))
+                       (conn-get-windows
+                        nil 'nomini
+                        (when (xor conn-wincontrol-goto-window-other-frames
+                                   invert-other-frames)
+                          'visible)))))
     (if-let* ((window (conn-prompt-for-window windows)))
         (let ((frame (window-frame window)))
           (unless (eq frame (selected-frame))
