@@ -1027,7 +1027,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
 (cl-defmethod conn-argument-payload ((arg conn-dispatch-marker-argument))
   (copy-marker (point) (conn-dispatch-marker-argument-type arg)))
 
-(define-inline conn-dispatch-marker-argument-cleanup (arg)
+(define-inline conn--dispatch-marker-argument-cleanup (arg)
   (inline-quote
    (let ((mk (conn-dispatch-marker-argument-start ,arg)))
      (with-current-buffer (marker-buffer mk)
@@ -1035,10 +1035,10 @@ buffers `conn-jump-ring' if opoint differs from point.")
      (set-marker mk nil))))
 
 (cl-defmethod conn-argument-accept ((arg conn-dispatch-marker-argument))
-  (conn-dispatch-marker-argument-cleanup arg))
+  (conn--dispatch-marker-argument-cleanup arg))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-marker-argument))
-  (conn-dispatch-marker-argument-cleanup arg))
+  (conn--dispatch-marker-argument-cleanup arg))
 
 ;;;;;; Dispatch Quick Ref
 
@@ -1860,8 +1860,8 @@ characterwise labels for all remaining targets.")
                              'face face))))
 
 (defun conn--centered-padding (overlay width face)
-  (let* ((left (min 15 (floor width 2)))
-         (right (max (- width 15) (ceiling width 2))))
+  (let ((left (min 15 (floor width 2)))
+        (right (max (- width 15) (ceiling width 2))))
     (when (> left 0)
       (overlay-put overlay 'before-string
                    (propertize
@@ -3778,16 +3778,17 @@ to the key binding for that target."
 
 (defclass conn-dispatch-focus-mixin ()
   ((hidden :initform nil)
-   (hide :initform t :initarg :hide)
-   (context-lines :initform 0 :initarg :context-lines)
+   (hide :initform t
+         :initarg :hide)
+   (context-lines :initform 0
+                  :initarg :context-lines)
    (cursor-location :initform nil)
    (separator-p :initarg :separator)
-   (fringe-indicator
-    :initform (propertize " " 'display (list 'left-fringe
-                                             'right-triangle))
-    :initarg :fringe-indicator)
-   (always-prompt
-    :initform t))
+   (fringe-indicator :initform (propertize " "
+                                           'display (list 'left-fringe
+                                                          'right-triangle))
+                     :initarg :fringe-indicator)
+   (always-prompt :initform t))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
@@ -3935,11 +3936,9 @@ contain targets."
 
 (define-conn-target-finder conn-dispatch-jump-ring
     (conn-dispatch-focus-mixin)
-    ((context-lines
-      :initform 2
-      :initarg :context-lines)
-     (window-predicate
-      :initform (lambda (win) (eq win (selected-window))))
+    ((context-lines :initform 2
+                    :initarg :context-lines)
+     (window-predicate :initform (lambda (win) (eq win (selected-window))))
      (other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (let ((points (conn-ring-list conn-jump-ring)))
@@ -3969,11 +3968,9 @@ contain targets."
 
 (define-conn-target-finder conn-dispatch-previous-emacs-state
     (conn-dispatch-focus-mixin)
-    ((context-lines
-      :initform 1
-      :initarg :context-lines)
-     (window-predicate
-      :initform (lambda (win) (eq win (selected-window))))
+    ((context-lines :initform 1
+                    :initarg :context-lines)
+     (window-predicate :initform (lambda (win) (eq win (selected-window))))
      (other-end :initform :no-other-end))
   ( :default-update-handler (_state)
     (dolist (pt (conn-ring-list conn-emacs-state-ring))
@@ -4015,10 +4012,9 @@ contain targets."
 (define-conn-target-finder conn-dispatch-all-defuns
     (conn-dispatch-focus-mixin)
     ((cache :initform nil)
-     (window-predicate
-      :initform (lambda (win)
-                  (eq (window-buffer win)
-                      (current-buffer)))))
+     (window-predicate :initform (lambda (win)
+                                   (eq (window-buffer win)
+                                       (current-buffer)))))
   ( :default-update-handler (state)
     (cl-symbol-macrolet ((cache (oref state cache)))
       (unless (and-let* ((cached (alist-get (current-buffer) cache)))
