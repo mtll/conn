@@ -70,8 +70,8 @@
   (propertize " WinC-1" 'face 'font-lock-warning-face))
 (put 'conn-wincontrol-one-command-mode-lighter 'risky-local-variable t)
 
-(defvar-local conn-wincontrol-mode nil)
-(defvar-local conn-wincontrol-one-command-mode nil)
+(defvar conn-wincontrol-mode nil)
+(defvar conn-wincontrol-one-command-mode nil)
 
 ;;;###autoload
 (defun conn-wincontrol-mode (&optional one-command)
@@ -430,11 +430,13 @@
   "Prompt for a window and then select it."
   (interactive)
   (let ((windows (delq (selected-window)
-                       (conn-get-windows
-                        nil 'nomini
-                        (if current-prefix-arg 'visible)))))
+                       (conn-get-windows nil 'nomini 'visible))))
     (if-let* ((window (conn-prompt-for-window windows)))
-        (select-window window)
+        (let ((frame (window-frame window)))
+          (unless (eq frame (selected-frame))
+            (select-frame-set-input-focus frame)
+            (raise-frame frame))
+          (select-window window))
       (user-error "No other windows available to select"))))
 
 (defvar conn-wincontrol-mru-window-timeout 2.5)

@@ -324,7 +324,7 @@ has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
   (declare (important-return-value t))
-  (let* ((prompt (propertize (or prompt "Chars")
+  (let* ((prompt (propertize (or prompt "Chars: ")
                              'face 'minibuffer-prompt))
          (prompt-flag always-prompt)
          (current candidates)
@@ -2405,10 +2405,10 @@ characterwise labels for all remaining targets.")
                (set-marker b nil)))
            conn--dispatch-window-lines-cache)
   (clrhash conn--dispatch-window-lines-cache)
-  (let* ((redisplay (lambda ()
+  (let ((timer (run-with-idle-timer
+                0 t (lambda ()
                       (while-no-input
-                        (conn-redisplay-labels labels))))
-         (timer (run-with-idle-timer 0 t redisplay)))
+                        (conn-redisplay-labels labels))))))
     (unwind-protect
         (conn-with-dispatch-handlers
           (:handler
@@ -2499,9 +2499,14 @@ depths will be sorted before greater depths.
   (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-select-window (window)
-  (prog1 (select-window window)
-    (with-memoization (gethash (current-buffer) conn--dispatch-buffer-opoints)
-      (point-marker))))
+  (let ((frame (window-frame window)))
+    (unless (eq frame (selected-frame))
+      (select-frame-set-input-focus frame)
+      (raise-frame frame)))
+  (select-window window)
+  (with-memoization (gethash (current-buffer) conn--dispatch-buffer-opoints)
+    (point-marker))
+  window)
 
 (defun conn-dispatch-goto-char (position &optional nopush)
   (goto-char position)
