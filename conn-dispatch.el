@@ -1729,8 +1729,7 @@ Optionally the overlay may have an associated THING."
   (unless window (setf window (selected-window)))
   (when (funcall conn-target-predicate pt length window)
     (conn-protected-let*
-        ((throw-on-input nil)
-         (line-bounds
+        ((line-bounds
           (save-excursion
             (goto-char pt)
             (cons (pos-bol) (pos-eol))))
@@ -1744,6 +1743,7 @@ Optionally the overlay may have an associated THING."
              composition-end 'composition nil (car line-bounds))))
          (old (conn--overlays-in-of-type pt (+ pt (max length 1))
                                          'conn-old-target window))
+         (throw-on-input nil)
          (ov (if composition-start
                  (if (> length 0)
                      (make-overlay composition-start composition-end nil nil t)
@@ -2728,7 +2728,8 @@ the meaning of depth."
 
 (define-conn-state conn-dispatch-read-char-state ()
   "State for reading label characters during dispatch."
-  :suppress-input-method t)
+  :suppress-input-method t
+  :cursor 'hollow)
 
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-read-char-state)
