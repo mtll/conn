@@ -71,6 +71,12 @@
     (conn--pop-state-1 'clone))
   (conn-setup-state-for-buffer t))
 
+(defun conn--cleanup-state-stack ()
+  (let (conn-next-state)
+    (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
+  (while conn--state-stack
+    (conn--pop-state-1 'clone)))
+
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
@@ -104,16 +110,16 @@
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
+        (add-hook 'change-major-mode-hook 'conn--cleanup-state-stack nil t)
         (setf conn--input-method current-input-method)
         (conn-setup-state-for-buffer))
-    (let (conn-next-state)
-      (conn--run-exit-fns (conn-stack-transition conn-stack-exit)))
-    (setf conn--state-stack nil)
+    (conn--cleanup-state-stack)
     (kill-local-variable 'conn-lighter)
     (setf cursor-type t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)
+    (remove-hook 'change-major-mode-hook 'conn--cleanup-state-stack t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method (cl-shiftf conn--input-method nil)))))
 

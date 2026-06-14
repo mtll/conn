@@ -38,7 +38,6 @@
   :suppress t
   "TAB" 'outline-cycle
   "<backstab>" 'outline-cycle-buffer
-  "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol-mode
   "/" (conn-remap-key conn-undo-keys t)

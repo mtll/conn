@@ -852,30 +852,25 @@ is being entered after the current state has exited or nil if
   (make-hash-table :test 'eq
                    :weakness 'key))
 
-(defvar conn-state-unwind-clone nil)
-
-(defmacro conn-state-unwind (clone &rest body)
-  "Run BODY when the state stack is unwinding past the current point.
-
-If the stack is being unwound because the buffer has been cloned then
-CLONE will be non-nil, otherwise CLONE will nil."
+(defmacro conn-state-unwind (cleanup &rest body)
+  "Run BODY when the state stack is unwinding past the current point."
   (declare (indent 1))
-  (when (eql ?_ (string-to-char (symbol-name clone)))
-    (setf clone (gensym)))
+  (when (eql ?_ (string-to-char (symbol-name cleanup)))
+    (setf cleanup (gensym)))
   (cl-with-gensyms (rest)
-    `(push (lambda (,clone ,rest)
+    `(push (lambda (,cleanup ,rest)
              (unwind-protect
                  ,(macroexp-progn body)
-               (when ,rest (funcall (car ,rest) ,clone (cdr ,rest)))))
+               (when ,rest (funcall (car ,rest) ,cleanup (cdr ,rest)))))
            (gethash conn--state-stack
                     conn--state-unwind-functions))))
 
-(defun conn--run-state-unwind-functions (clone)
+(defun conn--run-state-unwind-functions (cleanup)
   (let ((fns (gethash conn--state-stack
                       conn--state-unwind-functions)))
-    (unless clone
+    (unless cleanup
       (remhash conn--state-stack conn--state-unwind-functions))
-    (when fns (funcall (car fns) clone (cdr fns)))))
+    (when fns (funcall (car fns) cleanup (cdr fns)))))
 
 (defvar conn-state-lighter-separator
   (if (char-displayable-p ?→) "→" ">")
@@ -1452,23 +1447,23 @@ entered.  If the predicate is not satisfied then the state is popped.")
     (add-hook 'pre-redisplay-functions
               #'conn--update-record-insertion-region
               nil 'local)
-    (conn-state-unwind clone
+    (conn-state-unwind cleanup
       (setf conn--insertion-recording-start-point nil)
       (remove-hook 'pre-redisplay-functions
                    #'conn--update-record-insertion-region
                    'local)
       (when conn--insertion-recording-change-group
-        (unless clone
+        (unless cleanup
           (accept-change-group conn--insertion-recording-change-group)
           (undo-amalgamate-change-group conn--insertion-recording-change-group))
         (setf conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
-        (unless clone
+        (unless cleanup
           (setf conn-insertion-recording-last-insertion
                 (conn-insertion-recording-text)))
         (setf conn-insertion-recording-other-end nil))
       (when (overlayp conn--insertion-recording-overlay)
-        (if clone
+        (if cleanup
             (without-restriction
               (mapc #'delete-overlay
                     (conn--overlays-in-of-type (point-min) (point-max)
@@ -1534,8 +1529,8 @@ entered.  If the predicate is not satisfied then the state is popped.")
   (interactive)
   (if with (insert with)
     (conn-record-insertion)
-    (conn-state-unwind clone
-      (when (and (not clone)
+    (conn-state-unwind cleanup
+      (when (and (not cleanup)
                  conn-insertion-recording-other-end)
         (conn-push-command-history
          'conn-emacs-state-record-insert
@@ -1590,8 +1585,8 @@ entered.  If the predicate is not satisfied then the state is popped.")
              (cl-typep transition 'conn-stack-push))
     (activate-mark))
   (setf conn--mark-state-rmm (bound-and-true-p rectangle-mark-mode))
-  (conn-state-unwind clone
-    (when (and (not clone)
+  (conn-state-unwind cleanup
+    (when (and (not cleanup)
                (use-region-p))
       (conn-push-mark-state-ring
        (list (point-marker)

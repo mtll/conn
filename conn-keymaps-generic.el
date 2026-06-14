@@ -492,7 +492,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-thing-state)
   "r" 'conn-rectangle-mark
-  "z" 'conn-exchange-mark-command)
+  "Z" 'conn-exchange-mark-command)
 
 (static-if (<= 30 emacs-major-version)
     (define-keymap

@@ -35,6 +35,12 @@
 ;;;; Commands
 
 (defun conn-toggle-highlight-at-point (&optional read)
+  "Toggle highlighting symbol at point.
+
+If point is inside a highlight then remove that highlight.  If point is
+inside multiple highlights then remove all of them.
+
+If the region is active then highlight the region contents."
   (interactive "P")
   (require 'hi-lock)
   (defvar hi-lock-auto-select-face)
@@ -97,10 +103,15 @@ execution."
         (message "Keyboard macro bound to %s"
                  (format-kbd-macro key-seq))))))
 
-(defun conn-repeat-try-next () nil)
+(defun conn-repeat-try-next ()
+  "Only bound during `conn-repeat'.
+When call during `conn-repeat' allows an element of
+`conn-command-history' to decline to run and punt to the next element of
+`conn-command-history.'"
+  (error "Not repeating"))
 
 (defun conn-repeat (&optional arg)
-  "Repeat the last conn operator."
+  "Repeat the most recent command in `conn-command-history'."
   (interactive "P")
   (unless conn-command-history
     (user-error "No repeatable last command"))
@@ -120,6 +131,8 @@ execution."
 ;;;;; Movement
 
 (defun conn-to-char-forward (char count)
+  "Move point to the COUNT instance of CHAR forward.
+If COUNT is negative move backward instead."
   (declare (conn-thing-command to-char))
   (interactive "cChar: \np")
   (if (< count 0)
@@ -135,6 +148,8 @@ execution."
         (decf count)))))
 
 (defun conn-to-char-backward (char count)
+  "Move point to the COUNT instance of CHAR backward.
+If COUNT is negative move forward instead."
   (declare (conn-thing-command to-char))
   (interactive "cChar: \np")
   (if (< count 0)
@@ -150,10 +165,14 @@ execution."
         (decf count)))))
 
 (defun conn-forward-up-list (arg)
+  "Move forward out of one level of parenthesis.
+See also `backward-up-list'."
   (interactive "p")
   (backward-up-list (- arg) t t))
 
 (defun conn-backward-down-list (arg)
+  "Move forward down one level of parenthesis.
+See also `down-list'."
   (interactive "p")
   (down-list (- arg) t))
 
@@ -173,7 +192,6 @@ execution."
 
 (defun conn-goto-line (line)
   "Goto absolute line, 1 origin.
-
 Respects the current restriction."
   (declare (conn-thing-command line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
@@ -186,6 +204,7 @@ Respects the current restriction."
   (forward-line line))
 
 (defun conn-backward-up-inner-list (arg)
+  "Like `backward-up-list' but leaves point inside the list."
   (declare (conn-thing-command inner-list
                                (conn-inverse-op-other-end-handler
                                 (lambda () (conn-forward-up-inner-list 1)))))
@@ -208,6 +227,7 @@ Respects the current restriction."
              (down-list 1))))))
 
 (defun conn-forward-up-inner-list (arg)
+  "Like `conn-forward-up-list' but leaves point inside the list."
   (declare (conn-thing-command inner-list
                                (conn-inverse-op-other-end-handler
                                 (lambda () (conn-backward-up-inner-list 1)))))
@@ -290,13 +310,13 @@ Pulses line that was the last visible line before scrolling."
 (put 'conn-scroll-up 'scroll-command t)
 
 (defun conn-backward-line (N)
-  "`forward-line' by N but backward."
+  "`forward-line' but in reverse."
   (declare (conn-thing-command line #'conn-continuous-thing-other-end-handler))
   (interactive "p")
   (forward-line (- N)))
 
 (defun conn-backward-whitespace (N)
-  "`forward-whitespace' by N but backward."
+  "`forward-whitespace' but in reverse."
   (declare (conn-thing-command whitespace #'conn-discrete-thing-other-end-handler))
   (interactive "p")
   (forward-whitespace (- N)))
@@ -447,7 +467,7 @@ Line beginning positions are determined by `move-beginning-of-line'."
 (defun conn-command-to-register (register)
   "Store a previous command in REGISTER.
 
-The command to be stored is read from `command-history'."
+The command to be stored is read from `conn-command-history'."
   (interactive
    (list (register-read-with-preview "Command to register: ")))
   (set-register
@@ -596,14 +616,6 @@ If the mark is already active then deactivate it instead."
              (not conn-mark-state))
     (conn-push-state 'conn-mark-state)))
 
-(defun conn-exchange-and-mark-command ()
-  (interactive)
-  (dlet ((exchange-point-and-mark-highlight-region t))
-    (exchange-point-and-mark (region-active-p)))
-  (when (and (region-active-p)
-             (not conn-mark-state))
-    (conn-push-state 'conn-mark-state)))
-
 (defun conn-push-mark-command ()
   "Set mark at point and push old mark on mark ring."
   (interactive)
@@ -702,6 +714,8 @@ for the meaning of prefix ARG."
                                        arg
                                        transform
                                        register)
+  "Replace region with contents of REGISTER.
+The region to be replaced is defined with THING, ARG, and TRANSFORM."
   (interactive
    (conn-read-args (conn-read-thing-state
                     :prompt "Register Replace Thing")
@@ -784,15 +798,6 @@ for the meaning of prefix ARG."
 
 ;;;;; Misc Commands
 
-(defun conn-outline-insert-heading ()
-  (interactive)
-  (declare-function outline-insert-heading "outline")
-  (conn-with-recursive-stack 'conn-emacs-state
-    (save-mark-and-excursion
-      (save-current-buffer
-        (outline-insert-heading)
-        (recursive-edit)))))
-
 ;; Create aliases so we do not overwrite the default repeat map
 ;; property for these commands
 (defalias 'conn-next-error #'next-error)
@@ -822,7 +827,7 @@ for the meaning of prefix ARG."
 (defun conn-previous-emacs-state (arg)
   "Enter `conn-emacs-state' ARG positions back in `conn-emacs-state-ring'.
 
-Interactively ARG is the prefix argument."
+Interactively ARG is the current prefix argument."
   (interactive "p")
   (unless (conn-ring-head conn-emacs-state-ring)
     (user-error "No previous emacs state"))
@@ -846,7 +851,7 @@ Interactively ARG is the prefix argument."
 (defun conn-next-emacs-state (arg)
   "Enter `conn-emacs-state' ARG positions forward in `conn-emacs-state-ring'.
 
-Interactively ARG is the prefix argument."
+Interactively ARG is the current prefix argument."
   (interactive "p")
   (unless (conn-ring-head conn-emacs-state-ring)
     (user-error "No next emacs state"))
@@ -862,17 +867,17 @@ Interactively ARG is the prefix argument."
          (conn-push-state 'conn-emacs-state))))
 
 (defun conn-emacs-state ()
-  "Enter `conn-emacs-state'."
+  "Push `conn-emacs-state'."
   (interactive)
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-command-state ()
-  "Enter `conn-command-state'."
+  "Push `conn-command-state'."
   (interactive)
   (conn-push-state 'conn-command-state))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
-  "Open line above and enter `conn-emacs-state'.
+  "Open line above and push `conn-emacs-state'.
 
 If ARG is non-nil move up ARG lines before opening line."
   (interactive "p")
@@ -885,7 +890,7 @@ If ARG is non-nil move up ARG lines before opening line."
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line (&optional arg)
-  "Open line and enter `conn-emacs-state'.
+  "Open line and push `conn-emacs-state'.
 
 If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
@@ -894,10 +899,10 @@ If ARG is non-nil move down ARG lines before opening line."
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-emacs-state-overwrite (&optional arg)
-  "Enter emacs state in `overwrite-mode'.
+  "Push emacs state in `overwrite-mode'.
 
 `overwrite-mode' will be turned off when when emacs state is exited.
-If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
+If ARG is non-nil push emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (conn-push-state 'conn-emacs-state)
   (conn-state-on-exit _transition
@@ -907,7 +912,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
     (overwrite-mode 1)))
 
 (defun conn-emacs-state-overwrite-binary ()
-  "Enter Emacs state in `binary-overwrite-mode'."
+  "Push Emacs state in `binary-overwrite-mode'."
   (interactive)
   (conn-emacs-state-overwrite 1))
 
@@ -1412,7 +1417,7 @@ negative then only display that many context lines before each line."))
 (cl-defmethod conn-mark-thing-do ((_thing (eql conn-exchange-mark-command))
                                   _arg
                                   _transform)
-  (conn-exchange-and-mark-command))
+  (conn-exchange-mark-command))
 
 (cl-defmethod conn-mark-thing-do ((_thing (eql conn-rectangle-mark))
                                   _arg
@@ -4770,8 +4775,8 @@ Interactively REPEAT is given by the prefix argument."
                              (accept-change-group cg))))
                (t
                 (conn-record-insertion nil cg pt)
-                (conn-state-unwind clone
-                  (when-let* ((text (and (not clone)
+                (conn-state-unwind cleanup
+                  (when-let* ((text (and (not cleanup)
                                          (conn-insertion-recording-text))))
                     (push-hist text))))))))
     (_ (error "No thing at point"))))
@@ -4951,8 +4956,8 @@ Interactively REPEAT is given by the prefix argument."
             (insert with)
             (accept-change-group cg))
         (conn-record-insertion nil cg pt)
-        (conn-state-unwind clone
-          (unless clone
+        (conn-state-unwind cleanup
+          (unless cleanup
             (setf with (conn-insertion-recording-text)))))))
   (conn-push-command-history
    (let ((prev (conn-previous-dispatch-copy
@@ -4969,8 +4974,8 @@ Interactively REPEAT is given by the prefix argument."
                  (insert with)
                  (accept-change-group cg))
              (conn-record-insertion nil cg pt)
-             (conn-state-unwind clone
-               (unless clone
+             (conn-state-unwind cleanup
+               (unless cleanup
                  (setf with (conn-insertion-recording-text)))))))))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql conn-replace))

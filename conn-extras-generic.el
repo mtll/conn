@@ -40,7 +40,6 @@
   "TAB" 'outline-cycle
   "o" 'outline-cycle
   "<backstab>" 'outline-cycle-buffer
-  "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   "/" (conn-remap-key conn-undo-keys t)
   "?" (conn-remap-key conn-undo-redo-keys t)
