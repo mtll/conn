@@ -717,7 +717,8 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                        (t `(app (pcase--flip conn-state-get ',prop) ,prop))))
              (lambda (prop)
                (cond ((consp prop)
-                      `(app (conn-state-get _ ,(car prop) ,(caddr prop)) ,(cadr prop)))
+                      `(app (conn-state-get _ ,(car prop) ,(caddr prop))
+                            ,(cadr prop)))
                      ((keywordp prop)
                       (let ((var (intern (substring (symbol-name prop) 1))))
                         `(app (conn-state-get _ ,prop) ,var)))
@@ -999,9 +1000,15 @@ To execute code when a state is exiting use `conn-state-on-exit'."
      (conn-stack-transition conn-stack-push
        (push state conn--state-stack)))))
 
-(defun conn--pop-state-1 (&optional clone)
-  (conn--run-state-unwind-functions clone)
+(defun conn--pop-state-1 (&optional cleanup)
+  (conn--run-state-unwind-functions cleanup)
   (pop conn--state-stack))
+
+(defun conn--cleanup-state-stack ()
+  (let (conn-next-state)
+    (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
+  (while conn--state-stack
+    (conn--pop-state-1 'cleanup)))
 
 (defun conn-pop-state ()
   "Pop to the previous state in the state stack.
@@ -1100,36 +1107,31 @@ HANDLE should be a handle returned by `conn-enter-recursive-stack'."
           (dolist (mode new-mode-maps)
             (conn--ensure-minor-mode-map child mode))
           (conn--rebuild-state-keymaps child)))))
-   ((bind* (state-obj (conn--make-state name parents)))
-    (setf (conn--find-state name) state-obj
-          (conn-state--properties state-obj) props)
-    (dolist (parent parents)
-      (cl-pushnew name (conn-state--children
-                        (conn--find-state parent))))
-    (unless (conn-state-get name :no-keymap)
+   ((bind* (state-obj (conn--make-state name parents))))
+   (t (setf (conn--find-state name) state-obj
+            (conn-state--properties state-obj) props)
       (dolist (parent parents)
-        (pcase-dolist (`(,mode . ,_)
-                       (cdr (conn-state-minor-mode-maps-alist parent)))
-          (conn--ensure-minor-mode-map name mode)))))))
+        (cl-pushnew name (conn-state--children
+                          (conn--find-state parent))))
+      (unless (conn-state-get name :no-keymap)
+        (dolist (parent parents)
+          (pcase-dolist (`(,mode . ,_)
+                         (cdr (conn-state-minor-mode-maps-alist parent)))
+            (conn--ensure-minor-mode-map name mode)))))))
 
 (defun conn--make-state-docstring (state docstring)
   (put state 'variable-documentation
        (list
         (lambda ()
-          (concat
-           docstring
-           "\n\n\tParent states:\n"
-           (cl-loop for parent in (cdr (conn-state-all-parents state))
-                    concat (format "`%s'\n" parent) into ps
-                    finally return (if (string-empty-p ps)
-                                       "No parent states"
-                                     ps))
-           "\n\n\tChild states:\n"
-           (cl-loop for child in (conn-state-all-children state)
-                    concat (format "`%s'\n" child) into cs
-                    finally return (if (string-empty-p cs)
-                                       "No child states"
-                                     cs)))))))
+          (cl-flet ((fmt (sym) (format "`%s'\n" sym)))
+            (apply #'concat
+                   `(,docstring
+                     "\n\n\tParent states:\n"
+                     ,@(or (mapcar #'fmt (cdr (conn-state-all-parents state)))
+                           (list "No parent states"))
+                     "\n\n\tChild states:\n"
+                     ,@(or (mapcar #'fmt (conn-state-all-children state))
+                           (list "No child states")))))))))
 
 (defmacro define-conn-state (name parents &rest properties)
   "Define a conn state named NAME.
@@ -1453,9 +1455,8 @@ entered.  If the predicate is not satisfied then the state is popped.")
                    #'conn--update-record-insertion-region
                    'local)
       (when conn--insertion-recording-change-group
-        (unless cleanup
-          (accept-change-group conn--insertion-recording-change-group)
-          (undo-amalgamate-change-group conn--insertion-recording-change-group))
+        (accept-change-group conn--insertion-recording-change-group)
+        (undo-amalgamate-change-group conn--insertion-recording-change-group)
         (setf conn--insertion-recording-change-group nil))
       (when conn-insertion-recording-other-end
         (unless cleanup
@@ -1464,6 +1465,10 @@ entered.  If the predicate is not satisfied then the state is popped.")
         (setf conn-insertion-recording-other-end nil))
       (when (overlayp conn--insertion-recording-overlay)
         (if cleanup
+            ;; Search the buffer for conn-recording-region overlays
+            ;; because if the buffer has been cloned then the overlay
+            ;; in conn--insertion-recording-overlay will be the
+            ;; overlay in the base buffer and not the cloned buffer.
             (without-restriction
               (mapc #'delete-overlay
                     (conn--overlays-in-of-type (point-min) (point-max)

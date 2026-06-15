@@ -3897,14 +3897,12 @@ contain targets."
 (define-conn-target-finder conn-dispatch-focus-thing-at-point
     (conn-dispatch-string-targets
      conn-dispatch-focus-mixin)
-    ((context-lines
-      :initform 1
-      :initarg :context-lines)
-     (window-predicate
-      :initarg :window-predicate
-      :initform (lambda (win)
-                  (eq (window-buffer win)
-                      (current-buffer)))))
+    ((context-lines :initform 1
+                    :initarg :context-lines)
+     (window-predicate :initarg :window-predicate
+                       :initform (lambda (win)
+                                   (eq (window-buffer win)
+                                       (current-buffer)))))
   ( :default-update-handler (state)
     (let* ((line-height (window-height))
            (string (oref state string))
@@ -4177,8 +4175,8 @@ contain targets."
 (define-conn-target-finder conn-dispatch-column-targets
     ()
     ((goal-column :initform nil)
-     (window-predicate
-      :initform (lambda (win) (eq win (selected-window)))))
+     (window-predicate :initform (lambda (win)
+                                   (eq win (selected-window)))))
   ( :default-update-handler (state)
     (let ((goal-col
            (with-memoization (oref state goal-column)

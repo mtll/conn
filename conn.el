@@ -71,12 +71,6 @@
     (conn--pop-state-1 'clone))
   (conn-setup-state-for-buffer t))
 
-(defun conn--cleanup-state-stack ()
-  (let (conn-next-state)
-    (conn--run-exit-fns (conn-stack-transition conn-stack-clone)))
-  (while conn--state-stack
-    (conn--pop-state-1 'clone)))
-
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn

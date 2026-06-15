@@ -88,6 +88,7 @@
   :keymap conn-default-edit-map
   "t" 'conn-register-prefix
   "F" #'conn-bind-last-dispatch-to-key
+  "M" #'ffap-menu
   "b" 'conn-command-to-register
   "#" 'conn-how-many-in-thing
   "'" 'conn-kapply-count-iterator
