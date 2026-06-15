@@ -224,7 +224,8 @@ See also `conn-repeat'.")
 ;;;;; Remaps
 
 (defmacro conn--without-conn-maps (&rest body)
-  "Run BODY without any state, mode, or local maps active."
+  "Run BODY without any state, mode, or local maps active.
+Also binds `overriding-terminal-local-map' to nil."
   (declare (debug (body))
            (indent 0))
   `(let ((emulation-mode-map-alists
@@ -234,7 +235,8 @@ See also `conn-repeat'.")
                             conn--major-mode-map
                             conn--state-map
                             conn--read-args-maps)
-                          #'eq)))
+                          #'eq))
+         (overriding-terminal-local-map nil))
      ,(macroexp-progn body)))
 
 (defvar conn-demap-key

@@ -295,6 +295,8 @@ This skips executing the body of the `conn-read-args' form entirely."
 
 (defvar conn-read-args-message-delay 0)
 
+(defvar conn--read-args-maps nil)
+
 (defconst conn--read-args-timer (timer-create))
 
 (defvar conn-read-args-around-function
@@ -331,15 +333,17 @@ This skips executing the body of the `conn-read-args' form entirely."
                      conn--read-args-timer)))
     (cl-macrolet
         ((with-keymaps (&rest body)
-           `(let ((emulation-mode-map-alists
-                   `(((,state
+           `(let* ((conn--read-args-maps
+                    `((,state
                        ,@(thread-last
                            (mapcar #'conn-argument-compose-keymap
                                    arguments)
                            (cons overriding-map)
                            (delq nil)
-                           (make-composed-keymap))))
-                     ,@emulation-mode-map-alists)))
+                           (make-composed-keymap)))))
+                   (emulation-mode-map-alists
+                    `(conn--read-args-maps
+                      ,@emulation-mode-map-alists)))
               ,@body))
          (with-overriding-keymaps (&rest body)
            `(with-keymaps

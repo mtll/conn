@@ -344,15 +344,15 @@ themselves once the selection process has concluded."
         (cl-return (conn-label-payload it))))
      (setf prompt-flag nil)
      (cl-loop
-      (cond* ((bind* (c (conn-dispatch-read-char
-                         prompt
-                         conn-dispatch-label-input-method))))
-             (conn-dispatch-hide-labels)
-             (t (cl-callf2 seq-keep
-                    (lambda (l) (conn-label-narrow l c))
-                    current)
-                (setf partial t)
-                (cl-return)))))))
+      (let ((c (conn-dispatch-read-char
+                prompt
+                conn-dispatch-label-input-method)))
+        (unless conn-dispatch-hide-labels
+          (cl-callf2 seq-keep
+              (lambda (l) (conn-label-narrow l c))
+              current)
+          (setf partial t)
+          (cl-return)))))))
 
 (defvar conn--dispatch-read-char-handlers nil)
 
