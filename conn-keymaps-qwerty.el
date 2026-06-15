@@ -19,18 +19,18 @@
 
 ;;; Code
 
-(require 'conn-extras)
+(require 'conn)
 
 (setf conn-keymaps-defined 'qwerty)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "h" 'end-of-buffer
-  "C-e" 'conn-forward-outer-line
-  "C-a" 'conn-backward-outer-line
+  "h" #'end-of-buffer
+  "C-e" #'conn-forward-outer-line
+  "C-a" #'conn-backward-outer-line
   ";" 'conn-things-in-region
-  ">" 'forward-line
-  "<" 'conn-backward-line)
+  ">" #'forward-line
+  "<" #'conn-backward-line)
 
 (define-keymap
   :keymap conn-other-end-argument-map
@@ -40,15 +40,15 @@
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
-  "/" 'tab-bar-history-back
-  "?" 'tab-bar-history-forward)
+  "/" #'tab-bar-history-back
+  "?" #'tab-bar-history-forward)
 
 ;;;; Mode Keymaps
 
 (defvar-keymap conn-error-repeat-map
   :repeat (:continue (conn-repeat))
-  "i" 'conn-previous-error
-  "k" 'conn-next-error)
+  "i" #'conn-previous-error
+  "k" #'conn-next-error)
 (keymap-set conn-error-repeat-map "j" 'conn-repeat)
 (keymap-set conn-error-repeat-map "l" 'conn-repeat-kmacro-at-error)
 (keymap-set conn-error-repeat-map "b" 'conn-repeat)
@@ -56,15 +56,15 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-mark-state 'rectangle-mark-mode)
   "z" 'rectangle-exchange-point-and-mark
-  "C-y" 'conn-yank-replace-rectangle
-  "*" 'calc-grab-rectangle
-  "+" 'calc-grab-sum-down
-  "_" 'calc-grab-sum-across
-  "M-DEL" 'clear-rectangle
-  "<backspace>" 'clear-rectangle
-  "<conn-edit-map> d" 'delete-whitespace-rectangle
-  "<conn-edit-map> o" 'open-rectangle
-  "#" 'rectangle-number-lines)
+  "C-y" #'conn-yank-replace-rectangle
+  "*" #'calc-grab-rectangle
+  "+" #'calc-grab-sum-down
+  "_" #'calc-grab-sum-across
+  "M-DEL" #'clear-rectangle
+  "<backspace>" #'clear-rectangle
+  "<conn-edit-map> d" #'delete-whitespace-rectangle
+  "<conn-edit-map> o" #'open-rectangle
+  "#" #'rectangle-number-lines)
 (conn-set-mode-map-depth 'rectangle-mark-mode -90 'conn-command-state)
 
 (defun conn-setup-isearch-map ()

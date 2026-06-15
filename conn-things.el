@@ -599,6 +599,40 @@ command moves over."
   (setf (alist-get 'conn-thing-command defun-declarations-alist)
         (list #'conn--declare-thing-command)))
 
+;; From `cl--generic-describe'
+(add-hook 'help-fns-describe-function-functions #'conn--thing-operation-describe)
+(defun conn--thing-operation-describe (function)
+  (when-let* ((_ (symbolp function))
+              (generic (function-get function 'conn-thing-operation))
+              (_ (and (symbolp generic)
+                      (cl--generic generic))))
+    (save-excursion
+      ;; Ensure that we have two blank lines (but not more).
+      (unless (looking-back "\n\n" (- (point) 2))
+        (insert "\n"))
+      (insert "This is a conn thing operation command.\n\n")
+      (insert (format-message "`%s' %s\n\n"
+                              generic
+                              (propertize "documentation for things:" 'face 'bold)))
+      ;; Loop over fanciful generics
+      (cl--map-methods-documentation
+       generic
+       (lambda (quals signature file doc)
+         (when doc
+           (pcase signature
+             (`(,name (,_arg (conn-thing internal--anonymous-thing-method)) . ,_))
+             (`(,name ,(and thing (pred consp)) . ,_)
+              (insert (format "%s%S%s\n\n%s\n\n"
+                              quals
+                              (list name thing)
+                              (if file (format-message " in `%s'." file) "")
+                              doc))))))))))
+
+(defun conn--declare-thing-operation (f _args generic-function)
+  `(put ',f 'conn-thing-operation ',generic-function))
+(setf (alist-get 'conn-thing-operation defun-declarations-alist)
+      (list #'conn--declare-thing-operation))
+
 (define-inline conn-subthing-p (thing parent)
   (declare (side-effect-free t)
            (important-return-value t))

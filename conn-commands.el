@@ -1499,6 +1499,7 @@ negative then only display that many context lines before each line."))
 
 (defun conn-mark-thing (thing arg transform)
   "Mark the region defined by THING, ARG, and TRANSFORM."
+  (declare (conn-thing-operation conn-mark-thing-do))
   (interactive
    (conn-read-args (conn-mark-thing-state
                     :prompt "Mark Thing")
@@ -1817,6 +1818,7 @@ the head of the kill ring.
 
 if non-nil check-bounds checks the bounds of the region to be deleted
 with `conn-check-bounds' before deleting."
+  (declare (conn-thing-operation conn-yank-replace-do))
   (interactive
    (conn-read-args (conn-yank-replace-state
                     :prompt "Yank and Replace Thing")
@@ -2137,7 +2139,7 @@ with `conn-check-bounds' before deleting."
                                to)))
 
 (cl-defmethod conn-replace-do ((_thing (conn-thing widen))
-                               &rest _)
+                               &rest _rest)
   (without-restriction
     (cl-call-next-method)))
 
@@ -2148,7 +2150,7 @@ with `conn-check-bounds' before deleting."
 (cl-defmethod conn-replace-do ((_thing (eql conn-emacs-state))
                                arg
                                transform
-                               &rest _)
+                               &rest _rest)
   (conn-read-args (conn-change-state
                    :prefix arg
                    :prompt "Change Thing")
@@ -2296,6 +2298,7 @@ subregion of the region in turn.
 
 For more information about how the replacement is carried out see
 `query-replace' and `query-replace-regexp'."
+  (declare (conn-thing-operation conn-replace-do))
   (interactive
    (conn-read-args (conn-replace-state
                     :prompt "Replace in Thing")
@@ -2523,6 +2526,7 @@ Exiting the recursive edit will resume the isearch."
                              regexp
                              subregions-p)
   "Isearch forward within the bounds of a thing."
+  (declare (conn-thing-operation conn-isearch-in-thing-do))
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
@@ -2553,6 +2557,7 @@ Exiting the recursive edit will resume the isearch."
                               regexp
                               subregions-p)
   "Isearch backward within the bounds of a thing."
+  (declare (conn-thing-operation conn-isearch-in-thing-do))
   (interactive
    (conn-read-args (conn-isearch-state
                     :prompt "Isearch in Thing")
@@ -2875,6 +2880,7 @@ and ARG at point and mark.
 
 If THING is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
+  (declare (conn-thing-operation conn-transpose-things-do))
   (interactive
    (conn-read-args (conn-transpose-state
                     :prompt "Transpose Things"
@@ -3150,6 +3156,7 @@ Interactively REFORMAT defaults to the value of
 
 If CHECK-BOUNDS is non-nil then run the `conn-check-bounds-functions'
 hook, which see."
+  (declare (conn-thing-operation conn-kill-thing-do))
   (interactive
    (conn-read-args (conn-kill-state
                     :prompt "Kill Thing"
@@ -3884,6 +3891,7 @@ If copying to a registers then append to the register.  If APPEND is
 APPEND is \\='repeat then the first invocation sets the place which is
 being copied to and further invocations with `conn-repeat' append to
 that place."
+  (declare (conn-thing-operation conn-copy-thing-do))
   (interactive
    (conn-read-args (conn-copy-state
                     :prompt "Copy Thing")
@@ -4169,6 +4177,7 @@ TRANSFORM.  For how they are used to define the region see
 `conn-bounds-of' and `conn-transform-bounds'.
 
 The regexp is read interactively."
+  (declare (conn-thing-operation conn-how-many-in-thing-do))
   (interactive
    (conn-read-args (conn-how-many-state
                     :prompt "How Many in Thing")
@@ -4234,6 +4243,7 @@ The regexp is read interactively."
 
 For how they are used to define the region see `conn-bounds-of' and
 `conn-transform-bounds'."
+  (declare (conn-thing-operation conn-comment-thing-do))
   (interactive
    (conn-read-args (conn-comment-state
                     :prompt "Comment Thing")
@@ -4657,6 +4667,7 @@ For how they are used to define the region see `conn-bounds-of' and
 
 If REPEAT is non-nil then duplicate the region REPEAT times.
 Interactively REPEAT is given by the prefix argument."
+  (declare (conn-thing-operation conn-duplicate-thing-do))
   (interactive
    (conn-read-args (conn-duplicate-state
                     :prompt "Duplicate Thing")
@@ -5053,6 +5064,7 @@ Interactively REPEAT is given by the prefix argument."
 
 For how the region is determined using THING, ARG, and TRANSFORM see
 `conn-bounds-of' and `conn-transform-bounds'."
+  (declare (conn-thing-operation conn-change-thing-do))
   (interactive
    (conn-read-args (conn-change-state
                     :prompt "Change Thing")
@@ -5212,6 +5224,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
 
 If CLEANUP-WHITESPACE is non-nil then also run
 `whitespace-cleanup-region' on the region."
+  (declare (conn-thing-operation conn-indent-thing-do))
   (interactive
    (conn-read-args (conn-indent-state
                     :prompt "Indent Thing")
@@ -5636,6 +5649,7 @@ subregion."
                                     &optional
                                     replace
                                     subregions)
+  (declare (conn-thing-operation conn-shell-command-on-thing-do))
   (interactive
    (conn-read-args (conn-shell-command-state
                     :prompt "Shell Command on Thing")
@@ -5770,6 +5784,7 @@ subregion."
     (conn-case-thing-do thing arg transform #'capitalize-region)))
 
 (defun conn-upcase-thing (thing arg transform)
+  (declare (conn-thing-operation conn-case-thing-do))
   (interactive
    (conn-read-args (conn-case-state
                     :prompt "Upcase Thing")
@@ -5779,6 +5794,7 @@ subregion."
   (conn-case-thing-do thing arg transform #'upcase-region))
 
 (defun conn-downcase-thing (thing arg transform)
+  (declare (conn-thing-operation conn-case-thing-do))
   (interactive
    (conn-read-args (conn-case-state
                     :prompt "Downcase Thing")
@@ -5788,6 +5804,7 @@ subregion."
   (conn-case-thing-do thing arg transform #'downcase-region))
 
 (defun conn-capitalize-thing (thing arg transform)
+  (declare (conn-thing-operation conn-case-thing-do))
   (interactive
    (conn-read-args (conn-case-state
                     :prompt "Capitalize Thing")

@@ -2289,6 +2289,8 @@ characterwise labels for all remaining targets.")
       (nreverse lines))))
 
 (defun conn-dispatch-get-display-line (&optional point)
+  "Return the number of visual lines between POINT and selected window start.
+If POINT is not visible in the currently selected window then return nil."
   (cl-loop for line from 0
            for (beg end . exclusive) in (conn--dispatch-window-lines)
            when (<= beg
@@ -2297,6 +2299,7 @@ characterwise labels for all remaining targets.")
            return line))
 
 (defun conn-dispatch-pixelwise-label-p (ov)
+  "Return non-nil if OV should receive a pixelwise label."
   (declare (important-return-value t))
   (or (not (display-graphic-p))
       (and (funcall conn-pixelwise-labels-window-predicate
@@ -2304,6 +2307,7 @@ characterwise labels for all remaining targets.")
            (funcall conn-pixelwise-labels-target-predicate ov))))
 
 (defun conn-dispatch-create-label (target string)
+  "Return a label for TARGET with label STRING."
   (declare (important-return-value t))
   (let ((window (overlay-get target 'window)))
     (conn-protected-let*
@@ -3249,7 +3253,7 @@ buffer."
                           :allocation :class
                           :initform (lambda ,arglist ,@body)))
                        ('nil)
-                       (_ (error "Malformed default handler definition")))))
+                       (_ (error "Malformed default update handler definition")))))
            ,@(when docstring (list docstring)))
          :autoload-end
          ,(pcase update-method
