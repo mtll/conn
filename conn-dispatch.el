@@ -1088,8 +1088,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
          (function (apply desc (conn-action--slots ,action))))))))
 
 (defun conn-action-reference (action)
-  (and-let* ((ref (and action
-                       (conn-action--reference action))))
+  (and-let* ((ref (and action (conn-action--reference action))))
     (cl-typecase ref
       (conn--reference-page ref)
       (string

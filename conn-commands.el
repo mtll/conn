@@ -1417,11 +1417,13 @@ negative then only display that many context lines before each line."))
 (cl-defmethod conn-mark-thing-do ((_thing (eql conn-exchange-mark-command))
                                   _arg
                                   _transform)
+  "Exchange the mark and point and enter `conn-mark-state'."
   (conn-exchange-mark-command))
 
 (cl-defmethod conn-mark-thing-do ((_thing (eql conn-rectangle-mark))
                                   _arg
                                   _transform)
+  "Activate `rectangle-mark-mode'."
   (cl-call-next-method)
   (rectangle-mark-mode 1))
 
@@ -1430,6 +1432,7 @@ negative then only display that many context lines before each line."))
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing dispatch))
                                   arg
                                   transform)
+  "Mark a thing or things selected with dispatch."
   (conn-read-args (conn-mark-dispatch-state
                    :prefix arg
                    :prompt "Mark Dispatch")
@@ -1474,6 +1477,8 @@ negative then only display that many context lines before each line."))
 (cl-defmethod conn-mark-thing-do ((_thing (conn-thing expansion))
                                   arg
                                   transform)
+  "Mark an expansion from point selected with dispatch.
+Uses expansions from `conn-expand'."
   (conn-dispatch-setup
    (conn-action ()
      (:description "Mark")

@@ -613,7 +613,7 @@ command moves over."
       (insert "This is a conn thing operation command.\n\n")
       (insert (format-message "`%s' %s\n\n"
                               generic
-                              (propertize "documentation for things:" 'face 'bold)))
+                              (propertize "documented thing methods:" 'face 'bold)))
       ;; Loop over fanciful generics
       (cl--map-methods-documentation
        generic
