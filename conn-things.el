@@ -133,7 +133,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (cl-defstruct (conn-bounds
                (:constructor conn--make-bounds)
                (:conc-name conn-bounds--))
-  (thing nil :type symbol :read-only t)
+  (thing nil :type conn-thing :read-only t)
   (arg nil :type (or nil integer) :read-only t)
   (point (point) :type integer :read-only t)
   (buffer (current-buffer) :type buffer :read-only t)
@@ -145,10 +145,11 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 (defalias 'conn-bounds-arg 'conn-bounds--arg)
 (defalias 'conn-bounds-buffer 'conn-bounds--buffer)
 
-(cl-defstruct (conn--anonymous-thing
-               (:constructor nil)
-               (:constructor conn--make-anonymous-thing)
-               (:copier conn--copy-anonymous-thing))
+(cl-defstruct (conn-anonymous-thing
+                (:constructor nil)
+                (:constructor conn--make-anonymous-thing)
+                (:copier conn--copy-anonymous-thing)
+                (:conc-name conn--anonymous-thing-))
   (parents nil)
   (methods nil :read-only t)
   (properties nil))
@@ -170,6 +171,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        (save-excursion
          (goto-char (conn-bounds--point ,bounds))
          ,@body))))
+
+(cl-deftype conn-thing () '(satisfies conn-thing-p))
 
 (define-inline conn-thing-p (thing)
   (declare (side-effect-free t)
@@ -205,15 +208,15 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
 
 (defun conn-thing-all-parents (thing)
   (declare (important-return-value t))
-  (pcase thing
-    ((pred conn-bounds-p)
+  (cl-typecase thing
+    (conn-bounds
      (conn-thing-all-parents (conn-bounds-thing thing)))
-    ((pred conn-anonymous-thing-p)
-     (let ((parents (conn-anonymous-thing-parents thing)))
-       (with-memoization (gethash parents conn--anonymous-thing-all-parents-cache)
-         (merge-ordered-lists
-          (mapcar #'conn-thing-all-parents parents)))))
-    ((pred conn-thing-p)
+    (conn-anonymous-thing
+      (let ((parents (conn-anonymous-thing-parents thing)))
+        (with-memoization (gethash parents conn--anonymous-thing-all-parents-cache)
+          (merge-ordered-lists
+           (mapcar #'conn-thing-all-parents parents)))))
+    (conn-thing
      (with-memoization (gethash thing conn--thing-all-parents-cache)
        (cons thing
              (merge-ordered-lists
@@ -269,12 +272,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                (conn--anonymous-thing-parse-properties properties)))
     `(conn--make-anonymous-thing
       :parents (cl-loop for p in ,parents
-                        for parent = (pcase p
-                                       ((pred conn-bounds-p)
-                                        (conn-bounds-thing p))
-                                       ((pred conn-thing-p)
-                                        p)
-                                       (_ (error "Unknown thing %s" p)))
+                        for parent = (cl-typecase p
+                                       (conn-bounds (conn-bounds-thing p))
+                                       (conn-thing p)
+                                       (t (error "Unknown thing %s" p)))
                         do (when (conn-anonymous-thing-p parent)
                              (error "Cannot inherit from anonymous thing"))
                         collect parent)
@@ -330,11 +331,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
        :autoload-end
        (cl-defmethod ,f ((,(car args) (conn-thing internal--anonymous-thing-method))
                          &rest rest)
-         (if-let* ((thing (pcase-exhaustive ,(car args)
-                            ((pred conn-bounds-p)
-                             (conn-bounds-thing ,(car args)))
-                            ((pred conn-thing-p)
-                             ,(car args))))
+         (if-let* ((thing (cl-typecase ,(car args)
+                            (conn-bounds (conn-bounds-thing ,(car args)))
+                            (conn-thing ,(car args))))
                    (op (conn--anonymous-thing-method thing ',f)))
              (apply op #'cl-call-next-method thing rest)
            (cl-call-next-method))))))
@@ -691,20 +690,18 @@ command moves over."
             (lambda (_exp)
               (macroexp-let2* nil (thing)
                 `(conn--make-bounds
-                  :thing (pcase ,thing
-                           ((pred conn-bounds-p)
-                            (conn-bounds-thing ,thing))
-                           ((pred conn-thing-p)
-                            ,thing)
-                           (_ (error "Not a valid thing: %s" ,thing)))
+                  :thing (cl-typecase ,thing
+                           (conn-bounds (conn-bounds-thing ,thing))
+                           (conn-thing ,thing)
+                           (t (error "Not a valid thing: %s" ,thing)))
                   :arg ,arg
                   :whole ,whole
                   :properties (list ,@properties))))))
   (conn--make-bounds
-   :thing (pcase thing
-            ((pred conn-bounds-p) (conn-bounds-thing thing))
-            ((pred conn-thing-p) thing)
-            (_ (error "Not a valid thing: %s" thing)))
+   :thing (cl-typecase thing
+            (conn-bounds (conn-bounds-thing thing))
+            (conn-thing thing)
+            (t (error "Not a valid thing: %s" thing)))
    :arg arg
    :whole whole
    :properties properties))
@@ -1397,7 +1394,7 @@ Returns a `conn-bounds' struct."
            (side-effect-free t))
   (:method (thing) (format "%s" thing))
   (:method ((thing symbol)) (copy-sequence (symbol-name thing)))
-  ( :method ((thing conn--anonymous-thing))
+  ( :method ((thing conn-anonymous-thing))
     (format "<anonymous %s %s>"
             (conn-anonymous-thing-parents thing)
             (substring (secure-hash 'sha1 (prin1-to-string thing)) 0 8))))
@@ -1789,7 +1786,7 @@ not be delete.  The the value returned by each function is ignored.")
  (conn-reference-page
    :name 'conn-check-bounds
    :depth 70
-   (:heading "Check Bounds Argument")
+   (:heading "Check Bounds")
    ((("toggle" check-bounds))
     (("toggle and set buffer locally" set-check-bounds)))))
 

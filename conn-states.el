@@ -72,7 +72,9 @@ function may setup any other necessary state as well.")
 
 (defvar conn--minor-mode-maps-sort-tick 0)
 
-(cl-defstruct (conn-state
+(cl-deftype conn-state () '(satisfies conn-state-p))
+
+(cl-defstruct (conn--state
                (:constructor nil)
                ( :constructor conn--make-state
                  (name
@@ -101,19 +103,19 @@ function may setup any other necessary state as well.")
             (lambda (val)
               (macroexp-let2 nil val val
                 `(progn
-                   (cl-check-type ,val conn-state)
+                   (cl-check-type ,val conn--state)
                    (put ,state :conn-state ,val))))))
   (inline-quote
    (get ,state :conn-state)))
 
-(define-inline conn-state-name-p (state)
+(define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
   (declare (side-effect-free t)
            (important-return-value t))
   (inline-letevals (state)
     (inline-quote
      (and (symbolp ,state)
-          (conn-state-p (get ,state :conn-state))))))
+          (conn--state-p (get ,state :conn-state))))))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
@@ -294,7 +296,7 @@ Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
     (let ((parents (conn-state-all-keymap-parents state))
           (state-obj (conn--find-state state)))
-      (cl-check-type state-obj conn-state)
+      (cl-check-type state-obj conn--state)
       (when-let* ((state-map (gethash state conn--composed-state-maps)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
@@ -449,7 +451,7 @@ return it."
          (conn--find-state ,state)))))
 
 (defun conn--sort-mode-maps (state)
-  (cl-check-type (conn--find-state state) conn-state)
+  (cl-check-type (conn--find-state state) conn--state)
   (unless (conn-state-get state :no-keymap)
     (let* ((parents (conn-state-all-keymap-parents state))
            (tables (mapcar (lambda (s)
@@ -702,7 +704,7 @@ property KEY in the state and matches to associated value against
 Each element can also be a SYMBOL, which is an abbreviation of a (KEY
 PAT) tuple of the form (\\='SYMBOL SYMBOL).  When SYMBOL is a keyword,
 it is an abbreviation of the form (:SYMBOL SYMBOL)."
-  `(and (pred conn-state-name-p)
+  `(and (pred conn-state-p)
         ,@(mapcar
            (static-if (< emacs-major-version 30)
                (lambda (prop)
@@ -727,7 +729,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 (pcase-defmacro conn-substate (parent)
   "Matches if EXPVAL is a substate of PARENT."
-  `(and (pred conn-state-name-p)
+  `(and (pred conn-state-p)
         (pred ,(static-if (< emacs-major-version 30)
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
@@ -746,7 +748,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state &rest _)
-       `(and (conn-state-name-p ,state)
+       `(and (conn-state-p ,state)
              (conn-state-all-parents ,state)))
   (lambda (tag &rest _)
     (when tag
@@ -1158,7 +1160,7 @@ can only be changed by redefining a state and are not inherited.
     (cl-assert (plistp properties))
     `(progn
        (dolist (parent ',parents)
-         (cl-check-type (conn--find-state parent) conn-state))
+         (cl-check-type (conn--find-state parent) conn--state))
        (unless (cl-loop for parent in ',parents
                         never (memq ',name (conn-state-all-parents parent)))
          (error "Cycle detected in %s inheritance hierarchy" ',name))
