@@ -3159,8 +3159,7 @@ buffer."
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql finish)))
   "Complete the current dispatch."
-  ( :update (_break)
-    (throw 'dispatch-exit nil)))
+  (:update (_break) (throw 'dispatch-exit nil)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql other-end)))

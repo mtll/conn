@@ -679,7 +679,8 @@ If the mark is already active then deactivate it instead."
   "Insert a newline, leave point before it and indent the new line.
 With arg N, insert N newlines."
   (interactive "p")
-  (save-excursion (newline-and-indent N)))
+  (save-excursion (newline-and-indent N))
+  (indent-according-to-mode))
 
 ;;;;; Register Setting and Loading
 

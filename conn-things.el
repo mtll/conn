@@ -219,11 +219,10 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
     (conn-thing
      (with-memoization (gethash thing conn--thing-all-parents-cache)
        (cons thing
-             (merge-ordered-lists
-              (mapcar #'conn-thing-all-parents
-                      (ignore-errors
-                        (conn--thing-parents
-                         (conn--find-thing thing))))))))))
+             (and-let* ((th (conn--find-thing thing)))
+               (merge-ordered-lists
+                (mapcar #'conn-thing-all-parents
+                        (conn--thing-parents th)))))))))
 
 (eval-and-compile
   (defun conn--anonymous-thing-parse-properties (properties)
@@ -2128,6 +2127,10 @@ Only the background color is used."
  'narrow-to-region
  'widen
  'conn-narrow-to-thing)
+
+(conn-register-thing-commands
+ '(widen) nil
+ 'conn-widen)
 
 (conn-register-thing 'narrow-ring)
 
