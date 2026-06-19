@@ -1870,7 +1870,7 @@ Optionally the overlay may have an associated THING."
 
 ;;;;; Dispatch Labels
 
-(defvar conn-dispatch-label-function 'conn-dispatch-simple-labels
+(defvar conn-dispatch-label-function #'conn-dispatch-simple-labels
   "Function responsible for labeling all `conn-targets'.
 
 A labeling function may take an optional argument STATE and should
@@ -1880,21 +1880,21 @@ list then NEW-STATE will be passed to the labeling function the next
 time it is called.  The first time the labeling function is called STATE
 will be nil.")
 
-(defvar conn-default-label-padding-function 'conn--centered-padding
+(defvar conn-default-label-padding-function #'conn--centered-padding
   "Default function for padding dispatch labels.
 
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
 (defvar conn-pixelwise-labels-window-predicate
-  'conn--pixelwise-labels-window-p
+  #'conn--pixelwise-labels-window-p
   "Predicate a window must satisfy for pixelwise labels to be used.")
 
 (defvar conn-dispatch-pixelwise-labels-line-limit 250
   "Maximum distance from beginning of line for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-target-predicate
-  'conn--pixelwise-labels-target-p
+  #'conn--pixelwise-labels-target-p
   "Predicate a target must satisfy for pixelwise labels to be used.")
 
 (defvar conn--label-start-time nil

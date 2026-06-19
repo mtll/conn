@@ -672,7 +672,7 @@
                                       &allow-other-keys)
   (mapc #'delete-overlay regions)
   (save-mark-and-excursion
-    (conn-with-recursive-stack (conn-buffer-base-state)
+    (conn-with-recursive-stack (conn-top-level-base-state)
       (conn-push-state 'conn-mark-state)
       (when other-end (conn-exchange-mark-command))
       (let ((adjust t)

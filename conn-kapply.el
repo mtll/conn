@@ -1446,13 +1446,13 @@ The iterator must be the first argument in ARGLIST.
                   (display-prefix "state ")
                   (name "state")
                   (value (if (memq conn-current-state
-                                   (list (conn-buffer-base-state)
+                                   (list (conn-top-level-base-state)
                                          'conn-command-state
                                          'conn-emacs-state))
                              conn-current-state
-                           (conn-buffer-base-state)))
+                           (conn-top-level-base-state)))
                   (choices (delete-dups
-                            (list (conn-buffer-base-state)
+                            (list (conn-top-level-base-state)
                                   'conn-command-state
                                   'conn-emacs-state)))
                   (cycling-commands '(kapply-state))

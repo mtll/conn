@@ -532,9 +532,8 @@ depth value.  Depth should be an integer between -100 and 100."
 (defun conn-get-minor-mode-map (state mode &optional dont-create)
   "Return keymap for MODE in STATE.
 
-If one does not exists create a new sparse keymap for MODE in STATE and
-return it.  If DONT-CREATE is non-nil and a map does not already exist
-then an error is signaled."
+If a keymap for MODE in STATE does not exist then create a sparse keymap and
+return it unless DONT-CREATE is non-nil, in which case an error is signaled."
   (declare (important-return-value t))
   (if (conn-state-get state :no-keymap)
       (unless dont-create
@@ -856,7 +855,13 @@ is being entered after the current state has exited or nil if
                    :weakness 'key))
 
 (defmacro conn-state-unwind (cleanup &rest body)
-  "Run BODY when the state stack is unwinding past the current point."
+  "Run BODY when the state stack is unwinding past the current state.
+
+CLEANUP should be a symbol which will be bound to a non-nil value when
+the stack is being unwound because it is being cleaned up, possibly so
+that a new stack can be setup with `conn-setup-state-for-buffer'.  For
+example when exiting `conn-local-mode', changing major modes, or from
+`clone-buffer-hook' or `clone-indirect-buffer-hook'."
   (declare (indent 1))
   (when (eql ?_ (string-to-char (symbol-name cleanup)))
     (setf cleanup (gensym)))
@@ -887,6 +892,7 @@ is being entered after the current state has exited or nil if
 (put 'conn-mode-line-state-stack 'risky-local-variable t)
 
 (defun conn-mode-line-lighter ()
+  "Return the mode-line lighter for the state stack."
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
     (let ((lighter (conn-state-get conn-current-state :lighter)))
       (dolist (elem (cdr conn--state-stack))
@@ -906,7 +912,7 @@ If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
-(defun conn-state-major-mode-maps-alist ()
+(defun conn--state-major-mode-maps-alist ()
   (when conn-current-state
     `((conn-local-mode
        . ,(make-composed-keymap
@@ -919,16 +925,20 @@ If BUFFER is nil then use the current buffer."
 (defun conn-set-major-mode-maps (maps)
   "Set buffers activate conn major mode maps to MAPS."
   (setf conn-active-major-mode-maps maps
-        conn--major-mode-map (conn-state-major-mode-maps-alist)))
+        conn--major-mode-map (conn--state-major-mode-maps-alist)))
 
 (defun conn-get-major-mode-maps ()
   "Return a list of the currently active conn major mode maps."
   (declare (gv-setter conn-set-major-mode-maps))
   (copy-sequence conn-active-major-mode-maps))
 
-(cl-defgeneric conn-setup-major-mode-maps (mmode))
+(cl-defgeneric conn-setup-major-mode-maps (mmode)
+  "Setup the major-mode maps for MMODE in the current buffer.")
 
 (cl-defmethod conn-setup-major-mode-maps (mmode)
+  "Default method for setting up major-mode maps.
+Activates the major-mode map for MMODE and each of MMODE\\='s parent
+modes."
   (cl-callf2 append
       (conn--derived-mode-all-parents mmode)
       (conn-get-major-mode-maps)))
@@ -941,7 +951,7 @@ If BUFFER is nil then use the current buffer."
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map)))
           conn--minor-mode-maps (conn-state-minor-mode-maps-alist
                                  conn-current-state)
-          conn--major-mode-map (conn-state-major-mode-maps-alist))))
+          conn--major-mode-map (conn--state-major-mode-maps-alist))))
 
 (defun conn--setup-state-properties ()
   (setf cursor-type
@@ -951,11 +961,16 @@ If BUFFER is nil then use the current buffer."
 (cl-defgeneric conn-enter-state (state transition)
   "Enter STATE.
 
-Code that is run when a state is entered should be added as methods to
+Code that is run when a state is entered should be added as a method to
 this function.  The (conn-substate STATE) specializer is provided so
 that code can be run for every state inheriting from some parent state.
 
-To execute code when a state is exiting use `conn-state-on-exit'."
+An error in any of the primary, :before, or :after methods of this
+function will cause `conn-mode' to exit.  Code that may abort entering a
+state with an error, without causing `conn-mode' to exit, must be in an
+:around method.
+
+See also `conn-state-on-exit' and `conn-state-unwind'."
   ( :method ((state (conn-substate t)) transition)
     (set state t)
     (funcall transition)
@@ -995,7 +1010,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
            (message "Error in conn-state-entry-hook: %s" (car err)))))))))
 
 (defun conn-push-state (state)
-  "Enter STATE and push it to the state stack."
+  "Enter STATE and push it onto the state stack."
   (unless (symbol-value state)
     (conn-enter-state
      state
@@ -1018,7 +1033,7 @@ To execute code when a state is exiting use `conn-state-on-exit'."
 If the current state is the base state for the stack then push the
 state given by the current state's :pop-alternate property.  If the
 current state does not have a :pop-alternate property then push
-`conn-command-state'."
+`conn-pop-alternate-default'."
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (conn-enter-state
@@ -1030,6 +1045,10 @@ current state does not have a :pop-alternate property then push
                      t conn-pop-alternate-default))))
 
 (defun conn-unwind-stack ()
+  "Unwind the current state stack.
+This command pops the current state until the base state of the current
+state stack is reached.  If a recursive stack is active then this
+command will pop to the base state of the current recursive stack."
   (interactive)
   (while (conn-peek-state)
     (conn-pop-state)))
@@ -1040,8 +1059,10 @@ current state does not have a :pop-alternate property then push
            (important-return-value t))
   (cadr conn--state-stack))
 
-(defun conn-buffer-base-state (&optional buffer)
-  "Returns the next state in the state stack."
+(defun conn-top-level-base-state (&optional buffer)
+  "Returns the top level base state for the current buffer.
+This function ignores any recursive stacks and returns the base state
+for the outermost state stack."
   (declare (side-effect-free t)
            (important-return-value t))
   (conn-<
@@ -1050,11 +1071,23 @@ current state does not have a :pop-alternate property then push
     last
     car))
 
+(defun conn-base-state (&optional buffer)
+  "Returns the base state for the current buffer.
+If any recursive stacks are active then return the base state for the
+innermost recursive stack."
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (cl-loop for (a b) on (buffer-local-value 'conn--state-stack
+                                            (or buffer (current-buffer)))
+           unless b return a))
+
 (defun conn--state-stack-handle ()
   (cons (current-buffer) conn--state-stack))
 
 (defun conn-enter-recursive-stack (state)
-  "Enter a recursive stack with STATE as the base state."
+  "Enter a recursive stack with STATE as the base state.
+Returns a stack handle that should be passed to
+`conn-exit-recursive-stack' to exit the recursive stack."
   (declare (important-return-value t))
   (prog1 (conn--state-stack-handle)
     (conn-enter-state
