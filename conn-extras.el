@@ -104,10 +104,7 @@
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading))
                                       &rest _)
-  (conn-dispatch-headings
-   :reference (conn-reference-quote
-                ((:heading "Heading Targets")
-                 "Hides buffer regions outside heading lines."))))
+  (conn-dispatch-headings))
 
 (eval-and-compile
   (conn-register-thing

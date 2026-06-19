@@ -173,12 +173,10 @@
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link))
                                       &rest _)
   (conn-dispatch-regexp-targets
+   :description "org-link"
    :regexp org-link-any-re
    :fixed-length 0
-   :window-predicate #'conn--org-window-p
-   :reference (conn-reference-quote
-                ((:heading "Org Link Targets")
-                 "Dispatch on org links."))))
+   :window-predicate #'conn--org-window-p))
 
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
@@ -186,9 +184,7 @@
                                       &rest _)
   (conn-all-things-targets
    :all-things 'org-paragraph
-   :window-predicate #'conn--org-window-p
-   :reference (conn-reference-quote
-                ((:heading "Org Paragraph Targets")))))
+   :window-predicate #'conn--org-window-p))
 
 (conn-register-thing-commands
  '(org-paragraph) 'conn-continuous-thing-other-end-handler

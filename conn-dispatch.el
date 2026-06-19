@@ -591,7 +591,7 @@ Two macros are locally defined within body for binding handlers:
   (set-window-parameter window 'conn-window-labeled-p t)
   (conn-minibuffer-label window string))
 
-(defun conn--setup-window-labels (windows)
+(defun conn-get-window-labels (windows)
   (cl-loop for win in windows
            when (window-parameter win 'conn-label-string)
            collect
@@ -638,10 +638,10 @@ for dispatch."
            collect win))
 
 (eval-and-compile
-  (defun conn--with-window-labels (var windows body)
+  (defun conn--with-window-labels (var labels body)
     (cl-with-gensyms (timer)
       `(conn-with-dispatch-input-buffer
-         (let* ((,var (conn--setup-window-labels ,windows))
+         (let* ((,var ,labels)
                 (conn-dispatch-label-input-method nil)
                 (,timer (run-with-idle-timer
                          0 t (lambda ()
@@ -655,16 +655,19 @@ for dispatch."
              (when ,timer (cancel-timer ,timer))
              (mapc #'conn-label-delete ,var)))))))
 
-(defmacro conn-with-window-labels (var windows &rest body)
-  (declare (indent 2))
-  (conn--with-window-labels var windows body))
+(defmacro conn-with-window-labels (binder &rest body)
+  (declare (indent 1))
+  (pcase binder
+    (`(,var ,labels)
+     (conn--with-window-labels var labels body))))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
   (when windows
     (funcall conn-window-label-function)
-    (conn-with-window-labels labels windows
+    (conn-with-window-labels
+        (labels (conn-get-window-labels windows))
       (conn-with-dispatch-handlers
         (:handler
          ( :predicate (cmd)
@@ -1166,13 +1169,16 @@ buffers `conn-jump-ring' if opoint differs from point.")
          (function (apply desc (conn-action--slots ,action))))))))
 
 (defun conn-action-reference (action)
-  (and-let* ((ref (and action (conn-action--reference action))))
+  (and-let* ((ref (conn-action--reference action)))
+    (when (cl-functionp ref)
+      (cl-callf apply ref (conn-action--slots action)))
     (cl-typecase ref
       (conn--reference-page ref)
       (string
-       (conn-reference-quote
-         ((:heading (concat "Action: " (conn-action-description action)))
-          ,ref))))))
+       (conn-reference-page
+         :depth -70
+         (:heading (concat "Action: " (conn-action-description action)))
+         (:eval ref))))))
 
 (define-inline conn-call-action (action)
   (inline-letevals (action)
@@ -1478,6 +1484,10 @@ that slot's value and otherwise performs a shallow copy."
      ("yank to/read"
       conn-dispatch-yank-to
       conn-dispatch-reading-yank-to)))))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
+  (when-let* ((action (conn-dispatch-action-argument-value arg)))
+    (conn-action-reference action)))
 
 (cl-defmethod conn-argument-command-reference ((_arg conn-dispatch-action-argument)
                                                cmd
@@ -2776,6 +2786,12 @@ the meaning of depth."
   (conn-<
     (mapcar #'conn-argument-display arguments)
     flatten-tree
+    ( :as strs
+      (compat-call
+       sort strs
+       :key (lambda (str)
+              (or (get-text-property 0 'conn-read-args-display-depth str)
+                  0))))
     (string-join "; ")
     (or "")
     substitute-command-keys
@@ -2896,7 +2912,8 @@ the meaning of depth."
               conn--read-args-prefix-mag)))
          (conn--read-args-prefix-sign "[-1]")
          (t "[1]"))
-   'face 'read-multiple-choice-face))
+   'face 'read-multiple-choice-face
+   'conn-read-args-display-depth -40))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-prefix-arg)
                                        (cmd (eql negative-argument)))
@@ -2950,7 +2967,9 @@ the meaning of depth."
 (cl-defmethod conn-argument-display ((_arg conn-read-char-input-method))
   (and-let* ((im (buffer-local-value 'current-input-method-title
                                      conn-dispatch-input-buffer)))
-    (propertize im 'face 'read-multiple-choice-face)))
+    (propertize im
+                'face 'read-multiple-choice-face
+                'conn-read-args-display-depth -30)))
 
 (define-conn-dispatch-handler-command ((arg conn-read-char-input-method)
                                        (cmd (eql set-input-method)))
@@ -3027,6 +3046,8 @@ buffer."
 
 (cl-defmethod conn-argument-display ((_handler conn-dispatch-select-command-handler))
   (list
+   (propertize (conn-thing-pretty-print (oref conn-dispatch-target-finder thing))
+               'conn-read-args-display-depth -45)
    "\\[reference] help"
    (when (conn-dispatch-other-end-p)
      (concat
@@ -3041,6 +3062,10 @@ buffer."
       (propertize
        "this win"
        'face 'eldoc-highlight-function-argument)))))
+
+(cl-defmethod conn-argument-get-reference ((_handler conn-dispatch-select-command-handler))
+  (list (conn-action-reference conn-dispatch-action)
+        (conn-target-finder-reference conn-dispatch-target-finder)))
 
 (eieio-declare-slots thing arg transform)
 
@@ -3291,6 +3316,8 @@ buffer."
                      :initarg :window-predicate)
    (reference :initform nil
               :initarg :reference)
+   (description :initform nil
+                :initarg :description)
    (label-function :initform nil
                    :initarg :label-function)
    (label-sort-function :initform nil
@@ -3358,6 +3385,18 @@ buffer."
     (when (stringp (car rest))
       (setf docstring (pop rest)))
     (define--conn-target-finder name superclasses slots docstring rest)))
+
+(defun conn-target-finder-reference (target-finder)
+  (and-let* ((ref (oref target-finder reference)))
+    (cl-typecase ref
+      (conn--reference-page ref)
+      (t
+       (conn-reference-page
+         :depth -70
+         (:heading
+          (format "Target Finder: %s"
+                  (conn-thing-pretty-print (oref target-finder thing))))
+         (:eval ref))))))
 
 (defun conn-add-update-handler (target-finder function &optional depth)
   (unless depth (setf depth 0))
@@ -3477,11 +3516,9 @@ buffer."
         (labels (conn-dispatch-get-labels))
       (prog1
           (conn-with-dispatch-handlers
-            ( :with (conn-dispatch-select-command-handler)
-              :depth -95)
+            ( :with (conn-dispatch-select-command-handler))
             (when executing-kbd-macro
               (:handler
-               (:depth 50)
                ( :display ()
                  (list "\\[exit] exit macro"
                        "\\[skip] skip iteration"))
@@ -3635,10 +3672,8 @@ to the key binding for that target."
   (conn-with-dispatch-labels
       (labels (conn-dispatch-key-labels))
     (conn-with-dispatch-handlers
-      ( :with (conn-dispatch-select-command-handler)
-        :depth -95)
+      (:with (conn-dispatch-select-command-handler))
       (:handler
-       (:depth -100)
        ( :predicate (obj)
          (conn-dispatch-label-p obj))
        ( :update (obj _break)
@@ -4175,12 +4210,12 @@ contain targets."
                   (pcase (ignore-errors (conn-bounds-of thing nil))
                     ((conn-bounds `(,tbeg . ,_tend))
                      (= beg tbeg)))))
-   :reference (conn-reference-quote
-                ((:heading "Thing With Prefix")
-                 ,(string-fill
-                   (format "Read a prefix string of %s characters for a %s target."
-                           prefix-length thing)
-                   80)))))
+   :reference (conn-reference-page
+                (:heading "Thing With Prefix")
+                ,(string-fill
+                  (format "Read a prefix string of %s characters for a %s target."
+                          prefix-length thing)
+                  80))))
 
 (define-conn-target-finder conn-dispatch-things-with-prefix-targets
     ()
@@ -5153,14 +5188,13 @@ it.")
                  prev-dispatch))
       (conn-with-dispatch-handlers
         (:handler
-         (:depth -99)
          ( :display ()
            (and-let* ((desc (conn-action-description conn-dispatch-action)))
-             (propertize desc 'face 'conn-argument-active-face))))
-        ( :with (conn-dispatch-prefix-arg)
-          :depth -97)
-        ( :with (conn-read-char-input-method)
-          :depth -96)
+             (propertize desc
+                         'face 'conn-argument-active-face
+                         'conn-read-args-display-depth -50))))
+        ( :with (conn-dispatch-prefix-arg))
+        ( :with (conn-read-char-input-method))
         (conn-target-finder-setup target-finder)
         (conn-action-setup action (xor repeat invert-repeat))
         (when restrict-windows
@@ -5203,14 +5237,13 @@ it.")
                                     ('nil #'+)))
     (conn-with-dispatch-handlers
       (:handler
-       (:depth -99)
        ( :display ()
          (and-let* ((desc (conn-action-description conn-dispatch-action)))
-           (propertize desc 'face 'conn-argument-active-face))))
-      ( :with (conn-dispatch-prefix-arg)
-        :depth -97)
-      ( :with (conn-read-char-input-method)
-        :depth -96)
+           (propertize desc
+                       'face 'conn-argument-active-face
+                       'conn-read-args-display-depth -50))))
+      ( :with (conn-dispatch-prefix-arg))
+      ( :with (conn-read-char-input-method))
       (conn-action-setup (or action (conn-get-default-action thing))
                          repeat)
       (conn-target-finder-setup
@@ -5579,18 +5612,11 @@ for the dispatch."
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun))
                                       &rest _)
-  (conn-dispatch-all-defuns
-   :reference (conn-reference-quote
-                ((:heading "Defun Targets")
-                 "Dispatch on defuns.  Hides buffer regions outside defun definition
-lines."))))
+  (conn-dispatch-all-defuns))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line))
                                       &rest _)
-  (conn-dispatch-visual-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Visual Lines Targets")
-                 "Dispatch on visual lines."))))
+  (conn-dispatch-visual-line-targets))
 
 (conn-register-thing-commands '(dispatch) nil 'conn-dispatch)
 
@@ -5608,19 +5634,11 @@ lines."))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence))
                                       &rest _)
-  (conn-all-things-targets
-   :all-things 'sentence
-   :reference (conn-reference-quote
-                ((:heading "Sentence Targets")
-                 "Dispatch on sentences."))))
+  (conn-all-things-targets :all-things 'sentence))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph))
                                       &rest _)
-  (conn-all-things-targets
-   :all-things 'paragraph
-   :reference (conn-reference-quote
-                ((:heading "Paragraph Targets")
-                 "Dispatch on paragraphs."))))
+  (conn-all-things-targets :all-things 'paragraph))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing char))
                                       &rest _)
@@ -5630,52 +5648,30 @@ lines."))))
 (cl-defmethod conn-get-target-finder ((_cmd (eql forward-char))
                                       &rest _)
   (conn-dispatch-read-with-timeout
-   :timeout conn-read-string-timeout
-   :reference (conn-reference-quote
-                ((:heading "String Targets")
-                 "Display on matches for a string read with a timeout.  Other end puts
-point at the end of a match."))))
+   :timeout conn-read-string-timeout))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line))
                                       &rest _)
-  (conn-dispatch-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Line Targets")
-                 "Dispatch on a line."))))
+  (conn-dispatch-line-targets))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column))
                                       &rest _)
-  (conn-dispatch-column-targets
-   :reference (conn-reference-quote
-                ((:heading "Column Targets")
-                 "Dispatch on a column.  Bounds are from point to selected column."))))
+  (conn-dispatch-column-targets))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line))
                                       &rest _)
-  (conn-dispatch-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Outer Line Targets")
-                 "Dispatch on an outer line."))))
+  (conn-dispatch-line-targets))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line))
                                       &rest _)
-  (conn-dispatch-inner-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Inner Line Targets")
-                 "Dispatch on an inner line."))))
+  (conn-dispatch-inner-line-targets))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line))
                                       &rest _)
-  (conn-dispatch-end-of-inner-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Inner Line Targets")
-                 "Dispatch on an outer line.  Other end defaults to non-nil."))))
+  (conn-dispatch-end-of-inner-line-targets))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line-dwim))
                                       &rest _)
-  (conn-dispatch-end-of-inner-line-targets
-   :reference (conn-reference-quote
-                ((:heading "Inner Line Targets")
-                 "Dispatch on an outer line.  Other end defaults to non-nil."))))
+  (conn-dispatch-end-of-inner-line-targets))
 
 (provide 'conn-dispatch)

@@ -1467,6 +1467,7 @@ entered.  If the predicate is not satisfied then the state is popped.")
         (overlay-put conn--insertion-recording-overlay 'window window)))))
 
 (defun conn-insertion-recording-p ()
+  "Non-nil when insertion is being recorded with `conn-record-emacs-state'."
   (and conn--insertion-recording-overlay t))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-record-emacs-state))
@@ -1512,6 +1513,7 @@ entered.  If the predicate is not satisfied then the state is popped.")
         (setf conn--insertion-recording-overlay nil)))))
 
 (defun conn-insertion-recording-text ()
+  "Return the text contained in the insertion recording region."
   (when (markerp conn-insertion-recording-other-end)
     (filter-buffer-substring
      (min (point) conn-insertion-recording-other-end)

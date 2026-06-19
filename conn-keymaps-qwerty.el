@@ -476,7 +476,7 @@
                    (conn-dispatch-goto-char beg))))))))
   ")" (conn-anonymous-thing
         '(sexp)
-        :pretty-print (:method (_) "outer-list-or-string")
+        :pretty-print (:method (_) "outer-list")
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
                           :prefix-thing 'sexp
@@ -484,7 +484,7 @@
                                                  (syntax string-quote))))))
   "]" (conn-anonymous-thing
         '(inner-list)
-        :pretty-print (:method (_) "inner-list-or-string")
+        :pretty-print (:method (_) "inner-list")
         :bounds-op ( :method (_self arg)
                      (pcase (conn-bounds-of 'inner-string arg)
                        ((and bounds (conn-bounds (pred identity)))

@@ -438,7 +438,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (with-overriding-keymaps
                  (condition-case err
                      (conn-quick-reference
-                      (conn-get-quick-ref-pages)
+                      (nconc (mapcar #'conn-argument-get-reference arguments)
+                             (conn-get-quick-ref-pages))
                       (lambda (&rest _) (display-message)))
                    (user-error
                     (conn--read-args-set-error-message
@@ -658,6 +659,10 @@ be displayed in the echo area during `conn-read-args'."
   (declare (important-return-value t))
   (:method (_arg _cmd _break) nil))
 
+(cl-defgeneric conn-argument-get-reference (arg)
+  (declare (important-return-value t))
+  (:method (_arg) nil))
+
 (cl-defmethod conn-argument-command-reference ((arg conn-argument)
                                                cmd
                                                break)
@@ -826,6 +831,10 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-display ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
            collect (conn-argument-display a)))
+
+(cl-defmethod conn-argument-get-reference ((arg conn-composite-argument))
+  (mapcar #'conn-argument-get-reference
+          (conn-composite-argument-value arg)))
 
 (cl-defmethod conn-argument-compose-keymap ((arg conn-composite-argument))
   (make-composed-keymap
