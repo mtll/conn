@@ -41,8 +41,8 @@
 (cl-defmethod conn-argument-update ((arg conn-surround-with-argument)
                                     (_cmd (eql surround-self-insert))
                                     break)
-  (setf (conn-argument-set-flag arg) t
-        (conn-argument-value arg)
+  (setf (conn-argument--set-flag arg) t
+        (conn-argument--value arg)
         (list last-input-event
               (conn-read-args-consume-prefix-arg)))
   (funcall break))
@@ -51,8 +51,8 @@
                                     cmd
                                     break)
   (when (memq cmd '(conn-adjust-surround conn-adjust-surround-other-end))
-    (setf (conn-argument-set-flag arg) t
-          (conn-argument-value arg)
+    (setf (conn-argument--set-flag arg) t
+          (conn-argument--value arg)
           (list cmd (conn-read-args-consume-prefix-arg)))
     (funcall break)))
 
@@ -66,8 +66,8 @@
                                        (_sym (conn-thing conn-surround)))
   t)
 
-(cl-defmethod conn-argument-payload ((arg conn-surround-with-argument))
-  (pcase (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-surround-with-argument))
+  (pcase (conn-argument--value arg)
     (`(,(and ev (pred integerp)) ,arg)
      (list
       (conn-anonymous-thing
@@ -133,13 +133,13 @@
                                     cmd
                                     break)
   (when (conn-argument-predicate arg cmd)
-    (setf (conn-argument-value arg)
-          (unless (eq cmd (conn-argument-value arg))
+    (setf (conn-argument--value arg)
+          (unless (eq cmd (conn-argument--value arg))
             cmd))
     (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-surround-property-argument))
-  (and-let* ((val (conn-argument-value arg)))
+  (and-let* ((val (conn-argument--value arg)))
     (propertize (format "%s" val)
                 'face 'conn-argument-active-face)))
 
@@ -527,14 +527,14 @@
 (cl-defmethod conn-argument-update ((arg conn-change-surround-argument)
                                     (_cmd (eql surround-self-insert))
                                     break)
-  (setf (conn-argument-set-flag arg) t
-        (conn-argument-value arg)
+  (setf (conn-argument--set-flag arg) t
+        (conn-argument--value arg)
         (list last-input-event
               (conn-read-args-consume-prefix-arg)))
   (funcall break))
 
-(cl-defmethod conn-argument-payload ((arg conn-change-surround-argument))
-  (pcase (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-change-surround-argument))
+  (pcase (conn-argument--value arg)
     (`(,(and ev (pred integerp)) ,arg)
      (list
       (conn-anonymous-thing

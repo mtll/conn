@@ -1456,7 +1456,7 @@ Returns a `conn-bounds' struct."
   (recursive-edit nil :type boolean :read-only t)
   (in-region nil :type boolean))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-thing-argument))
+(cl-defmethod conn-argument-keymap ((arg conn-thing-argument))
   (if (conn-thing-argument-recursive-edit arg)
       (make-composed-keymap
        (list conn-recursive-edit-thing-map
@@ -1468,8 +1468,8 @@ Returns a `conn-bounds' struct."
                                     cmd
                                     break)
   (when (conn-argument-predicate arg cmd)
-    (setf (conn-argument-set-flag arg) t
-          (conn-argument-value arg)
+    (setf (conn-argument--set-flag arg) t
+          (conn-argument--value arg)
           (list cmd (conn-read-args-consume-prefix-arg)))
     (funcall break)))
 
@@ -1511,10 +1511,10 @@ Returns a `conn-bounds' struct."
              (memq cmd '(kmacro-call-macro
                          call-last-kbd-macro
                          kmacro-end-and-call-macro)))
-        (setf (conn-argument-set-flag arg) t
-              (conn-argument-value arg) (list conn--last-thing-kbd-macro nil))
-      (setf (conn-argument-set-flag arg) t
-            (conn-argument-value arg)
+        (setf (conn-argument--set-flag arg) t
+              (conn-argument--value arg) (list conn--last-thing-kbd-macro nil))
+      (setf (conn-argument--set-flag arg) t
+            (conn-argument--value arg)
             (list
              (conn-anonymous-thing
                (list 'kbd-macro)
@@ -1555,8 +1555,8 @@ Returns a `conn-bounds' struct."
             (propertize "in-region"
                         'face 'conn-argument-active-face))))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-thing-argument)
-                                                   sym)
+(cl-defmethod conn-argument-annotation ((arg conn-thing-argument)
+                                        sym)
   (when (conn-argument-predicate arg sym)
     (pcase sym
       ((and (pred conn-anonymous-thing-p)
@@ -1568,7 +1568,7 @@ Returns a `conn-bounds' struct."
                                      (conn-thing-all-parents sym))
                          sym))))))
 
-(cl-defmethod conn-argument-payload ((arg conn-thing-argument))
+(cl-defmethod conn-argument-value ((arg conn-thing-argument))
   (pcase (conn-thing-argument-value arg)
     (`(,cmd ,prefix)
      (when-let* ((fundef (and (symbolp cmd)
@@ -1652,7 +1652,7 @@ words."))
                                                break)
   (funcall break conn-subregions-argument-reference))
 
-(cl-defmethod conn-argument-compose-keymap ((_arg conn-thing-with-subregions-argument))
+(cl-defmethod conn-argument-keymap ((_arg conn-thing-with-subregions-argument))
   (make-composed-keymap conn-subregions-argument-map (cl-call-next-method)))
 
 (cl-defmethod conn-argument-update ((arg conn-thing-with-subregions-argument)
@@ -1691,9 +1691,9 @@ words."))
                  (bfn (lambda () (setf updated t)))))
          (t (cl-call-next-method arg cmd bfn)
             (when updated
-              (when (conn-argument-value arg)
+              (when (conn-argument--value arg)
                 (setf (conn-thing-with-subregions-argument-subregions arg)
-                      (conn-< (conn-argument-value arg)
+                      (conn-< (conn-argument--value arg)
                               car
                               (conn-subregions-argument-default))))
               (funcall break)))))
@@ -1706,7 +1706,7 @@ words."))
                              'conn-argument-active-face)))
         (cl-call-next-method)))
 
-(cl-defmethod conn-argument-payload ((arg conn-thing-with-subregions-argument))
+(cl-defmethod conn-argument-value ((arg conn-thing-with-subregions-argument))
   (nconc (cl-call-next-method)
          (list (conn-thing-with-subregions-argument-subregions arg))))
 
@@ -1746,7 +1746,7 @@ words."))
                                (cmd (eql reformat)))
   "Toggle whether the buffer is reformated around the kill."
   ( :update (break)
-    (cl-callf null (conn-argument-value arg))
+    (cl-callf null (conn-argument--value arg))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-reformat-argument)
@@ -1754,15 +1754,15 @@ words."))
   "Toggle whether the buffer is reformated around the kill.
 Also sets the buffer local default value of the reformat argument."
   ( :update (break)
-    (cl-callf null (conn-argument-value arg))
-    (setq-local conn-reformat-default (conn-argument-value arg))
+    (cl-callf null (conn-argument--value arg))
+    (setq-local conn-reformat-default (conn-argument--value arg))
     (funcall break)))
 
 (cl-defmethod conn-argument-display ((arg conn-reformat-argument))
   (substitute-command-keys
    (concat
     (substitute-command-keys "\\[reformat], \\[set-reformat] ")
-    (if-let* ((ts (conn-argument-value arg)))
+    (if-let* ((ts (conn-argument--value arg)))
         (propertize
          "reformat"
          'face 'eldoc-highlight-function-argument)
@@ -1814,7 +1814,7 @@ not be delete.  The the value returned by each function is ignored.")
                                     _break)
   (cl-call-next-method)
   (when (eq cmd 'set-check-bounds)
-    (setq-local conn-check-bounds-default (conn-argument-value arg))))
+    (setq-local conn-check-bounds-default (conn-argument--value arg))))
 
 ;;;;; Thing Transform Argument
 
@@ -1861,7 +1861,7 @@ not be delete.  The the value returned by each function is ignored.")
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd
                                     break)
-  (cl-symbol-macrolet ((transforms (conn-argument-value arg)))
+  (cl-symbol-macrolet ((transforms (conn-argument--value arg)))
     (pcase cmd
       ('conn-transform-reset
        (setf transforms nil)
@@ -1883,7 +1883,7 @@ not be delete.  The the value returned by each function is ignored.")
        (get sym :conn-bounds-transformation)))
 
 (cl-defmethod conn-argument-display ((arg conn-transform-argument))
-  (when-let* ((ts (conn-argument-value arg)))
+  (when-let* ((ts (conn-argument--value arg)))
     (concat
      (propertize "T"
                  'face 'bold
@@ -1895,7 +1895,7 @@ not be delete.  The the value returned by each function is ignored.")
                  ts "∘")
       'face 'eldoc-highlight-function-argument))))
 
-(cl-defmethod conn-argument-payload ((_arg conn-transform-argument))
+(cl-defmethod conn-argument-value ((_arg conn-transform-argument))
   (nreverse (cl-call-next-method)))
 
 ;;;;; Multi Things
@@ -1941,12 +1941,13 @@ Only the background color is used."
 (cl-defstruct (conn-multi-thing-argument
                (:include conn-argument)
                ( :constructor conn-multi-thing-argument
-                 (bounds &optional
-                         (index 0)
-                         &aux
-                         (size (length bounds))
-                         (pips (conn--multi-thing-pip-strings))
-                         (required t))))
+                 (bounds
+                  &optional
+                  (index 0)
+                  &aux
+                  (size (length bounds))
+                  (pips (conn--multi-thing-pip-strings))
+                  (required t))))
   (bounds nil :type list :read-only t)
   (pips nil :read-only t)
   (index -1 :type integer)
@@ -2033,8 +2034,8 @@ Only the background color is used."
                          (bounds (conn-multi-thing-argument-bounds arg)))
       (let ((bound (nth curr bounds)))
         (setf (conn-bounds-get bound :direction) -1
-              (conn-argument-value arg) bound
-              (conn-argument-set-flag arg) t)))
+              (conn-argument--value arg) bound
+              (conn-argument--set-flag arg) t)))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-multi-thing-argument)
@@ -2045,8 +2046,8 @@ Only the background color is used."
                          (bounds (conn-multi-thing-argument-bounds arg)))
       (let ((bound (nth curr bounds)))
         (setf (conn-bounds-get bound :direction) 1
-              (conn-argument-value arg) bound
-              (conn-argument-set-flag arg) t)))
+              (conn-argument--value arg) bound
+              (conn-argument--set-flag arg) t)))
     (funcall break)))
 
 (defun conn-multi-thing-select (things)

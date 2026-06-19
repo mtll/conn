@@ -1258,7 +1258,7 @@ Currently selected window remains selected afterwards."
                                'must-match))
     (funcall break)))
 
-(cl-defmethod conn-argument-payload ((arg conn-grep-directory-argument))
+(cl-defmethod conn-argument-value ((arg conn-grep-directory-argument))
   (or (conn-grep-directory-argument-value arg)
       (ignore-errors
         (declare-function project-root "project")
@@ -1313,7 +1313,7 @@ Currently selected window remains selected afterwards."
          (conn-boolean-argument "confirm"
                                 'conn-grep-confirm
                                 conn-grep-confirm-argument-map
-                                :reference "Edit the grep command before it is run.")))
+                                :command-reference "Edit the grep command before it is run.")))
      (list thing arg transform files directory confirm)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -1347,7 +1347,7 @@ Currently selected window remains selected afterwards."
                  'conn-occur-context-lines
                  conn-occur-context-argument-map
                  (lambda (_) (conn-read-args-consume-prefix-arg))
-                 :reference "Number of context lines to display around each line.  If the number is
+                 :command-reference "Number of context lines to display around each line.  If the number is
 negative then only display that many context lines before each line."))
         (restrict (conn-read-argument
                    "restrict"
@@ -1359,7 +1359,7 @@ negative then only display that many context lines before each line."))
                          ((`(,thing ,arg) (conn-thing-argument t))
                           (transform (conn-transform-argument)))
                        (list thing arg transform)))
-                   :reference "Restrict search to a thing.")))
+                   :command-reference "Restrict search to a thing.")))
      (list thing arg transform nlines restrict)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -1443,17 +1443,17 @@ negative then only display that many context lines before each line."))
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               :reference conn-repeat-argument-reference))
+                               :command-reference conn-repeat-argument-reference))
        (other-end
         (conn-boolean-argument "other-end"
                                'other-end
                                conn-other-end-argument-map
-                               :reference "Leave point at the end of the marked region."))
+                               :command-reference "Leave point at the end of the marked region."))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
                                conn-restrict-windows-argument-map
-                               :reference conn-this-win-argument-reference)))
+                               :command-reference conn-this-win-argument-reference)))
     (conn-dispatch-setup
      (conn-action ()
        (:description "Mark")
@@ -1677,23 +1677,23 @@ Uses expansions from `conn-expand'."
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               :reference conn-repeat-argument-reference))
+                               :command-reference conn-repeat-argument-reference))
        (other-end (conn-boolean-argument
                    "other-end"
                    'other-end
                    conn-other-end-argument-map
-                   :reference conn-dispatch-other-end-reference))
+                   :command-reference conn-dispatch-other-end-reference))
        (restrict-windows
         (conn-boolean-argument "this-win"
                                'restrict-windows
                                conn-restrict-windows-argument-map
-                               :reference conn-this-win-argument-reference))
+                               :command-reference conn-this-win-argument-reference))
        (stay
         (conn-boolean-argument "stay"
                                'stay
                                conn-stay-argument-map
                                :value t
-                               :reference conn-stay-argument-reference)))
+                               :command-reference conn-stay-argument-reference)))
     (let ((str (if register
                    (get-register register)
                  (or read-from-kill-ring
@@ -2314,17 +2314,17 @@ For more information about how the replacement is carried out see
          (conn-boolean-argument "regexp"
                                 'regexp
                                 conn-regexp-argument-map
-                                :reference conn-regexp-argument-reference))
+                                :command-reference conn-regexp-argument-reference))
         (delimited
          (conn-boolean-argument "word delimited"
                                 'delimited
                                 conn-delimited-argument-map
-                                :reference conn-word-delimited-argument-reference))
+                                :command-reference conn-word-delimited-argument-reference))
         (backward
          (conn-boolean-argument "backward"
                                 'backward
                                 conn-backward-argument-map
-                                :reference conn-backward-argument-reference)))
+                                :command-reference conn-backward-argument-reference)))
      (list thing
            arg
            transform
@@ -2541,7 +2541,7 @@ Exiting the recursive edit will resume the isearch."
         (regexp (conn-boolean-argument "regexp"
                                        'regexp
                                        conn-regexp-argument-map
-                                       :reference conn-regexp-argument-reference)))
+                                       :command-reference conn-regexp-argument-reference)))
      (list thing arg transform regexp subregions)))
   (conn-isearch-in-thing-do thing
                             arg
@@ -2573,7 +2573,7 @@ Exiting the recursive edit will resume the isearch."
                  "regexp"
                  'regexp
                  conn-regexp-argument-map
-                 :reference conn-regexp-argument-reference)))
+                 :command-reference conn-regexp-argument-reference)))
      (list thing arg transform regexp subregions)))
   (conn-isearch-in-thing-do thing
                             arg
@@ -2790,7 +2790,7 @@ Exiting the recursive edit will resume the isearch."
           (conn-boolean-argument "this-win"
                                  'restrict-windows
                                  conn-restrict-windows-argument-map
-                                 :reference conn-this-win-argument-reference)))
+                                 :command-reference conn-this-win-argument-reference)))
       (deactivate-mark)
       (save-excursion
         (conn-dispatch-setup
@@ -2896,7 +2896,7 @@ region after a `recursive-edit'."
                             "transpose at point and mark"
                             'transpose-at-point-and-mark
                             conn-transpose-point-and-mark-argument-map
-                            :reference "Transpose the things at the point and mark.")))
+                            :command-reference "Transpose the things at the point and mark.")))
      (list thing arg at-point-and-mark)))
   (conn-transpose-things-do thing arg at-point-and-mark)
   (conn-push-command-history 'conn-transpose-things
@@ -2934,7 +2934,7 @@ region after a `recursive-edit'."
                   display-prefix
                   &aux
                   (name "append")
-                  (reference
+                  (command-reference
                    (conn-reference-page
                      "If APPEND is non-nil then append the killed region to the previous kill.
 If killing to a registers then append to the register.  If APPEND is
@@ -2994,7 +2994,7 @@ that place.")
                           'delete
                           conn-delete-argument-map
                           :value delete
-                          :reference "Delete the thing without adding it the the kill-ring.")
+                          :command-reference "Delete the thing without adding it the the kill-ring.")
    (conn-kill-append-argument :value append)
    (conn-read-argument "register"
                        'register
@@ -3002,19 +3002,19 @@ that place.")
                        (lambda (_) (register-read-with-preview "Register: "))
                        :formatter #'conn-argument-format-register
                        :value register
-                       :reference "Kill the thing to a register.")
+                       :command-reference "Kill the thing to a register.")
    (conn-separator-argument separator)))
 
 (cl-defmethod conn-argument-update ((arg conn-kill-how-argument)
                                     cmd
                                     _break)
-  (cl-symbol-macrolet ((delete (conn-argument-value
+  (cl-symbol-macrolet ((delete (conn-argument--value
                                 (conn-kill-how-argument-delete arg)))
-                       (register (conn-argument-value
+                       (register (conn-argument--value
                                   (conn-kill-how-argument-register arg)))
-                       (append (conn-argument-value
+                       (append (conn-argument--value
                                 (conn-kill-how-argument-append arg)))
-                       (separator (conn-argument-value
+                       (separator (conn-argument--value
                                    (conn-kill-how-argument-separator arg))))
     (pcase cmd
       ((or 'append 'append-on-repeat)
@@ -3042,8 +3042,8 @@ that place.")
                        (separator (conn-kill-how-argument-separator arg)))
     (mapcar #'conn-argument-display
             (list append
-                  (when (or (conn-argument-value append)
-                            (conn-argument-value separator))
+                  (when (or (conn-argument--value append)
+                            (conn-argument--value separator))
                     separator)
                   register
                   delete))))
@@ -3545,7 +3545,7 @@ hook, which see."
             (conn-boolean-argument "repeat"
                                    'repeat-dispatch
                                    conn-dispatch-repeat-argument-map
-                                   :reference conn-repeat-argument-reference))
+                                   :command-reference conn-repeat-argument-reference))
            (`(,delete ,append ,register ,separator)
             (conn-kill-how-argument
              :append (if (eq append 'repeat) nil append)
@@ -3556,18 +3556,18 @@ hook, which see."
             (conn-boolean-argument "other-end"
                                    'other-end
                                    conn-other-end-argument-map
-                                   :reference conn-dispatch-other-end-reference))
+                                   :command-reference conn-dispatch-other-end-reference))
            (restrict-windows
             (conn-boolean-argument "this-win"
                                    'restrict-windows
                                    conn-restrict-windows-argument-map
-                                   :reference conn-this-win-argument-reference))
+                                   :command-reference conn-this-win-argument-reference))
            (stay
             (conn-boolean-argument "stay"
                                    'stay
                                    conn-stay-argument-map
                                    :value t
-                                   :reference conn-stay-argument-reference))
+                                   :command-reference conn-stay-argument-reference))
            (`(,dtform ,reformat)
             (conn-dispatch-transform-and-fixup-argument reformat)))
         (conn-with-dispatch-handlers
@@ -3844,8 +3844,8 @@ hook, which see."
                        (register (conn-copy-how-argument-register arg))
                        (append (conn-copy-how-argument-append arg)))
     (list (conn-argument-display append)
-          (when (or (conn-argument-value append)
-                    (conn-argument-value separator))
+          (when (or (conn-argument--value append)
+                    (conn-argument--value separator))
             (conn-argument-display separator))
           (conn-argument-display register))))
 
@@ -4081,7 +4081,7 @@ that place."
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               :reference conn-repeat-argument-reference))
+                               :command-reference conn-repeat-argument-reference))
        (`(,append ,register ,separator)
         (conn-copy-how-argument
          :append (if (eq append 'repeat) nil append)
@@ -4091,7 +4091,7 @@ that place."
         (conn-boolean-argument "this-win"
                                'restrict-windows
                                conn-restrict-windows-argument-map
-                               :reference conn-this-win-argument-reference)))
+                               :command-reference conn-this-win-argument-reference)))
     (conn-with-dispatch-handlers
       (:handler
        (:keymap (define-keymap "<remap> <other-end>" 'copy-append))
@@ -4878,18 +4878,18 @@ Interactively REPEAT is given by the prefix argument."
         (conn-boolean-argument "other-end"
                                'other-end
                                conn-other-end-argument-map
-                               :reference conn-dispatch-other-end-reference))
+                               :command-reference conn-dispatch-other-end-reference))
        (repeat
         (conn-boolean-argument "repeat"
                                'repeat-dispatch
                                conn-dispatch-repeat-argument-map
-                               :reference conn-repeat-argument-reference))
+                               :command-reference conn-repeat-argument-reference))
        (stay
         (conn-boolean-argument "stay"
                                'stay
                                conn-stay-argument-map
                                :value t
-                               :reference conn-stay-argument-reference)))
+                               :command-reference conn-stay-argument-reference)))
     (conn-with-dispatch-handlers
       (:handler
        (:predicate (cmd) (eq cmd 'stay))
@@ -5011,17 +5011,17 @@ Interactively REPEAT is given by the prefix argument."
         (conn-boolean-argument "regexp"
                                'regexp
                                conn-regexp-argument-map
-                               :reference conn-regexp-argument-reference))
+                               :command-reference conn-regexp-argument-reference))
        (delimited
         (conn-boolean-argument "word delimited"
                                'delimited
                                conn-delimited-argument-map
-                               :reference conn-word-delimited-argument-reference))
+                               :command-reference conn-word-delimited-argument-reference))
        (backward
         (conn-boolean-argument "backward"
                                'backward
                                conn-backward-argument-map
-                               :reference conn-backward-argument-reference)))
+                               :command-reference conn-backward-argument-reference)))
     (conn-replace-do thing
                      arg
                      transform
@@ -5045,7 +5045,7 @@ Interactively REPEAT is given by the prefix argument."
        (swap (conn-boolean-argument "swap"
                                     'swap
                                     conn-swap-argument-map
-                                    :reference "Swap the head of the kill-ring with the thing."))
+                                    :command-reference "Swap the head of the kill-ring with the thing."))
        (register (conn-read-argument
                   "register"
                   'register
@@ -5084,7 +5084,7 @@ For how the region is determined using THING, ARG, and TRANSFORM see
             "kbd-macro-query"
             'conn-kapply-kbd-macro-query
             nil
-            :reference "`kbd-macro-query' for this replacement."))))
+            :command-reference "`kbd-macro-query' for this replacement."))))
      (list thing arg transform check-bounds kbd-macro-query)))
   (conn-change-thing-do thing
                         arg
@@ -5240,7 +5240,7 @@ If CLEANUP-WHITESPACE is non-nil then also run
          (conn-boolean-argument "cleanup-whitespace"
                                 'cleanup-whitespace
                                 conn-indent-cleanup-whitespace-map
-                                :reference "Cleanup whitespace")))
+                                :command-reference "Cleanup whitespace")))
      (list thing arg transform cleanup-whitespace)))
   (conn-indent-thing-do thing arg transform cleanup-whitespace))
 
@@ -5554,7 +5554,7 @@ The region is added to `conn-narrow-ring'."
         (indirect (conn-boolean-argument "indirect"
                                          'indirect
                                          conn-indirect-map
-                                         :reference "Narrow to thing in an indirect buffer.")))
+                                         :command-reference "Narrow to thing in an indirect buffer.")))
      (list thing arg transform indirect)))
   (pcase (conn-bounds-of thing arg)
     ((conn-bounds `(,beg . ,end) transform)
@@ -5666,7 +5666,7 @@ subregion."
           "replace"
           'replace
           conn-shell-command-replace-map
-          :reference "Replace the thing with the result of the shell command."
+          :command-reference "Replace the thing with the result of the shell command."
           :value t)))
      (list thing arg transform replace subregions)))
   (conn-shell-command-on-thing-do thing arg transform replace subregions))

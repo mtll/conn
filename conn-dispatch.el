@@ -439,12 +439,12 @@ themselves once the selection process has concluded."
                        (alist-get :predicate ,methods #'ignore)
                        :display (alist-get :display ,methods #'ignore)
                        :annotation (alist-get :annotation ,methods #'ignore)
-                       :reference (alist-get :reference ,methods #'ignore)
+                       :command-reference (alist-get :command-reference ,methods #'ignore)
                        :keymap ,keymap)
                       (cons ,depth ',tag))
                 conn--dispatch-read-char-handlers))
        `(,@(cl-loop for method in '(:annotation
-                                    :reference
+                                    :command-reference
                                     :predicate
                                     :display)
                     collect (cons method
@@ -513,7 +513,7 @@ Two macros are locally defined within body for binding handlers:
   - (:annotation (COMMAND) &rest BODY) defines the annotation method for
     the handler.  See also `conn-argument-annotation'.
 
-  - (:reference (COMMAND BREAK) &rest BODY) defines the command
+  - (:command-reference (COMMAND BREAK) &rest BODY) defines the command
     reference method for the handler.  See also
     `conn-argument-command-reference'.
 
@@ -750,8 +750,8 @@ for dispatch."
             (conn-dispatch-char-argument-input-method arg))
       ((pred (eql (car (last (current-input-mode)))))
        (signal 'quit nil))
-      (ev (setf (conn-argument-value arg) ev
-                (conn-argument-set-flag arg) t)))
+      (ev (setf (conn-argument--value arg) ev
+                (conn-argument--set-flag arg) t)))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-dispatch-char-argument)
@@ -762,16 +762,16 @@ for dispatch."
                  (propertize "Quoted Char: "
                              'face 'minibuffer-prompt))))
       (unless (eq char (car (last (current-input-mode))))
-        (setf (conn-argument-value arg) char
-              (conn-argument-set-flag arg) t)))
+        (setf (conn-argument--value arg) char
+              (conn-argument--set-flag arg) t)))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-dispatch-char-argument)
                                (cmd (eql restart)))
   "Narrow labels by character."
   ( :update (break)
-    (setf (conn-argument-value arg) 8
-          (conn-argument-set-flag arg) t)
+    (setf (conn-argument--value arg) 8
+          (conn-argument--set-flag arg) t)
     (funcall break)))
 
 (cl-defstruct (conn-dispatch-handler
@@ -782,7 +782,7 @@ for dispatch."
                   &key
                   keymap
                   annotation
-                  reference
+                  command-reference
                   display)))
   (update #'ignore :type function :read-only t)
   (predicate #'ignore :type function :read-only t)
@@ -798,15 +798,15 @@ for dispatch."
 (cl-defmethod conn-argument-display ((arg conn-dispatch-handler))
   (funcall (conn-dispatch-handler-display arg)))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-handler))
+(cl-defmethod conn-argument-keymap ((arg conn-dispatch-handler))
   (conn-dispatch-handler-keymap arg))
 
 (cl-defmethod conn-argument-predicate ((arg conn-dispatch-handler)
                                        cmd)
   (funcall (conn-dispatch-handler-predicate arg) cmd))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-handler)
-                                                   value)
+(cl-defmethod conn-argument-annotation ((arg conn-dispatch-handler)
+                                        value)
   (and-let* ((ann (conn-dispatch-handler-annotation arg))
              (_ (funcall (conn-dispatch-handler-predicate arg) value)))
     (funcall ann value)))
@@ -815,7 +815,7 @@ for dispatch."
                                                cmd
                                                break)
   (and (funcall (conn-dispatch-handler-predicate arg) cmd)
-       (funcall (conn-dispatch-handler-reference arg) cmd break)))
+       (funcall (conn-dispatch-handler-command-reference arg) cmd break)))
 
 ;;;; Dispatch State
 
@@ -1038,7 +1038,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
                (:constructor conn-dispatch-target-argument
                              (&aux (required t)))))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-target-argument))
+(cl-defmethod conn-argument-keymap ((arg conn-dispatch-target-argument))
   (make-composed-keymap conn-recursive-edit-thing-map
                         (conn-thing-argument-keymap arg)))
 
@@ -1062,7 +1062,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
             ((string-empty-p s) 'default)
             (t s)))
    :value initial-value
-   :reference "Read a separator to be inserted between each string."))
+   :command-reference "Read a separator to be inserted between each string."))
 
 (defvar-keymap conn-dispatch-replace-argument-map)
 
@@ -1094,7 +1094,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
                        (separator (conn-dispatch-to-how-argument-separator arg)))
     (mapcar #'conn-argument-display
             (list replace
-                  (and (conn-argument-value replace)
+                  (and (conn-argument--value replace)
                        separator)))))
 
 (cl-defstruct (conn-dispatch-marker-argument
@@ -1105,7 +1105,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
   (type nil :type boolean :read-only t)
   (start nil :type marker :read-only t))
 
-(cl-defmethod conn-argument-payload ((arg conn-dispatch-marker-argument))
+(cl-defmethod conn-argument-value ((arg conn-dispatch-marker-argument))
   (copy-marker (point) (conn-dispatch-marker-argument-type arg)))
 
 (define-inline conn--dispatch-marker-argument-cleanup (arg)
@@ -1413,7 +1413,7 @@ that slot's value and otherwise performs a shallow copy."
 (cl-defmethod conn-argument-update ((arg conn-dispatch-replace-argument)
                                     (_cmd (eql dispatch-replace))
                                     break)
-  (cl-symbol-macrolet ((cg (conn-argument-value arg)))
+  (cl-symbol-macrolet ((cg (conn-argument--value arg)))
     (if cg
         (progn
           (conn--action-cancel-change-group (cl-shiftf cg nil))
@@ -1439,11 +1439,11 @@ that slot's value and otherwise performs a shallow copy."
   (concat (substitute-command-keys "\\[dispatch-replace]")
           " "
           (propertize "replace"
-                      'face (when (conn-argument-value arg)
+                      'face (when (conn-argument--value arg)
                               'conn-argument-active-face))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-replace-argument))
-  (conn--action-cancel-change-group (conn-argument-value arg)))
+  (conn--action-cancel-change-group (conn-argument--value arg)))
 
 (cl-defmethod conn-argument-accept ((arg conn-dispatch-replace-argument))
   (when-let* ((str (conn-dispatch-replace-argument-string arg)))
@@ -1485,7 +1485,7 @@ that slot's value and otherwise performs a shallow copy."
       conn-dispatch-yank-to
       conn-dispatch-reading-yank-to)))))
 
-(cl-defmethod conn-argument-get-reference ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-reference ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-dispatch-action-argument-value arg)))
     (conn-action-reference action)))
 
@@ -1500,7 +1500,8 @@ that slot's value and otherwise performs a shallow copy."
                   "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
 End the loop and accept changes with \\[finish].
 Abort the loop and undo all changes with \\[keyboard-quit]."))))
-    ((and (guard (function-get cmd :conn-dispatch-action)))
+    ((and (pred symbolp)
+          (guard (function-get cmd :conn-dispatch-action)))
      (if-let* ((docstring (documentation cmd)))
          (funcall break (conn-reference-page ,docstring))
        (funcall break (conn-reference-page
@@ -1511,13 +1512,13 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
                                     break)
   (cl-symbol-macrolet
       ((arguments (conn-dispatch-action-argument-arguments arg))
-       (action (conn-argument-value arg))
-       (set-flag (conn-argument-set-flag arg))
+       (action (conn-argument--value arg))
+       (set-flag (conn-argument--set-flag arg))
        (action-command (conn-dispatch-action-argument-action-command arg)))
     (pcase cmd
       ((and 'repeat-dispatch)
-       (when (or (null (conn-argument-value arg))
-                 (conn-action-repeatable-p (conn-argument-value arg)))
+       (when (or (null (conn-argument--value arg))
+                 (conn-action-repeatable-p (conn-argument--value arg)))
          (cl-callf not (conn-dispatch-action-argument-repeat arg)))
        (funcall break))
       ((guard (function-get cmd :conn-dispatch-action))
@@ -1547,20 +1548,20 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
          (conn-argument-update a cmd break))))))
 
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-argument-value arg)))
+  (when-let* ((action (conn-argument--value arg)))
     (conn-action-cancel action)))
 
 (cl-defmethod conn-argument-accept ((arg conn-dispatch-action-argument))
   (mapc #'conn-argument-accept
         (conn-dispatch-action-argument-arguments arg)))
 
-(cl-defmethod conn-argument-payload ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-value ((arg conn-dispatch-action-argument))
   (when-let* ((action (conn-dispatch-action-argument-value arg)))
     (dolist (slot (conn-action--slots action))
       (when (conn-action-slot--read slot)
         (setf (conn-action-slot--read slot) nil
               (conn-action-slot--live slot) t)
-        (cl-callf conn-argument-payload
+        (cl-callf conn-argument-value
             (conn-action-slot--value slot)))))
   (list (conn-dispatch-action-argument-value arg)
         (conn-dispatch-action-argument-repeat arg)))
@@ -1571,18 +1572,18 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
       (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
                thereis (conn-argument-predicate a sym))))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-dispatch-action-argument)
-                                                   sym)
+(cl-defmethod conn-argument-annotation ((arg conn-dispatch-action-argument)
+                                        sym)
   (or (and (function-get sym :conn-dispatch-action)
            " (action)")
       (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
-               thereis (conn-argument-completion-annotation a sym))))
+               thereis (conn-argument-annotation a sym))))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-dispatch-action-argument))
+(cl-defmethod conn-argument-keymap ((arg conn-dispatch-action-argument))
   (make-composed-keymap
    (cons (cl-call-next-method)
          (cl-loop for a in (conn-dispatch-action-argument-arguments arg)
-                  collect (conn-argument-compose-keymap a)))))
+                  collect (conn-argument-keymap a)))))
 
 (cl-defmethod conn-argument-display ((arg conn-dispatch-action-argument))
   (list
@@ -1591,7 +1592,7 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
             "repeat"
             'face (when (conn-dispatch-action-argument-repeat arg)
                     'eldoc-highlight-function-argument)))
-   (and-let* ((action (conn-argument-value arg)))
+   (and-let* ((action (conn-argument--value arg)))
      (concat (propertize "Do"
                          'face 'bold
                          'conn-read-args-display-depth -50)
@@ -2504,7 +2505,7 @@ If POINT is not visible in the currently selected window then return nil."
     (unwind-protect
         (conn-with-dispatch-handlers
           (:handler
-           ( :reference (cmd break)
+           ( :command-reference (cmd break)
              (when (eq cmd 'toggle-labels)
                (funcall break (conn-reference-page
                                 "Toggle display of labels."))))
@@ -3063,7 +3064,7 @@ buffer."
        "this win"
        'face 'eldoc-highlight-function-argument)))))
 
-(cl-defmethod conn-argument-get-reference ((_handler conn-dispatch-select-command-handler))
+(cl-defmethod conn-argument-reference ((_handler conn-dispatch-select-command-handler))
   (list (conn-action-reference conn-dispatch-action)
         (conn-target-finder-reference conn-dispatch-target-finder)))
 
@@ -5322,12 +5323,12 @@ INITIAL-ARG is the initial value of the prefix argument during
           (conn-boolean-argument "other-end"
                                  'other-end
                                  conn-other-end-argument-map
-                                 :reference conn-dispatch-other-end-reference))
+                                 :command-reference conn-dispatch-other-end-reference))
          (restrict-windows
           (conn-boolean-argument "this-win"
                                  'restrict-windows
                                  conn-restrict-windows-argument-map
-                                 :reference conn-this-win-argument-reference)))
+                                 :command-reference conn-this-win-argument-reference)))
       (conn-dispatch-setup
        action
        (conn-anonymous-thing

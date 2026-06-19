@@ -210,7 +210,7 @@ The duration of the message display is controlled by
                     ((pred vectorp) (key-description binding))))
          (annotation
           (cl-loop for arg in args
-                   thereis (conn-argument-completion-annotation arg command))))
+                   thereis (conn-argument-annotation arg command))))
     (list (if binding
               (propertize (concat binding " ")
                           'face 'help-key-binding)
@@ -336,7 +336,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            `(let* ((conn--read-args-maps
                     `((,state
                        ,@(thread-last
-                           (mapcar #'conn-argument-compose-keymap
+                           (mapcar #'conn-argument-keymap
                                    arguments)
                            (cons overriding-map)
                            (delq nil)
@@ -438,7 +438,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (with-overriding-keymaps
                  (condition-case err
                      (conn-quick-reference
-                      (nconc (mapcar #'conn-argument-get-reference arguments)
+                      (nconc (mapcar #'conn-argument-reference arguments)
                              (conn-get-quick-ref-pages))
                       (lambda (&rest _) (display-message)))
                    (user-error
@@ -490,7 +490,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                               (funcall conn-read-args-around-function
                                        #'command-loop)))
                  (funcall conn-read-args-around-function #'command-loop))
-               (setf argument-values (mapcar #'conn-argument-payload arglist)))
+               (setf argument-values (mapcar #'conn-argument-value arglist)))
              (cancel-message-timer)
              (unless argument-values
                (mapc #'conn-argument-cancel arguments))
@@ -539,7 +539,7 @@ command and the current iteration of the loop end.
 If no command handler handles the current command and no argument
 calls an updater then an invalid command message is printed.
 
-Once the loop ends `conn-argument-payload' is called on each
+Once the loop ends `conn-argument-value' is called on each
 argument and the result is bound to the corresponding pattern form by
 `pcase-let' and BODY then runs.
 
@@ -573,6 +573,7 @@ echo area help message.
 ;;;; Argument Types
 
 (cl-defstruct (conn-argument
+               (:conc-name conn-argument--)
                ( :constructor conn-argument
                  (value &aux (required nil) (set-flag nil))))
   (value nil)
@@ -581,9 +582,9 @@ echo area help message.
   (name nil :type (or string function nil) :read-only t)
   (annotation nil :type (or nil string function) :read-only t)
   (keymap nil :type keymap :read-only t)
-  (reference nil
-             :type (or function string conn--reference-page)
-             :read-only t))
+  (command-reference nil
+                     :type (or function string conn--reference-page)
+                     :read-only t))
 
 (cl-defgeneric conn-argument-cancel (argument)
   "Cancel ARGUMENT after `conn-read-args' has been aborted.
@@ -592,27 +593,27 @@ See also `conn-argument-accept'."
 
 (cl-defgeneric conn-argument-accept (argument)
   "Accept ARGUMENT after `conn-read-args' has exited normally.
-This function is called after `conn-argument-payload' has succeeded for
+This function is called after `conn-argument-value' has succeeded for
 all arguments.  See also `conn-argument-cancel'."
   ( :method (_arg) nil))
 
-(cl-defgeneric conn-argument-payload (argument)
+(cl-defgeneric conn-argument-value (argument)
   "Extract ARGUMENT's value.
 Note that any cleanup which depends on whether `conn-read-args'
 succeeded or failed should be done in either `conn-argument-accept' or
-`conn-argument-cancel', respectively, since `conn-argument-payload' may
+`conn-argument-cancel', respectively, since `conn-argument-value' may
 error."
   (declare (important-return-value t))
   ( :method (arg) arg)
   ( :method ((arg conn-argument))
-    (conn-argument-value arg)))
+    (conn-argument--value arg)))
 
 (cl-defgeneric conn-argument-required-p (argument)
   (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
-    (and (conn-argument-required arg)
-         (not (conn-argument-set-flag arg)))))
+    (and (conn-argument--required arg)
+         (not (conn-argument--set-flag arg)))))
 
 (cl-defgeneric conn-argument-update (argument command break)
   "Update ARGUMENT in response to COMMAND.
@@ -628,27 +629,27 @@ be displayed in the echo area during `conn-read-args'."
   (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
-    (pcase (conn-argument-name arg)
+    (pcase (conn-argument--name arg)
       ((and (pred stringp) str) str)
       ((and (pred functionp) fn) (funcall fn arg)))))
 
-(cl-defgeneric conn-argument-compose-keymap (argument)
+(cl-defgeneric conn-argument-keymap (argument)
   "Return keymap for ARGUMENT."
   (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
-    (conn-argument-keymap arg)))
+    (conn-argument--keymap arg)))
 
 (cl-defgeneric conn-argument-predicate (argument command)
   "Return non-nil if ARGUMENT accepts COMMAND."
   (declare (important-return-value t))
   ( :method (_arg _cmd) nil))
 
-(cl-defgeneric conn-argument-completion-annotation (argument value)
+(cl-defgeneric conn-argument-annotation (argument value)
   (declare (important-return-value t))
   (:method (&rest _) nil)
   ( :method ((arg conn-argument) value)
-    (and-let* ((ann (conn-argument-annotation arg))
+    (and-let* ((ann (conn-argument--annotation arg))
                (_ (conn-argument-predicate arg value)))
       (cl-typecase ann
         (string (concat " (" ann ")"))
@@ -659,14 +660,14 @@ be displayed in the echo area during `conn-read-args'."
   (declare (important-return-value t))
   (:method (_arg _cmd _break) nil))
 
-(cl-defgeneric conn-argument-get-reference (arg)
+(cl-defgeneric conn-argument-reference (arg)
   (declare (important-return-value t))
   (:method (_arg) nil))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-argument)
                                                cmd
                                                break)
-  (and-let* ((doc (conn-argument-reference arg))
+  (and-let* ((doc (conn-argument--command-reference arg))
              (_ (conn-argument-predicate arg cmd)))
     (cl-typecase doc
       (string (funcall break (conn-reference-page ,doc)))
@@ -745,7 +746,7 @@ be displayed in the echo area during `conn-read-args'."
   (name :type (or nil string function))
   (annotation :type (or nil string function))
   (keymap :type keymap)
-  (reference :type (or conn--reference-page string function)))
+  (command-reference :type (or conn--reference-page string function)))
 
 (defalias 'conn-anonymous-argument-name
   'conn-anonymous-argument--name)
@@ -762,8 +763,8 @@ be displayed in the echo area during `conn-read-args'."
 (defalias 'conn-anonymous-argument-keymap
   'conn-anonymous-argument--keymap)
 
-(defalias 'conn-anonymous-argument-reference
-  'conn-anonymous-argument--reference)
+(defalias 'conn-anonymous-argument-command-reference
+  'conn-anonymous-argument--command-reference)
 
 (cl-defmethod conn-argument-required-p ((arg conn-anonymous-argument))
   (and (conn-anonymous-argument-required arg)
@@ -774,7 +775,7 @@ be displayed in the echo area during `conn-read-args'."
                                     break)
   (funcall arg form break))
 
-(cl-defmethod conn-argument-payload ((arg conn-anonymous-argument))
+(cl-defmethod conn-argument-value ((arg conn-anonymous-argument))
   (conn-anonymous-argument-value arg))
 
 (cl-defmethod conn-argument-display ((arg conn-anonymous-argument))
@@ -782,7 +783,7 @@ be displayed in the echo area during `conn-read-args'."
     ((and (pred stringp) str) str)
     ((and (pred functionp) fn) (funcall fn arg))))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-anonymous-argument))
+(cl-defmethod conn-argument-keymap ((arg conn-anonymous-argument))
   (conn-anonymous-argument-keymap arg))
 
 (cl-defmethod conn-argument-predicate ((arg conn-anonymous-argument)
@@ -790,8 +791,8 @@ be displayed in the echo area during `conn-read-args'."
   (and-let* ((pred (conn-anonymous-argument--predicate arg)))
     (funcall pred cmd)))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-anonymous-argument)
-                                                   value)
+(cl-defmethod conn-argument-annotation ((arg conn-anonymous-argument)
+                                        value)
   (and-let* ((ann (conn-anonymous-argument--annotation arg))
              (_ (funcall (conn-anonymous-argument--predicate arg) value)))
     (cl-typecase ann
@@ -802,7 +803,7 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-command-reference ((arg conn-anonymous-argument)
                                                cmd
                                                break)
-  (when-let* ((ref (conn-anonymous-argument-reference arg cmd)))
+  (when-let* ((ref (conn-anonymous-argument-command-reference arg cmd)))
     (cl-typecase ref
       (string (funcall break (conn-reference-page ,ref)))
       (function (funcall ref cmd break))
@@ -821,25 +822,25 @@ be displayed in the echo area during `conn-read-args'."
 (cl-defmethod conn-argument-update ((arg conn-composite-argument)
                                     form
                                     break)
-  (dolist (a (conn-argument-value arg))
+  (dolist (a (conn-argument--value arg))
     (conn-argument-update a form break)))
 
-(cl-defmethod conn-argument-payload ((arg conn-composite-argument))
+(cl-defmethod conn-argument-value ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
-           collect (conn-argument-payload a)))
+           collect (conn-argument-value a)))
 
 (cl-defmethod conn-argument-display ((arg conn-composite-argument))
   (cl-loop for a in (conn-composite-argument-value arg)
            collect (conn-argument-display a)))
 
-(cl-defmethod conn-argument-get-reference ((arg conn-composite-argument))
-  (mapcar #'conn-argument-get-reference
+(cl-defmethod conn-argument-reference ((arg conn-composite-argument))
+  (mapcar #'conn-argument-reference
           (conn-composite-argument-value arg)))
 
-(cl-defmethod conn-argument-compose-keymap ((arg conn-composite-argument))
+(cl-defmethod conn-argument-keymap ((arg conn-composite-argument))
   (make-composed-keymap
    (cl-loop for a in (conn-composite-argument-value arg)
-            when (conn-argument-compose-keymap a)
+            when (conn-argument-keymap a)
             collect it)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-composite-argument)
@@ -847,10 +848,10 @@ be displayed in the echo area during `conn-read-args'."
   (cl-loop for a in (conn-composite-argument-value arg)
            thereis (conn-argument-predicate a cmd)))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-composite-argument)
-                                                   value)
+(cl-defmethod conn-argument-annotation ((arg conn-composite-argument)
+                                        value)
   (cl-loop for a in (conn-composite-argument-value arg)
-           thereis (conn-argument-completion-annotation a value)))
+           thereis (conn-argument-annotation a value)))
 
 (cl-defmethod conn-argument-accept ((arg conn-composite-argument))
   (mapc #'conn-argument-accept
@@ -878,7 +879,7 @@ be displayed in the echo area during `conn-read-args'."
                   &key
                   value
                   annotation
-                  reference)))
+                  command-reference)))
   (toggle-command nil :type (or symbol list) :read-only t))
 
 (cl-defmethod conn-argument-update ((arg conn-boolean-argument)
@@ -895,7 +896,7 @@ be displayed in the echo area during `conn-read-args'."
                                                cmd
                                                break)
   (let ((toggles (conn-boolean-argument-toggle-command arg))
-        (doc (conn-boolean-argument-reference arg)))
+        (doc (conn-boolean-argument-command-reference arg)))
     (when (if (consp toggles)
               (memq cmd toggles)
             (eq cmd toggles))
@@ -919,7 +920,7 @@ be displayed in the echo area during `conn-read-args'."
                ", "))
    " "
    (propertize (conn-boolean-argument-name arg)
-               'face (when (conn-argument-value arg)
+               'face (when (conn-argument--value arg)
                        'conn-argument-active-face))))
 
 ;;;;; Cycling Argument
@@ -934,7 +935,7 @@ be displayed in the echo area during `conn-read-args'."
                   choices
                   commands
                   &key
-                  reference
+                  command-reference
                   keymap
                   (formatter #'conn-format-cycling-argument)
                   required
@@ -963,8 +964,8 @@ be displayed in the echo area during `conn-read-args'."
              (car (conn-cycling-argument-choices arg)))
        (funcall break)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-cycling-argument))
-  (let ((val (conn-argument-value arg)))
+(cl-defmethod conn-argument-value ((arg conn-cycling-argument))
+  (let ((val (conn-argument--value arg)))
     (or (cdr-safe val) val)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-cycling-argument)
@@ -1016,7 +1017,7 @@ be displayed in the echo area during `conn-read-args'."
                                                cmd
                                                break)
   (let ((commands (conn-cycling-argument-cycling-commands arg))
-        (doc (conn-cycling-argument-reference arg)))
+        (doc (conn-cycling-argument-command-reference arg)))
     (when (memq cmd commands)
       (cl-typecase doc
         (string (funcall break (conn-reference-page ,doc)))
@@ -1037,7 +1038,7 @@ be displayed in the echo area during `conn-read-args'."
                   value
                   annotation
                   always-read
-                  reference)))
+                  command-reference)))
   (reader nil :type function :read-only t)
   (formatter nil :type function :read-only t)
   (toggle-command nil :type (or symbol list) :read-only t)
@@ -1047,7 +1048,7 @@ be displayed in the echo area during `conn-read-args'."
                                                cmd
                                                break)
   (let ((toggles (conn-read-argument-toggle-command arg))
-        (doc (conn-read-argument-reference arg)))
+        (doc (conn-read-argument-command-reference arg)))
     (when (if (consp toggles)
               (memq cmd toggles)
             (eq cmd toggles))
@@ -1064,11 +1065,11 @@ be displayed in the echo area during `conn-read-args'."
         (when (if (consp toggles)
                   (memq cmd toggles)
                 (eq cmd toggles))
-          (setf (conn-argument-value arg)
-                (unless (and (conn-argument-value arg)
+          (setf (conn-argument--value arg)
+                (unless (and (conn-argument--value arg)
                              (not (conn-read-argument-always-read arg)))
                   (funcall (conn-read-argument-reader arg)
-                           (conn-argument-value arg))))
+                           (conn-argument--value arg))))
           (funcall break))
       (quit (conn-read-args-error "Quit"))
       (error (conn-read-args-error (error-message-string err))))))
@@ -1090,11 +1091,11 @@ be displayed in the echo area during `conn-read-args'."
         (funcall fn
                  key-string
                  (conn-read-argument-name arg)
-                 (conn-argument-value arg))
+                 (conn-argument--value arg))
       (concat key-string " "
               (propertize
                (conn-read-argument-name arg)
-               'face (when (conn-argument-value arg)
+               'face (when (conn-argument--value arg)
                        'conn-argument-active-face))))))
 
 ;;;;; Command Handler
@@ -1103,12 +1104,12 @@ be displayed in the echo area during `conn-read-args'."
                (:include conn-argument)
                ( :constructor conn-read-args-command-handler)))
 
-(cl-defmethod conn-argument-completion-annotation ((arg conn-read-args-command-handler)
-                                                   value)
+(cl-defmethod conn-argument-annotation ((arg conn-read-args-command-handler)
+                                        value)
   (when (conn-argument-predicate arg value)
     " (command)"))
 
-(cl-defmethod conn-argument-compose-keymap ((_arg conn-read-args-command-handler))
+(cl-defmethod conn-argument-keymap ((_arg conn-read-args-command-handler))
   conn-read-args-map)
 
 (define-conn-argument-command ((arg conn-read-args-command-handler)
@@ -1202,7 +1203,7 @@ be displayed in the echo area during `conn-read-args'."
                                     cmd
                                     break)
   (when (eq cmd (conn-finished-argument-finish-command arg))
-    (setf (conn-argument-set-flag arg) t)
+    (setf (conn-argument--set-flag arg) t)
     (funcall break)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-finished-argument)

@@ -1343,8 +1343,8 @@ The iterator must be the first argument in ARGLIST.
                                (cmd (eql record)))
   "Record a new keyboard macro."
   ( :update (break)
-    (setf (conn-argument-value arg) 'record
-          (conn-argument-set-flag arg) t)
+    (setf (conn-argument--value arg) 'record
+          (conn-argument--set-flag arg) t)
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1354,8 +1354,8 @@ The iterator must be the first argument in ARGLIST.
     (if (and (kmacro-ring-empty-p t)
              (not (conn-kapply-macro-argument-register arg)))
         (conn-read-args-error "Kmacro ring empty")
-      (setf (conn-argument-value arg) cmd
-            (conn-argument-set-flag arg) t)
+      (setf (conn-argument--value arg) cmd
+            (conn-argument--set-flag arg) t)
       (funcall break))))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1365,8 +1365,8 @@ The iterator must be the first argument in ARGLIST.
     (if (and (kmacro-ring-empty-p t)
              (not (conn-kapply-macro-argument-register arg)))
         (conn-read-args-error "Kmacro ring empty")
-      (setf (conn-argument-value arg) cmd
-            (conn-argument-set-flag arg) t)
+      (setf (conn-argument--value arg) cmd
+            (conn-argument--set-flag arg) t)
       (funcall break))))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1376,8 +1376,8 @@ The iterator must be the first argument in ARGLIST.
     (if (and (kmacro-ring-empty-p t)
              (not (conn-kapply-macro-argument-register arg)))
         (conn-read-args-error "Kmacro ring empty")
-      (setf (conn-argument-value arg) cmd
-            (conn-argument-set-flag arg) t)
+      (setf (conn-argument--value arg) cmd
+            (conn-argument--set-flag arg) t)
       (funcall break))))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1387,8 +1387,8 @@ The iterator must be the first argument in ARGLIST.
     (if (and (kmacro-ring-empty-p t)
              (not (conn-kapply-macro-argument-register arg)))
         (conn-read-args-error "Kmacro ring empty")
-      (setf (conn-argument-value arg) cmd
-            (conn-argument-set-flag arg) t)
+      (setf (conn-argument--value arg) cmd
+            (conn-argument--set-flag arg) t)
       (funcall break))))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1407,9 +1407,9 @@ The iterator must be the first argument in ARGLIST.
             (setf (conn-kapply-macro-argument-register arg) reg)))
     (funcall break)))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-macro-argument))
+(cl-defmethod conn-argument-value ((arg conn-kapply-macro-argument))
   (let ((register (conn-kapply-macro-argument-register arg)))
-    (pcase (conn-argument-value arg)
+    (pcase (conn-argument--value arg)
       ('record
        (let ((macro (when register (get-register register))))
          (lambda (it) (conn-kmacro-apply it nil macro))))
@@ -1459,8 +1459,8 @@ The iterator must be the first argument in ARGLIST.
                   (keymap conn-kapply-state-argument-map)
                   (formatter #'conn--format-state-argument)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-state-argument))
-  (let ((state (conn-argument-value arg)))
+(cl-defmethod conn-argument-value ((arg conn-kapply-state-argument))
+  (let ((state (conn-argument--value arg)))
     (lambda (it) (conn-kapply-with-state it state))))
 
 ;;;;; Order Argument
@@ -1477,8 +1477,8 @@ The iterator must be the first argument in ARGLIST.
                   (keymap conn-kapply-order-argument-map)
                   (formatter #'conn-format-cycling-argument)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-order-argument))
-  (pcase (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-order-argument))
+  (pcase (conn-argument--value arg)
     ('forward (lambda (it)
                 (funcall it :forward)
                 it))
@@ -1503,8 +1503,8 @@ The iterator must be the first argument in ARGLIST.
                   (toggle-command 'kapply-empty)
                   (keymap conn-kapply-empty-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-empty-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-empty-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-skip-empty))
 
 ;;;;; Ibuffer Argument
@@ -1527,10 +1527,10 @@ finishing showing the buffers that were visited."))
                   (name "ibuffer")
                   (toggle-command 'kapply-ibuffer)
                   (keymap conn-kapply-ibuffer-argument-map)
-                  (reference conn-kapply-ibuffer-reference)))))
+                  (command-reference conn-kapply-ibuffer-reference)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-ibuffer-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-ibuffer-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-ibuffer-overview))
 
 ;;;;; Undo Argument
@@ -1552,10 +1552,10 @@ finishing showing the buffers that were visited."))
                   (cycling-commands '(kapply-undo))
                   (keymap conn-kapply-undo-argument-map)
                   (value (car choices))
-                  (reference conn-kapply-undo-reference)))))
+                  (command-reference conn-kapply-undo-reference)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-undo-argument))
-  (pcase (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-undo-argument))
+  (pcase (conn-argument--value arg)
     ('buffer-atomic #'conn-kapply-per-buffer-atomic-undo)
     ('buffer #'conn-kapply-per-buffer-undo)
     ('per-iteration #'conn-kapply-per-iteration-undo)))
@@ -1564,7 +1564,7 @@ finishing showing the buffers that were visited."))
   (apply #'concat
          (conn-key-bind-string 'kapply-undo)
          " merge undo"
-         (and-let* ((val (conn-argument-value arg)))
+         (and-let* ((val (conn-argument--value arg)))
            (list " "
                  (propertize "(" 'face 'shadow)
                  (propertize (format "%s" val)
@@ -1588,8 +1588,8 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-excursions)
                   (keymap conn-kapply-excursions-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-excursions-argument))
-  (let ((val (conn-argument-value arg)))
+(cl-defmethod conn-argument-value ((arg conn-kapply-excursions-argument))
+  (let ((val (conn-argument--value arg)))
     (lambda (it) (conn-kapply-save-excursion it val))))
 
 ;;;;; Save Restrictions Argument
@@ -1606,8 +1606,8 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-restrictions)
                   (keymap conn-kapply-restrictions-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-restrictions-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-restrictions-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-save-restriction))
 
 ;;;;; Save Window Configuration Argument
@@ -1624,8 +1624,8 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'save-window-conf)
                   (keymap conn-kapply-window-conf-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-window-conf-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-window-conf-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-save-windows))
 
 ;;;;; Query Argument
@@ -1642,8 +1642,8 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'query)
                   (keymap conn-kapply-query-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-query-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-query-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-query))
 
 ;;;;; Other End Argument
@@ -1658,8 +1658,8 @@ finishing showing the buffers that were visited."))
                   (toggle-command 'other-end)
                   (keymap conn-other-end-argument-map)))))
 
-(cl-defmethod conn-argument-payload ((arg conn-kapply-other-end-argument))
-  (and (conn-argument-value arg)
+(cl-defmethod conn-argument-value ((arg conn-kapply-other-end-argument))
+  (and (conn-argument--value arg)
        #'conn-kapply-at-end))
 
 ;;;;; Command Handler
