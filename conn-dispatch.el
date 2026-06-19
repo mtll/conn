@@ -78,12 +78,22 @@
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar conn-window-label-display-function 'conn-header-line-labels
-  "Function to label windows for `conn-prompt-for-window'.
+(defvar conn-window-label-display-functions
+  (list #'conn-setup-minibuffer-label)
+  "Abnormal hook run to label windows.
 
-The function should accept a single argument, the list of windows to be
-labeled, and it should return a list of structs for `conn-label-select',
-which see.")
+Each function in this list will be called with with a window and a
+string, and should return either a window label or nil.  Each function
+will be called in turn until one returns a label.  If every function
+returns nil then `conn-window-label-default-display-function' will be
+called to label the window.")
+
+(defvar conn-window-label-default-display-function
+  #'conn-setup-header-line-label
+  "Default function to label windows.
+
+The function should accept a window and a string and return a window
+label.")
 
 (defvar conn-dispatch-label-input-method nil
   "Input method to use when reading labels during `conn-label-select'.
@@ -168,6 +178,10 @@ and pad overlay with WIDTH space and face FACE."
                                             (window-buffer window)))))))
   "State for a minibuffer window label."
   (overlay nil :type overlay))
+
+(defun conn-setup-minibuffer-label (win str)
+  (when (window-minibuffer-p win)
+    (conn-minibuffer-label win str)))
 
 (cl-defstruct (conn-window-header-line-label
                (:constructor nil)
@@ -564,7 +578,7 @@ Two macros are locally defined within body for binding handlers:
   '("" (:eval (conn--centered-header-label))))
 (put 'conn-header-line-label-format 'risky-local-variable t)
 
-(defun conn--setup-header-line-label (window string)
+(defun conn-setup-header-line-label (window string)
   (set-window-parameter window 'conn-window-labeled-p t)
   (with-selected-window window
     (unless conn--saved-header-line-format
@@ -577,19 +591,15 @@ Two macros are locally defined within body for binding handlers:
   (set-window-parameter window 'conn-window-labeled-p t)
   (conn-minibuffer-label window string))
 
-(defun conn-header-line-labels (windows)
+(defun conn--setup-window-labels (windows)
   (cl-loop for win in windows
            when (window-parameter win 'conn-label-string)
-           collect (if (window-minibuffer-p win)
-                       (conn--setup-minibuffer-label win it)
-                     (conn--setup-header-line-label win it))))
-
-(defun conn-mode-line-labels (windows)
-  (cl-loop for win in windows
-           when (window-parameter win 'conn-label-string)
-           collect (if (window-minibuffer-p win)
-                       (conn--setup-minibuffer-label win it)
-                     (conn-window-label win it))))
+           collect
+           (or (run-hook-with-args-until-success
+                'conn-window-label-display-functions
+                win it)
+               (funcall conn-window-label-default-display-function
+                        win it))))
 
 ;; From ace-window
 (defun conn--dispatch-window-predicate (window &optional ignore-dedicated)
@@ -627,35 +637,34 @@ for dispatch."
                          (funcall predicate win)))
            collect win))
 
-(defun conn--with-window-labels (labels body)
-  (conn-with-dispatch-input-buffer
-    (let ((conn-dispatch-label-input-method nil)
-          (timer (run-with-idle-timer
-                  0 t (lambda ()
-                        (while-no-input
-                          (conn-redisplay-labels labels))))))
-      (unwind-protect
-          (progn
-            (while-no-input
-              (conn-redisplay-labels labels))
-            (funcall body labels))
-        (when timer (cancel-timer timer))
-        (mapc #'conn-label-delete labels)))))
+(eval-and-compile
+  (defun conn--with-window-labels (var windows body)
+    (cl-with-gensyms (timer)
+      `(conn-with-dispatch-input-buffer
+         (let* ((,var (conn--setup-window-labels ,windows))
+                (conn-dispatch-label-input-method nil)
+                (,timer (run-with-idle-timer
+                         0 t (lambda ()
+                               (while-no-input
+                                 (conn-redisplay-labels ,var))))))
+           (unwind-protect
+               (progn
+                 (while-no-input
+                   (conn-redisplay-labels ,var))
+                 ,@body)
+             (when ,timer (cancel-timer ,timer))
+             (mapc #'conn-label-delete ,var)))))))
 
-(defmacro conn-with-window-labels (binder &rest body)
-  (declare (indent 1))
-  (pcase binder
-    (`(,var ,val)
-     `(conn--with-window-labels ,val (lambda (,var) ,@body)))
-    (_ (error "Unexpected binding form %s" binder))))
+(defmacro conn-with-window-labels (var windows &rest body)
+  (declare (indent 2))
+  (conn--with-window-labels var windows body))
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (declare (important-return-value t))
   (when windows
     (funcall conn-window-label-function)
-    (conn-with-window-labels
-        (labels (funcall conn-window-label-display-function windows))
+    (conn-with-window-labels labels windows
       (conn-with-dispatch-handlers
         (:handler
          ( :predicate (cmd)

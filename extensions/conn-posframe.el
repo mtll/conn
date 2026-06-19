@@ -519,7 +519,8 @@
   "Store the state for a window label."
   string window bufname overlay)
 
-(defun conn--setup-posframe-window-label (window string)
+;;;###autoload
+(defun conn-setup-posframe-window-label (window string)
   (let ((bufname (format " *conn-label-posfame-%s*" string)))
     (with-selected-window window
       (posframe-show
@@ -530,14 +531,6 @@
         (overlay-put overlay 'window window)
         (overlay-put overlay 'face 'shadow)
         (conn--make-posframe-window-label string window bufname overlay)))))
-
-;;;###autoload
-(defun conn-posframe-window-labels (windows)
-  (cl-loop for win in windows
-           when (window-parameter win 'conn-label-string)
-           collect (if (window-minibuffer-p win)
-                       (conn--setup-minibuffer-label win it)
-                     (conn--setup-posframe-window-label win it))))
 
 (cl-defmethod conn-label-display ((label conn-posframe-window-label))
   (posframe-refresh (conn-posframe-window-label-bufname label)))
