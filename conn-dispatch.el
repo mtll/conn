@@ -141,10 +141,33 @@ and pad overlay with WIDTH space and face FACE."
 
 (cl-defstruct (conn-window-label
                (:constructor nil)
-               ( :constructor conn-window-label (string window)))
+               (:constructor conn-window-label (window string)))
   "State for a window label."
-  (string nil :type string)
-  (window nil :type window))
+  (window nil :type window)
+  (string nil :type string))
+
+(defvar conn-minibuffer-label-format-string
+  (concat
+   (propertize
+    (if (display-graphic-p)
+        (propertize " %s " 'display '(space-width 0.33))
+      "%s")
+    'face 'conn-minibuffer-window-label-face)
+   " "))
+
+(cl-defstruct (conn-minibuffer-label
+               (:include conn-window-label)
+               (:constructor nil)
+               ( :constructor conn-minibuffer-label
+                 ( window
+                   string
+                   &aux
+                   (overlay (with-current-buffer (window-buffer window)
+                              (make-overlay (point-min)
+                                            (point-max)
+                                            (window-buffer window)))))))
+  "State for a minibuffer window label."
+  (overlay nil :type overlay))
 
 (cl-defstruct (conn-window-header-line-label
                (:constructor nil)
@@ -266,6 +289,14 @@ returned."
   "Return LABEL\'s payload."
   (declare (important-return-value t)))
 
+(cl-defmethod conn-label-display ((label conn-minibuffer-label))
+  (pcase-let (((cl-struct conn-minibuffer-label window overlay)
+               label))
+    (overlay-put overlay 'face 'shadow)
+    (overlay-put overlay 'before-string
+                 (format conn-minibuffer-label-format-string
+                         (window-parameter window 'conn-label-string)))))
+
 (cl-defmethod conn-label-payload ((label conn-window-label))
   (conn-window-label-window label))
 
@@ -274,12 +305,25 @@ returned."
                         'conn-label-string
                         (conn-window-label-string label)))
 
+(cl-defmethod conn-label-reset ((label conn-minibuffer-label))
+  (cl-call-next-method)
+  (pcase-let (((cl-struct conn-minibuffer-label window overlay)
+               label))
+    (overlay-put overlay 'face 'shadow)
+    (overlay-put overlay 'before-string
+                 (format conn-minibuffer-label-format-string
+                         (window-parameter window 'conn-label-string)))))
+
 (cl-defmethod conn-label-delete ((label conn-window-label))
   (pcase-let (((cl-struct conn-window-label
                           window
                           string)
                label))
     (set-window-parameter window 'conn-label-string string)))
+
+(cl-defmethod conn-label-delete ((label conn-minibuffer-label))
+  (delete-overlay (conn-minibuffer-label-overlay label))
+  (cl-call-next-method))
 
 (cl-defmethod conn-label-delete ((label conn-window-header-line-label))
   (pcase-let* (((cl-struct conn-window-header-line-label
@@ -305,6 +349,18 @@ returned."
                 (not (eql prefix-char (string-to-char string))))
       (set-window-parameter window 'conn-label-string (substring string 1))
       label)))
+
+(cl-defmethod conn-label-narrow ((_label conn-minibuffer-label)
+                                 _prefix-char)
+  (pcase (cl-call-next-method)
+    ((and (cl-struct conn-minibuffer-label
+                     window
+                     overlay)
+          label)
+     (overlay-put overlay 'before-string
+                  (format conn-minibuffer-label-format-string
+                          (window-parameter window 'conn-label-string)))
+     label)))
 
 (cl-defmethod conn-label-completed-p ((label conn-window-label))
   (string-empty-p (window-parameter (conn-window-label-window label)
@@ -458,11 +514,16 @@ Two macros are locally defined within body for binding handlers:
   "Face for conn window prompt overlay."
   :group 'conn-faces)
 
+(defface conn-minibuffer-window-label-face
+  '((t (:bold t :inherit highlight)))
+  "Face for wincontrol mode-line window labels."
+  :group 'conn-faces)
+
 (defvar conn--window-label-pool nil)
 
 (defun conn-simple-window-labels ()
   (setf conn-dispatch-label-input-method conn-simple-label-input-method)
-  (let* ((windows (conn-get-windows nil 'nomini t))
+  (let* ((windows (conn-get-windows nil t t))
          (window-count (length windows)))
     (when (or (null conn--window-label-pool)
               (length< conn--window-label-pool window-count))
@@ -512,15 +573,23 @@ Two macros are locally defined within body for binding handlers:
     (prog1 (conn-window-header-line-label string window)
       (goto-char (window-start)))))
 
+(defun conn--setup-minibuffer-label (window string)
+  (set-window-parameter window 'conn-window-labeled-p t)
+  (conn-minibuffer-label window string))
+
 (defun conn-header-line-labels (windows)
   (cl-loop for win in windows
-           for str = (window-parameter win 'conn-label-string)
-           when str collect (conn--setup-header-line-label win str)))
+           when (window-parameter win 'conn-label-string)
+           collect (if (window-minibuffer-p win)
+                       (conn--setup-minibuffer-label win it)
+                     (conn--setup-header-line-label win it))))
 
 (defun conn-mode-line-labels (windows)
   (cl-loop for win in windows
-           for str = (window-parameter win 'conn-label-string)
-           when str collect (conn-window-label str win)))
+           when (window-parameter win 'conn-label-string)
+           collect (if (window-minibuffer-p win)
+                       (conn--setup-minibuffer-label win it)
+                     (conn-window-label win it))))
 
 ;; From ace-window
 (defun conn--dispatch-window-predicate (window &optional ignore-dedicated)

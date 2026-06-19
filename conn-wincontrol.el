@@ -131,6 +131,7 @@
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-exit)
   (remove-function eldoc-message-function #'conn--wincontrol-ignore)
   (message nil)
   (setf conn-wincontrol-mode nil
@@ -201,8 +202,9 @@
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (internal-push-keymap conn-wincontrol-map
-                          'overriding-terminal-local-map)
+    (when conn-wincontrol-mode
+      (internal-push-keymap conn-wincontrol-map
+                            'overriding-terminal-local-map))
     (when conn-wincontrol-one-command-mode
       (internal-push-keymap conn-wincontrol-one-command-map
                             'overriding-terminal-local-map))
@@ -434,7 +436,7 @@
   (interactive "P")
   (let ((windows (delq (selected-window)
                        (conn-get-windows
-                        nil 'nomini
+                        nil nil
                         (when (xor conn-wincontrol-goto-window-other-frames
                                    invert-other-frames)
                           'visible)))))
@@ -485,7 +487,8 @@
 
 (defface conn-wincontrol-mode-line-label-face
   '((t (:bold t :inherit highlight)))
-  "Face for wincontrol mode-line window labels.")
+  "Face for wincontrol mode-line window labels."
+  :group 'conn-faces)
 
 (defvar conn-wincontrol-mode-line-format-string
   (concat

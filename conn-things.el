@@ -155,7 +155,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
   (properties nil))
 
 (defalias 'conn-anonymous-thing-parents 'conn--anonymous-thing-parents)
-(defalias 'conn-anonymous-thing-p 'conn--anonymous-thing-p)
 
 (oclosure-define (conn--bounds-delayed
                   (:predicate conn--bounds-delayed-p)))

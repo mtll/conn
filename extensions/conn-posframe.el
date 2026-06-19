@@ -535,7 +535,9 @@
 (defun conn-posframe-window-labels (windows)
   (cl-loop for win in windows
            when (window-parameter win 'conn-label-string)
-           collect (conn--setup-posframe-window-label win it)))
+           collect (if (window-minibuffer-p win)
+                       (conn--setup-minibuffer-label win it)
+                     (conn--setup-posframe-window-label win it))))
 
 (cl-defmethod conn-label-display ((label conn-posframe-window-label))
   (posframe-refresh (conn-posframe-window-label-bufname label)))
