@@ -3229,7 +3229,7 @@ buffer."
   (unless (eq cmd 'recenter-top-bottom)
     (setf recenter-last-op nil)))
 (add-hook 'conn-dispatch-read-char-pre-functions
-          'conn--dispatch-recenter-hook)
+          #'conn--dispatch-recenter-hook)
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql isearch-forward)))
@@ -3344,7 +3344,7 @@ buffer."
            (conn-dispatch-redisplay))
           ((length> conn-targets 1)
            (add-function :after-while conn-target-window-predicate
-                         'conn--dispatch-restrict-windows
+                         #'conn--dispatch-restrict-windows
                          '((name . restrict-windows)))
            (conn-dispatch-redisplay)))))
 
@@ -4614,7 +4614,7 @@ contain targets."
              (widget-apply-action (get-char-property pt 'button) pt)
              t)))))
 
-(add-hook 'conn-dispatch-button-functions 'conn-dispatch-button-handler-default 50)
+(add-hook 'conn-dispatch-button-functions #'conn-dispatch-button-handler-default 50)
 
 (defun conn-dispatch-push-button ()
   (declare (conn-dispatch-action)
@@ -5245,19 +5245,19 @@ it.")
                             restrict-windows)
                  prev-dispatch))
       (conn-with-dispatch-handlers
-        (:handler
-         ( :display ()
-           (and-let* ((desc (conn-action-description conn-dispatch-action)))
-             (propertize desc
-                         'face 'conn-argument-active-face
-                         'conn-read-args-display-depth -50))))
         ( :with (conn-dispatch-prefix-arg))
         ( :with (conn-read-char-input-method))
+        ( :handler
+          ( :display ()
+            (and-let* ((desc (conn-action-description conn-dispatch-action)))
+              (propertize desc
+                          'face 'conn-argument-active-face
+                          'conn-read-args-display-depth -50))))
         (conn-target-finder-setup target-finder)
         (conn-action-setup action (xor repeat invert-repeat))
         (when restrict-windows
           (add-function :after-while conn-target-window-predicate
-                        'conn--dispatch-restrict-windows
+                        #'conn--dispatch-restrict-windows
                         '((name . restrict-windows))))
         (conn--dispatch-loop)
         (conn-action-accept conn-dispatch-action)
@@ -5308,7 +5308,7 @@ it.")
        (conn-get-target-finder thing arg transform))
       (when restrict-windows
         (add-function :after-while conn-target-window-predicate
-                      'conn--dispatch-restrict-windows
+                      #'conn--dispatch-restrict-windows
                       '((name . restrict-windows))))
       (conn--dispatch-loop)
       (conn-action-accept conn-dispatch-action)
@@ -5495,12 +5495,11 @@ for the dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (when (equal isearch-string "")
-    (if (null (if isearch-regexp regexp-search-ring search-ring))
-        (error "No previous search string")
-      (setf isearch-string
-	    (car (if isearch-regexp regexp-search-ring search-ring))
-	    isearch-case-fold-search isearch-last-case-fold-search)))
+  (cond* ((not (string-empty-p isearch-string)))
+         ((bind-and* (ring (if isearch-regexp regexp-search-ring search-ring)))
+          (setf isearch-string (car ring)
+	        isearch-case-fold-search isearch-last-case-fold-search))
+         (t (error "No previous search string")))
   (unwind-protect
       (let ((conn-dispatch-always-prompt t)
             (regexp-search-ring

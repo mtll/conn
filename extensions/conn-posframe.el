@@ -299,7 +299,7 @@
        :border-width conn-posframe-border-width
        :border-color (face-background 'conn-posframe-border)
        :lines-truncate t))
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+    (add-hook 'pre-command-hook #'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-tab-display (&rest _)
   (when (and (not executing-kbd-macro)
@@ -339,7 +339,7 @@
        :timeout conn-posframe-timeout
        :border-width conn-posframe-border-width
        :border-color (face-background 'conn-posframe-border)))
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+    (add-hook 'pre-command-hook #'conn-posframe--hide-pre)))
 
 (defun conn-posframe--kmacro-ring-display-subr ()
   (declare-function conn--kmacro-display "conn-transient")
@@ -439,7 +439,7 @@
                         thereis (advice-member-p 'conn-list-posframe fn)))
              conn-dispatch-ring)
     (conn-posframe--dispatch-ring-display-subr)
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+    (add-hook 'pre-command-hook #'conn-posframe--hide-pre)))
 
 ;;;###autoload
 (define-minor-mode conn-posframe-mode

@@ -64,7 +64,7 @@ potential expansions.  Functions may return invalid expansions
   (unless (region-active-p)
     (error "Region not active"))
   (with-memoization conn--current-expansions
-    (add-hook 'deactivate-mark-hook 'conn--clear-expansions nil 'local)
+    (add-hook 'deactivate-mark-hook #'conn--clear-expansions nil 'local)
     (conn->
       (mapcan #'funcall conn-expansion-functions)
       conn--expand-filter-regions

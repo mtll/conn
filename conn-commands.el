@@ -2420,8 +2420,10 @@ Exiting the recursive edit will resume the isearch."
           (cleanup (make-symbol "cleanup")))
       (fset setup (lambda ()
                     (when (= depth (recursion-depth))
-                      (add-function :after-while (local 'isearch-filter-predicate)
-                                    in-regions-p `((isearch-message-prefix . ,prefix)))
+                      (add-function :after-while
+                                    (local 'isearch-filter-predicate)
+                                    in-regions-p
+                                    `((isearch-message-prefix . ,prefix)))
                       (remove-hook 'isearch-mode-hook setup t))))
       (fset cleanup (lambda ()
                       (if (and (= depth (recursion-depth))
@@ -2431,7 +2433,9 @@ Exiting the recursive edit will resume the isearch."
                       (remove-function (local 'isearch-filter-predicate)
                                        in-regions-p)))
       (add-hook 'isearch-mode-end-hook cleanup nil t))
-    (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
+    (add-function :after-while
+                  (local 'isearch-filter-predicate)
+                  in-regions-p
                   `((name . conn-isearch-restrict)
                     (isearch-message-prefix . ,prefix)))))
 

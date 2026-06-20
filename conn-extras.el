@@ -667,6 +667,6 @@
 
 (defun conn-occur-edit-map-setup ()
   (setf (conn-get-major-mode-maps) '(occur-edit-mode)))
-(add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
+(add-hook 'occur-edit-mode-hook #'conn-occur-edit-map-setup)
 
 (provide 'conn-extras)

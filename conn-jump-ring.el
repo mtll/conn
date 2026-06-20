@@ -160,8 +160,8 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
     (let (conn-jump-repeating)
       (conn-push-jump-ring pos))
     (setf conn-jump-repeating (buffer-chars-modified-tick))
-    (add-hook 'conn-push-jump-functions 'conn--repeat-push-jump-hook nil 'local)
-    (add-hook 'post-command-hook 'conn--repeat-change-hook nil 'local)))
+    (add-hook 'conn-push-jump-functions #'conn--repeat-push-jump-hook nil 'local)
+    (add-hook 'post-command-hook #'conn--repeat-change-hook nil 'local)))
 
 (conn-set-jump-command 'scroll-up-command #'conn-ignore-repeat-jump-handler)
 (conn-set-jump-command 'scroll-down-command #'conn-ignore-repeat-jump-handler)

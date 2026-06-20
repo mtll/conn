@@ -1658,34 +1658,34 @@ entered.  If the predicate is not satisfied then the state is popped.")
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-functions 'conn-setup-commit-state)
+(add-hook 'conn-setup-state-functions #'conn-setup-commit-state)
 
 (defun conn-setup-edmacro-state ()
   "Set the base state to `conn-command-state' in edit macro buffers."
   (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-functions 'conn-setup-edmacro-state)
+(add-hook 'conn-setup-state-functions #'conn-setup-edmacro-state)
 
 (defun conn-setup-null-state ()
   "Set the base state to `conn-null-state' in `conn-null-state-modes' buffers."
   (when (derived-mode-p conn-null-state-modes)
     (conn-push-state 'conn-null-state)
     t))
-(add-hook 'conn-setup-state-functions 'conn-setup-null-state -90)
+(add-hook 'conn-setup-state-functions #'conn-setup-null-state -90)
 
 (defun conn-setup-command-state ()
   "Set base state to `conn-command-state' in `conn-command-state-modes' buffers."
   (when (derived-mode-p conn-command-state-modes)
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-functions 'conn-setup-command-state 50)
+(add-hook 'conn-setup-state-functions #'conn-setup-command-state 50)
 
 (defun conn-setup-minibuffer-state ()
   "Setup `minibuffer-mode' buffer state."
   (when (eq major-mode 'minibuffer-mode)
     (conn-push-state 'conn-emacs-state)
     t))
-(add-hook 'conn-setup-state-functions 'conn-setup-minibuffer-state -80)
+(add-hook 'conn-setup-state-functions #'conn-setup-minibuffer-state -80)
 
 (provide 'conn-states)

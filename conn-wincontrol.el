@@ -82,9 +82,9 @@
               conn-wincontrol-one-command-mode (and one-command t))
         (add-hook 'set-message-functions #'conn-wincontrol-message-function)
         ;; Must be before 'repeat-post-hook
-        (add-hook 'post-command-hook 'conn--wincontrol-post-command -98)
-        (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 98)
-        (add-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
+        (add-hook 'post-command-hook #'conn--wincontrol-post-command -98)
+        (add-hook 'pre-command-hook #'conn--wincontrol-pre-command 98)
+        (add-hook 'minibuffer-setup-hook #'conn--wincontrol-minibuffer-setup)
         (add-function :override eldoc-message-function #'conn--wincontrol-ignore)
         (setf conn--wincontrol-arg (when current-prefix-arg
                                      (prefix-numeric-value current-prefix-arg))
@@ -97,7 +97,7 @@
         (internal-push-keymap conn-wincontrol-map
                               'overriding-terminal-local-map)
         (when conn-wincontrol-one-command-mode
-          (add-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+          (add-hook 'pre-command-hook #'conn--wincontrol-one-command-hook)
           (internal-push-keymap conn-wincontrol-one-command-map
                                 'overriding-terminal-local-map))
         (if (eq (selected-window) (active-minibuffer-window))
@@ -218,7 +218,7 @@
                        'overriding-terminal-local-map)
   (setq-local conn-wincontrol-mode nil
               conn-wincontrol-one-command-mode nil)
-  (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
+  (add-hook 'minibuffer-exit-hook #'conn--wincontrol-minibuffer-exit))
 
 (defvar conn-wincontrol-one-command-stay-command
   (list 'conn-wincontrol-backward-delete-arg
