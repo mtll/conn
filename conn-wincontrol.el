@@ -126,12 +126,12 @@
                        'overriding-terminal-local-map)
   (internal-pop-keymap conn-wincontrol-map
                        'overriding-terminal-local-map)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+  (remove-hook 'pre-command-hook #'conn--wincontrol-one-command-hook)
   (remove-hook 'set-message-functions #'conn-wincontrol-message-function)
-  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-setup)
-  (remove-hook 'minibuffer-setup-hook 'conn--wincontrol-minibuffer-exit)
+  (remove-hook 'post-command-hook #'conn--wincontrol-post-command)
+  (remove-hook 'pre-command-hook #'conn--wincontrol-pre-command)
+  (remove-hook 'minibuffer-setup-hook #'conn--wincontrol-minibuffer-setup)
+  (remove-hook 'minibuffer-setup-hook #'conn--wincontrol-minibuffer-exit)
   (remove-function eldoc-message-function #'conn--wincontrol-ignore)
   (message nil)
   (setf conn-wincontrol-mode nil
@@ -204,12 +204,12 @@
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (when conn-wincontrol-mode
       (internal-push-keymap conn-wincontrol-map
-                            'overriding-terminal-local-map))
+                            'overriding-terminal-local-map)
+      (let ((message-log-max nil))
+        (message "%s" (conn--wincontrol-message))))
     (when conn-wincontrol-one-command-mode
       (internal-push-keymap conn-wincontrol-one-command-map
-                            'overriding-terminal-local-map))
-    (let ((message-log-max nil))
-      (message "%s" (conn--wincontrol-message)))))
+                            'overriding-terminal-local-map))))
 
 (defun conn--wincontrol-minibuffer-setup ()
   (internal-pop-keymap conn-wincontrol-map
@@ -234,7 +234,7 @@
 (defun conn--wincontrol-one-command-hook ()
   (when (and conn-wincontrol-one-command-mode
              (not (conn-wincontrol-one-command-stay-p)))
-    (remove-hook 'pre-command-hook 'conn--wincontrol-one-command-hook)
+    (remove-hook 'pre-command-hook #'conn--wincontrol-one-command-hook)
     (conn-wincontrol-exit)))
 
 ;;;;; Wincontrol Quick Ref

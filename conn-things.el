@@ -1300,11 +1300,7 @@ Returns a `conn-bounds' struct."
                                          transforms
                                          bounds)
   (when-let* ((thing (seq-find #'conn-simple-thing-p
-                               (conn-thing-all-parents thing)))
-              (_ (save-excursion
-                   (ignore-errors
-                     (forward-thing thing 1)
-                     t))))
+                               (conn-thing-all-parents thing))))
     (let ((subregions nil)
           (things-beg most-positive-fixnum)
           (things-end most-negative-fixnum))
@@ -1353,17 +1349,18 @@ Returns a `conn-bounds' struct."
                              (push-bound sub-beg sub-end ssr)
                              (throw 'end nil))))
                        (push-bound sub-beg sub-end ssr))))))))))
-      (conn-make-bounds
-       (conn-anonymous-thing
-         (list thing)
-         :bounds-op ( :method (_self _arg)
-                      (conn-make-bounds
-                       thing nil
-                       (bounds-of-thing-at-point thing)
-                       :direction 1)))
-       nil
-       (cons things-beg things-end)
-       :subregions (nreverse subregions)))))
+      (when subregions
+        (conn-make-bounds
+         (conn-anonymous-thing
+           (list thing)
+           :bounds-op ( :method (_self _arg)
+                        (conn-make-bounds
+                         thing nil
+                         (bounds-of-thing-at-point thing)
+                         :direction 1)))
+         nil
+         (cons things-beg things-end)
+         :subregions (nreverse subregions))))))
 
 (cl-defmethod conn-get-things-in-region ((thing (conn-thing region))
                                          arg

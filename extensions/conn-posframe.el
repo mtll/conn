@@ -449,59 +449,59 @@
   (if conn-posframe-mode
       (progn
         (advice-add 'kmacro-cycle-ring-next :after
-                    'conn-posframe--kmacro-ring-display
+                    #'conn-posframe--kmacro-ring-display
                     '((name . conn-list-posframe)))
         (advice-add 'kmacro-cycle-ring-previous :after
-                    'conn-posframe--kmacro-ring-display
+                    #'conn-posframe--kmacro-ring-display
                     '((name . conn-list-posframe)))
         (advice-add 'previous-buffer :after
-                    'conn-posframe--switch-buffer-display
+                    #'conn-posframe--switch-buffer-display
                     '((name . conn-list-posframe)))
         (advice-add 'next-buffer :after
-                    'conn-posframe--switch-buffer-display
+                    #'conn-posframe--switch-buffer-display
                     '((name . conn-list-posframe)))
         (advice-add 'bury-buffer :after
-                    'conn-posframe--switch-buffer-display
+                    #'conn-posframe--switch-buffer-display
                     '((name . conn-list-posframe)))
         (advice-add 'unbury-buffer :after
-                    'conn-posframe--switch-buffer-display
+                    #'conn-posframe--switch-buffer-display
                     '((name . conn-list-posframe)))
         (advice-add 'conn-kill-this-buffer :after
-                    'conn-posframe--switch-buffer-display
+                    #'conn-posframe--switch-buffer-display
                     '((name . conn-list-posframe)))
         (advice-add 'tab-bar-new-tab :after
-                    'conn-posframe--switch-tab-display
+                    #'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
         (advice-add 'tab-bar-switch-to-next-tab :after
-                    'conn-posframe--switch-tab-display
+                    #'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
         (advice-add 'tab-bar-switch-to-prev-tab :after
-                    'conn-posframe--switch-tab-display
+                    #'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
         (advice-add 'tab-bar-close-tab :after
-                    'conn-posframe--switch-tab-display
+                    #'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
         (advice-add 'tab-bar-duplicate-tab :after
-                    'conn-posframe--switch-tab-display
+                    #'conn-posframe--switch-tab-display
                     '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-previous :after
-                    'conn-posframe--dispatch-ring-display
+                    #'conn-posframe--dispatch-ring-display
                     '((name . conn-list-posframe)))
         (advice-add 'conn-dispatch-cycle-ring-next :after
-                    'conn-posframe--dispatch-ring-display
+                    #'conn-posframe--dispatch-ring-display
                     '((name . conn-list-posframe))))
-    (advice-remove 'kmacro-cycle-ring-next 'conn-list-posframe)
-    (advice-remove 'kmacro-cycle-ring-previous 'conn-list-posframe)
-    (advice-remove 'previous-buffer 'conn-list-posframe)
-    (advice-remove 'next-buffer 'conn-list-posframe)
-    (advice-remove 'bury-buffer 'conn-list-posframe)
-    (advice-remove 'unbury-buffer 'conn-list-posframe)
-    (advice-remove 'conn-kill-this-buffer 'conn-list-posframe)
-    (advice-remove 'tab-bar-new-tab 'conn-list-posframe)
-    (advice-remove 'tab-bar-switch-to-next-tab 'conn-list-posframe)
-    (advice-remove 'tab-bar-switch-to-prev-tab 'conn-list-posframe)
-    (advice-remove 'tab-bar-duplicate-tab 'conn-list-posframe)
-    (advice-remove 'tab-bar-close-tab 'conn-list-posframe)))
+    (advice-remove 'kmacro-cycle-ring-next #'conn-list-posframe)
+    (advice-remove 'kmacro-cycle-ring-previous #'conn-list-posframe)
+    (advice-remove 'previous-buffer #'conn-list-posframe)
+    (advice-remove 'next-buffer #'conn-list-posframe)
+    (advice-remove 'bury-buffer #'conn-list-posframe)
+    (advice-remove 'unbury-buffer #'conn-list-posframe)
+    (advice-remove 'conn-kill-this-buffer #'conn-list-posframe)
+    (advice-remove 'tab-bar-new-tab #'conn-list-posframe)
+    (advice-remove 'tab-bar-switch-to-next-tab #'conn-list-posframe)
+    (advice-remove 'tab-bar-switch-to-prev-tab #'conn-list-posframe)
+    (advice-remove 'tab-bar-duplicate-tab #'conn-list-posframe)
+    (advice-remove 'tab-bar-close-tab #'conn-list-posframe)))
 
 ;;;; Posframe window labels
 
