@@ -1267,6 +1267,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
         (list #'conn--set-action-property)))
 
 (defun conn-action-stale-p (action)
+  "Return non-nil if action is no longer valid."
   (cl-loop for slot in (conn-action--slots action)
            thereis (condition-case _
                        (funcall (conn-action-slot--stale slot)
@@ -1327,6 +1328,8 @@ that slot's value and otherwise performs a shallow copy."
         (setf (conn-action-slot--live slot) nil)))))
 
 (defun conn-action-setup (action repeat)
+  "Setup ACTION for dispatch.
+If REPEAT is non-nil then repeat dispatch."
   (when conn-dispatch-action
     (pcase-dolist (`(,_ . ,undo-fn)
                    (pop conn--dispatch-change-groups))
@@ -1374,16 +1377,19 @@ that slot's value and otherwise performs a shallow copy."
            (run-hooks 'deactivate-mark-hook)))))))
 
 (cl-defgeneric conn-get-default-action (cmd)
+  "Return default action for CMD."
   (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t)))
 
 (defun conn-action-change-group ()
+  "Return an action change group slot."
   (declare (important-return-value t))
   (conn-action-slot (conn--action-buffer-change-group)
                     :accept #'conn--action-accept-change-group
                     :cancel #'conn--action-cancel-change-group))
 
 (defun conn-action-marker ()
+  "Return a marker action slot."
   (declare (important-return-value t))
   (conn-action-slot (conn-dispatch-marker-argument t)
                     :read t
@@ -1450,6 +1456,7 @@ that slot's value and otherwise performs a shallow copy."
     (kill-new str)))
 
 (defun conn-action-repeatable-p (action)
+  "Return non-nil if ACTION can be repeated."
   (declare (important-return-value t))
   (or (eq (conn-action-repeat action) t)
       (eq (conn-action-repeat action) nil)))
@@ -1860,6 +1867,17 @@ Optionally the overlay may have an associated THING."
                                          predicate
                                          fixed-length
                                          thing)
+  "Make target overlays at each match for STRING.
+
+If PREDICATE is non-nil then it will be called with the match beginning
+and end for each match and a match overlay will be created only when
+PREDICATE returns non-nil.
+
+If FIXED-LENGTH is non-nil then it should be an integer and each target
+overlay will be FIXED-LENGTH long.
+
+If THING is non-nil then it will be passed as the thing for overlay to
+`conn-make-target-overlay'."
   (when (length> string 0)
     (pcase-dolist (`(,beg . ,end)
                    (conn--visible-matches string predicate))
@@ -1872,6 +1890,17 @@ Optionally the overlay may have an associated THING."
                                      predicate
                                      fixed-length
                                      thing)
+  "Make target overlays at each match for REGEXP.
+
+If PREDICATE is non-nil then it will be called with the match beginning
+and end for each match and a target overlay will be created only when
+PREDICATE returns non-nil.
+
+If FIXED-LENGTH is non-nil then it should be an integer and each target
+overlay will be FIXED-LENGTH long.
+
+If THING is non-nil then it will be passed as the thing for overlay to
+`conn-make-target-overlay'."
   (when (length> regexp 0)
     (pcase-dolist (`(,beg . ,end)
                    (conn--visible-re-matches regexp predicate))
@@ -1898,14 +1927,14 @@ Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
 (defvar conn-pixelwise-labels-window-predicate
-  #'conn--pixelwise-labels-window-p
+  #'conn-pixelwise-labels-window-p
   "Predicate a window must satisfy for pixelwise labels to be used.")
 
 (defvar conn-dispatch-pixelwise-labels-line-limit 250
   "Maximum distance from beginning of line for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-target-predicate
-  #'conn--pixelwise-labels-target-p
+  #'conn-pixelwise-labels-target-p
   "Predicate a target must satisfy for pixelwise labels to be used.")
 
 (defvar conn--label-start-time nil
@@ -1914,7 +1943,9 @@ Target overlays may override this default by setting the
 (defconst conn--pixelwise-window-cache (make-hash-table :test 'eq)
   "Cache of line lengths in each dispatch window.")
 
-(defun conn--pixelwise-labels-window-p (win)
+(defun conn-pixelwise-labels-window-p (win)
+  "Return non-nil if WIN should have pixelwise labels.
+Checks if WIN is on the selected frame."
   (declare (important-return-value t))
   (eq (selected-frame) (window-frame win)))
 
@@ -1923,7 +1954,8 @@ Target overlays may override this default by setting the
 If labeling takes longer than this amount of time then fall back to
 characterwise labels for all remaining targets.")
 
-(defun conn--pixelwise-labels-target-p (target)
+(defun conn-pixelwise-labels-target-p (target)
+  "Return non-nil if TARGET should have a pixelwise label."
   (declare (important-return-value t))
   (and (time-less-p (time-since conn--label-start-time)
                     conn-pixelwise-label-timeout)
@@ -2339,6 +2371,7 @@ characterwise labels for all remaining targets.")
       (overlay-put overlay 'setup (list 'display full-string)))))
 
 (defun conn-before-string-label (label)
+  "Setup `conn-dispatch-label' overlay with before-string."
   (pcase-let* (((cl-struct conn-dispatch-label
                            prefix
                            suffix
@@ -2482,6 +2515,7 @@ If POINT is not visible in the currently selected window then return nil."
     `(:state ,(list pool size in-use) ,@labels)))
 
 (defun conn-dispatch-get-labels ()
+  "Return list of labels for all targets in `conn-targets'."
   (pcase (if conn--dispatch-label-state
              (funcall conn-dispatch-label-function
                       conn--dispatch-label-state)
@@ -2535,6 +2569,12 @@ If POINT is not visible in the currently selected window then return nil."
       (mapc #'conn-label-delete labels))))
 
 (defmacro conn-with-dispatch-labels (binder &rest body)
+  "Bind labels according to BINDER and execute BODY.
+
+BINDER is of the form (VAR LABELS) and binds the labels returned from
+evaluating LABELS to VAR.
+
+\(fn (VAR LABELS) &rest BODY)"
   (declare (indent 1))
   (pcase binder
     (`(,var ,val)
@@ -2587,11 +2627,17 @@ depths will be sorted before greater depths.
               (pcase ,signal ,@cases))))))))
 
 (defun conn-dispatch-redisplay (&optional maybe-dont-prompt)
+  "Recompute all dispatch targets.
+If MAYBE-DONT-PROMPT is non-nil then don't reset
+`conn--dispatch-redisplay-prompt-flag' to t."
   (unless maybe-dont-prompt
     (setf conn--dispatch-redisplay-prompt-flag t))
   (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-select-window (window)
+  "Select WINDOW for dispatch.
+If window is on another frame then `select-frame-set-input-focus' that
+frame."
   (let ((frame (window-frame window)))
     (unless (eq frame (selected-frame))
       (select-frame-set-input-focus frame)
@@ -2602,6 +2648,9 @@ depths will be sorted before greater depths.
   window)
 
 (defun conn-dispatch-goto-char (position &optional nopush)
+  "Goto char POSITION for dispatch.
+If NOPUSH is non-nil then don't add the previous position to the
+dispatch point history."
   (goto-char position)
   (recenter (conn-dispatch-get-display-line))
   (when-let* ((mk (and (not nopush)
@@ -2858,6 +2907,13 @@ the meaning of depth."
                                 use-input-method
                                 seconds
                                 prompt-suffix)
+  "Read one character for dispatch.
+
+PROMPT, USE-INPUT-METHOD, and SECONDS have the same meaning as in
+`read-event'.
+
+If the optional argument PROMPT-SUFFIX is non-nil then display it at the
+end of the prompt."
   (declare (important-return-value t))
   (cond*
    ((null seconds)
@@ -3371,7 +3427,7 @@ buffer."
             (_ (error "Malformed update method definition")))))))
 
 (defmacro define-conn-target-finder (name superclasses slots &rest rest)
-  "Define a target finder.
+  "Define NAME as a new target finder derived from SUPERCLASSES with SLOTS.
 
 \(fn NAME SUPERCLASSES SLOTS [DOC-STRING] [UPDATE-METHOD DEFAULT-UPDATE-HANDLER])"
   (declare (doc-string 4)
@@ -3388,6 +3444,7 @@ buffer."
     (define--conn-target-finder name superclasses slots docstring rest)))
 
 (defun conn-target-finder-reference (target-finder)
+  "Return the reference for TARGET-FINDER."
   (and-let* ((ref (oref target-finder reference)))
     (cl-typecase ref
       (conn--reference-page ref)
