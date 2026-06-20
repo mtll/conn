@@ -144,21 +144,20 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
 (defvar-local conn-jump-repeating nil)
 
 (defun conn--repeat-push-jump-hook (&rest _)
-  (remove-hook 'conn-push-jump-functions #'conn--repeat-jump-hook 'local)
-  (remove-hook 'after-change-functions #'conn--repeat-push-jump-hook 'local)
+  (remove-hook 'conn-push-jump-functions #'conn--repeat-push-jump-hook 'local)
+  (remove-hook 'post-command-hook #'conn--repeat-change-hook 'local)
   (setf conn-jump-repeating nil))
 
 (defun conn--repeat-change-hook (&rest _)
   (unless (eql (buffer-chars-modified-tick)
                conn-jump-repeating)
-    (remove-hook 'conn-push-jump-functions #'conn--repeat-jump-hook 'local)
+    (remove-hook 'conn-push-jump-functions #'conn--repeat-push-jump-hook 'local)
     (remove-hook 'post-command-hook #'conn--repeat-change-hook 'local)
     (setf conn-jump-repeating nil)))
 
 (defun conn-ignore-repeat-jump-handler (pos)
   (unless conn-jump-repeating
-    (let (conn-jump-repeating)
-      (conn-push-jump-ring pos))
+    (conn-push-jump-ring pos)
     (setf conn-jump-repeating (buffer-chars-modified-tick))
     (add-hook 'conn-push-jump-functions #'conn--repeat-push-jump-hook nil 'local)
     (add-hook 'post-command-hook #'conn--repeat-change-hook nil 'local)))
