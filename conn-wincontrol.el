@@ -119,7 +119,10 @@
   (conn-wincontrol 'one-command))
 
 (defun conn-wincontrol-exit ()
+  "Exit wincontrol."
   (interactive)
+  (unless conn-wincontrol
+    (user-error "Wincontrol not active"))
   (internal-pop-keymap conn-wincontrol-one-command-map
                        'overriding-terminal-local-map)
   (internal-pop-keymap conn-wincontrol-map
