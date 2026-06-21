@@ -112,7 +112,9 @@
   "k" 'dired-next-line
   "i" 'dired-previous-line
   "/" 'dired-undo
-  "u" 'dired-tree-up
+  "u" 'dired-unmark-all-marks
+  "U" 'dired-unmark-all-files
+  "I" 'dired-tree-up
   "l" 'dired-next-dirline
   "j" 'dired-prev-dirline
   "m" 'dired-next-subdir
@@ -228,6 +230,8 @@
   "`" 'conn-wincontrol-mru-window
   "y" 'ibuffer-yank
   "z" 'ibuffer-jump-to-buffer
+  "u" 'ibuffer-unmark-all-marks
+  "U" 'ibuffer-unmark-all
   "r" (conn-remap-key "%")
   "," (conn-remap-key "*")
   "l" 'ibuffer-forward-filter-group
