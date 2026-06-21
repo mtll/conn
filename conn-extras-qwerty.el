@@ -105,14 +105,14 @@
   "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
-  "A" 'execute-extended-command-for-buffer
-  ;; "A" 'dired-find-alternate-file
-  "D" 'dired-do-flagged-delete
+  ;; "A" 'execute-extended-command-for-buffer
+  "A" 'dired-find-alternate-file
+  "d" 'dired-do-delete
   "b" 'dired-up-directory
   "k" 'dired-next-line
   "i" 'dired-previous-line
   "/" 'dired-undo
-  "I" 'dired-tree-up
+  "u" 'dired-tree-up
   "l" 'dired-next-dirline
   "j" 'dired-prev-dirline
   "m" 'dired-next-subdir
@@ -142,7 +142,6 @@
   "C-d" 'dired-unmark
   "M-DEL" 'dired-unmark-all-marks
   "C-M-<backspace>" 'dired-unmark-all-files
-  "u" 'dired-do-delete
   "M-w" 'dired-copy-filename-as-kill
   "RET" 'dired-find-file
   "o" 'dired-find-file-other-window
@@ -217,6 +216,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
+  "d" 'ibuffer-do-delete
   "C-M-<backspace>" 'ibuffer-unmark-all
   "M-DEL" 'ibuffer-unmark-all-marks
   "f" 'conn-ibuffer-dispatch-state
@@ -237,7 +237,6 @@
   "k" 'ibuffer-forward-line
   "i" 'ibuffer-backward-line
   "h" 'ibuffer-do-kill-lines
-  "u" 'ibuffer-do-kill-on-deletion-marks
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t)
   "s" conn-search-remap
@@ -258,7 +257,6 @@
   "v" 'ibuffer-mark-forward
   "V" 'ibuffer-toggle-marks
   "C-d" 'ibuffer-unmark-forward
-  "D" 'ibuffer-mark-for-delete-backwards
   "o" 'ibuffer-visit-buffer-other-window
   "RET" 'ibuffer-visit-buffer
   "S-<return>" 'ibuffer-do-view)
@@ -322,6 +320,7 @@
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'beginning-of-buffer
+  "c" (conn-remap-key "C-c" t)
   "e" 'end-of-buffer
   "j" 'backward-button
   "l" 'forward-button
@@ -337,6 +336,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'Info-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward
@@ -364,6 +364,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'treemacs-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -379,6 +380,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'messages-buffer-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -396,6 +398,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'debugger-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -413,6 +416,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'occur-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -428,6 +432,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'compilation-mode)
+  "c" (conn-remap-key "C-c" t)
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
