@@ -463,7 +463,7 @@
 
 (defvar conn-quick-reference-buffer-display-action
   '(display-buffer-in-side-window
-    (dedicated t)
+    (dedicated . t)
     (side . bottom)
     (inhibit-same-window . t))
   "Display action for quick reference buffers.")

@@ -377,8 +377,9 @@ returned."
      label)))
 
 (cl-defmethod conn-label-completed-p ((label conn-window-label))
-  (string-empty-p (window-parameter (conn-window-label-window label)
-                                    'conn-label-string)))
+  (string-empty-p
+   (window-parameter (conn-window-label-window label)
+                     'conn-label-string)))
 
 (defun conn-label-select (candidates &optional prompt always-prompt)
   "Select a label from CANDIDATES.
