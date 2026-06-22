@@ -492,7 +492,7 @@
    (substitute-command-keys
     (concat
      "Adjusting: Press \\[conn-pop-state] to finish, "
-     "\\[conn-change-thing] to change surround"))))
+     "\\[conn-replace] to change surround"))))
 
 (define-minor-mode conn-adjust-surround-mode
   "Mode for adjusting surround."
@@ -679,7 +679,7 @@
             with arg)
         (conn-with-overriding-map
             (define-keymap
-              "<remap> <conn-change-thing>"
+              "<remap> <conn-replace>"
               (lambda ()
                 (interactive)
                 (conn-read-args (conn-surround-with-state
@@ -729,11 +729,14 @@
          (let ((cleanup (plist-get prep-keys :cleanup))
                (success nil))
            (unwind-protect
-               (apply #'conn--adjust-surround-subr
-                      `(,at-end
-                        :regions ,(list ov)
-                        :trim ,trim
-                        ,@prep-keys))
+               (progn
+                 (goto-char (overlay-start ov))
+                 (push-mark (overlay-end ov))
+                 (apply #'conn--adjust-surround-subr
+                        `(,at-end
+                          :regions ,(list ov)
+                          :trim ,trim
+                          ,@prep-keys)))
              (deactivate-mark)
              (delete-overlay ov)
              (when cleanup
@@ -744,12 +747,12 @@
   (interactive)
   (conn-read-args (conn-adjust-surround-state
                    :prompt "Adjust Surrounding")
-      ((`(,thing ,arg) (conn-change-surround-argument))
-       (transform (conn-transform-argument))
-       (at-end (conn-boolean-argument "At End"
+      ((at-end (conn-boolean-argument "At End"
                                       'other-end
                                       conn-other-end-argument-map
                                       :value t))
+       (`(,thing ,arg) (conn-change-surround-argument))
+       (transform (conn-transform-argument))
        (trim (conn-read-argument
               "trim whitespace"
               'trim

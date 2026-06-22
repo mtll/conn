@@ -2884,7 +2884,7 @@ the meaning of depth."
               (when conn--read-args-error-message
                 (concat " " (propertize conn--read-args-error-message
                                         'face 'error)))))
-    (message "%s")))
+    (:> (message "%s"))))
 
 (defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
   (condition-case _
@@ -3476,15 +3476,26 @@ buffer."
 
 ;;;;;; Target Finder API
 
-(cl-defgeneric conn-get-target-finder (cmd arg transform)
+(cl-defgeneric conn-get-target-finder (thing arg transform)
+  "Construct a target finder for THING, ARG and TRANSFORM."
   (declare (conn-anonymous-thing-property :target-finder)))
 
-(cl-defgeneric conn-target-finder-clear (target-finder))
+(cl-defgeneric conn-target-finder-clear (target-finder)
+  "Clear the target state for TARGET-FINDER.
+This function removes all target overlays if all buffers.  Methods may
+be added if a target finder creates any additional state that needs to
+be cleaned up.")
 
 (cl-defgeneric conn-target-finder-select (target-finder)
+  "Select a target created by TARGET-FINDER."
   (declare (important-return-value t)))
 
 (cl-defgeneric conn-target-finder-shelve (target-finder)
+  "Shelve TARGET-FINDER so that it can be stored in `conn-dispatch-ring'.
+
+The return value of this function will be stored as the target finder
+for the dispatch being stored in `conn-dispatch-ring' and passed to
+`conn-target-finder-setup' when resuming the dispatch."
   (declare (important-return-value t)))
 
 (cl-defgeneric conn-target-finder-setup (target-finder))
