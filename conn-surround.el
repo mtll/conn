@@ -123,11 +123,11 @@
 
 (define-conn-argument-command ((arg conn-surround-property-argument)
                                (cmd (eql :whole)))
-                              "The whole region.")
+  "The whole region.")
 
 (define-conn-argument-command ((arg conn-surround-property-argument)
                                (cmd (eql :inner)))
-                              "The inner region.")
+  "The inner region.")
 
 (cl-defmethod conn-argument-update ((arg conn-surround-property-argument)
                                     cmd

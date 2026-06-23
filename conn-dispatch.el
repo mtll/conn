@@ -704,6 +704,12 @@ for dispatch."
                                                 docstring
                                                 &rest
                                                 body)
+  "Define a command for a dispatch handler argument.
+
+This is identical to `define-conn-argument-command' except that within
+the :update method the macro (:return &optional VALUE) is locally
+defined which throws with VALUE to the `conn-with-dispatch-handlers'
+form that bound the handler."
   (declare (indent 1))
   (pcase argument-and-command
     (`((,handler ,_spec) ,_cmd)

@@ -609,6 +609,9 @@ error."
     (conn-argument--value arg)))
 
 (cl-defgeneric conn-argument-required-p (argument)
+  "Return non-nil if argument is required.
+
+`conn-read-args' finishes when all required arguments have read a value."
   (declare (important-return-value t))
   ( :method (_arg) nil)
   ( :method ((arg conn-argument))
@@ -622,7 +625,7 @@ update methods being called with COMMAND."
   ( :method (_arg _cmd _break) nil))
 
 (cl-defgeneric conn-argument-display (argument)
-  "Display string in `conn-read-args-message' for ARGUMENT.
+  "Return ARGUMENT\\='s display string for `conn-read-args-message'.
 
 Return value should be a string or a list of strings, each of which will
 be displayed in the echo area during `conn-read-args'."
@@ -645,24 +648,33 @@ be displayed in the echo area during `conn-read-args'."
   (declare (important-return-value t))
   ( :method (_arg _cmd) nil))
 
-(cl-defgeneric conn-argument-annotation (argument value)
+(cl-defgeneric conn-argument-annotation (argument command)
+  "Return ARGUMENT\\='s completion annotation string for COMMAND.
+
+The annotation string will be displayed when doing completion is
+performed on available commands during `conn-read-args'."
   (declare (important-return-value t))
   (:method (&rest _) nil)
-  ( :method ((arg conn-argument) value)
+  ( :method ((arg conn-argument) command)
     (and-let* ((ann (conn-argument--annotation arg))
-               (_ (conn-argument-predicate arg value)))
+               (_ (conn-argument-predicate arg command)))
       (cl-typecase ann
         (string (concat " (" ann ")"))
         (function (and-let* ((str (funcall ann arg)))
                     (concat " (" str ")")))))))
 
-(cl-defgeneric conn-argument-command-reference (arg command break)
+(cl-defgeneric conn-argument-command-reference (argument command break)
+  "BREAK and return COMMAND reference for ARGUMENT.
+
+BREAK is a function of one argument, a reference, and should be
+funcalled to return ARGUMENT\\='s reference for COMMAND."
   (declare (important-return-value t))
   (:method (_arg _cmd _break) nil))
 
-(cl-defgeneric conn-argument-reference (arg)
+(cl-defgeneric conn-argument-reference (argument)
+  "Return the reference for ARGUMENT."
   (declare (important-return-value t))
-  (:method (_arg) nil))
+  (:method (_argument) nil))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-argument)
                                                cmd
@@ -690,46 +702,66 @@ be displayed in the echo area during `conn-read-args'."
 
   (defun define--conn-argument-command (argument-and-command
                                         docstring
-                                        body)
-    (unless (assq :predicate body)
-      (setf (alist-get :predicate body)
-            `(() t)))
-    (cond ((stringp docstring)
-           (setf (alist-get :reference body)
-                 `((break)
-                   (funcall break
-                            (conn-reference-page
-                              (:eval (substitute-command-keys ,docstring)))))))
-          ((eq :reference (car-safe docstring))
-           (push docstring body)))
-    (macroexpand-all
-     `(progn ,@body)
-     `((:update . ,(lambda (&rest body)
-                     (conn--argument-expand-method
-                      'conn-argument-update
-                      argument-and-command
-                      body)))
-       (:reference . ,(lambda (&rest body)
-                        (conn--argument-expand-method
-                         'conn-argument-command-reference
-                         argument-and-command
-                         body)))
-       (:annotation . ,(lambda (&rest body)
-                         (conn--argument-expand-method
-                          'conn-argument-annotation
-                          argument-and-command
-                          body)))
-       (:predicate . ,(lambda (&rest body)
-                        (conn--argument-expand-method
-                         'conn-argument-predicate
-                         argument-and-command
-                         body)))
-       ,@macroexpand-all-environment))))
+                                        methods)
+    (unless (assq :predicate methods)
+      (push `(:predicate () t) methods))
+    (let ((defs nil))
+      (push (conn--argument-expand-method
+             'conn-argument-command-reference
+             argument-and-command
+             (cond ((stringp docstring)
+                    `((break)
+                      (funcall break
+                               (conn-reference-page
+                                 (:eval (substitute-command-keys ,docstring))))))
+                   ((eq :reference (car-safe docstring))
+                    (cdr docstring))))
+            defs)
+      (dolist (form methods)
+        (pcase form
+          (`(:update . ,body)
+           (push (conn--argument-expand-method 'conn-argument-update
+                                               argument-and-command
+                                               body)
+                 defs))
+          (`(:annotation . ,body)
+           (push (conn--argument-expand-method 'conn-argument-annotation
+                                               argument-and-command
+                                               body)
+                 defs))
+          (`(:predicate . ,body)
+           (push (conn--argument-expand-method 'conn-argument-predicate
+                                               argument-and-command
+                                               body)
+                 defs))
+          (_ (error "Malformed argument method definition."))))
+      `(progn ,@defs))))
 
 (defmacro define-conn-argument-command (argument-and-command
                                         docstring
                                         &rest
                                         body)
+  "Define a command for an argument according to ARGUMENT-AND-COMMAND.
+
+ARGUMENT-AND-COMMAND should be a list of dispatch arguments
+(see also `cl-defmethod') of the form
+(ARGUMENT-SPECIALIZER COMMAND-SPECIALIZER) where each specializer will
+be used when defining methods for `conn-read-args' generic functions.
+
+DOCSTRING should be either a string or a method definition for
+`conn-argument-reference' of the form
+(:reference (BREAK) &rest BODY).
+
+BODY should be a list of method definitions of the forms:
+
+- (:update (BREAK) &rest BODY) Define a `conn-argument-update' method.
+
+- (:predicate () &rest BODY) Define a `conn-argument-predicate'
+method.  If a :predicate method is not defined in BODY a default method
+is defined which returns t.
+
+- (:annotation () &rest BODY) Define a `conn-argument-annotation'
+method."
   (declare (indent 1))
   (pcase argument-and-command
     (`((,_handler ,_spec) ,_cmd))
