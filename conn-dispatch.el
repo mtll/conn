@@ -707,9 +707,9 @@ for dispatch."
   "Define a command for a dispatch handler argument.
 
 This is identical to `define-conn-argument-command' except that within
-the :update method the macro (:return &optional VALUE) is locally
-defined which throws with VALUE to the `conn-with-dispatch-handlers'
-form that bound the handler."
+the :update method the macro (:return &optional VALUE) is defined
+locally and throws VALUE to the `conn-with-dispatch-handlers' form that
+bound the handler."
   (declare (indent 1))
   (pcase argument-and-command
     (`((,handler ,_spec) ,_cmd)
@@ -734,7 +734,8 @@ form that bound the handler."
       "DEL" 'restart
       "<backspace>" 'restart
       "<escape>" 'finish
-      "C-q" 'quoted-insert)))
+      "C-q" 'quoted-insert))
+  "Keymap for `conn-dispatch-char-argument' in `conn-read-args'.")
 
 (cl-defstruct (conn-dispatch-char-argument
                (:include conn-argument)

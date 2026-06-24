@@ -29,17 +29,17 @@
   (set-marker conn-this-command-start (point) (current-buffer)))
 
 (defun conn--jump-post-command-hook ()
-  (when-let* ((handler (and (symbolp this-command)
+  (when-let* ((handler (and (markerp conn-this-command-start)
+                            (marker-position conn-this-command-start)
+                            (eq (marker-buffer conn-this-command-start)
+                                (current-buffer))
+                            (/= (point) conn-this-command-start)
+                            (symbolp this-command)
                             (get this-command :conn-jump-command))))
-    (when (and (markerp conn-this-command-start)
-               (marker-position conn-this-command-start)
-               (eq (marker-buffer conn-this-command-start)
-                   (current-buffer))
-               (/= (point) conn-this-command-start))
-      (if (eq t handler)
-          (conn-push-jump-ring conn-this-command-start)
-        (ignore-errors
-          (funcall handler (marker-position conn-this-command-start)))))))
+    (if (eq t handler)
+        (conn-push-jump-ring conn-this-command-start)
+      (ignore-errors
+        (funcall handler (marker-position conn-this-command-start))))))
 
 ;;;###autoload
 (defun conn-set-jump-command (command &optional handler)
@@ -113,19 +113,18 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
             (conn-make-ring 40
                             :cleanup (lambda (mk) (set-marker mk nil))
                             :copier #'conn--copy-mark)))
-    (pcase-let ((ptb (conn-ring-tail conn-jump-ring))
-                (ptf (conn-ring-head conn-jump-ring)))
-      (cond
-       ((and ptf (= location ptf))
-        (when back (conn-ring-rotate-forward conn-jump-ring)))
-       ((and ptb (= location ptb))
-        (unless back (conn-ring-rotate-backward conn-jump-ring)))
-       (t
-        (if back
-            (conn-ring-insert-back conn-jump-ring
-                                   (conn--create-marker location))
-          (conn-ring-insert-front conn-jump-ring
-                                  (conn--create-marker location))))))
+    (cond ((and-let* ((ptf (conn-ring-head conn-jump-ring)))
+             (= location ptf))
+           (when back (conn-ring-rotate-forward conn-jump-ring)))
+          ((and-let* ((ptb (conn-ring-tail conn-jump-ring)))
+             (= location ptb))
+           (unless back (conn-ring-rotate-backward conn-jump-ring)))
+          (t
+           (if back
+               (conn-ring-insert-back conn-jump-ring
+                                      (conn--create-marker location))
+             (conn-ring-insert-front conn-jump-ring
+                                     (conn--create-marker location)))))
     (run-hook-wrapped 'conn-push-jump-functions
                       (lambda (fn location back)
                         (ignore-errors
