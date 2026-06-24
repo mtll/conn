@@ -338,7 +338,7 @@
         (conn-with-overriding-map conn-quick-ref-map
           (cl-loop
            (let ((keys (let ((inhibit-quit t))
-                         (read-key-sequence nil))))
+                         (read-key-sequence nil nil nil t t))))
              (when (eql (aref keys 0) (car (last (current-input-mode))))
                (signal 'quit nil))
              (pcase (key-binding keys 'accept-default)

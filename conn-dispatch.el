@@ -2894,6 +2894,12 @@ the meaning of depth."
     (:> (message "%s"))))
 
 (defun conn--dispatch-read-char-1 (&optional use-input-method seconds)
+  (when (and use-input-method
+             (stringp input-method-previous-message)
+             (not (eql (aref input-method-previous-message
+                             (1- (length input-method-previous-message)))
+                       ?\n)))
+    (cl-callf concat input-method-previous-message "\n"))
   (condition-case _
       (with-current-buffer conn-dispatch-input-buffer
         (pcase use-input-method
@@ -3941,7 +3947,8 @@ to the key binding for that target."
     (unless (oref state string)
       (catch 'string-read
         (let ((timeout (oref state timeout))
-              (prompt (propertize "String" 'face 'minibuffer-prompt)))
+              (prompt (propertize "String" 'face 'minibuffer-prompt))
+              (init-char nil))
           (conn-with-dispatch-handlers
             (:handler
              (:keymap conn-dispatch-read-string-target-keymap)
@@ -3962,11 +3969,12 @@ to the key binding for that target."
                               'conn-read-string-target-history
                               nil t))))))
                  (unless (equal newstr "")
-                   (setf (oref state string) newstr
-                         (oref state prompt) newstr)
+                   (setf (oref state string) newstr)
                    (throw 'string-read nil)))))
-            (setf (oref state string)
-                  (char-to-string (conn-dispatch-read-char prompt t))))
+            (setf init-char (conn-dispatch-read-char prompt)))
+          (conn-add-unread-events init-char)
+          (setf input-method-previous-message (concat prompt ":\n")
+                (oref state string) (char-to-string (read-char nil t)))
           (while-no-input
             (conn-dispatch-call-update-handlers state))
           (while-let ((next-char (conn-dispatch-read-char
@@ -3975,8 +3983,7 @@ to the key binding for that target."
             (conn-clear-targets)
             (cl-callf concat (oref state string)
               (char-to-string next-char))
-            (conn-dispatch-call-update-handlers state))
-          (setf (oref state prompt) (oref state string))))
+            (conn-dispatch-call-update-handlers state))))
       (conn-clear-targets))
     (conn-dispatch-call-update-handlers state 0)))
 

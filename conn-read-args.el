@@ -249,7 +249,7 @@ The duration of the message display is controlled by
 (defun conn--read-args-describe-key (arguments message-function)
   (funcall message-function "Key Sequence...")
   (let ((cmd (key-binding (let ((inhibit-quit t))
-                            (read-key-sequence nil))
+                            (read-key-sequence nil nil nil t t))
                           'accept-default)))
     (if (arrayp cmd)
         (conn-quick-reference
@@ -392,7 +392,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                 (cl-loop
                  repeat 10 do
                  (setf keyseq (let ((inhibit-quit t))
-                                (read-key-sequence nil))
+                                (read-key-sequence nil nil nil t t))
                        cmd (key-binding keyseq 'accept-default))
                  (if (arrayp cmd)
                      (conn-add-unread-events cmd)
