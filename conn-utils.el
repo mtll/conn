@@ -155,7 +155,6 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
 (defun conn-command-property--cmacro (exp propname &optional rtc no-alias)
-  "Return the value of the current commands PROPNAME property."
   (if (not (macroexp-const-p no-alias))
       exp
     (cl-flet ((getter (sym prop)
@@ -174,6 +173,12 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
              (getter 'this-command propname))))))
 
 (defun conn-command-property (propname &optional rtc no-alias)
+  "Return the value of `this-command'\\='s PROPNAME symbol property.
+
+If RTC is non-nil then also check `real-this-command' for PROPNAME if
+`this-command'\\='s PROPNAME symbol property is absent or nil.
+
+If NO-ALIAS is non-nil then do not check function aliases."
   (declare (side-effect-free t)
            (important-return-value t)
            (compiler-macro conn-command-property--cmacro))
