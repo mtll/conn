@@ -103,6 +103,8 @@
   "<conn-dired-search-map> c" 'dired-do-isearch-regexp
   "<conn-dired-search-map> q" 'dired-do-find-regexp
   "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace
+  "p" 'conn-other-window-prefix
+  "P" 'conn-other-place-prefix
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   ;; "A" 'execute-extended-command-for-buffer
@@ -218,6 +220,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'ibuffer-mode)
+  "p" 'conn-other-window-prefix
+  "P" 'conn-other-place-prefix
   "d" 'ibuffer-do-delete
   "C-M-<backspace>" 'ibuffer-unmark-all
   "M-DEL" 'ibuffer-unmark-all-marks

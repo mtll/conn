@@ -34,8 +34,7 @@
                             (eq (marker-buffer conn-this-command-start)
                                 (current-buffer))
                             (/= (point) conn-this-command-start)
-                            (symbolp this-command)
-                            (get this-command :conn-jump-command))))
+                            (conn-command-property :conn-jump-command nil t))))
     (if (eq t handler)
         (conn-push-jump-ring conn-this-command-start)
       (ignore-errors

@@ -30,24 +30,21 @@
 
 (eval-and-compile
   (defun conn--protected-let* (varlist body)
-    (if (cl-loop for b in varlist
-                 never (cdr (cdr-safe b)))
-        `(let* ,varlist ,@body)
-      (cl-with-gensyms (success)
-        (named-let protect ((binding (car (last varlist)))
-                            (rest (reverse (cons success (butlast varlist))))
-                            (body `(prog1 ,(macroexp-progn body)
-                                     (setf ,success t))))
-          (pcase binding
-            ('nil body)
-            (`(,var ,val ,cleanup)
-             (protect (car rest) (cdr rest)
-                      `(let* ((,var ,val))
-                         (unwind-protect
-                             ,body
-                           (unless ,success ,cleanup)))))
-            (_ (protect (car rest) (cdr rest)
-                        (macroexp-let* (list binding) body)))))))))
+    (cl-with-gensyms (success)
+      (named-let protect ((binding (car (last varlist)))
+                          (rest (reverse (cons success (butlast varlist))))
+                          (body `(prog1 ,(macroexp-progn body)
+                                   (setf ,success t))))
+        (pcase binding
+          ('nil body)
+          (`(,var ,val ,cleanup)
+           (protect (car rest) (cdr rest)
+                    `(let* ((,var ,val))
+                       (unwind-protect
+                           ,body
+                         (unless ,success ,cleanup)))))
+          (_ (protect (car rest) (cdr rest)
+                      (macroexp-let* (list binding) body))))))))
 
 (defmacro conn-protected-let* (varlist &rest body)
   "Bind variables according to VARLIST then eval body as in `let*'.
@@ -157,13 +154,102 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
         (let* ((rargs (nconc (list a1 getter) args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
-;; From repeat-mode
-(defun conn--command-property (propname)
+(defun conn-command-property--cmacro (exp propname &optional rtc inherit)
   "Return the value of the current commands PROPNAME property."
-  (or (and (symbolp this-command)
-           (get this-command propname))
-      (and (symbolp real-this-command)
-           (get real-this-command propname))))
+  (if (and (not (macroexp-const-p rtc))
+           (not (macroexp-const-p inherit)))
+      exp
+    (let* ((fg '(lambda (sym prop)
+                  (and (symbolp sym)
+                       (function-get sym prop))))
+           (g '(lambda (sym prop)
+                 (and (symbolp sym)
+                      (get sym prop))))
+           (getter (cond ((not (macroexp-const-p inherit))
+                          `(if ,inherit ,g ,fg))
+                         (inherit fg)
+                         (t g)))
+           (get (gensym "get")))
+      `(let ((,get ,getter))
+         ,(cond ((not (macroexp-const-p rtc))
+                 (macroexp-let2 nil propname propname
+                   `(or (funcall ,get this-command ,propname)
+                        (and ,rtc
+                             (funcall ,get real-this-command ,propname)))))
+                (rtc
+                 (macroexp-let2 nil propname propname
+                   `(or (funcall ,get this-command ,propname)
+                        (funcall ,get real-this-command ,propname))))
+                (t
+                 `(funcall ,get this-command ,propname)))))))
+
+(defun conn-command-property (propname &optional rtc inherit)
+  (declare (side-effect-free t)
+           (important-return-value t)
+           (compiler-macro conn-command-property--cmacro))
+  (if inherit
+      (or (and (symbolp this-command)
+               (function-get this-command propname))
+          (and rtc
+               (symbolp this-command)
+               (function-get real-this-command propname)))
+    (or (and (symbolp this-command)
+             (get this-command propname))
+        (and rtc
+             (symbolp this-command)
+             (get real-this-command propname)))))
+
+(defun conn-command-memq--cmacro (exp list &optional rtc inherit)
+  (if (and (not (macroexp-const-p rtc))
+           (not (macroexp-const-p inherit)))
+      exp
+    (let* ((fg '(lambda (f list)
+                  (catch 'return
+                    (while (and (symbolp f) (fboundp f))
+                      (and-let* ((ret (memq f list)))
+                        (throw 'return ret))
+                      (setf f (symbol-function f))))))
+           (g '(lambda (f list)
+                 (and (symbolp f) (memq f list))))
+           (memberp (cond ((not (macroexp-const-p inherit))
+                           `(if ,inherit ,fg ,g))
+                          (inherit fg)
+                          (t g)))
+           (mem (gensym "memq")))
+      `(let ((,mem ,memberp))
+         ,(cond ((not (macroexp-const-p rtc))
+                 (macroexp-let2 nil list list
+                   `(or (funcall ,mem this-command ,list)
+                        (and ,rtc (funcall ,mem real-this-command ,list)))))
+                (rtc
+                 (macroexp-let2 nil list list
+                   `(or (funcall ,mem this-command ,list)
+                        (funcall ,mem real-this-command ,list))))
+                (t
+                 `(funcall ,mem this-command ,list)))))))
+
+(defun conn-command-memq (list &optional rtc inherit)
+  (declare (side-effect-free t)
+           (important-return-value t)
+           (compiler-macro conn-command-memq--cmacro))
+  (if inherit
+      (catch 'return
+        (let ((f this-command))
+          (while (and (symbolp f) (fboundp f))
+            (and-let* ((ret (memq f list)))
+              (throw 'return ret))
+            (setf f (symbol-function f))))
+        (when rtc
+          (let ((f real-this-command))
+            (while f
+              (and-let* ((ret (memq f list)))
+                (throw 'return ret))
+              (setf f (symbol-function f))))))
+    (or (and (symbolp this-command)
+             (memq this-command list))
+        (and rtc
+             (symbolp real-this-command)
+             (memq real-this-command list)))))
 
 ;; We need string-pixel-width from emacs 31 since it accounts for face
 ;; remapping

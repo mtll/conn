@@ -143,7 +143,7 @@
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
     (setf prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (if this-command
-      (when (function-get this-command :conn-wincontrol-preserve-arg)
+      (when (conn-command-property :conn-wincontrol-preserve-arg nil t)
         (setf conn--wincontrol-preserve-arg t))
     (setf conn--wincontrol-preserve-arg t)))
 
@@ -230,7 +230,7 @@
         'conn-wincontrol-quick-ref))
 
 (defun conn-wincontrol-one-command-stay-p ()
-  (memq this-command conn-wincontrol-one-command-stay-command))
+  (conn-command-memq conn-wincontrol-one-command-stay-command nil t))
 
 (defun conn--wincontrol-one-command-hook ()
   (when (and conn-wincontrol-one-command
