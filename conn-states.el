@@ -1415,22 +1415,22 @@ entered.  If the predicate is not satisfied then the state is popped.")
 (defvar-local conn-emacs-state-ring nil
   "Ring of previous positions where `conn-emacs-state' was exited.")
 
-(defvar conn-emacs-state-preserve-prefix-commands
-  '(conn-pop-state
-    conn-emacs-state-at-mark
-    conn-emacs-state
-    conn-one-emacs-state))
+(dolist (cmd '(conn-pop-state
+               conn-emacs-state-at-mark
+               conn-emacs-state
+               conn-one-emacs-state))
+  (function-put cmd :conn-emacs-state-preserve-arg t))
 
 (cl-defmethod conn-enter-state ((_state (eql conn-emacs-state))
                                 _transition)
-  (when (conn-command-memq conn-emacs-state-preserve-prefix-commands nil t)
+  (when (conn-command-property :conn-emacs-state-preserve-arg)
     (run-hooks 'prefix-command-preserve-state-hook)
     (prefix-command-update))
   (cl-call-next-method))
 
 (cl-defmethod conn-enter-state ((_state (eql conn-one-emacs-state))
                                 _transition)
-  (when (conn-command-memq conn-emacs-state-preserve-prefix-commands nil t)
+  (when (conn-command-property :conn-emacs-state-preserve-arg)
     (run-hooks 'prefix-command-preserve-state-hook)
     (prefix-command-update))
   (cl-call-next-method))

@@ -154,13 +154,13 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
         (let* ((rargs (nconc (list a1 getter) args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
-(defun conn-command-property--cmacro (exp propname &optional rtc inherit)
+(defun conn-command-property--cmacro (exp propname &optional rtc no-alias)
   "Return the value of the current commands PROPNAME property."
-  (if (not (macroexp-const-p inherit))
+  (if (not (macroexp-const-p no-alias))
       exp
     (cl-flet ((getter (sym prop)
                 `(and (symbolp ,sym)
-                      (,(if inherit 'function-get 'get) ,sym ,prop))))
+                      (,(if no-alias 'get 'function-get) ,sym ,prop))))
       (cond ((not (macroexp-const-p rtc))
              (macroexp-let2 nil propname propname
                `(or ,(getter 'this-command propname)
@@ -173,68 +173,21 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
             (t
              (getter 'this-command propname))))))
 
-(defun conn-command-property (propname &optional rtc inherit)
+(defun conn-command-property (propname &optional rtc no-alias)
   (declare (side-effect-free t)
            (important-return-value t)
            (compiler-macro conn-command-property--cmacro))
-  (if inherit
+  (if no-alias
       (or (and (symbolp this-command)
-               (function-get this-command propname))
+               (get this-command propname))
           (and rtc
                (symbolp this-command)
-               (function-get real-this-command propname)))
+               (get real-this-command propname)))
     (or (and (symbolp this-command)
-             (get this-command propname))
+             (function-get this-command propname))
         (and rtc
              (symbolp this-command)
-             (get real-this-command propname)))))
-
-(defun conn-command-memq--cmacro (exp list &optional rtc inherit)
-  (if (not (macroexp-const-p inherit))
-      exp
-    (cl-flet ((memberp (f list)
-                (if inherit
-                    `(let ((f ,f))
-                       (catch 'return
-                         (while (and (symbolp f) (fboundp f))
-                           (and-let* ((ret (memq f ,list)))
-                             (throw 'return ret))
-                           (setf f (symbol-function f)))))
-                  `(and (symbolp ,f) (memq ,f ,list)))))
-      (cond ((not (macroexp-const-p rtc))
-             (macroexp-let2 nil list list
-               `(or ,(memberp 'this-command list)
-                    (and ,rtc
-                         ,(memberp 'real-this-command list)))))
-            (rtc
-             (macroexp-let2 nil list list
-               `(or ,(memberp 'this-command list)
-                    ,(memberp 'real-this-command list))))
-            (t
-             (memberp 'this-command list))))))
-
-(defun conn-command-memq (list &optional rtc inherit)
-  (declare (side-effect-free t)
-           (important-return-value t)
-           (compiler-macro conn-command-memq--cmacro))
-  (if inherit
-      (catch 'return
-        (let ((f this-command))
-          (while (and (symbolp f) (fboundp f))
-            (and-let* ((ret (memq f list)))
-              (throw 'return ret))
-            (setf f (symbol-function f))))
-        (when rtc
-          (let ((f real-this-command))
-            (while f
-              (and-let* ((ret (memq f list)))
-                (throw 'return ret))
-              (setf f (symbol-function f))))))
-    (or (and (symbolp this-command)
-             (memq this-command list))
-        (and rtc
-             (symbolp real-this-command)
-             (memq real-this-command list)))))
+             (function-get real-this-command propname)))))
 
 ;; We need string-pixel-width from emacs 31 since it accounts for face
 ;; remapping

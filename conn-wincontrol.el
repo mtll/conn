@@ -143,7 +143,7 @@
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
     (setf prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (if this-command
-      (when (conn-command-property :conn-wincontrol-preserve-arg nil t)
+      (when (conn-command-property :conn-wincontrol-preserve-arg)
         (setf conn--wincontrol-preserve-arg t))
     (setf conn--wincontrol-preserve-arg t)))
 
@@ -221,20 +221,17 @@
               conn-wincontrol-one-command nil)
   (add-hook 'minibuffer-exit-hook #'conn--wincontrol-minibuffer-exit))
 
-(defvar conn-wincontrol-one-command-stay-command
-  (list 'conn-wincontrol-backward-delete-arg
-        'conn-wincontrol-digit-argument-reset
-        'conn-wincontrol-invert-argument
-        'conn-wincontrol-digit-argument
-        'conn-wincontrol-universal-arg
-        'conn-wincontrol-quick-ref))
-
-(defun conn-wincontrol-one-command-stay-p ()
-  (conn-command-memq conn-wincontrol-one-command-stay-command nil t))
+(dolist (cmd '(conn-wincontrol-backward-delete-arg
+               conn-wincontrol-digit-argument-reset
+               conn-wincontrol-invert-argument
+               conn-wincontrol-digit-argument
+               conn-wincontrol-universal-arg
+               conn-wincontrol-quick-ref))
+  (function-put cmd :conn-wincontrol-one-command-stay t))
 
 (defun conn--wincontrol-one-command-hook ()
   (when (and conn-wincontrol-one-command
-             (not (conn-wincontrol-one-command-stay-p)))
+             (not (conn-command-property :conn-wincontrol-one-command-stay)))
     (remove-hook 'pre-command-hook #'conn--wincontrol-one-command-hook)
     (conn-wincontrol-exit)))
 
