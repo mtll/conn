@@ -156,32 +156,22 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
 
 (defun conn-command-property--cmacro (exp propname &optional rtc inherit)
   "Return the value of the current commands PROPNAME property."
-  (if (and (not (macroexp-const-p rtc))
-           (not (macroexp-const-p inherit)))
+  (if (not (macroexp-const-p inherit))
       exp
-    (let* ((fg '(lambda (sym prop)
-                  (and (symbolp sym)
-                       (function-get sym prop))))
-           (g '(lambda (sym prop)
-                 (and (symbolp sym)
-                      (get sym prop))))
-           (getter (cond ((not (macroexp-const-p inherit))
-                          `(if ,inherit ,g ,fg))
-                         (inherit fg)
-                         (t g)))
-           (get (gensym "get")))
-      `(let ((,get ,getter))
-         ,(cond ((not (macroexp-const-p rtc))
-                 (macroexp-let2 nil propname propname
-                   `(or (funcall ,get this-command ,propname)
-                        (and ,rtc
-                             (funcall ,get real-this-command ,propname)))))
-                (rtc
-                 (macroexp-let2 nil propname propname
-                   `(or (funcall ,get this-command ,propname)
-                        (funcall ,get real-this-command ,propname))))
-                (t
-                 `(funcall ,get this-command ,propname)))))))
+    (cl-flet ((getter (sym prop)
+                `(and (symbolp ,sym)
+                      (,(if inherit 'function-get 'get) ,sym ,prop))))
+      (cond ((not (macroexp-const-p rtc))
+             (macroexp-let2 nil propname propname
+               `(or ,(getter 'this-command propname)
+                    (and ,rtc
+                         ,(getter 'real-this-command propname)))))
+            (rtc
+             (macroexp-let2 nil propname propname
+               `(or ,(getter 'this-command propname)
+                    ,(getter 'real-this-command propname))))
+            (t
+             (getter 'this-command propname))))))
 
 (defun conn-command-property (propname &optional rtc inherit)
   (declare (side-effect-free t)
@@ -200,33 +190,28 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
              (get real-this-command propname)))))
 
 (defun conn-command-memq--cmacro (exp list &optional rtc inherit)
-  (if (and (not (macroexp-const-p rtc))
-           (not (macroexp-const-p inherit)))
+  (if (not (macroexp-const-p inherit))
       exp
-    (let* ((fg '(lambda (f list)
-                  (catch 'return
-                    (while (and (symbolp f) (fboundp f))
-                      (and-let* ((ret (memq f list)))
-                        (throw 'return ret))
-                      (setf f (symbol-function f))))))
-           (g '(lambda (f list)
-                 (and (symbolp f) (memq f list))))
-           (memberp (cond ((not (macroexp-const-p inherit))
-                           `(if ,inherit ,fg ,g))
-                          (inherit fg)
-                          (t g)))
-           (mem (gensym "memq")))
-      `(let ((,mem ,memberp))
-         ,(cond ((not (macroexp-const-p rtc))
-                 (macroexp-let2 nil list list
-                   `(or (funcall ,mem this-command ,list)
-                        (and ,rtc (funcall ,mem real-this-command ,list)))))
-                (rtc
-                 (macroexp-let2 nil list list
-                   `(or (funcall ,mem this-command ,list)
-                        (funcall ,mem real-this-command ,list))))
-                (t
-                 `(funcall ,mem this-command ,list)))))))
+    (cl-flet ((memberp (f list)
+                (if inherit
+                    `(let ((f ,f))
+                       (catch 'return
+                         (while (and (symbolp f) (fboundp f))
+                           (and-let* ((ret (memq f ,list)))
+                             (throw 'return ret))
+                           (setf f (symbol-function f)))))
+                  `(and (symbolp ,f) (memq ,f ,list)))))
+      (cond ((not (macroexp-const-p rtc))
+             (macroexp-let2 nil list list
+               `(or ,(memberp 'this-command list)
+                    (and ,rtc
+                         ,(memberp 'real-this-command list)))))
+            (rtc
+             (macroexp-let2 nil list list
+               `(or ,(memberp 'this-command list)
+                    ,(memberp 'real-this-command list))))
+            (t
+             (memberp 'this-command list))))))
 
 (defun conn-command-memq (list &optional rtc inherit)
   (declare (side-effect-free t)

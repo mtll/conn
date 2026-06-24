@@ -1153,7 +1153,8 @@ When kapply finishes restore the restrictions in each buffer."
    :around (var iterator)
    (let (prev)
      (lambda (iterator state)
-       (when prev (conn-exit-recursive-stack prev))
+       (when prev
+         (conn-exit-recursive-stack (cl-shiftf prev nil)))
        (let ((ret (funcall iterator state)))
          (when (and ret
                     conn-local-mode
