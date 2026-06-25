@@ -630,7 +630,7 @@ If the mark is already active then deactivate it instead."
     (when conn--unpoped-marks
       (conn-push-jump-ring (car (last conn--unpoped-marks))))
     (setf mark-ring (nconc mark-ring
-                           (mapcar #'copy-marker
+                           (mapcar #'conn--copy-marker-and-type
                                    (nreverse conn--unpoped-marks))))
     (setf conn--unpoped-marks nil)
     (remove-hook 'post-command-hook 'conn--popping-marks-hook)))

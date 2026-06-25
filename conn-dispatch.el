@@ -1405,7 +1405,7 @@ If REPEAT is non-nil then repeat dispatch."
                     :read t
                     :stale (lambda (mk) (not (buffer-live-p (marker-buffer mk))))
                     :cleanup (lambda (mk) (set-marker mk nil))
-                    :copy #'copy-marker))
+                    :copy #'conn--copy-marker-and-type))
 
 (defun conn-action-separator ()
   (declare (important-return-value t))

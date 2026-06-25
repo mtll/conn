@@ -194,7 +194,7 @@ If NO-ALIAS is non-nil then do not check function aliases."
              (symbolp this-command)
              (function-get real-this-command propname)))))
 
-;; We need string-pixel-width from emacs 31 since it accounts for face
+;; We need `string-pixel-width' from emacs 31 since it accounts for face
 ;; remapping
 (static-if (<= 31 emacs-major-version)
     (defalias 'conn--string-pixel-width 'string-pixel-width)
@@ -223,33 +223,34 @@ If NO-ALIAS is non-nil then do not check function aliases."
         (car (buffer-text-pixel-size nil nil t))))))
 
 (defun conn--open-invisible (beg end)
+  "Open all invisible overlays in the region BEG to END.
+
+Returns either a possibly empty list of functions to restore the state
+of each opened overlay, or t if the region could not be opened."
   (catch 'return
+    ;; If any part of the region is invisible because of a text
+    ;; property then give up.
     (cl-loop for pt = beg then (next-single-property-change
                                 pt 'invisible nil end)
              while (and pt (< pt end))
              when (invisible-p (get-text-property pt 'invisible))
-             do (throw 'return nil))
-    (let (restore)
-      (dolist (ov (overlays-in beg end))
-        (let ((inv (overlay-get ov 'invisible)))
-          (when (invisible-p inv)
-            (unless (overlay-get ov 'isearch-open-invisible)
-              (throw 'return (mapc #'funcall restore)))
-            (push
-             (if-let* ((fun (overlay-get ov 'isearch-open-invisible-temporary)))
-                 (progn
-                   (funcall fun ov nil)
-                   (lambda () (funcall fun ov t)))
-               (overlay-put ov 'invisible nil)
-               (lambda () (overlay-put ov 'invisible inv)))
-             restore))))
-      (or restore t))))
+             do (throw 'return t))
+    (let (restore inv)
+      (dolist (ov (overlays-in beg end) restore)
+        (when (invisible-p (setf inv (overlay-get ov 'invisible)))
+          (unless (overlay-get ov 'isearch-open-invisible)
+            (mapc #'funcall restore)
+            (throw 'return t))
+          (if-let* ((fn (overlay-get ov 'isearch-open-invisible-temporary)))
+              (progn
+                (funcall fn ov nil)
+                (push (lambda () (funcall fn ov t)) restore))
+            (overlay-put ov 'invisible nil)
+            (push (lambda () (overlay-put ov 'invisible inv)) restore)))))))
 
-(defun conn--copy-mark (marker &optional buffer)
-  (let ((mk (make-marker)))
-    (set-marker mk (marker-position marker) buffer)
-    (set-marker-insertion-type mk (marker-insertion-type marker))
-    mk))
+(defun conn--copy-marker-and-type (marker)
+  "Like `copy-marker' but also copy MARKER insertion type."
+  (copy-marker marker (marker-insertion-type marker)))
 
 ;; From quail
 (defun conn-add-unread-events (key &optional reset)
@@ -277,6 +278,7 @@ See `quail-add-unread-command-events'."
        'face 'conn-argument-active-face)))))
 
 (defun conn--remove-all-advice (&rest symbols)
+  "Remove all advice from SYMBOLS."
   (dolist (symbol symbols)
     (setf (symbol-function symbol)
           (advice--cd*r (symbol-function symbol)))))

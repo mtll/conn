@@ -836,7 +836,8 @@ Regions are only skipped if the entire region is not visible."
 (defun conn-kapply-open-invisible (iterator)
   "Open invisible regions returned by ITERATOR.
 
-If the region is invisible and cannot be opened then skip it."
+If the region contains an invisible overlay that cannot be opened then
+skip it."
   (declare (important-return-value t)
            (side-effect-free t))
   (add-function
@@ -848,11 +849,11 @@ If the region is invisible and cannot be opened then skip it."
           (cl-loop
            for next = (funcall iterator state)
            do (pcase next
-                (`[,beg ,end ,_buffer]
-                 (when-let* ((restore (conn--open-invisible beg end)))
-                   (when (consp restore)
-                     (cl-callf2 nconc restore restore-fns))
-                   (cl-return next)))
+                ((and `[,beg ,end ,_buffer]
+                      (let (and (pred listp) restore)
+                        (conn--open-invisible beg end)))
+                 (cl-callf2 nconc restore restore-fns)
+                 (cl-return next))
                 (_ (cl-return next)))))
          (:cleanup
           (funcall iterator state)

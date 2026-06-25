@@ -100,7 +100,7 @@
           (setf conn-emacs-state-ring
                 (conn-make-ring 8
                                 :cleanup (lambda (mk) (set-marker mk nil))
-                                :copier #'conn--copy-mark)))
+                                :copier #'conn--copy-marker-and-type)))
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook #'conn--isearch-input-method nil t)

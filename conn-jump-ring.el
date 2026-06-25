@@ -111,7 +111,7 @@ If BACK is non-nil then push LOCATION to the back of the jump ring."
       (setf conn-jump-ring
             (conn-make-ring 40
                             :cleanup (lambda (mk) (set-marker mk nil))
-                            :copier #'conn--copy-mark)))
+                            :copier #'conn--copy-marker-and-type)))
     (cond ((and-let* ((ptf (conn-ring-head conn-jump-ring)))
              (= location ptf))
            (when back (conn-ring-rotate-forward conn-jump-ring)))
