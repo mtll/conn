@@ -277,6 +277,8 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'bookmark-bmenu-mode)
+  "p" 'conn-other-window-prefix
+  "P" 'conn-other-place-prefix
   "x" (conn-remap-key "C-x" t)
   "c" (conn-remap-key "C-c" t)
   "`" 'conn-wincontrol-mru-window
