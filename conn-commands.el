@@ -1558,24 +1558,12 @@ Uses expansions from `conn-expand'."
          (advice-remove 'conn-yank-with-completion ad-sym)
          (undo-amalgamate-change-group cg)))
      (format "%s yank pop; %s yank unpop; %s yank with completion"
-             (propertize
-              (key-description
-               (where-is-internal 'yank-pop
-                                  (list conn-yank-pop-repeat-map)
-                                  t))
-              'face 'help-key-binding)
-             (propertize
-              (key-description
-               (where-is-internal 'conn-yank-unpop
-                                  (list conn-yank-pop-repeat-map)
-                                  t))
-              'face 'help-key-binding)
-             (propertize
-              (key-description
-               (where-is-internal 'conn-yank-with-completion
-                                  (list conn-yank-pop-repeat-map)
-                                  t))
-              'face 'help-key-binding)))))
+             (conn-key-bind-string 'yank-pop
+                                   (list conn-yank-pop-repeat-map))
+             (conn-key-bind-string 'conn-yank-unpop
+                                   (list conn-yank-pop-repeat-map))
+             (conn-key-bind-string 'conn-yank-with-completion
+                                   (list conn-yank-pop-repeat-map))))))
 
 (cl-defgeneric conn-yank-replace-do (thing
                                      arg
@@ -2656,9 +2644,9 @@ Exiting the recursive edit will resume the isearch."
  conn-transpose-repeat-map
  (conn-reference-page
    :name 'conn-transpose-repeat
-   ((("Repeat transposition" conn-transpose-repeat))
-    (("Repeat transposition in opposite direction" conn-transpose-repeat-inverse))
-    (("Recenter" recenter-top-bottom)))
+   ((("Repeat transposition" conn-transpose-repeat)
+     ("Repeat transposition in opposite direction" conn-transpose-repeat-inverse)
+     ("Recenter" recenter-top-bottom)))
    "Any other non-prefix command ends repeating."))
 
 (defun conn-transpose-setup-repeat-map (repeat repeat-inverse)
@@ -2681,28 +2669,13 @@ Exiting the recursive edit will resume the isearch."
      (let ((inhibit-quit t))
        (advice-remove 'conn-transpose-repeat repeat)
        (advice-remove 'conn-transpose-repeat-inverse repeat-inverse)))
-   (concat
-    (format "%s repeat"
-            (propertize
-             (key-description
-              (where-is-internal 'conn-transpose-repeat
-                                 (list conn-transpose-repeat-map)
-                                 t))
-             'face 'help-key-binding))
-    (and-let* ((key (where-is-internal 'conn-transpose-repeat-inverse
-                                       (list conn-transpose-repeat-map)
-                                       t)))
-      (format "; %s other direction"
-              (propertize
-               (key-description key)
-               'face 'help-key-binding)))
-    (and-let* ((key (where-is-internal 'conn-transpose-repeat-help
-                                       (list conn-transpose-repeat-map)
-                                       t)))
-      (format "; %s help"
-              (propertize
-               (key-description key)
-               'face 'help-key-binding))))))
+   (format "%s repeat; %s other direction; %s help"
+           (conn-key-bind-string 'conn-transpose-repeat
+                                 (list conn-transpose-repeat-map))
+           (conn-key-bind-string 'conn-transpose-repeat-inverse
+                                 (list conn-transpose-repeat-map))
+           (conn-key-bind-string 'conn-quick-reference
+                                 (list conn-transpose-repeat-map)))))
 
 (cl-defgeneric conn-transpose-things-do (thing arg at-point-and-mark)
   (declare (conn-anonymous-thing-property :transpose-op)))
@@ -4338,22 +4311,18 @@ Only available during repeating duplicate."
                                     command-name
                                     reference-command
                                     &rest desc-and-commands)
-  (cl-macrolet ((key-desc (command)
-                  `(propertize
-                    (key-description
-                     (where-is-internal ,command (list keymap) 'first-only))
-                    'face 'help-key-binding)))
-    (with-work-buffer
-      (insert (format "Repeat %s (%s reference):\n"
-                      command-name
-                      (key-desc reference-command)))
-      (conn-to-vtable
-       (cl-loop for (d c) on desc-and-commands by #'cddr
-                collect (format "%s %s" (key-desc c) d))
-       4 (current-buffer)
-       :separator-width 3
-       :use-header-line nil)
-      (buffer-substring (point-min) (1- (point-max))))))
+  (with-work-buffer
+    (insert (format "Repeat %s (%s reference):\n"
+                    command-name
+                    (conn-key-bind-string reference-command (list keymap))))
+    (conn-to-vtable
+     (cl-loop for (d c) on desc-and-commands by #'cddr
+              collect
+              (format "%s %s" (conn-key-bind-string c (list keymap)) d))
+     4 (current-buffer)
+     :separator-width 3
+     :use-header-line nil)
+    (buffer-substring (point-min) (1- (point-max)))))
 
 (defun conn-duplicate-subr (beg end &optional repeat no-padding)
   "Duplicate the region from BEG to END REPEAT times."

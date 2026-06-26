@@ -248,9 +248,12 @@ of each opened overlay, or t if the region could not be opened."
             (overlay-put ov 'invisible nil)
             (push (lambda () (overlay-put ov 'invisible inv)) restore)))))))
 
-(defun conn--copy-marker-and-type (marker)
+(define-inline conn--copy-marker-and-type (marker)
   "Like `copy-marker' but also copy MARKER insertion type."
-  (copy-marker marker (marker-insertion-type marker)))
+  (inline-letevals (marker)
+    (inline-quote
+     (copy-marker ,marker (and (markerp ,marker)
+                               (marker-insertion-type ,marker))))))
 
 ;; From quail
 (defun conn-add-unread-events (key &optional reset)
@@ -343,37 +346,6 @@ See `quail-add-unread-command-events'."
 
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
-
-;;;;; Buffer Properties
-
-(defvar-local conn--buffer-properties nil)
-
-(define-inline conn-get-buffer-property (property &optional buffer default)
-  (declare (side-effect-free t)
-           (important-return-value t))
-  (inline-quote
-   (or (plist-get (buffer-local-value 'conn--buffer-properties
-                                      (or ,buffer (current-buffer)))
-                  ,property)
-       ,default)))
-
-(gv-define-setter conn-get-buffer-property (value
-                                            property
-                                            &optional
-                                            buffer
-                                            _default)
-  `(conn-set-buffer-property ,property ,value ,buffer))
-
-(defun conn-set-buffer-property (property value &optional buffer)
-  (setf (plist-get (buffer-local-value 'conn--buffer-properties
-                                       (or buffer (current-buffer)))
-                   property)
-        value))
-
-(defun conn-unset-buffer-property (property &optional buffer)
-  (let ((buffer (or buffer (current-buffer))))
-    (cl-callf2 assq-delete-all property
-               (buffer-local-value 'conn--buffer-properties buffer))))
 
 ;;;;; Rings
 
@@ -716,7 +688,7 @@ If BUFFER is nil check `current-buffer'."
              :objects (mapcar #'nreverse objs)
              keys))))
 
-(defun conn-key-bind-string (command &optional buffer keymap face)
+(defun conn-key-bind-string (command &optional keymap buffer face)
   (propertize
    (with-current-buffer (or buffer (current-buffer))
      (key-description (where-is-internal command keymap t)))

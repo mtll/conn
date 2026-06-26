@@ -274,10 +274,8 @@
                (propertize "Resize Map"
                            'face 'conn-quick-ref-heading-face)
                " "
-               (propertize (key-description
-                            (where-is-internal conn-window-resize-map
-                                               conn-wincontrol-map t))
-                           'face 'help-key-binding)))
+               (conn-key-bind-string conn-window-resize-map
+                                     conn-wincontrol-map)))
        ("widen/narrow"
         conn-wincontrol-widen-window
         conn-wincontrol-narrow-window)
