@@ -292,7 +292,8 @@
   "i" 'conn-backward-line
   "L" 'conn-forward-inner-line
   "J" 'conn-backward-inner-line
-  "S" 'conn-thing-at-isearch
+  ;; "S" 'conn-thing-at-isearch
+  "S" 'conn-surround
   "C-s" 'isearch-forward
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp

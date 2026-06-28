@@ -81,11 +81,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-ripgrep-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-line-thing (thing arg transform)
@@ -104,11 +100,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-line-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-line-multi-thing (thing arg transform)
@@ -128,11 +120,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-line-multi-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-locate-thing (thing arg transform)
@@ -150,11 +138,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-locate-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-git-grep-thing (thing arg transform)
@@ -174,11 +158,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-git-grep-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 ;;;###autoload
 (defun conn-consult-find-thing (thing arg transform)
@@ -198,11 +178,7 @@
                  (= (count-lines beg end) 1))
         (funcall conn-completion-region-quote-function
                  (buffer-substring-no-properties beg end))))
-     (conn-push-jump-ring (mark-marker))
-     (conn-push-command-history 'conn-consult-find-thing
-                                thing
-                                arg
-                                transform))))
+     (conn-push-jump-ring (mark-marker)))))
 
 (defun conn--consult-grep-iterator (candidates)
   (let ((files nil)

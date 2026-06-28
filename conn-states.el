@@ -495,8 +495,7 @@ depth value.  Depth should be an integer between -100 and 100."
         (dolist (child (conn-state-all-children state))
           (setf (conn--mode-maps-sorted-p child) nil))
         (when (alist-get mode mmode-maps)
-          (conn--sort-mode-maps state)))))
-  nil)
+          (conn--sort-mode-maps state))))))
 
 ;; setup special mode maps
 (conn-set-mode-map-depth :override -80)

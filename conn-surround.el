@@ -719,7 +719,9 @@
   (let ((hist conn-command-history))
     (cl-call-next-method)
     (when (eq hist conn-command-history)
-      (apply #'conn-push-command-history 'conn-adjust-surround-do args))))
+      (apply #'conn-push-command-history
+             '(conn-adjust-surround conn-adjust-surround-do)
+             args))))
 
 (cl-defmethod conn-adjust-surround-do (thing arg transform at-end trim)
   (with-undo-amalgamate

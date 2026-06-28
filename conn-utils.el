@@ -288,17 +288,40 @@ See `quail-add-unread-command-events'."
 
 ;;;;; Command History
 
+(oclosure-define (conn-previous-command
+                  (:predicate conn-previous-command-p))
+  command
+  function
+  (arguments :mutable t))
+
 (defun conn-push-command-history (command &rest args)
   (unless conn-repeating-command
     (add-to-history 'conn-command-history
-                    (cons command args)
+                    (pcase command
+                      ((pred conn-previous-command-p) command)
+                      ((or `(,cmd ,fn) fn)
+                       (oclosure-lambda (conn-previous-command
+                                         (function fn)
+                                         (command cmd)
+                                         (arguments args))
+                           ()
+                         (apply function arguments))))
                     conn-command-history-max
                     t)))
 
 (defun conn-read-from-command-history ()
   (let* ((print-level nil)
          (cmds (cl-loop for cmd in conn-command-history
-                        collect (cons (prin1-to-string cmd) cmd))))
+                        for i from 0
+                        collect
+                        (cons (concat
+                               (propertize (number-to-string i) 'display "")
+                               (prin1-to-string
+                                (cons
+                                 (or (conn-previous-command--command cmd)
+                                     (conn-previous-command--function cmd))
+                                 (conn-previous-command--arguments cmd))))
+                              cmd))))
     (alist-get (completing-read
                 "Command: "
                 (lambda (string pred action)

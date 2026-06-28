@@ -136,7 +136,7 @@ The duration of the message display is controlled by
     (and-let* ((msg (conn--read-args-get-message)))
       (concat " " msg)))))
 
-(defun conn--read-args-prompt (prompt arguments &optional elide)
+(defun conn-read-args-display-flat (prompt arguments &optional elide)
   (message "%s"
            (concat
             (conn-read-args-prompt-line prompt elide)
@@ -310,7 +310,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                            callback
                            &key
                            (command-handler (conn-read-args-command-handler))
-                           (display-handler #'conn--read-args-prompt)
+                           (display-handler #'conn-read-args-display-flat)
                            around
                            overriding-map
                            prompt
@@ -355,7 +355,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                ,@body))))
       (cl-labels
           ((message-timer-function ()
-             (setf timer nil)
+             (setf timer nil
+                   conn-read-args-message-delay nil)
              (display-message))
            (start-message-timer ()
              (when timer
@@ -564,11 +565,12 @@ echo area help message.
                    def-body)))
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     (cl-check-type state symbol)
-    `(conn--read-args
-      ',state
-      (list ,@(mapcar #'cadr varlist))
-      (pcase-lambda ,(mapcar #'car varlist) ,@body)
-      ,@keys)))
+    `(let ((conn-read-args-message-delay conn-read-args-message-delay))
+       (conn--read-args
+        ',state
+        (list ,@(mapcar #'cadr varlist))
+        (pcase-lambda ,(mapcar #'car varlist) ,@body)
+        ,@keys))))
 
 ;;;; Argument Types
 
