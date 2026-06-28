@@ -295,6 +295,22 @@ See `quail-add-unread-command-events'."
   (arguments :mutable t))
 
 (defun conn-push-command-history (command &rest args)
+  "Push COMMAND with ARG to `conn-command-history'.
+
+COMMAND should be one of:
+
+- A function which which will be applied to ARGS.
+
+- A list of (COMMAND FUNCTION).  `this-command' will be set to COMMAND
+  and FUNCTION will be applied to ARGS.  COMMAND will also be displayed
+  during completion on `conn-command-history' with
+  `conn-read-from-command-history'.
+
+- A `conn-previous-command' oclosure, in which case COMMAND will be
+  added to `conn-command-history' as is and ARGS will be ignored.
+  During completion on `conn-command-history' with
+  `conn-read-from-command-history' the slots (command . arguments) will
+  be displayed for COMMAND."
   (unless conn-repeating-command
     (add-to-history 'conn-command-history
                     (pcase command
