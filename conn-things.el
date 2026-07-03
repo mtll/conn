@@ -231,21 +231,19 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
           (alist nil)
           (method-expander
            (lambda (args &rest body)
-             (pcase args
-               ((and `#',fn (guard (null body)))
-                `#'(lambda (_cnm &rest args)
-                     (apply #',fn args)))
-               (_ (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-                    (`#'(lambda ,args . ,body)
-                     (let ((parsed-body (macroexp-parse-body body))
-                           (cnm (gensym "thing--cnm")))
-                       `#'(lambda ,(cons cnm args)
-                            ,@(car parsed-body)
-                            ,(macroexpand-all
-                              `(cl-flet ((cl-call-next-method ,cnm))
-                                 ,@(cdr parsed-body))))))
-                    (result (error "Unexpected macroexpansion result :%S"
-                                   result))))))))
+             (cond*
+              ((pcase* (and `#',fn (guard (null body))) args)
+               `#'(lambda (_cnm &rest args) (apply #',fn args)))
+              ((bind* (me (macroexpand `(cl-function (lambda ,args ,@body))))))
+              ((pcase* `#'(lambda ,args . ,body) me)
+               (let ((parsed-body (macroexp-parse-body body))
+                     (cnm (gensym "thing--cnm")))
+                 `#'(lambda ,(cons cnm args)
+                      ,@(car parsed-body)
+                      ,(macroexpand-all
+                        `(cl-flet ((cl-call-next-method ,cnm))
+                           ,@(cdr parsed-body))))))
+              (t (error "Unexpected macroexpansion result :%S" me))))))
       (while properties
         (cond* ((pcase* `(,key ,val) properties))
                ((bind-and* (gfn (alist-get key known))
@@ -1497,7 +1495,7 @@ Returns a `conn-bounds' struct."
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing dispatch)))
   "Operate on a thing selected with dispatch."
-  ( :predicate () (not (or defining-kbd-macro executing-kbd-macro))))
+  (:predicate () (not (or defining-kbd-macro executing-kbd-macro))))
 
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (eql recursive-edit)))
