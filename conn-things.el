@@ -231,17 +231,21 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
           (alist nil)
           (method-expander
            (lambda (args &rest body)
-             (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
-               (`#'(lambda ,args . ,body)
-                (let ((parsed-body (macroexp-parse-body body))
-                      (cnm (gensym "thing--cnm")))
-                  `#'(lambda ,(cons cnm args)
-                       ,@(car parsed-body)
-                       ,(macroexpand-all
-                         `(cl-flet ((cl-call-next-method ,cnm))
-                            ,@(cdr parsed-body))))))
-               (result (error "Unexpected macroexpansion result :%S"
-                              result))))))
+             (pcase args
+               ((and `#',fn (guard (null body)))
+                `#'(lambda (_cnm &rest args)
+                     (apply #',fn args)))
+               (_ (pcase (macroexpand `(cl-function (lambda ,args ,@body)))
+                    (`#'(lambda ,args . ,body)
+                     (let ((parsed-body (macroexp-parse-body body))
+                           (cnm (gensym "thing--cnm")))
+                       `#'(lambda ,(cons cnm args)
+                            ,@(car parsed-body)
+                            ,(macroexpand-all
+                              `(cl-flet ((cl-call-next-method ,cnm))
+                                 ,@(cdr parsed-body))))))
+                    (result (error "Unexpected macroexpansion result :%S"
+                                   result))))))))
       (while properties
         (cond* ((pcase* `(,key ,val) properties))
                ((bind-and* (gfn (alist-get key known))
@@ -364,7 +368,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                (if (consp no-inherit) (cadr no-inherit) no-inherit))
           (macroexp-let2* nil (thing)
             `(or (when (conn-anonymous-thing-p ,thing)
-                   (or (assq ,property (conn--anonymous-thing-properties ,thing))
+                   (or (and-let* ((v (assq ,property (conn--anonymous-thing-properties ,thing))))
+                         (cdr v))
                        (progn
                          (setf ,thing (car (conn-thing-all-parents ,thing)))
                          nil)))
@@ -378,7 +383,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                      property)))
       (macroexp-let2* nil (thing)
         `(or (when (conn-anonymous-thing-p ,thing)
-               (or (assq ,property (conn--anonymous-thing-properties ,thing))
+               (or (and-let* ((v (assq ,property (conn--anonymous-thing-properties ,thing))))
+                     (cdr v))
                    (progn
                      (setf ,thing (car (conn-thing-all-parents ,thing)))
                      nil)))
@@ -391,7 +397,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
            (if (consp no-inherit) (cadr no-inherit) no-inherit))
       (macroexp-let2* nil (thing property)
         `(or (when (conn-anonymous-thing-p ,thing)
-               (or (assq ,property (conn--anonymous-thing-properties ,thing))
+               (or (and-let* ((v (assq ,property (conn--anonymous-thing-properties ,thing))))
+                     (cdr v))
                    (progn
                      (setf ,thing (car (conn-thing-all-parents ,thing)))
                      nil)))
@@ -400,9 +407,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                                    end-op
                                    bounds-of-thing-at-point))
                  (get ,thing ,property)
-               (assq ,property (ignore-errors
-                                 (conn--thing-properties
-                                  (conn--find-thing ,thing))))))))
+               (cdr (assq ,property (ignore-errors
+                                      (conn--thing-properties
+                                       (conn--find-thing ,thing)))))))))
      (t exp))))
 
 (defun conn-thing-get (thing property &optional no-inherit default)
@@ -1260,8 +1267,7 @@ Returns a `conn-bounds' struct."
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
 
-(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
-                              arg)
+(defun conn--isearch-at-thing-method (self arg)
   (let ((bounds nil)
         (quit (make-symbol "quit-hook")))
     (fset quit (lambda ()
@@ -1269,15 +1275,19 @@ Returns a `conn-bounds' struct."
                    (when (or isearch-mode-end-hook-quit
                              (null isearch-other-end))
                      (abort-recursive-edit))
-                   (conn-read-args (conn-read-thing-state
-                                    :prompt "Thing at Isearch"
-                                    :prefix arg)
-                       ((`(,thing ,arg) (conn-thing-argument)))
-                     (setf bounds (conn-bounds-of thing arg))))))
+                   (conn->
+                     (with-memoization (conn-thing-get self :thing)
+                       (conn-read-args (conn-read-thing-state
+                                        :prompt "Thing at Isearch"
+                                        :prefix arg)
+                           ((th (conn-thing-argument)))
+                         th))
+                     (apply #'conn-bounds-of)
+                     (setf bounds)))))
     (unwind-protect
         (save-mark-and-excursion
           (add-hook 'isearch-mode-end-hook quit)
-          (if (conn-thing-get cmd :command)
+          (if-let* ((cmd (conn-thing-get self :isearch-command)))
               (progn
                 (call-interactively cmd)
                 (when isearch-mode
@@ -1286,6 +1296,14 @@ Returns a `conn-bounds' struct."
             (isearch-forward)))
       (remove-hook 'isearch-mode-end-hook quit))
     bounds))
+
+(cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
+                              arg)
+  (conn-bounds-of
+   (conn-anonymous-thing
+     `(,cmd)
+     :bounds-op (:method #'conn--isearch-at-thing-method))
+   arg))
 
 (conn-register-thing 'conn-thing-at-isearch)
 

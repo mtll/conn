@@ -188,7 +188,22 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "C-s" 'conn-thing-at-isearch
+  "C-s" (conn-anonymous-thing
+          '(conn-thing-at-isearch)
+          :isearch-command 'isearch-forward
+          :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-r" (conn-anonymous-thing
+          '(conn-thing-at-isearch)
+          :isearch-command 'isearch-backward
+          :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-M-f" (conn-anonymous-thing
+            '(conn-thing-at-isearch)
+            :isearch-command 'isearch-forward-regexp
+            :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-M-r" (conn-anonymous-thing
+            '(conn-thing-at-isearch)
+            :isearch-command 'isearch-backward-regexp
+            :bounds-op (:method #'conn--isearch-at-thing-method))
   "e" 'previous-line
   "d" 'next-line
   "," conn-thing-inner-remap
@@ -479,7 +494,8 @@
         :target-finder ( :method (_self &rest _)
                          (conn-dispatch-things-with-re-prefix-targets
                           :prefix-thing 'sexp
-                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                          :prefix-regexp (rx (zero-or-more (syntax expression-prefix))
+                                             (or (syntax open-parenthesis)
                                                  (syntax string-quote))))))
   "]" (conn-anonymous-thing
         '(inner-list)
@@ -493,7 +509,8 @@
                          (conn-dispatch-things-with-re-prefix-targets
                           :prefix-thing 'sexp
                           :skip-prefix t
-                          :prefix-regexp (rx (or (syntax open-parenthesis)
+                          :prefix-regexp (rx (zero-or-more (syntax expression-prefix))
+                                             (or (syntax open-parenthesis)
                                                  (syntax string-quote)))))))
 
 (define-keymap
