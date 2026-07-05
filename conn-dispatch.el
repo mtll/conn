@@ -3135,7 +3135,6 @@ buffer."
   "M-s" conn-search-remap
   "M-g" conn-goto-remap
   "M-h" conn-edit-remap
-  (key-description conn-undo-keys) 'undo
   "<dispatch-mouse-repeat>" 'repeat-dispatch-at-mouse
   "C-z" 'other-end
   "<remap> <mouse-drag-region>" 'undefined)
@@ -3392,19 +3391,26 @@ buffer."
                          '((name . restrict-windows)))
            (conn-dispatch-redisplay)))))
 
+(defun conn--dispatch-select-undo (break)
+  (if (null (cdr conn--dispatch-change-groups))
+      (progn
+        (conn-read-args-error "Nothing to undo")
+        (funcall break))
+    (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
+                     (cl-callf2 drop 2 conn--dispatch-change-groups)))
+      (pcase-dolist (`(,_ . ,undo-fn) group)
+        (funcall undo-fn :undo)))
+    (throw 'dispatch-undo nil)))
+
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql undo)))
   "Undo the most recent iteration of dispatch."
-  ( :update (break)
-    (if (null (cdr conn--dispatch-change-groups))
-        (progn
-          (conn-read-args-error "Nothing to undo")
-          (funcall break))
-      (dolist (group (prog1 (take 2 conn--dispatch-change-groups)
-                       (cl-callf2 drop 2 conn--dispatch-change-groups)))
-        (pcase-dolist (`(,_ . ,undo-fn) group)
-          (funcall undo-fn :undo)))
-      (throw 'dispatch-undo nil))))
+  ( :update (break) (conn--dispatch-select-undo break)))
+
+(define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
+                                       (cmd (eql undo-only)))
+  "Undo the most recent iteration of dispatch."
+  ( :update (break) (conn--dispatch-select-undo break)))
 
 ;;;;; Dispatch Target Finders
 
@@ -4387,24 +4393,28 @@ contain targets."
     (let ((goal-col
            (with-memoization (oref state goal-column)
              ;; From `line-move-visual'
-             (let ((posn (posn-at-point))
-                   (lnum-width (line-number-display-width t))
-                   x-pos)
-               (cond
-                ;; Handle the `overflow-newline-into-fringe' case
-                ;; (left-fringe is for the R2L case):
-                ((memq (nth 1 posn) '(right-fringe left-fringe))
-                 (window-width))
-                ((car (posn-x-y posn))
-                 (setf x-pos (- (car (posn-x-y posn)) lnum-width))
-                 ;; In R2L lines, the X pixel coordinate is measured from the
-                 ;; left edge of the window, but columns are still counted
-                 ;; from the logical-order beginning of the line, i.e. from
-                 ;; the right edge in this case.  We need to adjust for that.
-                 (if (eq (current-bidi-paragraph-direction) 'right-to-left)
-                     (setf x-pos (- (window-body-width nil t) 1 x-pos)))
-                 (/ (float x-pos)
-                    (frame-char-width))))))))
+             (cond*
+              ;; Handle the `overflow-newline-into-fringe' case
+              ;; (left-fringe is for the R2L case):
+              ((pcase* (and (or `(,col . ,_hscroll) col)
+                            (guard (memq last-command
+                                         '(next-line previous-line))))
+                       temporary-goal-column)
+               col)
+              ((bind* (posn (posn-at-point))))
+              ((memq (nth 1 posn) '(right-fringe left-fringe))
+               (window-width))
+              ((bind-and* (x-pos (car (posn-x-y posn)))
+                          (lnum-width (line-number-display-width t))
+                          (x-pos (- (car (posn-x-y posn)) lnum-width)))
+               ;; In R2L lines, the X pixel coordinate is measured from the
+               ;; left edge of the window, but columns are still counted
+               ;; from the logical-order beginning of the line, i.e. from
+               ;; the right edge in this case.  We need to adjust for that.
+               (if (eq (current-bidi-paragraph-direction) 'right-to-left)
+                   (setf x-pos (- (window-body-width nil t) 1 x-pos)))
+               (/ (float x-pos)
+                  (frame-char-width)))))))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-min))

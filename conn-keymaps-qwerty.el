@@ -381,10 +381,10 @@
   "e" #'conn-pop-state
   "`" #'conn-wincontrol-mru-window
   "|" #'conn-shell-command-on-thing
-  "/" (conn-remap-key conn-undo-keys t)
+  "/" "<conn-undo-remap>"
   ";" #'conn-wincontrol
   "'" #'conn-kapply-on-things
-  "?" (conn-remap-key conn-undo-redo-keys t)
+  "?" "<conn-undo-redo-remap>"
   "_" #'repeat-complex-command
   "a" #'execute-extended-command
   "A" #'execute-extended-command-for-buffer
@@ -401,7 +401,7 @@
   "W" #'conn-widen
   "X" 'conn-narrow-ring-prefix
   "Y" #'yank-from-kill-ring
-  "y" (conn-remap-key conn-yank-keys t)
+  "y" "<conn-yank-remap>"
   "z" #'conn-yank-replace
   "Z" #'conn-exchange-mark-command)
 

@@ -40,8 +40,8 @@
   "<backstab>" 'outline-cycle-buffer
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol-mode
-  "/" (conn-remap-key conn-undo-keys t)
-  "?" (conn-remap-key conn-undo-redo-keys t)
+  "/" "<conn-undo-remap>"
+  "?" "<conn-redo-remap>"
   "W" 'widen
   "<escape>" 'conn-pop-state
   "J" 'outline-promote
