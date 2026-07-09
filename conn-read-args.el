@@ -418,8 +418,11 @@ This skips executing the body of the `conn-read-args' form entirely."
                  (setf conn--read-args-message nil
                        conn--read-args-message-timeout nil))
                (while (eq cmd 'execute-extended-command)
-                 (setf cmd (conn--read-args-completing-read arguments
-                                                            partial-keymap)
+                 (setf cmd (conn--read-args-completing-read
+                            arguments
+                            (or partial-keymap
+                                (with-overriding-keymaps
+                                 (make-composed-keymap (current-active-maps t)))))
                        reading t))
                (if (or (eq cmd 'undefined)
                        (null cmd))

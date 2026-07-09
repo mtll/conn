@@ -5283,14 +5283,14 @@ it.")
                             restrict-windows)
                  prev-dispatch))
       (conn-with-dispatch-handlers
-        ( :with (conn-dispatch-prefix-arg))
-        ( :with (conn-read-char-input-method))
-        ( :handler
-          ( :display ()
-            (and-let* ((desc (conn-action-description conn-dispatch-action)))
-              (propertize desc
-                          'face 'conn-argument-active-face
-                          'conn-read-args-display-depth -50))))
+        (:handler
+         ( :display ()
+           (and-let* ((desc (conn-action-description conn-dispatch-action)))
+             (propertize desc
+                         'face 'conn-argument-active-face
+                         'conn-read-args-display-depth -50))))
+        (:with (conn-dispatch-prefix-arg))
+        (:with (conn-read-char-input-method))
         (conn-target-finder-setup target-finder)
         (conn-action-setup action (xor repeat invert-repeat))
         (when restrict-windows
@@ -5338,8 +5338,8 @@ it.")
            (propertize desc
                        'face 'conn-argument-active-face
                        'conn-read-args-display-depth -50))))
-      ( :with (conn-dispatch-prefix-arg))
-      ( :with (conn-read-char-input-method))
+      (:with (conn-dispatch-prefix-arg))
+      (:with (conn-read-char-input-method))
       (conn-action-setup (or action (conn-get-default-action thing))
                          repeat)
       (conn-target-finder-setup
