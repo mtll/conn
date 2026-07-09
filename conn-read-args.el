@@ -179,7 +179,7 @@ The duration of the message display is controlled by
                               (make-string separator-width ?\ ))))))))
 
 ;; From embark
-(defun conn--read-args-bindings (args &optional keymap)
+(defun conn--read-args-bindings (args keymaps)
   (declare-function conn-thing-pretty-print "conn-things")
   (let ((result nil))
     (cl-labels ((predicate (item)
@@ -193,14 +193,14 @@ The duration of the message display is controlled by
                         (bindings keymap))
                        (`(,(and desc (pred stringp))
                           . ,(and item (pred predicate)))
-                        (push (cons desc item) result))
+                        (when (where-is-internal item keymaps t t)
+                          (push (cons desc item) result)))
                        ((and item (pred predicate))
-                        (push (cons (conn-thing-pretty-print item) item)
-                              result))))
+                        (when (where-is-internal item keymaps t t)
+                          (push (cons (conn-thing-pretty-print item) item)
+                                result)))))
                    (keymap-canonicalize keymap))))
-      (if keymap
-          (bindings keymap)
-        (mapc #'bindings (current-active-maps)))
+      (mapc #'bindings keymaps)
       result)))
 
 (defun conn--read-args-command-affixation (command args &optional keymap)
@@ -220,10 +220,10 @@ The duration of the message display is controlled by
                           'face 'completions-annotations)
             ""))))
 
-(defun conn--read-args-completing-read (args &optional keymap)
+(defun conn--read-args-completing-read (args keymaps)
   (let ((inhibit-message nil))
     (message nil))
-  (let* ((table (conn--read-args-bindings args keymap))
+  (let* ((table (conn--read-args-bindings args keymaps))
          (affixations (make-hash-table :test 'equal))
          (metadata
           `(metadata
@@ -234,7 +234,7 @@ The duration of the message display is controlled by
     (conn--where-is-with-remaps
       (pcase-dolist (`(,name . ,command) table)
         (setf (gethash name affixations)
-              (conn--read-args-command-affixation command args keymap)))
+              (conn--read-args-command-affixation command args keymaps)))
       (condition-case _
           (alist-get (completing-read
                       "Command: "
@@ -267,8 +267,8 @@ The duration of the message display is controlled by
         (user-error
          (conn-read-args-error (error-message-string err)))))))
 
-(defun conn--read-args-describe-symbol (arguments message-function)
-  (let ((cmd (conn--read-args-completing-read arguments)))
+(defun conn--read-args-describe-symbol (arguments message-function keymaps)
+  (let ((cmd (conn--read-args-completing-read arguments keymaps)))
     (condition-case err
         (conn-quick-reference
          (cl-block nil
@@ -420,9 +420,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                (while (eq cmd 'execute-extended-command)
                  (setf cmd (conn--read-args-completing-read
                             arguments
-                            (or partial-keymap
-                                (with-overriding-keymaps
-                                 (make-composed-keymap (current-active-maps t)))))
+                            (if partial-keymap (list partial-keymap)
+                              (with-overriding-keymaps
+                               (current-active-maps t))))
                        reading t))
                (if (or (eq cmd 'undefined)
                        (null cmd))
@@ -458,9 +458,10 @@ This skips executing the body of the `conn-read-args' form entirely."
                       (display-message))))))
                ((or 'describe-symbol 'conn-describe-symbol)
                 (cancel-message-timer)
-                (with-keymaps
-                 (conn--read-args-describe-symbol arguments
-                                                  #'display-message)))
+                (conn--read-args-describe-symbol arguments
+                                                 #'display-message
+                                                 (with-overriding-keymaps
+                                                  (current-active-maps t))))
                ((pred identity)
                 (or (update-args cmd)
                     (conn--read-args-set-error-message
