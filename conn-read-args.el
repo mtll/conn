@@ -174,7 +174,7 @@ The duration of the message display is controlled by
                                :use-header-line nil)
                (buffer-substring (point-min) (1- (point-max)))))
          (concat prompt-line
-                 (when to-display "\n")
+                 (and to-display "\n")
                  (string-join to-display
                               (make-string separator-width ?\ ))))))))
 
@@ -203,11 +203,11 @@ The duration of the message display is controlled by
       (mapc #'bindings keymaps)
       result)))
 
-(defun conn--read-args-command-affixation (command args &optional keymap)
-  (let* ((binding (where-is-internal command keymap t))
-         (binding (pcase binding
-                    ((pred stringp) binding)
-                    ((pred vectorp) (key-description binding))))
+(defun conn--read-args-command-affixation (command args keymaps)
+  (let* ((binding
+          (cond* ((bind* (b (where-is-internal command keymaps t))))
+                 ((not (stringp b)) (key-description b))
+                 (t b)))
          (annotation
           (cl-loop for arg in args
                    thereis (conn-argument-annotation arg command))))
@@ -294,6 +294,7 @@ This skips executing the body of the `conn-read-args' form entirely."
           (list (lambda () ,@body))))
 
 (defvar conn-read-args-message-delay 0)
+(defvar conn--read-args-depth 0)
 
 (defvar conn--read-args-maps nil)
 
@@ -360,9 +361,13 @@ This skips executing the body of the `conn-read-args' form entirely."
              (display-message))
            (start-message-timer ()
              (when timer
-               (timer-set-function timer #'message-timer-function)
-               (timer-set-idle-time timer conn-read-args-message-delay)
-               (timer-activate-when-idle timer t)))
+               (if conn-read-args-message-delay
+                   (progn
+                     (timer-set-function timer #'message-timer-function)
+                     (timer-set-idle-time timer conn-read-args-message-delay)
+                     (timer-activate-when-idle timer t))
+                 (cancel-timer (cl-shiftf timer nil))
+                 (display-message))))
            (cancel-message-timer ()
              (when timer
                (cancel-timer timer)
@@ -569,12 +574,13 @@ echo area help message.
                    def-body)))
   (pcase-let (((or `(,state . ,keys) state) state-and-keys))
     (cl-check-type state symbol)
-    `(let ((conn-read-args-message-delay conn-read-args-message-delay))
-       (conn--read-args
-        ',state
-        (list ,@(mapcar #'cadr varlist))
-        (pcase-lambda ,(mapcar #'car varlist) ,@body)
-        ,@keys))))
+    `(let ((args (list ,@(mapcar #'cadr varlist)))
+           (body (pcase-lambda ,(mapcar #'car varlist) ,@body)))
+       (if (bound-and-true-p %conn-read-args-active%)
+           (conn--read-args ',state args body ,@keys)
+         (dlet ((conn-read-args-message-delay conn-read-args-message-delay)
+                (%conn-read-args-active% t))
+           (conn--read-args ',state args body ,@keys))))))
 
 ;;;; Argument Types
 

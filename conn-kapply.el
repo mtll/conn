@@ -2310,6 +2310,116 @@ finishing showing the buffers that were visited."))
     (conn-kapply-on-iterator :query t
                              :ibuffer t)))
 
+;;;;; Kapply At Points
+
+(define-conn-state conn-kapply-at-points-state (conn-command-state)
+  :lighter "KAPPLY-AT")
+
+(defvar conn--kapply-at-points nil)
+(defvar conn--kapply-at-points-state nil)
+(defvar-local conn-kapply-at-points-mode nil)
+(defvar conn--kapply-at-points-buffer nil)
+
+(defun conn-kapply-add-point ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (cond ((eobp)
+         (push (make-overlay (point) (point))
+               conn--kapply-at-points)
+         (overlay-put
+          (car conn--kapply-at-points)
+          'before-string  (propertize " " 'face 'conn-kapply-region-face)))
+        ((eolp)
+         (push (make-overlay (point) (point))
+               conn--kapply-at-points)
+         (overlay-put
+          (car conn--kapply-at-points)
+          'after-string (propertize " " 'face 'conn-kapply-region-face)))
+        (t
+         (push (make-overlay (point) (1+ (point)))
+               conn--kapply-at-points)))
+  (overlay-put (car conn--kapply-at-points)
+               'face 'conn-kapply-region-face))
+
+(defun conn-kapply-add-region ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (push (make-overlay (region-beginning) (region-end))
+        conn--kapply-at-points)
+  (overlay-put (car conn--kapply-at-points)
+               'face 'conn-kapply-region-face)
+  (setf deactivate-mark t))
+
+(defun conn-kapply-at-points-undo ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (goto-char (overlay-start (car conn--kapply-at-points)))
+  (delete-overlay (pop conn--kapply-at-points)))
+
+(defun conn-kapply-at-points-emacs ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (throw 'conn-kapply-at-points-begin nil))
+
+(defun conn-kapply-at-points-command ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (setf conn--kapply-at-points-state 'conn-command-state)
+  (throw 'conn-kapply-at-points-begin nil))
+
+(defun conn-kapply-at-points ()
+  (interactive)
+  (cl-assert (not conn--kapply-at-points-buffer) nil
+             "Kapply points already active")
+  (let ((conn--kapply-at-points-state 'conn-emacs-state)
+        (beg (point-marker)))
+    (unwind-protect
+        (conn-kapply-on-iterator
+         (conn-kapply-region-iterator
+          (let ((buffer-read-only t)
+                (conn--kapply-at-points-buffer (current-buffer))
+                (conn--kapply-at-points nil)
+                (conn-kapply-at-points-mode t))
+            (unwind-protect
+                (progn
+                  (conn-kapply-add-point)
+                  (catch 'conn-kapply-at-points-begin
+                    (conn-with-recursive-stack 'conn-kapply-at-points-state
+                      (recursive-edit)))
+                  (conn-kapply-add-point)
+                  (mapcar (pcase-lambda (`(,beg . ,end))
+                            (conn-kapply-make-region beg end))
+                          (conn--merge-overlapping-regions
+                           (mapcar (lambda (ov)
+                                     (cons (overlay-start ov) (overlay-end ov)))
+                                   conn--kapply-at-points)
+                           t)))
+              (mapc #'delete-overlay conn--kapply-at-points))))
+         :applier #'conn-kmacro-apply
+         :extra (list (lambda (it)
+                        (conn-kapply-with-state it conn--kapply-at-points-state))
+                      (lambda (it)
+                        (add-function
+                         :before (var it)
+                         (let ((pt nil))
+                           (lambda (state)
+                             (pcase state
+                               (:record)
+                               (:cleanup
+                                (when pt
+                                  (goto-char pt)
+                                  (set-marker pt nil))
+                                (conn-push-jump-ring beg))
+                               ((and :next (guard (null pt)))
+                                (setf pt (point-marker))))))
+                         '((depth . -99))))))
+      (set-marker beg nil))))
+
 ;;;;; Dispatch Kapply
 
 (defun conn-dispatch-kapply ()

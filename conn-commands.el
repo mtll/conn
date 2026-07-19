@@ -3040,22 +3040,22 @@ conn-bounds-trim:         file name sans extension")
                                     break)
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
                        (fws (conn-transform-and-fixup-argument-reformat arg)))
-    (let ((valid nil))
-      (cond ((progn
-               (conn-argument-update tform cmd (lambda () (setf valid t)))
-               valid)
-             (unless (conn-transform-and-fixup-argument-explicit arg)
-               (setf (conn-reformat-argument-value fws)
-                     (cl-loop for tf in (conn-transform-argument-value tform)
-                              never (plist-get
-                                     (function-get tf :conn-transform-properties)
-                                     :no-reformat))))
-             (funcall break))
-            ((progn
-               (conn-argument-update fws cmd (lambda () (setf valid t)))
-               valid)
-             (setf (conn-transform-and-fixup-argument-explicit arg) t)
-             (funcall break))))))
+    (cond* ((bind* (valid nil)))
+           ((progn
+              (conn-argument-update tform cmd (lambda () (setf valid t)))
+              valid)
+            (unless (conn-transform-and-fixup-argument-explicit arg)
+              (setf (conn-reformat-argument-value fws)
+                    (cl-loop for tf in (conn-transform-argument-value tform)
+                             never (plist-get
+                                    (function-get tf :conn-transform-properties)
+                                    :no-reformat))))
+            (funcall break))
+           ((progn
+              (conn-argument-update fws cmd (lambda () (setf valid t)))
+              valid)
+            (setf (conn-transform-and-fixup-argument-explicit arg) t)
+            (funcall break)))))
 
 (defun conn-kill-thing (&optional repeat-count)
   "Kill a region defined by THING, ARG, and TRANSFORM.

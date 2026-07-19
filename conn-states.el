@@ -973,15 +973,14 @@ See also `conn-state-on-exit' and `conn-state-unwind'."
   ( :method ((state (conn-substate t)) transition)
     (set state t)
     (funcall transition)
-    (conn-update-lighter))
-  ( :method (state _transition)
-    (error "Attempting to enter unknown state: %s" state)))
+    (conn-update-lighter)))
 
-(cl-defmethod conn-enter-state :around ((state (conn-substate t))
-                                        transition)
+(cl-defmethod conn-enter-state :around (state transition)
   (declare-function conn-local-mode "conn")
-  (when (conn-state-get state :abstract)
-    (error "Attempting to enter abstract state %s" state))
+  (cl-assert (conn-state-p state) nil
+             "Attempting to enter unknown state: %s" state)
+  (cl-assert (not (conn-state-get state :abstract))
+             "Attempting to enter abstract state %s" state)
   (let (conn-previous-state)
     (unwind-protect
         (progn

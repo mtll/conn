@@ -188,6 +188,8 @@
 
 (define-keymap
   :keymap conn-default-thing-map
+  "t" 'conn-kapply-on-things
+  "'" 'conn-kapply-on-things
   "C-s" (conn-anonymous-thing
           '(conn-thing-at-isearch)
           :isearch-command 'isearch-forward
@@ -383,7 +385,7 @@
   "|" #'conn-shell-command-on-thing
   "/" "<conn-undo-remap>"
   ";" #'conn-wincontrol
-  "'" #'conn-kapply-on-things
+  "'" #'conn-kapply-at-points
   "?" "<conn-undo-redo-remap>"
   "_" #'repeat-complex-command
   "a" #'execute-extended-command
@@ -565,6 +567,13 @@
   "/" 'multi-file)
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-kapply-at-points-state)
+  "d" #'conn-kapply-add-point
+  "e" #'conn-kapply-at-points-emacs
+  "c" #'conn-kapply-at-points-command
+  "/" #'conn-kapply-at-points-undo)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)
   "<escape>" #'exit-recursive-edit
   "C-M-<escape>" #'abort-recursive-edit)
@@ -634,8 +643,14 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-thing-state)
+  "i" 'previous-line
+  "k" 'next-line
   "r" 'conn-rectangle-mark
   "z" 'conn-exchange-mark-command)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn-kapply-at-points-mode)
+  "d" #'conn-kapply-add-region)
 
 (static-if (<= 30 emacs-major-version)
     (define-keymap
