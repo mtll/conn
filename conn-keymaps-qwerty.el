@@ -648,10 +648,6 @@
   "r" 'conn-rectangle-mark
   "z" 'conn-exchange-mark-command)
 
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn-kapply-at-points-mode)
-  "d" #'conn-kapply-add-region)
-
 (static-if (<= 30 emacs-major-version)
     (define-keymap
       :keymap conn-replace-thing-argument-map

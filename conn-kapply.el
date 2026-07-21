@@ -2320,37 +2320,26 @@ finishing showing the buffers that were visited."))
 (defvar-local conn-kapply-at-points-mode nil)
 (defvar conn--kapply-at-points-buffer nil)
 
+(defvar conn-kapply-points-cursor-width 3.0)
+
+(defun conn--kapply-point-cursor-at (point)
+  (if (display-graphic-p)
+      (let ((cursor (propertize
+                     " "
+                     'display `(space :width (,conn-kapply-points-cursor-width))
+                     'face 'cursor)))
+        (push (make-overlay point point nil t)
+              conn--kapply-at-points)
+        (overlay-put (car conn--kapply-at-points)
+                     'before-string cursor))
+    (push (make-overlay point point nil t)
+          conn--kapply-at-points)))
+
 (defun conn-kapply-add-point ()
   (interactive)
   (unless (eq (current-buffer) conn--kapply-at-points-buffer)
     (user-error "Kapply on points not active in buffer"))
-  (cond ((eobp)
-         (push (make-overlay (point) (point))
-               conn--kapply-at-points)
-         (overlay-put
-          (car conn--kapply-at-points)
-          'before-string  (propertize " " 'face 'conn-kapply-region-face)))
-        ((eolp)
-         (push (make-overlay (point) (point))
-               conn--kapply-at-points)
-         (overlay-put
-          (car conn--kapply-at-points)
-          'after-string (propertize " " 'face 'conn-kapply-region-face)))
-        (t
-         (push (make-overlay (point) (1+ (point)))
-               conn--kapply-at-points)))
-  (overlay-put (car conn--kapply-at-points)
-               'face 'conn-kapply-region-face))
-
-(defun conn-kapply-add-region ()
-  (interactive)
-  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
-    (user-error "Kapply on points not active in buffer"))
-  (push (make-overlay (region-beginning) (region-end))
-        conn--kapply-at-points)
-  (overlay-put (car conn--kapply-at-points)
-               'face 'conn-kapply-region-face)
-  (setf deactivate-mark t))
+  (conn--kapply-point-cursor-at (point)))
 
 (defun conn-kapply-at-points-undo ()
   (interactive)
@@ -2381,25 +2370,26 @@ finishing showing the buffers that were visited."))
     (unwind-protect
         (conn-kapply-on-iterator
          (conn-kapply-region-iterator
-          (let ((buffer-read-only t)
-                (conn--kapply-at-points-buffer (current-buffer))
-                (conn--kapply-at-points nil)
-                (conn-kapply-at-points-mode t))
-            (unwind-protect
-                (progn
-                  (conn-kapply-add-point)
-                  (catch 'conn-kapply-at-points-begin
-                    (conn-with-recursive-stack 'conn-kapply-at-points-state
-                      (recursive-edit)))
-                  (conn-kapply-add-point)
-                  (mapcar (pcase-lambda (`(,beg . ,end))
-                            (conn-kapply-make-region beg end))
-                          (conn--merge-overlapping-regions
-                           (mapcar (lambda (ov)
-                                     (cons (overlay-start ov) (overlay-end ov)))
-                                   conn--kapply-at-points)
-                           t)))
-              (mapc #'delete-overlay conn--kapply-at-points))))
+          (conn-protected-let* ((buffer-read-only t)
+                                (conn--kapply-at-points-buffer (current-buffer))
+                                (conn-kapply-at-points-mode t)
+                                ( conn--kapply-at-points nil
+                                  (mapc #'delete-overlay conn--kapply-at-points)))
+            (conn-kapply-add-point)
+            (save-current-buffer
+              (catch 'conn-kapply-at-points-begin
+                (conn-with-recursive-stack 'conn-kapply-at-points-state
+                  (recursive-edit))))
+            (conn-kapply-add-point)
+            (let ((pts nil)
+                  (testfn (lambda (p1 p2)
+                            (= (overlay-start p1)
+                               (overlay-start p2)))))
+              (dolist (pt conn--kapply-at-points)
+                (if (seq-contains-p pts pt testfn)
+                    (delete-overlay pt)
+                  (push pt pts)))
+              (nreverse pts))))
          :applier #'conn-kmacro-apply
          :extra (list (lambda (it)
                         (conn-kapply-with-state it conn--kapply-at-points-state))
