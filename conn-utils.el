@@ -42,7 +42,8 @@
                     `(let* ((,var ,val))
                        (unwind-protect
                            ,body
-                         (unless ,success ,cleanup)))))
+                         (let (throw-on-input)
+                           (unless ,success ,cleanup))))))
           (_ (protect (car rest) (cdr rest)
                       (macroexp-let* (list binding) body))))))))
 

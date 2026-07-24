@@ -237,6 +237,8 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-mark-state)
+  "'" #'conn-kapply-at-points-in-region
+  "Z" #'conn-swizzle-things-in-region
   "z" #'conn-exchange-mark-command
   "e" #'conn-change-thing
   "r" #'conn-replace
@@ -385,7 +387,8 @@
   "|" #'conn-shell-command-on-thing
   "/" "<conn-undo-remap>"
   ";" #'conn-wincontrol
-  "'" #'conn-kapply-at-points
+  "\"" #'conn-kapply-at-points
+  "'" #'conn-kapply-at-points-no-cursor
   "?" "<conn-undo-redo-remap>"
   "_" #'repeat-complex-command
   "a" #'execute-extended-command
@@ -568,10 +571,18 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kapply-at-points-state)
+  "q" #'conn-kapply-at-points-apply
+  "t" #'conn-kapply-add-points-at-things
+  "w" #'conn-kapply-add-points-at-words-in-thing
+  "b" #'conn-kapply-add-points-at-symbols-in-thing
   "d" #'conn-kapply-add-point
   "e" #'conn-kapply-at-points-emacs
   "c" #'conn-kapply-at-points-command
   "/" #'conn-kapply-at-points-undo)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn-kapply-at-points-mode)
+  "t" #'conn-kapply-at-points-in-region)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)
@@ -601,6 +612,7 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-change-state)
+  "'" 'kapply
   "v u" 'upcase
   "v l" 'downcase
   "v c" 'capitalize

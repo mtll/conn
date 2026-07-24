@@ -4650,6 +4650,10 @@ Interactively REPEAT is given by the prefix argument."
                                (cmd (eql conn-emacs-state-record-insert)))
   "Enter emacs state with a record region.")
 
+(define-conn-argument-command ((arg conn-change-thing-argument)
+                               (cmd (eql kapply)))
+  "Kapply on matches.")
+
 (cl-defgeneric conn-change-thing-do (thing
                                      arg
                                      transform
