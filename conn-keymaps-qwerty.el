@@ -530,12 +530,11 @@
                          (conn-dispatch-things-read-prefix 'symbol 1))
         :default-action (:method (_self) (conn-dispatch-highlight-symbol)))
   "'" 'conn-dispatch-kapply
-  "w" 'conn-dispatch-copy-to
+  "w" 'conn-dispatch-send-to
+  "d" 'conn-dispatch-send-to-delete
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
-  "f" 'conn-dispatch-copy-from
-  "x" 'conn-dispatch-take
-  "d" 'conn-dispatch-send
+  "f" 'conn-dispatch-take-from
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   "b" 'conn-dispatch-repeat-command
