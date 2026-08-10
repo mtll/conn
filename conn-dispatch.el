@@ -4790,24 +4790,26 @@ the string after the region selected by dispatch.")
            (important-return-value t))
   (declare-function conn-kill-thing-do "conn-commands")
   (declare-function conn-copy-thing-do "conn-commands")
-  (conn-action ((_cg (conn-action-change-group))
-                (str (conn-read-args (conn-kill-state
-                                      :prompt "Send Thing")
-                         ((`(,thing ,arg) (conn-thing-argument-dwim))
-                          (transform (conn-transform-argument))
-                          (`(,delete ,fixup ,check-bounds)
-                           (conn-send-how-argument delete)))
-                       (pcase (conn-bounds-of thing arg)
-                         ((and bounds (conn-bounds `(,beg . ,end) transform))
-                          (when check-bounds (conn-check-bounds bounds))
-                          (prog1 (filter-buffer-substring beg end delete)
-                            (when fixup
-                              (save-excursion
-                                (goto-char beg)
-                                (funcall conn-kill-reformat-function bounds)))))
-                         (_ (error "No thing found")))))
-                (replace-and-separator
-                 (conn-dispatch-to-how-argument :replace nil)))
+  (conn-action
+      ((_cg (conn-action-change-group))
+       (str (conn-read-args (conn-kill-state
+                             :prompt "Send Thing")
+                ((`(,thing ,arg) (conn-thing-argument-dwim))
+                 (transform (conn-transform-argument))
+                 (`(,delete ,fixup ,check-bounds)
+                  (conn-send-how-argument delete)))
+              (pcase (conn-bounds-of thing arg)
+                ((and bounds (conn-bounds `(,beg . ,end) transform))
+                 (when check-bounds (conn-check-bounds bounds))
+                 (unless delete (conn-dispatch-action-pulse beg end))
+                 (prog1 (filter-buffer-substring beg end delete)
+                   (when fixup
+                     (save-excursion
+                       (goto-char beg)
+                       (funcall conn-kill-reformat-function bounds)))))
+                (_ (error "No thing found")))))
+       (replace-and-separator
+        (conn-dispatch-to-how-argument :replace nil)))
     (:description "Send To")
     (:window-predicate
      (lambda (win)

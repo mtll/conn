@@ -2345,7 +2345,7 @@ finishing showing the buffers that were visited."))
 (defvar conn--kapply-at-points-buffer nil)
 (defvar conn--kapply-at-points-pipeline nil)
 
-(defvar conn-kapply-points-cursor-width 3.0)
+(defvar conn-kapply-points-cursor-width 2.0)
 
 (defun conn-kapply-at-points-begin (applier pipeline)
   (throw 'conn-kapply-at-points-begin (cons applier pipeline)))
@@ -2353,20 +2353,17 @@ finishing showing the buffers that were visited."))
 (defun conn--kapply-point-cursor-at (&rest points)
   (conn-protected-let* ((new nil (mapc #'delete-overlay new))
                         (all (apply #'append (mapcar #'cdr conn--kapply-at-points))))
-    (if (display-graphic-p)
-        (let ((cursor (propertize
-                       " "
-                       'display `(space :width (,conn-kapply-points-cursor-width))
-                       'face 'cursor)))
-          (dolist (point points)
-            (unless (seq-find (lambda (p) (= point (overlay-start p))) all)
-              (push (make-overlay point point nil t) new)
-              (overlay-put (car new) 'before-string cursor)))
-          (push (cons (point-marker) (nreverse new))
-                conn--kapply-at-points))
+    (let ((cursor
+           (and (display-graphic-p)
+                (propertize
+                 " "
+                 'display `(space :width (,conn-kapply-points-cursor-width))
+                 'face 'cursor))))
       (dolist (point points)
         (unless (seq-find (lambda (p) (= point (overlay-start p))) all)
-          (push (make-overlay point point nil t) new)))
+          (push (make-overlay point point nil t) new)
+          (overlay-put (car new) 'before-string cursor))))
+    (when new
       (push (cons (point-marker) (nreverse new))
             conn--kapply-at-points))))
 
