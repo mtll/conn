@@ -581,7 +581,8 @@
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-mark-state 'conn-kapply-at-points-mode)
-  "t" #'conn-kapply-at-points-in-region)
+  "'" #'conn-kapply-add-points-at-things-in-region
+  "d" #'conn-kapply-add-points-at-things-in-region)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-record-emacs-recursive-state)

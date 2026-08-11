@@ -2352,17 +2352,17 @@ finishing showing the buffers that were visited."))
 
 (defun conn--kapply-point-cursor-at (&rest points)
   (conn-protected-let* ((new nil (mapc #'delete-overlay new))
-                        (all (apply #'append (mapcar #'cdr conn--kapply-at-points))))
-    (let ((cursor
-           (and (display-graphic-p)
-                (propertize
-                 " "
-                 'display `(space :width (,conn-kapply-points-cursor-width))
-                 'face 'cursor))))
-      (dolist (point points)
-        (unless (seq-find (lambda (p) (= point (overlay-start p))) all)
-          (push (make-overlay point point nil t) new)
-          (overlay-put (car new) 'before-string cursor))))
+                        (all (apply #'append (mapcar #'cdr conn--kapply-at-points)))
+                        (cursor
+                         (and (display-graphic-p)
+                              (propertize
+                               " "
+                               'display `(space :width (,conn-kapply-points-cursor-width))
+                               'face 'cursor))))
+    (dolist (point points)
+      (unless (seq-find (lambda (p) (= point (overlay-start p))) all)
+        (push (make-overlay point point nil t) new)
+        (overlay-put (car new) 'before-string cursor)))
     (when new
       (push (cons (point-marker) (nreverse new))
             conn--kapply-at-points))))
@@ -2401,8 +2401,7 @@ finishing showing the buffers that were visited."))
     ((conn-bounds-get :subregions)
      (conn-> subregions
              (mapcar (lambda (b) (car (conn-bounds b))))
-             (apply #'conn--kapply-point-cursor-at))
-     (goto-char (car (conn-bounds (car subregions))))))
+             (apply #'conn--kapply-point-cursor-at))))
   (deactivate-mark t))
 
 (defun conn-kapply-add-points-at-words-in-thing ()
