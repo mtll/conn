@@ -576,7 +576,9 @@
   "b" #'conn-kapply-add-points-at-symbols-in-thing
   "d" #'conn-kapply-add-point
   "e" #'conn-kapply-at-points-emacs
+  "E" #'conn-kapply-at-points-emacs-no-cursor
   "c" #'conn-kapply-at-points-command
+  "C" #'conn-kapply-at-points-command-no-cursor
   "/" #'conn-kapply-at-points-undo)
 
 (define-keymap

@@ -2483,6 +2483,13 @@ finishing showing the buffers that were visited."))
            (conn-kapply-with-state it 'conn-emacs-state))
          #'conn-kapply-per-buffer-atomic-undo)))
 
+(defun conn-kapply-at-points-emacs-no-cursor ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (setf conn--kapply-no-point-at-cursor t)
+  (conn-kapply-at-points-emacs))
+
 (defun conn-kapply-at-points-command ()
   (interactive)
   (unless (eq (current-buffer) conn--kapply-at-points-buffer)
@@ -2492,6 +2499,13 @@ finishing showing the buffers that were visited."))
    (list (lambda (it)
            (conn-kapply-with-state it 'conn-command-state))
          #'conn-kapply-per-buffer-atomic-undo)))
+
+(defun conn-kapply-at-points-command-no-cursor ()
+  (interactive)
+  (unless (eq (current-buffer) conn--kapply-at-points-buffer)
+    (user-error "Kapply on points not active in buffer"))
+  (setf conn--kapply-no-point-at-cursor t)
+  (conn-kapply-at-points-command))
 
 (defun conn-kapply-at-points-apply ()
   (interactive)
@@ -2511,11 +2525,14 @@ finishing showing the buffers that were visited."))
        (`(,app ,_count) (conn-kapply-macro-argument)))
     (conn-kapply-at-points-begin app pipeline)))
 
+(defvar conn--kapply-no-point-at-cursor nil)
+
 (defun conn--kapply-at-points (callback)
   (cl-assert (not conn--kapply-at-points-buffer) nil
              "Kapply points already active")
   (let ((pipeline nil)
         (applier nil)
+        (conn--kapply-no-point-at-cursor nil)
         (beg (point-marker)))
     (unwind-protect
         (conn-kapply-on-iterator
@@ -2532,8 +2549,9 @@ finishing showing the buffers that were visited."))
                         (save-current-buffer
                           (catch 'conn-kapply-at-points-begin
                             (funcall callback))))
-            (push (list (point-marker) (make-overlay (point) (point) nil t))
-                  conn--kapply-at-points)
+            (unless conn--kapply-no-point-at-cursor
+              (push (list (point-marker) (make-overlay (point) (point) nil t))
+                    conn--kapply-at-points))
             (mapc (pcase-lambda (`(,mk . ,_))
                     (when (markerp mk) (set-marker mk nil)))
                   conn--kapply-at-points)
