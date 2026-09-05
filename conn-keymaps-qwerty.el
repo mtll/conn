@@ -570,10 +570,12 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kapply-at-points-state)
+  "C-n" #'conn-kapply-at-next-line
+  "C-p" #'conn-kapply-at-previous-line
   "q" #'conn-kapply-at-points-apply
   "t" #'conn-kapply-add-points-at-things
   "w" #'conn-kapply-add-points-at-words-in-thing
-  "b" #'conn-kapply-add-points-at-symbols-in-thing
+  "W" #'conn-kapply-add-points-at-symbols-in-thing
   "d" #'conn-kapply-add-point
   "e" #'conn-kapply-at-points-emacs
   "E" #'conn-kapply-at-points-emacs-no-cursor

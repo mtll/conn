@@ -747,7 +747,8 @@ command moves over."
   (declare (gv-setter conn-bounds-set))
   (inline-letevals (prop bounds)
     (inline-quote
-     (let ((p (if (eq ,prop :whole) ,bounds
+     (let ((p (if (eq ,prop :whole)
+                  (conn-bounds--whole ,bounds)
                 (plist-get (conn-bounds--properties ,bounds) ,prop))))
        (conn-transform-bounds
         (if (conn--bounds-delayed-p p) (funcall p ,bounds) p)

@@ -249,12 +249,10 @@ of each opened overlay, or t if the region could not be opened."
             (overlay-put ov 'invisible nil)
             (push (lambda () (overlay-put ov 'invisible inv)) restore)))))))
 
-(define-inline conn--copy-marker-and-type (marker)
+(defun conn--copy-marker-and-type (marker)
   "Like `copy-marker' but also copy MARKER insertion type."
-  (inline-letevals (marker)
-    (inline-quote
-     (copy-marker ,marker (and (markerp ,marker)
-                               (marker-insertion-type ,marker))))))
+  (copy-marker marker (and (markerp marker)
+                           (marker-insertion-type marker))))
 
 ;; From quail
 (defun conn-add-unread-events (key &optional reset)
@@ -275,11 +273,8 @@ See `quail-add-unread-command-events'."
   (concat
    key-string " " name
    (when register
-     (concat
-      " "
-      (propertize
-       (concat "<" (char-to-string register) ">")
-       'face 'conn-argument-active-face)))))
+     (concat " " (propertize (char-to-string register)
+                             'face 'conn-argument-active-face)))))
 
 (defun conn--remove-all-advice (&rest symbols)
   "Remove all advice from SYMBOLS."
@@ -639,8 +634,7 @@ the same form and contains disjoint (BEG . END) pairs."
      (save-excursion
        (goto-char beg)
        (if (search-forward "\n" end t) "\n" " ")))
-    ((pred stringp)
-     separator)
+    ((pred stringp) separator)
     (_ "")))
 
 (defun conn-kill-separator-for-strings (strings separator)

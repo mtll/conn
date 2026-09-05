@@ -2344,6 +2344,7 @@ finishing showing the buffers that were visited."))
 (defvar-local conn-kapply-at-points-mode nil)
 (defvar conn--kapply-at-points-buffer nil)
 (defvar conn--kapply-at-points-pipeline nil)
+(defvar conn--kapply-no-point-at-cursor nil)
 
 (defvar conn-kapply-points-cursor-width 2.0)
 
@@ -2373,24 +2374,39 @@ finishing showing the buffers that were visited."))
     (user-error "Kapply on points not active in buffer"))
   (conn--kapply-point-cursor-at (point)))
 
-;; TODO: generic function?
+(define-conn-state conn-points-at-things-state (conn-read-thing-state)
+  :lighter "THINGS")
+
+(cl-defgeneric conn-kapply-add-points-at-things-do (thing arg transform)
+  (declare (conn-anonymous-thing-property :add-points-at-things-op)))
+
+(cl-defmethod conn-kapply-add-points-at-things-do ((thing (conn-thing t))
+                                                   arg
+                                                   transform)
+  (setq arg (or (max (prefix-numeric-value arg) 2) 2))
+  (pcase (conn-bounds-of thing arg)
+    ((and bounds
+          (conn-bounds-get :subregions transform
+                           (and subregions (pred identity))))
+     (conn-> (butlast subregions)
+             (mapcar (lambda (b) (car (conn-bounds b))))
+             (apply #'conn--kapply-point-cursor-at))
+     (goto-char (car (conn-bounds-get (car (last subregions)) :whole)))
+     (conn-push-command-history
+      `(conn-kapply-add-points-at-things
+        ,(lambda ()
+           (conn-kapply-add-points-at-things-do thing arg transform)))))))
+
 (defun conn-kapply-add-points-at-things ()
   (interactive)
   (unless (eq (current-buffer) conn--kapply-at-points-buffer)
     (user-error "Kapply on points not active in buffer"))
-  (conn-read-args (conn-read-thing-state
+  (conn-read-args (conn-points-at-things-state
                    :prompt "On Things")
       ((`(,thing ,arg)
         (conn-kapply-on-thing-argument nil (use-region-p)))
        (transform (conn-transform-argument)))
-    (pcase (conn-bounds-of thing arg)
-      ((conn-bounds-get :subregions transform
-                        (and subregions (pred identity)))
-       (conn-> subregions
-               (mapcar (lambda (b) (car (conn-bounds b))))
-               (apply #'conn--kapply-point-cursor-at)))
-      ((conn-bounds `(,beg . ,_end) transform)
-       (conn--kapply-point-cursor-at beg)))))
+    (conn-kapply-add-points-at-things-do thing arg transform)))
 
 ;; TODO: generic function?
 (defun conn-kapply-add-points-at-things-in-region ()
@@ -2442,23 +2458,17 @@ finishing showing the buffers that were visited."))
         ((`(,thing ,arg) (conn-thing-argument))
          (transform (conn-transform-argument)))
       (save-excursion
-        (let* ((regions
-                (prog1 (pcase (conn-bounds-of thing arg)
-                         ;; ((and (guard subregions)
-                         ;;       (conn-bounds-get :subregions
-                         ;;                        transform
-                         ;;                        (and sr (pred identity))))
-                         ;;  (mapcar #'conn-bounds sr))
-                         ((conn-bounds whole transform)
-                          (list whole)))
-                  (deactivate-mark))))
-          (save-excursion
-            (pcase-dolist (`(,beg . ,end) regions)
-              (goto-char beg)
-              (while (replace-search string end nil t case-fold-search)
-                (pcase (match-data t)
-                  (`(,mb ,_me . ,_)
-                   (conn--kapply-point-cursor-at mb)))))))))))
+        (pcase (conn-bounds-of thing arg)
+          ((conn-bounds `(,beg . ,end) transform)
+           (deactivate-mark)
+           (goto-char beg)
+           (let (case-fold-search)
+             (while (re-search-forward (rx symbol-start (literal string) symbol-end)
+                                       end t)
+               (pcase (match-data t)
+                 (`(,mb ,_me . ,_)
+                  (conn--kapply-point-cursor-at mb))))))
+          (_ (error "No thing found")))))))
 
 ;; (defun conn-kapply-add-points-at-dispatch ()
 ;;   (interactive)
@@ -2524,8 +2534,6 @@ finishing showing the buffers that were visited."))
                (conn-kapply-undo-argument))))
        (`(,app ,_count) (conn-kapply-macro-argument)))
     (conn-kapply-at-points-begin app pipeline)))
-
-(defvar conn--kapply-no-point-at-cursor nil)
 
 (defun conn--kapply-at-points (callback)
   (cl-assert (not conn--kapply-at-points-buffer) nil
@@ -2605,6 +2613,24 @@ finishing showing the buffers that were visited."))
      (conn-with-recursive-stack 'conn-kapply-at-points-state
        (conn-kapply-add-points-at-things-in-region)
        (recursive-edit)))))
+
+(defun conn-kapply-at-things ()
+  (interactive)
+  (conn--kapply-at-points
+   (lambda ()
+     (conn-with-recursive-stack 'conn-kapply-at-points-state
+       (conn-kapply-add-points-at-things)
+       (recursive-edit)))))
+
+(defun conn-kapply-at-next-line ()
+  (interactive)
+  (conn-kapply-add-point)
+  (next-line))
+
+(defun conn-kapply-at-previous-line ()
+  (interactive)
+  (conn-kapply-add-point)
+  (previous-line))
 
 ;;;;; Dispatch Kapply
 
