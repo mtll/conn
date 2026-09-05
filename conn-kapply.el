@@ -2632,6 +2632,34 @@ finishing showing the buffers that were visited."))
   (conn-kapply-add-point)
   (previous-line))
 
+(defun conn-kapply-at-sexp-forward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do
+   (let ((keys (key-binding [conn-forward-sexp-remap])))
+     (conn-without-conn-maps (key-binding keys)))
+   nil nil))
+
+(defun conn-kapply-at-sexp-backward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do
+   (let ((keys (key-binding [conn-backward-sexp-remap])))
+     (conn-without-conn-maps (key-binding keys)))
+   nil nil))
+
+(defun conn-kapply-at-word-forward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do
+   (let ((keys (key-binding [conn-forward-word-remap])))
+     (conn-without-conn-maps (key-binding keys)))
+   nil nil))
+
+(defun conn-kapply-at-word-backward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do
+   (let ((keys (key-binding [conn-backward-word-remap])))
+     (conn-without-conn-maps (key-binding keys)))
+   nil nil))
+
 ;;;;; Dispatch Kapply
 
 (defun conn-dispatch-kapply ()

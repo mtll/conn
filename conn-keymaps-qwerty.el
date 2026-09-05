@@ -570,6 +570,10 @@
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-kapply-at-points-state)
+  "C-M-f" #'conn-kapply-at-sexp-forward
+  "C-M-b" #'conn-kapply-at-sexp-backward
+  "M-f" #'conn-kapply-at-word-forward
+  "M-b" #'conn-kapply-at-word-backward
   "C-n" #'conn-kapply-at-next-line
   "C-p" #'conn-kapply-at-previous-line
   "q" #'conn-kapply-at-points-apply
