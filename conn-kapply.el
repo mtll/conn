@@ -2385,9 +2385,8 @@ finishing showing the buffers that were visited."))
                                                    transform)
   (setq arg (or (max (prefix-numeric-value arg) 2) 2))
   (pcase (conn-bounds-of thing arg)
-    ((and bounds
-          (conn-bounds-get :subregions transform
-                           (and subregions (pred identity))))
+    ((conn-bounds-get :subregions transform
+                      (and subregions (pred identity)))
      (conn-> (butlast subregions)
              (mapcar (lambda (b) (car (conn-bounds b))))
              (apply #'conn--kapply-point-cursor-at))
@@ -2625,12 +2624,12 @@ finishing showing the buffers that were visited."))
 (defun conn-kapply-at-next-line ()
   (interactive)
   (conn-kapply-add-point)
-  (next-line))
+  (forward-line))
 
 (defun conn-kapply-at-previous-line ()
   (interactive)
   (conn-kapply-add-point)
-  (previous-line))
+  (forward-line -1))
 
 (defun conn-kapply-at-sexp-forward ()
   (interactive)
