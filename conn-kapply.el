@@ -2660,6 +2660,14 @@ finishing showing the buffers that were visited."))
      (conn-without-conn-maps (key-binding keys)))
    nil nil))
 
+(defun conn-kapply-at-symbol-forward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do 'forward-symbol nil nil))
+
+(defun conn-kapply-at-symbol-backward ()
+  (interactive)
+  (conn-kapply-add-points-at-things-do 'backward-symbol nil nil))
+
 ;;;;; Dispatch Kapply
 
 (defun conn-dispatch-kapply ()

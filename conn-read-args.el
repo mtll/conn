@@ -53,6 +53,7 @@
   "?" 'reference
   "M-?" 'reference
   "C-h k" 'conn-describe-key
+  "C-h m" 'reference
   "C-h c" 'conn-describe-key
   "C-h o" 'conn-describe-symbol
   "<escape>" 'keyboard-quit
@@ -137,20 +138,21 @@ The duration of the message display is controlled by
       (concat " " msg)))))
 
 (defun conn-read-args-display-flat (prompt arguments &optional elide)
-  (message "%s"
-           (concat
-            (conn-read-args-prompt-line prompt elide)
-            (and-let* ((_ (not elide))
-                       (args (flatten-tree
-                              (mapcar #'conn-argument-display arguments))))
-              (conn-<
-                (compat-call
-                 sort args
-                 :key (lambda (str)
-                        (or (get-text-property 0 'conn-read-args-display-depth str)
-                            0)))
-                (string-join "   ")
-                (:> (concat "\n")))))))
+  (message
+   "%s"
+   (concat
+    (conn-read-args-prompt-line prompt elide)
+    (and-let* ((_ (not elide))
+               (args (flatten-tree
+                      (mapcar #'conn-argument-display arguments))))
+      (conn-<
+        (compat-call
+         sort args
+         :key (lambda (str)
+                (or (get-text-property 0 'conn-read-args-display-depth str)
+                    0)))
+        (string-join "   ")
+        (:> (concat "\n")))))))
 
 (defun conn-read-args-display-columns (column-count separator-width)
   (lambda (prompt arguments &optional elide)

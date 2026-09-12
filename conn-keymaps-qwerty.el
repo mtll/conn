@@ -188,8 +188,6 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "t" 'conn-kapply-on-things
-  "'" 'conn-kapply-on-things
   "C-s" (conn-anonymous-thing
           '(conn-thing-at-isearch)
           :isearch-command 'isearch-forward
@@ -332,6 +330,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "T" 'conn-kapply-on-things
   "P" #'conn-other-place-prefix
   "TAB" conn-dwim-at-point
   "M-TAB" conn-alt-dwim-at-point
@@ -574,6 +573,8 @@
   "C-M-b" #'conn-kapply-at-sexp-backward
   "M-f" #'conn-kapply-at-word-forward
   "M-b" #'conn-kapply-at-word-backward
+  "M-F" #'conn-kapply-at-symbol-forward
+  "M-B" #'conn-kapply-at-symbol-backward
   "C-n" #'conn-kapply-at-next-line
   "C-p" #'conn-kapply-at-previous-line
   "q" #'conn-kapply-at-points-apply
