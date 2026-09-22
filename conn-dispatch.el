@@ -1087,8 +1087,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
   (replace nil)
   (separator nil))
 
-(cl-defsubst conn-dispatch-to-how-argument (&key (replace t)
-                                                 (separator 'default))
+(cl-defsubst conn-dispatch-to-how-argument (&key replace (separator 'default))
   (declare (important-return-value t)
            (side-effect-free t))
   (conn-action-slot
@@ -4206,23 +4205,14 @@ contain targets."
                 (bound-and-true-p outline-minor-mode))
         (unless (and-let* ((cached (alist-get (current-buffer) cache)))
                   (= (car cached) (buffer-chars-modified-tick)))
-          (let ((pts nil))
+          (let (pts)
+            (dolist (n '(-1 1))
+              (save-excursion
+                (cl-loop
+                 (unless (outline-next-visible-heading n) (cl-return))
+                 (push (point) pts))))
             (setf (alist-get (current-buffer) cache)
-                  (cons (buffer-chars-modified-tick)
-                        (progn
-                          (save-excursion
-                            (catch 'break
-                              (while t
-                                (unless (outline-next-visible-heading -1)
-                                  (throw 'break nil))
-                                (push (point) pts))))
-                          (save-excursion
-                            (catch 'break
-                              (while t
-                                (unless (outline-next-visible-heading 1)
-                                  (throw 'break nil))
-                                (push (point) pts))))
-                          pts)))))
+                  (cons (buffer-chars-modified-tick) pts))))
         (dolist (pt (cdr (alist-get (current-buffer) cache)))
           (conn-make-target-overlay pt 0))))))
 
@@ -4739,14 +4729,12 @@ the string after the region selected by dispatch.")
              (if (and replace (<= beg (point) end))
                  (conn-dispatch-goto-char beg 'nopush)
                (goto-char beg))
-             (cond (replace
-                    (delete-region beg end))
+             (cond (replace (delete-region beg end))
                    ((and separator (< end beg))
                     (insert (conn-kill-separator-for-strings str separator))))
              (insert-for-yank str)
-             (conn-dispatch-action-pulse
-              (- (point) (length str))
-              (point))
+             (conn-dispatch-action-pulse (- (point) (length str))
+                                         (point))
              (when (and separator (not replace) (not (< end beg)))
                (insert (conn-kill-separator-for-strings str separator))))
             (_ (user-error "Cannot find thing at point"))))))))
@@ -4808,8 +4796,7 @@ the string after the region selected by dispatch.")
                        (goto-char beg)
                        (funcall conn-kill-reformat-function bounds)))))
                 (_ (error "No thing found")))))
-       (replace-and-separator
-        (conn-dispatch-to-how-argument :replace nil)))
+       (replace-and-separator (conn-dispatch-to-how-argument)))
     (:description "Send To")
     (:window-predicate
      (lambda (win)

@@ -94,11 +94,11 @@
   "'" #'conn-kapply-count-iterator
   "+" #'indent-relative-first-indent-point
   "c" #'conn-comment-thing
-  "_" #'indent-relative
-  "i" #'clone-indirect-buffer
+  "n" #'indent-relative
+  "l" #'clone-indirect-buffer
   "SPC" #'whitespace-cleanup
-  "q" #'conn-indent-thing
-  "n" #'conn-indent-thing-rigidly
+  "i" #'conn-indent-thing
+  "I" #'conn-indent-thing-rigidly
   "R" #'indent-rigidly
   "V" #'vc-region-history
   "a c" #'align-current
@@ -243,7 +243,6 @@
   "M-n" #'conn-mark-ring-next
   "M-p" #'conn-mark-ring-previous
   "DEL" #'kill-region
-  ;; "e" #'conn-emacs-state
   "TAB" #'indent-rigidly
   "y" #'conn-yank-replace
   "^" #'ispell-region
@@ -283,8 +282,8 @@
                                   (conn-to-char-forward char count)
                                   (point))))
                        (conn-make-bounds
-                        self count (cons (min pt (point))
-                                         (max pt (point)))
+                        self count (cons (min (1+ pt) (point))
+                                         (max (1- pt) (point)))
                         :direction (if (> (point) pt) -1 1)))))
   "r" (conn-anonymous-thing
         '(conn-to-char-backward)
@@ -297,8 +296,8 @@
                                   (conn-to-char-backward char count)
                                   (point))))
                        (conn-make-bounds
-                        self count (cons (min pt (point))
-                                         (max pt (point)))
+                        self count (cons (min (1+ pt) (point))
+                                         (max (1- pt) (point)))
                         :direction (if (> (point) pt) -1 1)))))
   "e" (conn-anonymous-thing
         '(expansion)
