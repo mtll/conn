@@ -279,6 +279,7 @@
                                       (conn-thing-get self :char)
                                     (read-char "Char: " t)))
                             (pt (save-excursion
+                                  (forward-char 1)
                                   (conn-to-char-forward char count)
                                   (point))))
                        (conn-make-bounds
@@ -293,6 +294,7 @@
                                       (conn-thing-get self :char)
                                     (read-char "Char: " t)))
                             (pt (save-excursion
+                                  (forward-char -1)
                                   (conn-to-char-backward char count)
                                   (point))))
                        (conn-make-bounds
@@ -407,6 +409,13 @@
   "y" "<conn-yank-remap>"
   "z" #'conn-yank-replace
   "Z" #'conn-exchange-mark-command)
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-command-state 'buffer-read-only)
+  "q" #'quit-window
+  "d" #'conn-copy-thing
+  ;; "r" "t" "z"
+  )
 
 ;;;;; Dispatch State
 

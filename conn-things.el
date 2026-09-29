@@ -1524,7 +1524,8 @@ Returns a `conn-bounds' struct."
     (if (and conn--last-thing-kbd-macro
              (memq cmd '(kmacro-call-macro
                          call-last-kbd-macro
-                         kmacro-end-and-call-macro)))
+                         kmacro-end-and-call-macro
+                         kmacro-end-or-call-macro)))
         (setf (conn-argument--set-flag arg) t
               (conn-argument--value arg) (list conn--last-thing-kbd-macro nil))
       (setf (conn-argument--set-flag arg) t
@@ -2127,6 +2128,7 @@ Only the background color is used."
  'kmacro-start-macro
  'kmacro-start-macro-or-insert-counter
  'kmacro-end-and-call-macro
+ 'kmacro-end-or-call-macro
  'kmacro-end-macro
  'kmacro-call-macro
  'start-kbd-macro
