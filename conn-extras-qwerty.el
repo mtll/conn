@@ -26,7 +26,7 @@
   "M-i" 'conn-one-command
   "M-I" 'conn-command-state
   "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "`" 'conn-wincontrol-mru-window
   "TAB" conn-dwim-at-point
   "M-TAB" conn-alt-dwim-at-point
@@ -39,7 +39,7 @@
   "TAB" 'outline-cycle
   "<backstab>" 'outline-cycle-buffer
   "<backspace>" 'conn-scroll-down
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "/" "<conn-undo-remap>"
   "?" "<conn-redo-remap>"
   "W" 'widen
@@ -139,7 +139,7 @@
   "M-SPC" 'dired-toggle-marks
   "C-M-l" 'dired-do-redisplay
   "z" 'dired-goto-file
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "`" 'conn-wincontrol-mru-window
   "v" 'dired-mark
   "V" 'dired-toggle-marks
@@ -164,7 +164,7 @@
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-special-state 'diff-mode)
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "w" 'conn-wincontrol-one-command
   "q" 'quit-window
   "/" 'diff-undo
@@ -229,7 +229,7 @@
   "w" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "/" 'ibuffer-do-revert
   "`" 'conn-wincontrol-mru-window
   "y" 'ibuffer-yank
@@ -294,7 +294,7 @@
   "i" 'previous-line
   "k" 'next-line
   "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "j" 'bookmark-bmenu-select
   "f" 'conn-bmenu-dispatch-state
   "h" 'bookmark-bmenu-this-window
@@ -320,7 +320,7 @@
   "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -338,7 +338,7 @@
   "k" 'scroll-up-command
   "f" 'conn-dispatch-on-buttons
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -366,7 +366,7 @@
   "f" 'dispatch-on-info-refs
   "v" 'Info-index
   "`" 'conn-wincontrol-mru-window
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -382,7 +382,7 @@
   "i" 'treemacs-previous-line
   "k" 'treemacs-next-line
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -400,7 +400,7 @@
   "i" 'scroll-down-command
   "k" 'scroll-up-command
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -418,7 +418,7 @@
   "I" 'scroll-down-command
   "K" 'scroll-up-command
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -434,7 +434,7 @@
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -450,7 +450,7 @@
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "." 'conn-register-load
   "x" (conn-remap-key "C-x" t))
 
@@ -463,7 +463,7 @@
   "x" (conn-remap-key "C-x" t)
   "`" 'conn-wincontrol-mru-window
   "w" 'conn-wincontrol-one-command
-  ";" 'conn-wincontrol-mode
+  ";" 'conn-wincontrol
   "i" 'pdf-view-scroll-down-or-previous-page
   "k" 'pdf-view-scroll-up-or-next-page
   "l" 'pdf-view-next-page-command

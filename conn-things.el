@@ -260,8 +260,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                 (push gfn defined))
                (t (push `(cons ,key ,val) alist)))
         (cl-callf2 drop 2 properties))
-      (cons `(list ,@mlist)
-            `(list ,@alist)))))
+      (cons mlist alist))))
 
 (defmacro conn-anonymous-thing (parents &rest properties)
   "Make an anonymous thing inheriting from PARENT."
@@ -279,8 +278,8 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                         do (when (conn-anonymous-thing-p parent)
                              (error "Cannot inherit from anonymous thing"))
                         collect parent)
-      :methods ,methods
-      :properties ,props)))
+      :methods (list ,@methods)
+      :properties (list ,@props))))
 
 (define-inline conn--anonymous-thing-method (object method)
   (declare (side-effect-free t))
@@ -311,8 +310,6 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-  (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
-        (list #'conn--set-anonymous-thing-property))
   (defun conn--set-anonymous-thing-property (f args &rest properties)
     `(progn
        (eval-and-compile
@@ -336,7 +333,9 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                             (conn-thing ,(car args))))
                    (op (conn--anonymous-thing-method thing ',f)))
              (apply op #'cl-call-next-method thing rest)
-           (cl-call-next-method))))))
+           (cl-call-next-method)))))
+  (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
+        (list #'conn--set-anonymous-thing-property)))
 
 (define-inline conn-thing-unset (thing property)
   "Unset THING property PROPERTY."
