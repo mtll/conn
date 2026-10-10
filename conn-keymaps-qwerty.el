@@ -15,8 +15,6 @@
 
 ;;; Commentary
 
-;; The primary conn keymaps
-
 ;;; Code
 
 (require 'conn)
@@ -71,7 +69,7 @@
   (define-keymap
     :keymap isearch-mode-map
     "M-z" #'conn-isearch-restrict-to-thing
-    "C-t" #'conn-isearch-thing-to-search-string
+    "C-S-t" #'conn-isearch-thing-to-search-string
     "C-z" #'conn-isearch-exit-other-end
     "M-'" #'conn-kapply-on-isearch
     "C-," #'conn-dispatch-isearch

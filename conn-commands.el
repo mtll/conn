@@ -1837,6 +1837,12 @@ with `conn-check-bounds' before deleting."
   "State for `conn-replace'."
   :lighter "REPLACE")
 
+(defvar-keymap conn-toggle-case-replace-map
+  "SPC" 'conn-toggle-case-replace)
+
+(defvar-keymap conn-toggle-case-fold-map
+  "RET" 'conn-toggle-case-fold-search)
+
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-replace-state)
  (conn-reference-page
@@ -2272,7 +2278,8 @@ For more information about how the replacement is carried out see
   (declare (conn-thing-operation conn-replace-do))
   (interactive)
   (conn-read-args (conn-replace-state
-                   :prompt "Replace in Thing")
+                   :prompt "Replace in Thing"
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
        (transform (conn-transform-argument))
        (regexp-flag
@@ -2289,14 +2296,25 @@ For more information about how the replacement is carried out see
         (conn-boolean-argument "backward"
                                'backward
                                conn-backward-argument-map
-                               :command-reference conn-backward-argument-reference)))
-    (conn-replace-do thing
-                     arg
-                     transform
-                     delimited
-                     backward
-                     regexp-flag
-                     subregions-p)))
+                               :command-reference conn-backward-argument-reference))
+       (cr
+        (conn-boolean-argument "case replace"
+                               'conn-toggle-case-replace
+                               conn-toggle-case-replace-map))
+       (cfs
+        (conn-boolean-argument "case fold"
+                               'conn-toggle-case-fold-search
+                               conn-toggle-case-fold-map
+                               :value case-fold-search)))
+    (dlet ((case-replace cr)
+           (case-fold-search cfs))
+      (conn-replace-do thing
+                       arg
+                       transform
+                       delimited
+                       backward
+                       regexp-flag
+                       subregions-p))))
 
 ;;;;; Isearch
 
@@ -4931,7 +4949,8 @@ Interactively REPEAT is given by the prefix argument."
                                     _kbd-macro-query)
   (conn-read-args (conn-replace-state
                    :prefix arg
-                   :prompt "Replace in Thing")
+                   :prompt "Replace in Thing"
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((`(,thing ,arg ,subregions-p) (conn-replace-thing-argument))
        (transform (conn-transform-argument transform))
        (regexp-flag
@@ -4948,14 +4967,26 @@ Interactively REPEAT is given by the prefix argument."
         (conn-boolean-argument "backward"
                                'backward
                                conn-backward-argument-map
-                               :command-reference conn-backward-argument-reference)))
-    (conn-replace-do thing
-                     arg
-                     transform
-                     delimited
-                     backward
-                     regexp-flag
-                     subregions-p)))
+                               :command-reference conn-backward-argument-reference))
+       (cr
+        (conn-boolean-argument "case replace"
+                               'conn-toggle-case-replace
+                               conn-toggle-case-replace-map
+                               :value case-replace))
+       (cfs
+        (conn-boolean-argument "case fold"
+                               'conn-toggle-case-fold-search
+                               conn-toggle-case-fold-map
+                               :value case-fold-search)))
+    (dlet ((case-replace cr)
+           (case-fold-search cfs))
+      (conn-replace-do thing
+                       arg
+                       transform
+                       delimited
+                       backward
+                       regexp-flag
+                       subregions-p))))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql yank))
                                     arg
