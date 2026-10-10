@@ -1380,6 +1380,7 @@ The iterator must be the first argument in ARGLIST.
   ( :update (break)
     (setf (conn-argument--value arg) 'record
           (conn-argument--set-flag arg) t)
+    (setq kmacro-initial-counter-value (conn-read-args-consume-prefix-arg))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
@@ -1754,17 +1755,6 @@ finishing showing the buffers that were visited."))
     (funcall break)))
 
 (define-conn-argument-command ((arg conn-kapply-command-handler)
-                               (cmd (eql kmacro-set-counter)))
-  "Set the kmacro counter."
-  ( :update (break)
-    (condition-case _
-        (kmacro-set-counter
-         (or (conn-read-args-consume-prefix-arg)
-             0))
-      (quit nil))
-    (funcall break)))
-
-(define-conn-argument-command ((arg conn-kapply-command-handler)
                                (cmd (eql kmacro-set-format)))
   "Set the kmacro format string."
   ( :update (break)
@@ -1773,17 +1763,12 @@ finishing showing the buffers that were visited."))
       (quit nil))
     (funcall break)))
 
-(cl-defmethod conn-argument-display ((_cmd (eql conn-kapply-command-handler)))
-  (list (concat (substitute-command-keys
-                 "\\[kmacro-set-format] format ")
-                (propertize
-                 kmacro-counter-format
-                 'face 'read-multiple-choice-face))
-        (concat (substitute-command-keys
-                 "\\[kmacro-set-counter] counter ")
-                (propertize
-                 (format "%d" (or kmacro-initial-counter-value 0))
-                 'face 'read-multiple-choice-face))))
+(cl-defmethod conn-argument-display ((_cmd conn-kapply-command-handler))
+  (concat (substitute-command-keys
+           "\\[kmacro-set-format] format ")
+          (propertize
+           kmacro-counter-format
+           'face 'conn-argument-active-face)))
 
 ;;;; Commands
 

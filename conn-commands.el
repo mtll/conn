@@ -2297,24 +2297,22 @@ For more information about how the replacement is carried out see
                                'backward
                                conn-backward-argument-map
                                :command-reference conn-backward-argument-reference))
-       (cr
+       (`,case-replace
         (conn-boolean-argument "case replace"
                                'conn-toggle-case-replace
                                conn-toggle-case-replace-map))
-       (cfs
+       (`,case-fold-search
         (conn-boolean-argument "case fold"
                                'conn-toggle-case-fold-search
                                conn-toggle-case-fold-map
                                :value case-fold-search)))
-    (dlet ((case-replace cr)
-           (case-fold-search cfs))
-      (conn-replace-do thing
-                       arg
-                       transform
-                       delimited
-                       backward
-                       regexp-flag
-                       subregions-p))))
+    (conn-replace-do thing
+                     arg
+                     transform
+                     delimited
+                     backward
+                     regexp-flag
+                     subregions-p)))
 
 ;;;;; Isearch
 
@@ -4968,25 +4966,23 @@ Interactively REPEAT is given by the prefix argument."
                                'backward
                                conn-backward-argument-map
                                :command-reference conn-backward-argument-reference))
-       (cr
+       (`,case-replace
         (conn-boolean-argument "case replace"
                                'conn-toggle-case-replace
                                conn-toggle-case-replace-map
                                :value case-replace))
-       (cfs
+       (`,case-fold-search
         (conn-boolean-argument "case fold"
                                'conn-toggle-case-fold-search
                                conn-toggle-case-fold-map
                                :value case-fold-search)))
-    (dlet ((case-replace cr)
-           (case-fold-search cfs))
-      (conn-replace-do thing
-                       arg
-                       transform
-                       delimited
-                       backward
-                       regexp-flag
-                       subregions-p))))
+    (conn-replace-do thing
+                     arg
+                     transform
+                     delimited
+                     backward
+                     regexp-flag
+                     subregions-p)))
 
 (cl-defmethod conn-change-thing-do ((_thing (eql yank))
                                     arg
