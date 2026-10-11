@@ -1354,8 +1354,7 @@ The iterator must be the first argument in ARGLIST.
                (:include conn-argument)
                ( :constructor conn-kapply-macro-argument
                  (&aux (required t))))
-  (register nil :type (or integer nil))
-  (count nil :type (or integer nil)))
+  (register nil :type (or integer nil)))
 
 (cl-defmethod conn-argument-display ((arg conn-kapply-macro-argument))
   (concat (substitute-command-keys
@@ -1363,16 +1362,6 @@ The iterator must be the first argument in ARGLIST.
           (and-let* ((reg (conn-kapply-macro-argument-register arg)))
             (propertize (format "<%c>" reg)
                         'face 'conn-argument-active-face))))
-
-(cl-defmethod conn-argument-update :around ((arg conn-kapply-macro-argument)
-                                            cmd
-                                            break)
-  (cl-call-next-method
-   arg cmd
-   (lambda ()
-     (setf (conn-kapply-macro-argument-count arg)
-           (conn-read-args-consume-prefix-arg))
-     (funcall break))))
 
 (define-conn-argument-command ((arg conn-kapply-macro-argument)
                                (cmd (eql record)))
@@ -1445,31 +1434,30 @@ The iterator must be the first argument in ARGLIST.
 
 (cl-defmethod conn-argument-value ((arg conn-kapply-macro-argument))
   (let ((register (conn-kapply-macro-argument-register arg)))
-    (list (pcase (conn-argument--value arg)
-            ('record
-             (let ((macro (when register (get-register register))))
-               (lambda (it &optional count)
-                 (conn-kmacro-apply it count macro))))
-            ('apply
-             (let ((macro (if register (get-register register) last-kbd-macro)))
-               (lambda (it &optional count)
-                 (conn-kmacro-apply it count macro))))
-            ((and cmd (or 'append 'append-skip-exec))
-             (when register
-               (kmacro-split-ring-element (get-register register)))
-             (lambda (it &optional count)
-               (conn-kmacro-apply-append it count
-                                         (eq cmd 'append-skip-exec))
-               (when register
-                 (set-register register (kmacro-ring-head)))))
-            ('step-edit
-             (when register
-               (kmacro-split-ring-element (get-register register)))
-             (lambda (it &optional count)
-               (conn-kmacro-apply-step-edit it count)
-               (when register
-                 (set-register register (kmacro-ring-head))))))
-          (conn-kapply-macro-argument-count arg))))
+    (pcase (conn-argument--value arg)
+      ('record
+       (let ((macro (when register (get-register register))))
+         (lambda (it &optional count)
+           (conn-kmacro-apply it count macro))))
+      ('apply
+       (let ((macro (if register (get-register register) last-kbd-macro)))
+         (lambda (it &optional count)
+           (conn-kmacro-apply it count macro))))
+      ((and cmd (or 'append 'append-skip-exec))
+       (when register
+         (kmacro-split-ring-element (get-register register)))
+       (lambda (it &optional count)
+         (conn-kmacro-apply-append it count
+                                   (eq cmd 'append-skip-exec))
+         (when register
+           (set-register register (kmacro-ring-head)))))
+      ('step-edit
+       (when register
+         (kmacro-split-ring-element (get-register register)))
+       (lambda (it &optional count)
+         (conn-kmacro-apply-step-edit it count)
+         (when register
+           (set-register register (kmacro-ring-head))))))))
 
 ;;;;; State Argument
 
@@ -1816,8 +1804,7 @@ finishing showing the buffers that were visited."))
                           (conn-kapply-restrictions-argument restrictions)
                           (conn-kapply-undo-argument)))
                 (ensure-list extra))))
-       ((or `(,app ,_count) app)
-        (or applier (conn-kapply-macro-argument))))
+       (app (or applier (conn-kapply-macro-argument))))
     (conn-kapply-macro app
                        iterator
                        `(conn-kapply-relocate-to-region
@@ -2112,14 +2099,16 @@ finishing showing the buffers that were visited."))
                                          pipeline)
        pipeline))))
 
-(defun conn-kapply-on-things ()
-  (interactive)
-  (conn-read-args (conn-kapply-on-things-state
-                   :prompt "On Things")
-      ((`(,thing ,arg)
-        (conn-kapply-on-thing-argument nil (use-region-p)))
-       (transform (conn-transform-argument)))
-    (conn-kapply-on-things-do thing arg transform)))
+(defun conn-kapply-on-things (&optional count)
+  (interactive "P")
+  (if count
+      (conn-kapply-count-iterator count)
+    (conn-read-args (conn-kapply-on-things-state
+                     :prompt "On Things")
+        ((`(,thing ,arg)
+          (conn-kapply-on-thing-argument nil (use-region-p)))
+         (transform (conn-transform-argument)))
+      (conn-kapply-on-things-do thing arg transform))))
 
 (defun conn-kapply-on-symbol ()
   (interactive)
@@ -2129,10 +2118,11 @@ finishing showing the buffers that were visited."))
   (interactive)
   (conn-kapply-on-things-do 'conn-kapply-on-word nil nil))
 
-(defun conn-kapply-count-iterator ()
-  (interactive)
+(defun conn-kapply-count-iterator (count)
+  (interactive "P")
+  (setq count (or count 0))
   (conn-read-args (conn-kapply-state
-                   :prompt "Kapply with Count"
+                   :prompt (format "Kapply with Count (%s)" count)
                    :command-handler (conn-kapply-command-handler)
                    :display-handler (conn-read-args-display-columns 3 3)
                    :pre (lambda (_)
@@ -2141,11 +2131,11 @@ finishing showing the buffers that were visited."))
                             (posframe-hide " *conn-list-posframe*"))))
       ((pipeline (conn-composite-argument
                   (list (conn-kapply-query-argument)
+                        (conn-kapply-state-argument)
                         (conn-kapply-excursions-argument t)
                         (conn-kapply-restrictions-argument t)
-                        (conn-kapply-window-conf-argument)
-                        (conn-kapply-undo-argument))))
-       (`(,applier ,count) (conn-kapply-macro-argument)))
+                        (conn-kapply-window-conf-argument))))
+       (applier (conn-kapply-macro-argument)))
     (unless (= count 1)
       (conn-kapply-macro
        (lambda (it) (funcall applier it (or (and count (1- count)) 0)))
@@ -2153,6 +2143,7 @@ finishing showing the buffers that were visited."))
        `(conn-kapply-relocate-to-region
          conn-kapply-open-invisible
          conn-kapply-pulse-region
+         conn-kapply-per-buffer-undo
          ,@pipeline)))
     (let ((macro (kmacro-ring-head)))
       (conn-push-command-history
@@ -2250,7 +2241,7 @@ finishing showing the buffers that were visited."))
                                  (conn-kapply-restrictions-argument t)
                                  (conn-kapply-window-conf-argument)
                                  (conn-kapply-undo-argument))))
-                (`(,applier ,_count) (conn-kapply-macro-argument)))
+                (applier (conn-kapply-macro-argument)))
              (setf restrict rst)
              (collect-matches)
              (conn-kapply-macro applier
@@ -2484,7 +2475,7 @@ finishing showing the buffers that were visited."))
     (user-error "Kapply on points not active in buffer"))
   (when arg (setq kmacro-initial-counter-value arg))
   (setf conn--kapply-no-point-at-cursor t)
-  (conn-kapply-at-points-emacs))
+  (conn-kapply-at-points-emacs arg))
 
 (defun conn-kapply-at-points-command (arg)
   (interactive "P")
@@ -2503,7 +2494,7 @@ finishing showing the buffers that were visited."))
     (user-error "Kapply on points not active in buffer"))
   (when arg (setq kmacro-initial-counter-value arg))
   (setf conn--kapply-no-point-at-cursor t)
-  (conn-kapply-at-points-command))
+  (conn-kapply-at-points-command arg))
 
 (defun conn-kapply-at-points-apply ()
   (interactive)
@@ -2520,7 +2511,7 @@ finishing showing the buffers that were visited."))
                (conn-kapply-window-conf-argument nil)
                (conn-kapply-restrictions-argument nil)
                (conn-kapply-undo-argument))))
-       (`(,app ,_count) (conn-kapply-macro-argument)))
+       (app (conn-kapply-macro-argument)))
     (conn-kapply-at-points-begin app pipeline)))
 
 (defun conn--kapply-at-points (callback)
@@ -2676,7 +2667,7 @@ finishing showing the buffers that were visited."))
                (lambda (it) (conn-kapply-save-excursion it t))
                #'conn-kapply-relocate-to-region
                #'conn-kapply-pulse-region)))
-       (`(,applier ,_count) (conn-kapply-macro-argument)))
+       (applier (conn-kapply-macro-argument)))
     (conn-action ((macro nil))
       (:description "Kapply")
       (:repeat t)

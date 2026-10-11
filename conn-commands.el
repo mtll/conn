@@ -2300,7 +2300,8 @@ For more information about how the replacement is carried out see
        (`,case-replace
         (conn-boolean-argument "case replace"
                                'conn-toggle-case-replace
-                               conn-toggle-case-replace-map))
+                               conn-toggle-case-replace-map
+                               :value case-replace))
        (`,case-fold-search
         (conn-boolean-argument "case fold"
                                'conn-toggle-case-fold-search
