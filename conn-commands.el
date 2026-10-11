@@ -2301,12 +2301,14 @@ For more information about how the replacement is carried out see
         (conn-boolean-argument "case replace"
                                'conn-toggle-case-replace
                                conn-toggle-case-replace-map
-                               :value case-replace))
+                               :value case-replace
+                               :command-reference (elisp-get-var-docstring 'case-replace)))
        (`,case-fold-search
         (conn-boolean-argument "case fold"
                                'conn-toggle-case-fold-search
                                conn-toggle-case-fold-map
-                               :value case-fold-search)))
+                               :value case-fold-search
+                               :command-reference (elisp-get-var-docstring 'case-fold-search))))
     (conn-replace-do thing
                      arg
                      transform
@@ -4971,12 +4973,14 @@ Interactively REPEAT is given by the prefix argument."
         (conn-boolean-argument "case replace"
                                'conn-toggle-case-replace
                                conn-toggle-case-replace-map
-                               :value case-replace))
+                               :value case-replace
+                               :command-reference (elisp-get-var-docstring 'case-replace)))
        (`,case-fold-search
         (conn-boolean-argument "case fold"
                                'conn-toggle-case-fold-search
                                conn-toggle-case-fold-map
-                               :value case-fold-search)))
+                               :value case-fold-search
+                               :command-reference (elisp-get-var-docstring 'case-fold-search))))
     (conn-replace-do thing
                      arg
                      transform
