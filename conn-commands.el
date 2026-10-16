@@ -1605,6 +1605,7 @@ Uses expansions from `conn-expand'."
                            (delete-rectangle (region-beginning)
                                              (region-end)))
                           (t (delete-region beg end)))))
+           (goto-char beg)
            (register-val-insert (get-register register))
            (when swap (set-register register str))))
         (t (goto-char beg))

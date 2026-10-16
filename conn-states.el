@@ -1279,12 +1279,16 @@ For use in buffers that should not have any other state."
   :no-keymap t
   :lighter "Ø")
 
-(define-conn-state conn-command-state ()
+(define-conn-state conn-command-common-state ()
   "A state for editing commands."
-  :lighter "C"
+  :abstract t
   :suppress-input-method t
-  :cursor 'box
-  :full-keymap t)
+  :full-keymap t
+  :cursor 'box)
+
+(define-conn-state conn-command-state (conn-command-common-state)
+  "A state for editing commands."
+  :lighter "C")
 
 (define-conn-state conn-outline-state ()
   "A state for editing outline sections."
@@ -1311,7 +1315,7 @@ By default `conn-emacs-state' does not bind anything except
   "Returns the cursor to be used in `conn-read-thing-common-state'."
   `(hbar . ,(floor (default-line-height) 2.5)))
 
-(define-conn-state conn-read-thing-common-state (conn-command-state)
+(define-conn-state conn-read-thing-common-state (conn-command-common-state)
   "Common elements of thing reading states."
   :cursor #'conn-read-thing-cursor
   :suppress-input-method t
@@ -1584,7 +1588,7 @@ entered.  If the predicate is not satisfied then the state is popped.")
 
 (defvar conn--mark-state-rmm nil)
 
-(define-conn-state conn-mark-state (conn-command-state
+(define-conn-state conn-mark-state (conn-command-common-state
                                     conn-autopop-state)
   :lighter "M"
   :autopop-satisfies #'region-active-p

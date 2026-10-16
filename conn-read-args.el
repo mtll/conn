@@ -296,7 +296,6 @@ This skips executing the body of the `conn-read-args' form entirely."
           (list (lambda () ,@body))))
 
 (defvar conn-read-args-message-delay 0)
-(defvar conn--read-args-depth 0)
 
 (defvar conn--read-args-maps nil)
 

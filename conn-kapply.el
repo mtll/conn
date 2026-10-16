@@ -697,7 +697,7 @@ Possibilities: \\<query-replace-map>
 \\[automatic]	Apply keyboard macro to rest in this buffer.
 \\[automatic-all]	Apply keyboard macro to rest in all remaining buffers.")
 
-(defun conn-kapply-query (iterator)
+(defun conn-kapply-query (iterator &optional norecord)
   "Query user before each iteration of the keyboard macro."
   (declare (important-return-value t)
            (side-effect-free t))
@@ -712,7 +712,7 @@ Possibilities: \\<query-replace-map>
      (overlay-put hl 'face 'query-replace)
      (lambda (iterator state)
        (pcase state
-         (:record
+         ((and :record (guard (not norecord)))
           (let ((hl (make-overlay (point) (point))))
             (overlay-put hl 'priority 2000)
             (overlay-put hl 'face 'query-replace)
@@ -2168,31 +2168,44 @@ finishing showing the buffers that were visited."))
 
 (defun conn-kapply-on-isearch ()
   (interactive)
-  (let ((matches nil)
-        (restrict
-         (unless (or (bound-and-true-p multi-isearch-file-list)
-                     (bound-and-true-p multi-isearch-buffer-list))
-           (conn-cycling-argument
-            "restrict"
-            '(nil 'after 'before)
-            'restrict
-            :keymap conn-restrict-argument-map)))
-        (iterator nil)
-        (curr (current-buffer)))
-    (cl-flet* ((collect-matches ()
-                 (pcase-dolist (`(,beg . ,end)
-                                (conn--isearch-matches curr restrict))
-                   (push (conn-kapply-make-region beg end curr) matches))
-                 (cl-callf nreverse matches))
-               (next ()
-                 (when multi-isearch-next-buffer-current-function
-                   (condition-case _
-                       (while (null matches)
-                         (cl-callf2 funcall
-                             multi-isearch-next-buffer-current-function
-                             curr)
-                         (collect-matches))
-                     (error nil)))))
+  (conn-protected-let*
+      ((pt (point))
+       (matches nil (mapc #'delete-overlay))
+       (restrict
+        (unless (or (bound-and-true-p multi-isearch-file-list)
+                    (bound-and-true-p multi-isearch-buffer-list))
+          (conn-cycling-argument
+           "restrict"
+           '(nil 'after 'before)
+           'restrict
+           :keymap conn-restrict-argument-map)))
+       (iterator nil)
+       (curr (current-buffer)))
+    (cl-flet*
+        ((collect-matches ()
+           (conn-protected-let* ((before nil (mapc #'delete-overlay))
+                                 (after nil (mapc #'delete-overlay)))
+             (pcase-dolist (`(,beg . ,end)
+                            (conn--isearch-matches curr restrict))
+               (push (conn-kapply-make-region beg end curr)
+                     (cond ((or (bound-and-true-p multi-isearch-file-list)
+                                (bound-and-true-p multi-isearch-buffer-list))
+                            after)
+                           ((if isearch-forward
+                                (<= pt end)
+                              (<= beg pt))
+                            after)
+                           (t before))))
+             (setf matches (nconc (nreverse after) (nreverse before)))))
+         (next ()
+           (when multi-isearch-next-buffer-current-function
+             (condition-case _
+                 (while (null matches)
+                   (cl-callf2 funcall
+                       multi-isearch-next-buffer-current-function
+                       curr)
+                   (collect-matches))
+               (error nil)))))
       (cl-macrolet
           ((with-protected-isearch-vars (body)
              (let ((vars '(multi-isearch-file-list
@@ -2236,7 +2249,6 @@ finishing showing the buffers that were visited."))
                 (pipeline (conn-composite-argument
                            (list (conn-kapply-state-argument)
                                  (conn-kapply-ibuffer-argument t)
-                                 (conn-kapply-query-argument)
                                  (conn-kapply-excursions-argument t)
                                  (conn-kapply-restrictions-argument t)
                                  (conn-kapply-window-conf-argument)
@@ -2249,11 +2261,14 @@ finishing showing the buffers that were visited."))
                                 `(conn-kapply-relocate-to-region
                                   conn-kapply-open-invisible
                                   conn-kapply-pulse-region
+                                  (lambda (it) (conn-kapply-query it t))
                                   ,@pipeline))
-             (setf curr (current-buffer))))
+             (setq pt (point)
+                   curr (current-buffer))))
         (setf isearch-window-configuration nil)
         (isearch-done)
-        (switch-to-buffer curr)))))
+        (switch-to-buffer curr)
+        (goto-char pt)))))
 
 (defvar-keymap conn-read-pattern-map)
 
@@ -2313,7 +2328,7 @@ finishing showing the buffers that were visited."))
 
 ;;;;; Kapply At Points
 
-(define-conn-state conn-kapply-at-points-state (conn-command-state)
+(define-conn-state conn-kapply-at-points-state (conn-command-common-state)
   :lighter "KAPPLY-AT")
 
 (defvar conn--kapply-at-points nil)

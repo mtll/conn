@@ -1769,12 +1769,13 @@ thing.  Can only be used during `conn-dispatch'."
 
 (define-inline conn-dispatch-bounds (bounds &optional transforms)
   (inline-quote
-   (pcase (conn-transform-bounds ,bounds ,transforms)
-     ((and (guard (conn-dispatch-other-end-p))
-           (conn-bounds `(,',beg . ,',end)))
-      (cons end beg))
-     ((conn-bounds bd)
-      bd))))
+   (save-mark-and-excursion
+     (pcase (conn-transform-bounds ,bounds ,transforms)
+       ((and (guard (conn-dispatch-other-end-p))
+             (conn-bounds `(,',beg . ,',end)))
+        (cons end beg))
+       ((conn-bounds bd)
+        bd)))))
 
 (pcase-defmacro conn-dispatch-bounds (pattern &optional transforms)
   `(and (pred conn-bounds-p)

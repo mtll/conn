@@ -207,8 +207,6 @@ Also binds `overriding-terminal-local-map' to nil."
   "<conn-backward-word-remap>" "M-b"
   "<conn-backward-sentence-remap>" "M-a"
   "<conn-forward-sentence-remap>" "M-e"
-  "<conn-backward-delete-char-remap>" "DEL"
-  "<conn-delete-char-remap>" "C-d"
   "<conn-backward-up-list-remap>" "C-M-u"
   "<conn-down-list-remap>" "C-M-d"
   "<conn-forward-list-remap>" "C-M-n"
@@ -231,21 +229,23 @@ Also binds `overriding-terminal-local-map' to nil."
           (`(:without-conn-maps ,key)
            (if (stringp key) (setf key (key-parse key)))
            (push `(conn-without-conn-maps
-                    (key-binding ,key 'accept-default))
+                    (key-binding ,key))
                  maps))
           ((and key (pred stringp))
            (if (stringp key) (setf key (key-parse key)))
-           (push `(key-binding ,key 'accept-default) maps))
+           (push `(key-binding ,key) maps))
           ((and key (pred vectorp))
-           (push `(key-binding ,key 'accept-default) maps))
+           (push `(key-binding ,key) maps))
           (map
            (push map maps)
            (push map default-maps))))
       `(list 'menu-item
              ,description
-             ,(when default-maps
-                `(make-composed-keymap
-                  (list ,@default-maps)))
+             ,(cond ((null default-maps))
+                    ((cdr default-maps)
+                     `(make-composed-keymap
+                       (list ,@default-maps)))
+                    (t (car default-maps)))
              :filter (lambda (_real-binding)
                        (make-composed-keymap
                         (delq nil (list ,@(nreverse maps)))))))))

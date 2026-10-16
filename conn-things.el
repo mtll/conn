@@ -1266,34 +1266,56 @@ Returns a `conn-bounds' struct."
     bounds))
 
 (defun conn--isearch-at-thing-method (self arg)
-  (let ((bounds nil)
-        (quit (make-symbol "quit-hook")))
-    (fset quit (lambda ()
-                 (unless isearch-suspended
-                   (when (or isearch-mode-end-hook-quit
-                             (null isearch-other-end))
-                     (abort-recursive-edit))
-                   (conn->
-                     (with-memoization (conn-thing-get self :thing)
-                       (conn-read-args (conn-read-thing-state
-                                        :prompt "Thing at Isearch"
-                                        :prefix arg)
-                           ((th (conn-thing-argument)))
-                         th))
-                     (apply #'conn-bounds-of)
-                     (setf bounds)))))
-    (unwind-protect
-        (save-mark-and-excursion
-          (add-hook 'isearch-mode-end-hook quit)
-          (if-let* ((cmd (conn-thing-get self :isearch-command)))
-              (progn
-                (call-interactively cmd)
-                (when isearch-mode
-                  (let ((isearch-recursive-edit t))
-                    (funcall conn-bounds-recursive-edit-function))))
-            (isearch-forward)))
-      (remove-hook 'isearch-mode-end-hook quit))
-    bounds))
+  (if-let* ((str (conn-thing-get self :isearch-string)))
+      (progn
+        (if-let* ((cmd (conn-thing-get self :isearch-command)))
+            (progn
+              (call-interactively cmd)
+              (when isearch-mode
+                (with-isearch-suspended
+                 (setf isearch-new-string str))
+                (if isearch-success
+                    (isearch-done)
+                  (ignore-error quit (isearch-cancel))
+                  (user-error "No match for %s" str))))
+          (isearch-forward nil t)
+          (with-isearch-suspended
+           (setf isearch-new-string str))
+          (if isearch-success
+              (isearch-done)
+            (ignore-error quit (isearch-cancel))
+            (user-error "No match for %s" str)))
+        (apply #'conn-bounds-of (conn-thing-get self :thing)))
+    (let ((bounds nil)
+          (quit (make-symbol "quit-hook")))
+      (fset quit (lambda ()
+                   (unless isearch-suspended
+                     (setf (conn-thing-get self :isearch-string)
+                           isearch-string)
+                     (when (or isearch-mode-end-hook-quit
+                               (null isearch-other-end))
+                       (abort-recursive-edit))
+                     (conn->
+                       (with-memoization (conn-thing-get self :thing)
+                         (conn-read-args (conn-read-thing-state
+                                          :prompt "Thing at Isearch"
+                                          :prefix arg)
+                             ((th (conn-thing-argument)))
+                           th))
+                       (apply #'conn-bounds-of)
+                       (setf bounds)))))
+      (unwind-protect
+          (save-mark-and-excursion
+            (add-hook 'isearch-mode-end-hook quit)
+            (if-let* ((cmd (conn-thing-get self :isearch-command)))
+                (progn
+                  (call-interactively cmd)
+                  (when isearch-mode
+                    (let ((isearch-recursive-edit t))
+                      (funcall conn-bounds-recursive-edit-function))))
+              (isearch-forward)))
+        (remove-hook 'isearch-mode-end-hook quit))
+      bounds)))
 
 (cl-defmethod conn-bounds-of ((cmd (conn-thing conn-thing-at-isearch))
                               arg)

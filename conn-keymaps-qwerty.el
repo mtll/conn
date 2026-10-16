@@ -43,6 +43,20 @@
 
 ;;;; Mode Keymaps
 
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-command-state 'isearch-mode)
+  "M-V" 'conn-mark-thing
+  "M-W" 'conn-rectangle-mark
+  "M-E" 'conn-emacs-state
+  "M-R" 'conn-change-thing
+  "M-D" 'conn-kill-thing
+  "M-T" 'conn-transpose-things
+  "M-Z" 'conn-yank-replace
+  "M-Q" 'conn-duplicate-thing
+  "M-B" 'conn-repeat
+  "M-F" 'conn-dispatch
+  "M-<backspace>" 'clear-rectangle)
+
 (defvar-keymap conn-error-repeat-map
   :repeat (:continue (conn-repeat))
   "i" #'conn-previous-error
@@ -186,22 +200,10 @@
 
 (define-keymap
   :keymap conn-default-thing-map
-  "C-s" (conn-anonymous-thing
-          '(conn-thing-at-isearch)
-          :isearch-command 'isearch-forward
-          :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-r" (conn-anonymous-thing
-          '(conn-thing-at-isearch)
-          :isearch-command 'isearch-backward
-          :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-M-f" (conn-anonymous-thing
-            '(conn-thing-at-isearch)
-            :isearch-command 'isearch-forward-regexp
-            :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-M-r" (conn-anonymous-thing
-            '(conn-thing-at-isearch)
-            :isearch-command 'isearch-backward-regexp
-            :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-s" 'isearch-forward
+  "C-r" 'isearch-backward
+  "C-M-f" 'isearch-forward-regexp
+  "C-M-r" 'isearch-backward-regexp
   "e" 'previous-line
   "d" 'next-line
   "," conn-thing-inner-remap
@@ -269,6 +271,22 @@
   "<conn-thing-map> (" 'list
   "<conn-thing-map> )" 'forward-list
   "<conn-inner-thing-map> (" 'inner-list
+  "C-s" (conn-anonymous-thing
+          '(conn-thing-at-isearch)
+          :isearch-command 'isearch-forward
+          :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-r" (conn-anonymous-thing
+          '(conn-thing-at-isearch)
+          :isearch-command 'isearch-backward
+          :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-M-f" (conn-anonymous-thing
+            '(conn-thing-at-isearch)
+            :isearch-command 'isearch-forward-regexp
+            :bounds-op (:method #'conn--isearch-at-thing-method))
+  "C-M-r" (conn-anonymous-thing
+            '(conn-thing-at-isearch)
+            :isearch-command 'isearch-backward-regexp
+            :bounds-op (:method #'conn--isearch-at-thing-method))
   "s" (conn-anonymous-thing
         '(conn-to-char-forward)
         :bounds-op ( :method (self arg)
@@ -309,10 +327,6 @@
   "i" 'conn-backward-line
   "L" 'conn-forward-inner-line
   "J" 'conn-backward-inner-line
-  "C-s" 'isearch-forward
-  "C-r" 'isearch-backward
-  "C-M-s" 'isearch-forward-regexp
-  "C-M-r" 'isearch-backward-regexp
   "c" 'comment
   "q" conn-thing-inner-remap)
 
@@ -327,7 +341,7 @@
 ;;;;; Command State
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-command-state)
+  :keymap (conn-get-state-map 'conn-command-common-state)
   :suppress t
   "T" 'conn-kapply-on-things
   "P" #'conn-other-place-prefix
