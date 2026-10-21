@@ -270,23 +270,23 @@
   "<conn-thing-map> @" 'email
   "<conn-thing-map> (" 'list
   "<conn-thing-map> )" 'forward-list
+  "<conn-thing-map> C-s" (conn-anonymous-thing
+                           '(conn-thing-at-isearch)
+                           :isearch-command 'isearch-forward
+                           :bounds-op (:method #'conn--isearch-at-thing-method))
+  "<conn-thing-map> C-r" (conn-anonymous-thing
+                           '(conn-thing-at-isearch)
+                           :isearch-command 'isearch-backward
+                           :bounds-op (:method #'conn--isearch-at-thing-method))
+  "<conn-thing-map> C-M-f" (conn-anonymous-thing
+                             '(conn-thing-at-isearch)
+                             :isearch-command 'isearch-forward-regexp
+                             :bounds-op (:method #'conn--isearch-at-thing-method))
+  "<conn-thing-map> C-M-r" (conn-anonymous-thing
+                             '(conn-thing-at-isearch)
+                             :isearch-command 'isearch-backward-regexp
+                             :bounds-op (:method #'conn--isearch-at-thing-method))
   "<conn-inner-thing-map> (" 'inner-list
-  "C-s" (conn-anonymous-thing
-          '(conn-thing-at-isearch)
-          :isearch-command 'isearch-forward
-          :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-r" (conn-anonymous-thing
-          '(conn-thing-at-isearch)
-          :isearch-command 'isearch-backward
-          :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-M-f" (conn-anonymous-thing
-            '(conn-thing-at-isearch)
-            :isearch-command 'isearch-forward-regexp
-            :bounds-op (:method #'conn--isearch-at-thing-method))
-  "C-M-r" (conn-anonymous-thing
-            '(conn-thing-at-isearch)
-            :isearch-command 'isearch-backward-regexp
-            :bounds-op (:method #'conn--isearch-at-thing-method))
   "s" (conn-anonymous-thing
         '(conn-to-char-forward)
         :bounds-op ( :method (self arg)

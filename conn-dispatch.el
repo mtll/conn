@@ -826,7 +826,7 @@ bound the handler."
   (and (funcall (conn-dispatch-handler-predicate arg) cmd)
        (funcall (conn-dispatch-handler-command-reference arg) cmd break)))
 
-;;;; Dispatch State
+;;;; Dispatch
 
 (defvar conn-dispatch-target-finder nil
   "Current target finder for dispatch.")
@@ -1131,7 +1131,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
 (cl-defmethod conn-argument-cancel ((arg conn-dispatch-marker-argument))
   (conn--dispatch-marker-argument-cleanup arg))
 
-;;;;;; Dispatch Quick Ref
+;;;;; Dispatch Quick Ref
 
 (conn-add-keymap-reference
  (conn-get-state-map 'conn-dispatch-targets-state)
@@ -1152,7 +1152,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
 (defvar conn-repeat-argument-reference
   "Perform the current dispatch repeatedly.")
 
-;;;;;; Action
+;;;;; Actions
 
 (cl-defstruct (conn-action (:conc-name conn-action--))
   (function #'ignore :type function)
@@ -1622,7 +1622,7 @@ Abort the loop and undo all changes with \\[keyboard-quit]."))))
                        (propertize str 'conn-read-args-display-depth -49))
                      (flatten-tree (conn-argument-display a))))))
 
-;;;;;; Command Handler
+;;;;; Command Handler
 
 (defvar-keymap conn-dispatch-command-handler-map)
 
@@ -1784,7 +1784,7 @@ thing.  Can only be used during `conn-dispatch'."
                 `(conn-dispatch-bounds _ ,transforms))
              ,pattern)))
 
-;;;;; Dispatch Window Filtering
+;;;;; Window Filtering
 
 (defcustom conn-dispatch-thing-ignored-modes
   (list 'image-mode 'doc-view-mode 'pdf-view-mode)
@@ -1805,7 +1805,7 @@ with `conn-dispatch-thing-ignored-modes'."
   (declare (side-effect-free t))
   (eq win (selected-window)))
 
-;;;;; Dispatch Target Overlays
+;;;;; Target Overlays
 
 (defcustom conn-read-string-timeout 0.5
   "Timeout for string reading functions."
@@ -1947,7 +1947,7 @@ If THING is non-nil then it will be passed as the thing for overlay to
                                'conn-target-overlay
                                (selected-window))))))))
 
-;;;;; Dispatch Labels
+;;;;; Labels
 
 (defvar conn-dispatch-label-function #'conn-dispatch-simple-labels
   "Function responsible for labeling all `conn-targets'.
@@ -2622,7 +2622,7 @@ evaluating LABELS to VAR.
         (conn--with-dispatch-labels ,val (lambda (,var) ,@body))))
     (_ (error "Unexpected binder form"))))
 
-;;;;; Dispatch Loop
+;;;;; Loop
 
 (defun conn--dispatch-push-undo-case (depth body)
   (push (cons depth body)
@@ -3413,7 +3413,7 @@ buffer."
   "Undo the most recent iteration of dispatch."
   ( :update (break) (conn--dispatch-select-undo break)))
 
-;;;;; Dispatch Target Finders
+;;;;; Target Finders
 
 (defclass conn-target-finder-base ()
   ((current-update-handlers :initform nil)
@@ -4554,7 +4554,7 @@ contain targets."
        (when (eobp) (cl-return nil))
        (vertical-motion 1)))))
 
-;;;;; Dispatch Labels
+;;;;; Labels
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
   (pcase-let* (((cl-struct conn-dispatch-label string target)
@@ -4626,7 +4626,7 @@ contain targets."
     (when setup (apply #'overlay-put overlay setup))
     (when padding (apply padding))))
 
-;;;;; Dispatch Actions
+;;;;; Action Definitions
 
 (cl-defmethod conn-get-default-action ((_cmd (conn-thing t)))
   (conn-dispatch-jump))
