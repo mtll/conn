@@ -999,13 +999,13 @@ determine which window to display the buffer in."
         (window-swap-states nil window)
       (user-error "No other visible windows"))))
 
-(defun conn-delete-window (window)
+(defun conn-delete-window ()
   "Prompt for window and delete it."
-  (interactive
-   (list (conn-prompt-for-window
-          (delq (selected-window)
-                (conn-get-windows nil 'nomini 'visible)))))
-  (delete-window window))
+  (interactive)
+  (delete-window
+   (conn-prompt-for-window
+    (delq (selected-window)
+          (conn-get-windows nil 'nomini 'visible)))))
 
 (defun conn-throw-buffer (window)
   "Send current buffer to another window and `switch-to-prev-buffer'."
@@ -1515,6 +1515,53 @@ Uses expansions from `conn-expand'."
       ((`(,thing ,arg) (conn-mark-thing-argument))
        (transform (conn-transform-argument)))
     (conn-mark-thing-do thing arg transform)))
+
+;;;;; Swizzle
+
+(defvar conn-swizzle-alphabet (list ?a ?b ?c ?d ?e ?f ?g))
+
+(defun conn-swizzle-things-in-region (&optional arg)
+  (interactive "P")
+  (pcase (conn-bounds-get (conn-bounds-of 'conn-things-in-region arg)
+                          :subregions)
+    ((and things (pred identity))
+     (deactivate-mark)
+     (when (length> things (length conn-swizzle-alphabet))
+       (user-error "Too many things"))
+     (let ((regions nil)
+           (strings nil)
+           (swizzle nil)
+           (labels conn-swizzle-alphabet))
+       (unwind-protect
+           (progn
+             (pcase-dolist ((conn-bounds `(,beg . ,end)) things)
+               (push (make-overlay beg end) regions)
+               (overlay-put (car regions) 'face 'conn-kapply-region-face)
+               (overlay-put (car regions)
+                            'before-string (propertize (string (pop labels))
+                                                       'face 'conn-dispatch-label-face)))
+             (setf regions (nreverse regions))
+             (cl-loop for swz = (read-string "Swizzle: ")
+                      when (and (length= things (length swz))
+                                (cl-loop for c across swizzle
+                                         always (memq c conn-swizzle-alphabet)))
+                      do (cl-return (setf swizzle swz)))
+             (cl-loop for reg in regions
+                      for str = (filter-buffer-substring (overlay-start reg)
+                                                         (overlay-end reg)
+                                                         t)
+                      do (push str strings))
+             (setf strings (nreverse strings))
+             (cl-loop for char across swizzle
+                      for i from 0
+                      for at = (nth i regions)
+                      for n = (seq-position conn-swizzle-alphabet char)
+                      for str = (nth n strings)
+                      do (save-excursion
+                           (goto-char (overlay-end at))
+                           (insert str))))
+         (mapc #'delete-overlay regions))))
+    (_ (user-error "No things found"))))
 
 ;;;;; Yank Replace
 

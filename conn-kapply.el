@@ -2574,7 +2574,6 @@ finishing showing the buffers that were visited."))
                          (let ((pt nil))
                            (lambda (state)
                              (pcase state
-                               (:record)
                                (:cleanup
                                 (when pt
                                   (goto-char pt)
