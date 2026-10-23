@@ -572,10 +572,16 @@ echo area help message.
            (debug (([sexp &rest keywordp form])
                    ([&rest sexp form])
                    def-body)))
-  (pcase-let (((or `(,state . ,keys) state) state-and-keys))
+  (pcase-let (((or `(,state . ,keys) state) state-and-keys)
+              (syms (cl-loop for i from 1 upto (length varlist)
+                             collect (gensym (format "arg<%s>" i)))))
     (cl-check-type state symbol)
-    `(let ((args (list ,@(mapcar #'cadr varlist)))
-           (body (pcase-lambda ,(mapcar #'car varlist) ,@body)))
+    `(let* ((args (list ,@(mapcar #'cadr varlist)))
+            (body (lambda ,syms
+                    (pcase-let ,(cl-loop for (pat . _) in varlist
+                                         for sym in syms
+                                         collect (list pat sym))
+                      ,@body))))
        (if (bound-and-true-p %conn-read-args-active%)
            (conn--read-args ',state args body ,@keys)
          (dlet ((conn-read-args-message-delay conn-read-args-message-delay)
