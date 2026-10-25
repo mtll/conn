@@ -351,7 +351,12 @@ This skips executing the body of the `conn-read-args' form entirely."
            `(with-keymaps
              (let ((overriding-terminal-local-map
                     (make-composed-keymap
-                     (let (minor-mode-overriding-map-alist
+                     (let ((emulation-mode-map-alists
+                            '( conn--read-args-maps
+                               conn--minor-mode-maps
+                               conn--major-mode-map
+                               conn--state-map))
+                           minor-mode-overriding-map-alist
                            minor-mode-map-alist)
                        (current-minor-mode-maps)))))
                ,@body))))
