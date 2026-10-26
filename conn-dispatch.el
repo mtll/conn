@@ -4659,9 +4659,19 @@ contain targets."
     (:reference "Push the selected button.")
     (:no-history t)
     (pcase-let ((`(,pt ,window ,_thing ,_arg ,_transform)
-                 (conn-select-target)))
-      (with-selected-window window
-        (run-hook-with-args-until-success 'conn-dispatch-button-functions pt)))))
+                 (conn-select-target))
+                (win nil))
+      (save-selected-window
+        (select-window window)
+        (run-hook-with-args-until-success 'conn-dispatch-button-functions pt)
+        (setq win (selected-window)))
+      (if (and (not help-window-select)
+               (provided-mode-derived-p
+                (buffer-local-value 'major-mode (window-buffer win))
+                'help-mode))
+          (select-window win)
+        ;; Update window list
+        (select-window (selected-window))))))
 
 (defun conn-dispatch-yank-to ()
   (declare (conn-dispatch-action)
