@@ -465,7 +465,9 @@
         '(button)
         :pretty-print ( :method (_self) "all-buttons")
         :target-finder ( :method (_self &rest _)
-                         (conn-dispatch-button-targets))))
+                         (conn-dispatch-button-targets))
+        :default-action ( :method (_self)
+                          (conn-dispatch-push-button))))
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-targets-state 'outline-minor-mode)
