@@ -132,7 +132,7 @@
   (remove-hook 'post-command-hook #'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook #'conn--wincontrol-pre-command)
   (remove-hook 'minibuffer-setup-hook #'conn--wincontrol-minibuffer-setup)
-  (remove-hook 'minibuffer-setup-hook #'conn--wincontrol-minibuffer-exit)
+  (remove-hook 'minibuffer-exit-hook #'conn--wincontrol-minibuffer-exit)
   (remove-function eldoc-message-function #'conn--wincontrol-ignore)
   (message nil)
   (setf conn-wincontrol nil
@@ -203,12 +203,14 @@
 (defun conn--wincontrol-minibuffer-exit ()
   (unless (> (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (when conn-wincontrol
+    (when (default-value 'conn-wincontrol)
       (internal-push-keymap conn-wincontrol-map
                             'overriding-terminal-local-map)
-      (let ((message-log-max nil))
-        (message "%s" (conn--wincontrol-message))))
-    (when conn-wincontrol-one-command
+      (run-with-timer 0 nil
+                      (lambda ()
+                        (let ((message-log-max nil))
+                          (message "%s" (conn--wincontrol-message))))))
+    (when (default-value 'conn-wincontrol-one-command)
       (internal-push-keymap conn-wincontrol-one-command-map
                             'overriding-terminal-local-map))))
 
@@ -430,12 +432,13 @@
 (defun conn-goto-window (&optional invert-other-frames)
   "Prompt for a window and then select it."
   (interactive "P")
-  (let ((windows (delq (selected-window)
-                       (conn-get-windows
-                        nil nil
-                        (when (xor conn-wincontrol-goto-window-other-frames
-                                   invert-other-frames)
-                          'visible)))))
+  (let* ((conn-wincontrol nil)
+         (windows (delq (selected-window)
+                        (conn-get-windows
+                         nil nil
+                         (when (xor conn-wincontrol-goto-window-other-frames
+                                    invert-other-frames)
+                           'visible)))))
     (if-let* ((window (conn-prompt-for-window windows)))
         (let ((frame (window-frame window)))
           (unless (eq frame (selected-frame))
