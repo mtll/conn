@@ -471,18 +471,19 @@ themselves once the selection process has concluded."
          (:keymap . ,(lambda (map) `(setf ,keymap ,map)))
          ,@macroexpand-all-environment))))
 
-  (defun conn--with-dispatch-handlers (tag body)
-    (macroexpand-all
-     `(let ((conn--dispatch-read-char-handlers
-             conn--dispatch-read-char-handlers))
-        (catch ',tag ,@body))
-     `((:handler . ,(lambda (&rest body)
-                      (conn--expand-dispatch-handler tag body)))
-       (:with . ,(cl-function
-                  (lambda (exp &key depth)
-                    `(push (cons ,exp (cons ,(or depth 0) ',tag))
-                           conn--dispatch-read-char-handlers))))
-       ,@macroexpand-all-environment))))
+  (defun conn--with-dispatch-handlers (body)
+    (let ((tag (gensym "handler")))
+      (macroexpand-all
+       `(let ((conn--dispatch-read-char-handlers
+               conn--dispatch-read-char-handlers))
+          (catch ',tag ,@body))
+       `((:handler . ,(lambda (&rest body)
+                        (conn--expand-dispatch-handler tag body)))
+         (:with . ,(cl-function
+                    (lambda (exp &key depth)
+                      `(push (cons ,exp (cons ,(or depth 0) ',tag))
+                             conn--dispatch-read-char-handlers))))
+         ,@macroexpand-all-environment)))))
 
 (defmacro conn-with-dispatch-handlers (&rest body)
   "Bind dispatch event handlers.
@@ -521,7 +522,7 @@ Two macros are locally defined within body for binding handlers:
 
   - (:keymap KEYMAP) defines the keymap for the command handler."
   (declare (indent 0))
-  (conn--with-dispatch-handlers (gensym "handler") body))
+  (conn--with-dispatch-handlers body))
 
 ;;;;; Window Header-line Labels
 
@@ -919,7 +920,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
 
 (defvar conn-dispatch-label-function)
 
-(defvar conn-dispatch-action-reference)
+(defvar conn-dispatch-action-reference nil)
 
 (defun conn--with-dispatch (body &optional suspend)
   (when suspend
@@ -5322,11 +5323,7 @@ INITIAL-ARG is the initial value of the prefix argument during
   (conn-read-args (conn-dispatch-state
                    :command-handler (conn-dispatch-command-handler)
                    :prompt "Dispatch"
-                   :display-handler (conn-read-args-display-columns 5 3)
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                   :display-handler (conn-read-args-display-columns 5 3))
       ((`(,action ,repeat) (conn-dispatch-action-argument))
        (`(,thing ,arg) (conn-dispatch-target-argument))
        (transform (conn-dispatch-transform-argument))
@@ -5357,11 +5354,7 @@ INITIAL-ARG is the initial value of the prefix argument during
   (let ((conn-dispatch-always-prompt t))
     (conn-read-args (conn-dispatch-thingatpt-state
                      :command-handler (conn-dispatch-command-handler)
-                     :prompt "Dispatch"
-                     :pre (lambda (_)
-                            (when (and (bound-and-true-p conn-posframe-mode)
-                                       (fboundp 'posframe-hide))
-                              (posframe-hide " *conn-list-posframe*"))))
+                     :prompt "Dispatch")
         ((`(,action ,repeat) (conn-dispatch-action-argument))
          (`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument))

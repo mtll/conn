@@ -448,6 +448,9 @@
   :lighter ""
   (if conn-posframe-mode
       (progn
+        (add-function :before conn-read-args-pre-function
+                      (lambda (_) (posframe-hide " *conn-list-posframe*"))
+                      '((name . conn-posframe-hide)))
         (advice-add 'kmacro-cycle-ring-next :after
                     #'conn-posframe--kmacro-ring-display
                     '((name . conn-list-posframe)))
@@ -490,6 +493,7 @@
         (advice-add 'conn-dispatch-cycle-ring-next :after
                     #'conn-posframe--dispatch-ring-display
                     '((name . conn-list-posframe))))
+    (remove-function conn-read-args-pre-function 'conn-posframe-hide)
     (advice-remove 'kmacro-cycle-ring-next 'conn-list-posframe)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-list-posframe)
     (advice-remove 'previous-buffer 'conn-list-posframe)

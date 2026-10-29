@@ -307,6 +307,9 @@ This skips executing the body of the `conn-read-args' form entirely."
            (conn-wincontrol-one-command-mode nil))
       (funcall cont))))
 
+(defvar conn-read-args-pre-function #'ignore)
+(defvar conn-read-args-post-function #'ignore)
+
 (cl-defun conn--read-args (state
                            arglist
                            callback
@@ -319,7 +322,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                            prefix
                            pre
                            post)
-  (let* ((arguments (if command-handler
+  (let* ((conn-read-args-pre-function conn-read-args-pre-function)
+         (conn-read-args-post-function conn-read-args-post-function)
+         (arguments (if command-handler
                         (cons command-handler arglist)
                       arglist))
          (prefix (when prefix (prefix-numeric-value prefix)))
@@ -333,6 +338,8 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (cl-loop for arg in arguments
                               thereis (conn-argument-display arg))
                      conn--read-args-timer)))
+    (when pre (add-function :before conn-read-args-pre-function pre))
+    (when post (add-function :before conn-read-args-post-function post))
     (cl-macrolet
         ((with-keymaps (&rest body)
            `(let* ((conn--read-args-maps
@@ -442,7 +449,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                      (read-command))
                  cmd)))
            (execute-command (cmd)
-             (when pre (funcall pre cmd))
+             (funcall conn-read-args-pre-function cmd)
              (pcase cmd
                ((or 'keyboard-quit
                     'keyboard-escape-quit)
@@ -478,7 +485,7 @@ This skips executing the body of the `conn-read-args' form entirely."
                      "Invalid command: %s <%s>"
                      (if (symbolp cmd) cmd "_")
                      (key-description keyseq)))))
-             (when post (funcall post cmd)))
+             (funcall conn-read-args-post-function cmd))
            (command-loop ()
              (conn-with-recursive-stack state
                (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))

@@ -35,7 +35,8 @@
   (concat
    (propertize "WinC " 'face 'minibuffer-prompt)
    "("
-   (propertize "%s" 'face 'read-multiple-choice-face) ", "
+   (propertize "%s" 'face 'read-multiple-choice-face)
+   ", "
    "\\[conn-wincontrol-exit] exit; "
    "\\[conn-wincontrol-quick-ref] help):"))
 

@@ -1782,13 +1782,9 @@ finishing showing the buffers that were visited."))
                    :command-handler (conn-kapply-command-handler)
                    :display-handler (conn-read-args-display-columns 3 3)
                    :around around
+                   :pre pre
                    :post post
-                   :overriding-map overriding-map
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))
-                          (when pre (funcall pre))))
+                   :overriding-map overriding-map)
       ((_ (conn-protect-argument iterator
             (funcall iterator :cleanup)))
        (pipeline
@@ -2124,11 +2120,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt (format "Kapply with Count (%s)" count)
                    :command-handler (conn-kapply-command-handler)
-                   :display-handler (conn-read-args-display-columns 3 3)
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                   :display-handler (conn-read-args-display-columns 3 3))
       ((pipeline (conn-composite-argument
                   (list (conn-kapply-query-argument)
                         (conn-kapply-state-argument)
@@ -2240,11 +2232,7 @@ finishing showing the buffers that were visited."))
            (conn-read-args (conn-kapply-state
                             :prompt "Kapply on Regions"
                             :command-handler (conn-kapply-command-handler)
-                            :display-handler (conn-read-args-display-columns 3 3)
-                            :pre (lambda (_)
-                                   (when (and (bound-and-true-p conn-posframe-mode)
-                                              (fboundp 'posframe-hide))
-                                     (posframe-hide " *conn-list-posframe*"))))
+                            :display-handler (conn-read-args-display-columns 3 3))
                ((rst restrict)
                 (pipeline (conn-composite-argument
                            (list (conn-kapply-state-argument)
@@ -2515,11 +2503,7 @@ finishing showing the buffers that were visited."))
   (interactive)
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply at Points"
-                   :display-handler (conn-read-args-display-columns 2 3)
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                   :display-handler (conn-read-args-display-columns 2 3))
       ((pipeline
         (conn-composite-argument
          (list (conn-kapply-query-argument nil)
@@ -2668,11 +2652,7 @@ finishing showing the buffers that were visited."))
   (conn-read-args (conn-kapply-state
                    :prompt "Kapply on Dispatch"
                    :command-handler (conn-kapply-command-handler)
-                   :display-handler (conn-read-args-display-columns 2 3)
-                   :pre (lambda (_)
-                          (when (and (bound-and-true-p conn-posframe-mode)
-                                     (fboundp 'posframe-hide))
-                            (posframe-hide " *conn-list-posframe*"))))
+                   :display-handler (conn-read-args-display-columns 2 3))
       ((pipeline
         (conn-composite-argument
          (list (conn-kapply-restrictions-argument t)
