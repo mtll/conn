@@ -1981,28 +1981,40 @@ with `conn-check-bounds' before deleting."
           (query-replace-read-from prompt regexp-flag)
         (query-replace-read-from prompt regexp-flag)))))
 
+(defun conn--replace-read-to (from prompt regions regexp-flag delimited)
+  (static-if (<= 32 emacs-major-version)
+      (cl-letf (((symbol-function 'replace-preview-update))
+                (isearch-filter-predicate isearch-filter-predicate))
+        (add-function :before-while (local 'isearch-filter-predicate)
+                      (lambda (beg end)
+                        (cl-loop for (min . max) in regions
+                                 thereis (<= min beg end max))))
+        (advice-add 'replace-preview-update :filter-args
+                    (lambda (args)
+                      `(,@(take 5 args) ,(point-min) ,(point-max))))
+        (query-replace-read-to from prompt regexp-flag delimited))
+    (query-replace-read-to from prompt regexp-flag delimited)))
+
 (defun conn--replace-read-args (&optional
                                 regexp-flag
                                 backward
                                 regions
                                 delimited
                                 prompt)
-  (let ((prompt (or prompt
+  (let ((regions (or regions (list (cons (point-min) (point-max)))))
+        (prompt (or prompt
                     (concat "Replace"
                             (when backward " backward")
                             (when delimited " word")))))
     (deactivate-mark)
     (conn-with-region-emphasis regions
-      (let* ((from (conn--replace-read-from
-                    prompt
-                    (or regions
-                        (list (cons (point-min) (point-max))))
-                    regexp-flag
-                    delimited))
-             (to (if (consp from)
-                     (prog1 (cdr from) (setf from (car from)))
-                   (query-replace-read-to from prompt regexp-flag))))
-        (cons from to)))))
+      (let ((from (conn--replace-read-from prompt regions regexp-flag delimited)))
+        (if (consp from) from
+          (cons from (conn--replace-read-to from
+                                            prompt
+                                            regions
+                                            regexp-flag
+                                            delimited)))))))
 
 (cl-defgeneric conn-replace-do (thing
                                 arg

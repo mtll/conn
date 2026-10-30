@@ -209,7 +209,7 @@ Expansions and contractions are provided by functions in
      ( :update (_cmd _break)
        (cl-callf not (oref target-finder hide))
        (recenter (conn-dispatch-get-display-line))
-       (conn-dispatch-redisplay))
+       (conn-dispatch-restart))
      ( :display ()
        (concat
         (substitute-command-keys "\\[toggle-focus] ")

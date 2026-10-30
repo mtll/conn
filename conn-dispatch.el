@@ -110,7 +110,7 @@ This variable should be set by the labeling function.")
 The value of this variable will be passed as the ALL-FRAMES argument to
 `conn-get-windows', which see.")
 
-(defvar conn--dispatch-redisplay-prompt-flag nil)
+(defvar conn--dispatch-restart-prompt-flag nil)
 
 (defvar-local conn--saved-header-line-format nil)
 
@@ -754,7 +754,7 @@ bound the handler."
   (:predicate)
   ( :update (break)
     (setf conn--read-args-error-message nil
-          conn--dispatch-redisplay-prompt-flag nil)
+          conn--dispatch-restart-prompt-flag nil)
     (conn-add-unread-events (this-single-command-raw-keys))
     (pcase (conn--dispatch-read-char-1
             (conn-dispatch-char-argument-input-method arg))
@@ -868,7 +868,7 @@ no other end.")
   "Alist of (WINDOW . TARGET-COUNT) for the current dispatch.")
 
 (defvar conn-target-sort-function #'conn-target-sort-adjacent-then-nearest
-  "Sort function for targets in each window.
+  "Function of one argument to sort targets for labeling in each window.
 
 Labels are sorted first by length and then lexicographically by the
 position of the characters in `conn-simple-label-characters'.  Then the
@@ -877,8 +877,7 @@ will received the first label, the second the second label and so one.
 Thus a target sorted before another target has higher priority for a
 shorter label.
 
-A sort function should take two targets as arguments and return non-nil
-if the first should be sorted before the second.")
+This function should not modify its argument.")
 
 (defvar conn-target-window-predicate #'conn-dispatch-ignored-mode-p
   "Predicate windows must satisfy in order to be considered by dispatch.")
@@ -987,7 +986,7 @@ buffers `conn-jump-ring' if opoint differs from point.")
      (unless conn-dispatch-in-progress
        (error "Trying to suspend dispatch when state not active"))
      (conn--with-dispatch (lambda () (message nil) ,@body) 'suspend)
-     (ignore-errors (conn-dispatch-redisplay))))
+     (ignore-errors (conn-dispatch-restart))))
 
 (define-inline conn-dispatch-other-end-p ()
   (inline-quote (> 0 (funcall conn-dispatch-other-end 1))))
@@ -2592,9 +2591,9 @@ If POINT is not visible in the currently selected window then return nil."
                "hide labels"
                'face (when conn-dispatch-hide-labels
                        'eldoc-highlight-function-argument))))
-           ( :update (_cmd _break)
+           ( :update (_cmd break)
              (cl-callf not conn-dispatch-hide-labels)
-             (conn-dispatch-redisplay)))
+             (funcall break)))
           (dolist (window (conn-get-dispatch-windows))
             (ignore (conn--dispatch-window-lines window)))
           (let ((conn--dispatch-suspend-labels
@@ -2666,13 +2665,13 @@ depths will be sorted before greater depths.
             (with-current-buffer ,buf
               (pcase ,signal ,@cases))))))))
 
-(defun conn-dispatch-redisplay (&optional maybe-dont-prompt)
+(defun conn-dispatch-restart (&optional maybe-dont-prompt)
   "Recompute all dispatch targets.
 If MAYBE-DONT-PROMPT is non-nil then don't reset
-`conn--dispatch-redisplay-prompt-flag' to t."
+`conn--dispatch-restart-prompt-flag' to t."
   (unless maybe-dont-prompt
-    (setf conn--dispatch-redisplay-prompt-flag t))
-  (throw 'dispatch-redisplay nil))
+    (setf conn--dispatch-restart-prompt-flag t))
+  (throw 'dispatch-restart nil))
 
 (defun conn-dispatch-select-window (window)
   "Select WINDOW for dispatch.
@@ -2798,7 +2797,7 @@ Returns a list of (POINT WINDOW THING ARG TRANSFORM)."
             (when-let* ((line (conn-dispatch-get-display-line)))
               (recenter line))))
         (cl-loop
-         (catch 'dispatch-redisplay
+         (catch 'dispatch-restart
            (unwind-protect
                (cl-return
                 (conn-target-finder-select conn-dispatch-target-finder))
@@ -3213,14 +3212,14 @@ buffer."
     (conn-read-args (conn-dispatch-targets-state
                      :prompt "New Targets"
                      :around (lambda (cont)
-                               (catch 'dispatch-redisplay
+                               (catch 'dispatch-restart
                                  (conn-with-dispatch-suspended
                                    (funcall cont)))))
         ((`(,thing ,arg) (conn-dispatch-target-argument))
          (transform (conn-dispatch-transform-argument)))
       (conn-target-finder-setup
        (conn-get-target-finder thing arg transform))
-      (conn-dispatch-redisplay))))
+      (conn-dispatch-restart))))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql change-action)))
@@ -3229,7 +3228,7 @@ buffer."
     (conn-read-args (conn-dispatch-state
                      :prompt "New Action"
                      :around (lambda (cont)
-                               (catch 'dispatch-redisplay
+                               (catch 'dispatch-restart
                                  (conn-with-dispatch-suspended
                                    (funcall cont)))))
         ((`(,action ,repeat)
@@ -3241,7 +3240,7 @@ buffer."
           (progn
             (conn-action-setup action repeat)
             (throw 'dispatch-undo nil))
-        (conn-dispatch-redisplay)))))
+        (conn-dispatch-restart)))))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql mwheel-scroll)))
@@ -3249,7 +3248,7 @@ buffer."
   ( :update (_break)
     (when (bound-and-true-p mouse-wheel-mode)
       (mwheel-scroll last-input-event))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql recursive-edit)))
@@ -3268,7 +3267,7 @@ buffer."
       (recenter-top-bottom (conn-read-args-prefix-arg))
       (unless executing-kbd-macro
         (pulse-momentary-highlight-one-line)))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (defun conn--dispatch-recenter-hook (cmd)
   (unless (eq cmd 'recenter-top-bottom)
@@ -3309,14 +3308,14 @@ buffer."
   "Go to the end of the buffer."
   ( :update (_break)
     (goto-char (point-max))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql beginning-of-buffer)))
   "Go to the beginning of the buffer."
   ( :update (_break)
     (goto-char (point-min))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql scroll-up-command)))
@@ -3327,7 +3326,7 @@ buffer."
       (condition-case err
           (progn
             (scroll-up)
-            (conn-dispatch-redisplay))
+            (conn-dispatch-restart))
         (end-of-buffer
          (conn-read-args-error (error-message-string err))
          (funcall break))))))
@@ -3341,7 +3340,7 @@ buffer."
       (condition-case err
           (progn
             (scroll-down)
-            (conn-dispatch-redisplay))
+            (conn-dispatch-restart))
         (beginning-of-buffer
          (conn-read-args-error (error-message-string err))
          (funcall break))))))
@@ -3358,7 +3357,7 @@ buffer."
                                (conn-get-dispatch-windows)))))
         (progn
           (conn-dispatch-select-window (conn-prompt-for-window windows))
-          (conn-dispatch-redisplay 'maybe-dont-prompt))
+          (conn-dispatch-restart 'maybe-dont-prompt))
       (funcall break))))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
@@ -3386,12 +3385,12 @@ buffer."
                                      conn-target-window-predicate)
            (remove-function conn-target-window-predicate
                             'restrict-windows)
-           (conn-dispatch-redisplay))
+           (conn-dispatch-restart))
           ((length> conn-targets 1)
            (add-function :after-while conn-target-window-predicate
                          #'conn--dispatch-restrict-windows
                          '((name . restrict-windows)))
-           (conn-dispatch-redisplay)))))
+           (conn-dispatch-restart)))))
 
 (defun conn--dispatch-select-undo (break)
   (if (null (cdr conn--dispatch-change-groups))
@@ -3581,7 +3580,7 @@ for the dispatch being stored in `conn-dispatch-ring' and passed to
     (setf (oref target-finder current-update-handlers) ufns)))
 
 (defun conn-dispatch-prompt-p ()
-  (or conn--dispatch-redisplay-prompt-flag
+  (or conn--dispatch-restart-prompt-flag
       conn-dispatch-always-prompt
       (> conn-dispatch-iteration-count 0)
       (oref conn-dispatch-target-finder always-prompt)))
@@ -3625,7 +3624,7 @@ for the dispatch being stored in `conn-dispatch-ring' and passed to
 
 (cl-defmethod conn-target-finder-select (_target-finder)
   (let ((after nil)
-        (conn--dispatch-redisplay-prompt-flag nil))
+        (conn--dispatch-restart-prompt-flag nil))
     (conn-with-dispatch-labels
         (labels (conn-dispatch-get-labels))
       (prog1
@@ -3823,10 +3822,10 @@ to the key binding for that target."
        (pcase cmd
          ('always-retarget
           (cl-callf not (oref state always-retarget))
-          (conn-dispatch-redisplay))
+          (conn-dispatch-restart))
          ('retarget
           (conn-target-finder-retarget state)
-          (conn-dispatch-redisplay 'maybe-dont-prompt)))))
+          (conn-dispatch-restart 'maybe-dont-prompt)))))
     (when (or (oref state always-retarget)
               (= (oref state retarget-tick)
                  conn-dispatch-iteration-count))
@@ -3883,7 +3882,7 @@ to the key binding for that target."
           (unless (= literal-count 0)
             (while-no-input
               (conn-dispatch-call-update-handlers state)))
-          (catch 'dispatch-redisplay
+          (catch 'dispatch-restart
             (conn-with-dispatch-handlers
               (:handler
                (:predicate (cmd) (memq cmd '(backspace quote)))

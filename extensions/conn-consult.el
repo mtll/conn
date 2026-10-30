@@ -234,7 +234,7 @@
   ( :update (_break)
     (conn-with-dispatch-suspended
       (call-interactively #'conn-consult-line-thing))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql conn-consult-ripgrep-thing)))
@@ -242,7 +242,7 @@
   ( :update (_break)
     (conn-with-dispatch-suspended
       (call-interactively #'conn-consult-ripgrep-thing))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-ripgrep)))
@@ -250,7 +250,7 @@
   ( :update (_break)
     (conn-with-dispatch-suspended
       (call-interactively #'consult-ripgrep))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-line)))
@@ -258,7 +258,7 @@
   ( :update (_break)
     (conn-with-dispatch-suspended
       (call-interactively #'consult-line))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (define-conn-dispatch-handler-command ((arg conn-dispatch-select-command-handler)
                                        (cmd (eql consult-imenu)))
@@ -267,7 +267,7 @@
     (declare-function consult-imenu "consult-imenu")
     (conn-with-dispatch-suspended
       (call-interactively #'consult-imenu))
-    (conn-dispatch-redisplay)))
+    (conn-dispatch-restart)))
 
 (provide 'conn-consult)
 
