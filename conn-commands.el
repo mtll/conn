@@ -3119,22 +3119,21 @@ conn-bounds-trim:         file name sans extension")
                                     break)
   (cl-symbol-macrolet ((tform (conn-transform-and-fixup-argument-transform arg))
                        (fws (conn-transform-and-fixup-argument-reformat arg)))
-    (cond* ((bind* (valid nil)))
-           ((progn
-              (conn-argument-update tform cmd (lambda () (setf valid t)))
-              valid)
-            (unless (conn-transform-and-fixup-argument-explicit arg)
-              (setf (conn-reformat-argument-value fws)
-                    (cl-loop for tf in (conn-transform-argument-value tform)
-                             never (plist-get
-                                    (function-get tf :conn-transform-properties)
-                                    :no-reformat))))
-            (funcall break))
-           ((progn
-              (conn-argument-update fws cmd (lambda () (setf valid t)))
-              valid)
-            (setf (conn-transform-and-fixup-argument-explicit arg) t)
-            (funcall break)))))
+    (conn-argument-update
+     tform cmd
+     (lambda ()
+       (unless (conn-transform-and-fixup-argument-explicit arg)
+         (setf (conn-reformat-argument-value fws)
+               (cl-loop for tf in (conn-transform-argument-value tform)
+                        never (plist-get
+                               (function-get tf :conn-transform-properties)
+                               :no-reformat))))
+       (funcall break)))
+    (conn-argument-update
+     fws cmd
+     (lambda ()
+       (setf (conn-transform-and-fixup-argument-explicit arg) t)
+       (funcall break)))))
 
 (defun conn-kill-thing (&optional repeat-count)
   "Kill a region defined by THING, ARG, and TRANSFORM.
@@ -4428,12 +4427,10 @@ Only available during repeating duplicate."
            (interactive "p")
            (when (> (length regions)
                     (+ n repeat))
-             (let* ((delete (take n regions))
-                    (keep (drop n regions)))
-               (delete-region (overlay-end (car keep))
+             (let ((delete (conn--popn n regions)))
+               (delete-region (overlay-end (car regions))
                               (overlay-end (car delete)))
-               (mapc #'delete-overlay delete)
-               (setf regions keep))))
+               (mapc #'delete-overlay delete))))
          (comment ()
            (interactive)
            (atomic-change-group

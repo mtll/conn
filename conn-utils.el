@@ -67,6 +67,12 @@ CLEANUP-FORM are run in reverse order of their appearance in VARLIST."
               (cdr to-wrap))
       wrapped)))
 
+(defmacro conn--popn (n place)
+  (gv-letplace (getter setter) place
+    (macroexp-let2* macroexp-copyable-p (getter n)
+      `(prog1 (take ,n ,getter)
+         ,(funcall setter `(drop ,n ,getter))))))
+
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
   (macroexp-let2 nil keymap keymap

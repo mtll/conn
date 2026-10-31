@@ -399,10 +399,9 @@ This skips executing the body of the `conn-read-args' form entirely."
                       (scroll-conservatively 100))
                   (funcall display-handler prompt arguments (and timer t))))))
            (update-args (cmd)
-             (let ((break nil))
-               (dolist (a arguments)
-                 (conn-argument-update a cmd (lambda () (setf break t)))
-                 (when break (cl-return-from update-args t)))))
+             (dolist (a arguments)
+               (conn-argument-update
+                a cmd (lambda () (cl-return-from update-args t)))))
            (read-command ()
              (let (partial-keymap cmd reading)
                (start-message-timer)
@@ -563,7 +562,7 @@ calls an updater then an invalid command message is printed.
 
 Once the loop ends `conn-argument-value' is called on each
 argument and the result is bound to the corresponding pattern form by
-`pcase-let' and BODY then runs.
+`pcase-let*' and BODY then runs.
 
 OVERRIDING-MAP if non-nil should be a keymap which will be active during
 the read args loop and take precedence over the ARGUMENT keymaps.  Note
@@ -590,11 +589,15 @@ echo area help message.
     (cl-check-type state symbol)
     `(let* ((args (list ,@(mapcar #'cadr varlist)))
             (body (lambda ,syms
-                    (pcase-let ,(cl-loop for (pat . _) in varlist
-                                         for sym in syms
-                                         collect (list pat sym))
+                    (pcase-let* ,(cl-loop for (pat . _) in varlist
+                                          for sym in syms
+                                          collect (list pat sym))
                       ,@body))))
        (if (bound-and-true-p %conn-read-args-active%)
+           ;; Don't shadow `conn-read-args-message-delay'.  If the
+           ;; message delay elapses inside this `conn-read-args' form
+           ;; it should also effect all enclosing `conn-read-args'
+           ;; forms.
            (conn--read-args ',state args body ,@keys)
          (dlet ((conn-read-args-message-delay conn-read-args-message-delay)
                 (%conn-read-args-active% t))

@@ -245,7 +245,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                            ,@(cdr parsed-body))))))
               (t (error "Unexpected macroexpansion result :%S" me))))))
       (while properties
-        (cond* ((pcase* `(,key ,val) properties))
+        (cond* ((pcase* `(,key ,val) (conn--popn 2 properties)))
                ((bind-and* (gfn (alist-get key known))
                            (method (macroexpand-all
                                     `(cons ',gfn ,val)
@@ -258,8 +258,7 @@ For the meaning of OTHER-END-HANDLER see `conn-command-other-end-handler'.")
                         method)
                       mlist)
                 (push gfn defined))
-               (t (push `(cons ,key ,val) alist)))
-        (cl-callf2 drop 2 properties))
+               (t (push `(cons ,key ,val) alist))))
       (cons mlist alist))))
 
 (defmacro conn-anonymous-thing (parents &rest properties)
