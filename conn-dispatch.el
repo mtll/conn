@@ -822,10 +822,9 @@ bound the handler."
     (funcall ann value)))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-dispatch-handler)
-                                               cmd
-                                               break)
+                                               cmd)
   (and (funcall (conn-dispatch-handler-predicate arg) cmd)
-       (funcall (conn-dispatch-handler-command-reference arg) cmd break)))
+       (funcall (conn-dispatch-handler-command-reference arg) cmd)))
 
 ;;;; Dispatch
 
@@ -1221,8 +1220,9 @@ buffers `conn-jump-ring' if opoint differs from point.")
   (cancel #'ignore :type function :read-only t))
 
 (eval-and-compile
-  (defun conn--action (slots body)
-    (let* ((syms (cl-loop for (var . _) in slots
+  (defun conn--action-parse-body (body)
+    (let* ((slots (pop body))
+           (syms (cl-loop for (var . _) in slots
                           collect (gensym var)))
            (ignore nil)
            (bindings
@@ -1253,22 +1253,24 @@ buffers `conn-jump-ring' if opoint differs from point.")
                             ,value)))
                     (car body)))
                 (pop body))))
-      (let ((slots (mapcar (lambda (s) `(list ,@(cdr s))) slots)))
-        `(make-conn-action
-          :slots (cl-loop for (slot . options) in (list ,@slots)
-                          if (conn-action-slot-p slot) collect slot
-                          else collect (apply #'conn-action-slot slot options))
-          :function (lambda (,@syms)
-                      (ignore ,@ignore)
-                      (cl-symbol-macrolet ,bindings
-                        ,@body))
-          ,@options)))))
+      (list (mapcar (lambda (s) `(list ,@(cdr s))) slots)
+            options
+            `(lambda (,@syms)
+               (ignore ,@ignore)
+               (cl-symbol-macrolet ,bindings
+                 ,@body))))))
 
-(defmacro conn-action (slots &rest body)
+(defmacro conn-action (&rest body)
   ;; If the body of an action captures then all copies share the same
   ;; captures.
   (declare (indent 1))
-  (conn--action slots body))
+  (pcase-let* ((`(,slots ,options ,body) (conn--action-parse-body body)))
+    `(make-conn-action
+      :slots (cl-loop for (slot . sopts) in (list ,@slots)
+                      if (conn-action-slot-p slot) collect slot
+                      else collect (apply #'conn-action-slot slot sopts))
+      :function ,body
+      ,@options)))
 
 (eval-and-compile
   (defun conn--set-action-property (f _args)
@@ -1506,22 +1508,20 @@ If REPEAT is non-nil then repeat dispatch."
     (conn-action-reference action)))
 
 (cl-defmethod conn-argument-command-reference ((_arg conn-dispatch-action-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (pcase cmd
     ('repeat-dispatch
-     (funcall break
-              (conn-reference-page
-                ,(substitute-command-keys
-                  "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
+     (conn-reference-page
+       ,(substitute-command-keys
+         "\\<conn-dispatch-char-argument-map>Perform the next dispatch in a loop.
 End the loop and accept changes with \\[finish].
-Abort the loop and undo all changes with \\[keyboard-quit]."))))
+Abort the loop and undo all changes with \\[keyboard-quit].")))
     ((and (pred symbolp)
           (guard (function-get cmd :conn-dispatch-action)))
      (if-let* ((docstring (documentation cmd)))
-         (funcall break (conn-reference-page ,docstring))
-       (funcall break (conn-reference-page
-                        ,(format "Action `%s'." cmd)))))))
+         (conn-reference-page ,docstring)
+       (conn-reference-page
+         ,(format "Action `%s'." cmd))))))
 
 (cl-defmethod conn-argument-update ((arg conn-dispatch-action-argument)
                                     cmd
@@ -2578,10 +2578,10 @@ If POINT is not visible in the currently selected window then return nil."
     (unwind-protect
         (conn-with-dispatch-handlers
           (:handler
-           ( :command-reference (cmd break)
+           ( :command-reference (cmd)
              (when (eq cmd 'toggle-labels)
-               (funcall break (conn-reference-page
-                                "Toggle display of labels."))))
+               (conn-reference-page
+                 "Toggle display of labels.")))
            (:predicate (cmd) (eq cmd 'toggle-labels))
            (:keymap conn-toggle-label-argument-map)
            ( :display ()
@@ -4893,10 +4893,14 @@ it.")
                  (conn-select-target)))
       (with-selected-window window
         (pcase (conn-bounds-of-dispatch thing arg pt)
-          ((conn-bounds `(,beg . ,end) transform)
+          ((and bounds (conn-bounds `(,beg . ,end) transform))
            (conn-dispatch-action-pulse beg end)
            (when delete (conn-dispatch-change-group))
-           (setf str (filter-buffer-substring beg end delete)))
+           (setf str (filter-buffer-substring beg end delete))
+           (unless transform
+             (save-excursion
+               (goto-char beg)
+               (funcall conn-kill-reformat-function bounds))))
           (_ (user-error "Cannot find thing at point"))))
       (cl-flet* ((insert-sep ()
                    (cond ((or (null cg) init)

@@ -3253,12 +3253,15 @@ hook, which see."
                                     (not (or (eobp) (bobp))))
                          do (forward-line (if backward -1 1))
                          finally return i))))
-    (cond ((looking-back (rx (syntax whitespace)) 1)
-           (fixup-whitespace)
-           (when (looking-at "[ \t]")
-             (forward-char 1)))
-          ((looking-at (rx (syntax whitespace)))
-           (fixup-whitespace)))
+    (pcase (conn-bounds-get bounds :direction)
+      (1 (delete-region (point)
+                        (save-excursion
+                          (skip-chars-forward " \t")
+                          (point))))
+      (-1 (delete-region (point)
+                         (save-excursion
+                           (skip-chars-backward " \t")
+                           (point)))))
     (cond ((and (conn-thing-get bounds :linewise)
                 (save-excursion
                   (beginning-of-line)
@@ -3268,7 +3271,12 @@ hook, which see."
           ((and (bolp)
                 (looking-at-p (rx (seq (* (syntax whitespace)) eol)))
                 (not (or (eobp) (bobp))))
-           (join-line)))))
+           (join-line))
+          ((looking-at (rx (syntax close-parenthesis)))
+           (delete-region (point)
+                          (progn
+                            (skip-chars-backward " \t")
+                            (point)))))))
 
 (defun conn--kill-region (beg
                           end

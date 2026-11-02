@@ -260,11 +260,8 @@ The duration of the message display is controlled by
                     (conn--kmacro-display cmd))))
       (condition-case err
           (conn-quick-reference
-           (cl-block nil
-             (dolist (a arguments)
-               (ignore
-                (conn-argument-command-reference
-                 a cmd (lambda (&rest pages) (cl-return pages))))))
+           (cl-loop for a in arguments
+                    thereis (conn-argument-command-reference a cmd))
            (lambda (&rest _) (funcall message-function)))
         (user-error
          (conn-read-args-error (error-message-string err)))))))
@@ -273,11 +270,8 @@ The duration of the message display is controlled by
   (let ((cmd (conn--read-args-completing-read arguments keymaps)))
     (condition-case err
         (conn-quick-reference
-         (cl-block nil
-           (dolist (a arguments)
-             (ignore
-              (conn-argument-command-reference
-               a cmd (lambda (&rest pages) (cl-return pages))))))
+         (cl-loop for a in arguments
+                  thereis (conn-argument-command-reference a cmd))
          (lambda (&rest _) (funcall message-function)))
       (user-error
        (conn-read-args-error (error-message-string err))))))
@@ -696,7 +690,7 @@ performed on available commands during `conn-read-args'."
         (function (and-let* ((str (funcall ann arg)))
                     (concat " (" str ")")))))))
 
-(cl-defgeneric conn-argument-command-reference (argument command break)
+(cl-defgeneric conn-argument-command-reference (argument command)
   "BREAK and return COMMAND reference for ARGUMENT.
 
 BREAK is a function of one argument, a reference, and should be
@@ -710,14 +704,13 @@ funcalled to return ARGUMENT\\='s reference for COMMAND."
   (:method (_argument) nil))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (and-let* ((doc (conn-argument--command-reference arg))
              (_ (conn-argument-predicate arg cmd)))
     (cl-typecase doc
-      (string (funcall break (conn-reference-page ,doc)))
-      (function (funcall doc cmd break))
-      (conn--reference-page (funcall break doc)))))
+      (string (conn-reference-page ,doc))
+      (function (funcall doc cmd))
+      (conn--reference-page doc))))
 
 (eval-and-compile
   (defun conn--argument-expand-method (method fixed-args body)
@@ -743,10 +736,8 @@ funcalled to return ARGUMENT\\='s reference for COMMAND."
              'conn-argument-command-reference
              argument-and-command
              (cond ((stringp docstring)
-                    `((break)
-                      (funcall break
-                               (conn-reference-page
-                                 (:eval (substitute-command-keys ,docstring))))))
+                    `(() (conn-reference-page
+                           (:eval (substitute-command-keys ,docstring)))))
                    ((eq :reference (car-safe docstring))
                     (cdr docstring))))
             defs)
@@ -783,7 +774,7 @@ be used when defining methods for `conn-read-args' generic functions.
 
 DOCSTRING should be either a string or a method definition for
 `conn-argument-reference' of the form
-(:reference (BREAK) &rest BODY).
+(:reference () &rest BODY).
 
 BODY should be a list of method definitions of the forms:
 
@@ -866,13 +857,12 @@ method."
                   (concat " (" str ""))))))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-anonymous-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (when-let* ((ref (conn-anonymous-argument-command-reference arg cmd)))
     (cl-typecase ref
-      (string (funcall break (conn-reference-page ,ref)))
-      (function (funcall ref cmd break))
-      (conn--reference-page (funcall break ref)))))
+      (string (conn-reference-page ,ref))
+      (function (funcall ref cmd))
+      (conn--reference-page ref))))
 
 ;;;;; Composite Argument
 
@@ -905,8 +895,7 @@ method."
 (cl-defmethod conn-argument-keymap ((arg conn-composite-argument))
   (make-composed-keymap
    (cl-loop for a in (conn-composite-argument-value arg)
-            when (conn-argument-keymap a)
-            collect it)))
+            when (conn-argument-keymap a) collect it)))
 
 (cl-defmethod conn-argument-predicate ((arg conn-composite-argument)
                                        cmd)
@@ -927,11 +916,9 @@ method."
         (conn-composite-argument-value arg)))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-composite-argument)
-                                               cmd
-                                               break)
-  (dolist (arg (conn-composite-argument-value arg))
-    (ignore
-     (conn-argument-command-reference arg cmd break))))
+                                               cmd)
+  (cl-loop for arg in (conn-composite-argument-value arg)
+           thereis (conn-argument-command-reference arg cmd)))
 
 ;;;;; Boolean Argument
 
@@ -958,17 +945,16 @@ method."
       (funcall break))))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-boolean-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (let ((toggles (conn-boolean-argument-toggle-command arg))
         (doc (conn-boolean-argument-command-reference arg)))
     (when (if (consp toggles)
               (memq cmd toggles)
             (eq cmd toggles))
       (cl-typecase doc
-        (string (funcall break (conn-reference-page ,doc)))
-        (function (funcall doc cmd break))
-        (conn--reference-page (funcall break doc))))))
+        (string (conn-reference-page ,doc))
+        (function (funcall doc cmd))
+        (conn--reference-page doc)))))
 
 (cl-defmethod conn-argument-predicate ((arg conn-boolean-argument)
                                        cmd)
@@ -1079,15 +1065,14 @@ method."
       (t name)))))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-cycling-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (let ((commands (conn-cycling-argument-cycling-commands arg))
         (doc (conn-cycling-argument-command-reference arg)))
     (when (memq cmd commands)
       (cl-typecase doc
-        (string (funcall break (conn-reference-page ,doc)))
-        (function (funcall doc cmd break))
-        (conn--reference-page (funcall break doc))))))
+        (string (conn-reference-page ,doc))
+        (function (funcall doc cmd))
+        (conn--reference-page doc)))))
 
 ;;;;; Read Argument
 
@@ -1110,17 +1095,16 @@ method."
   (always-read nil :type boolean :read-only t))
 
 (cl-defmethod conn-argument-command-reference ((arg conn-read-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (let ((toggles (conn-read-argument-toggle-command arg))
         (doc (conn-read-argument-command-reference arg)))
     (when (if (consp toggles)
               (memq cmd toggles)
             (eq cmd toggles))
       (cl-typecase doc
-        (string (funcall break (conn-reference-page ,doc)))
-        (function (funcall doc cmd break))
-        (conn--reference-page (funcall break doc))))))
+        (string (conn-reference-page ,doc))
+        (function (funcall doc cmd))
+        (conn--reference-page doc)))))
 
 (cl-defmethod conn-argument-update ((arg conn-read-argument)
                                     cmd

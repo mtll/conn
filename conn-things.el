@@ -1509,9 +1509,9 @@ Returns a `conn-bounds' struct."
 
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing t)))
-  ( :reference (break)
+  ( :reference ()
     (let ((doc (format "Operate on %s." (conn-thing-pretty-print cmd))))
-      (funcall break (conn-reference-page ,doc)))))
+      (conn-reference-page ,doc))))
 
 (define-conn-argument-command ((arg conn-thing-argument)
                                (cmd (conn-thing dispatch)))
@@ -1683,9 +1683,8 @@ words."))
   (subregions-explicit-flag nil :type boolean))
 
 (cl-defmethod conn-argument-command-reference ((_arg conn-thing-with-subregions-argument)
-                                               (_cmd (eql toggle-subregions))
-                                               break)
-  (funcall break conn-subregions-argument-reference))
+                                               (_cmd (eql toggle-subregions)))
+  conn-subregions-argument-reference)
 
 (cl-defmethod conn-argument-keymap ((_arg conn-thing-with-subregions-argument))
   (make-composed-keymap conn-subregions-argument-map (cl-call-next-method)))
@@ -1885,13 +1884,12 @@ not be delete.  The the value returned by each function is ignored.")
                   (annotation "transform")))))
 
 (cl-defmethod conn-argument-command-reference ((_arg conn-transform-argument)
-                                               cmd
-                                               break)
+                                               cmd)
   (and (symbolp cmd)
        (get cmd :conn-bounds-transformation)
        (pcase (help-split-fundoc (documentation cmd t) cmd)
          ((or `(,_usage . ,doc) doc)
-          (funcall break (conn-reference-page doc))))))
+          (conn-reference-page doc)))))
 
 (cl-defmethod conn-argument-update ((arg conn-transform-argument)
                                     cmd
