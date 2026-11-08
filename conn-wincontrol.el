@@ -715,4 +715,17 @@ Activates the `conn-kill-buffer-repeat-map' transient map."
   (kill-buffer)
   (set-transient-map conn-kill-buffer-repeat-map t nil t))
 
+(defun conn-wincontrol-dispatch ()
+  (interactive)
+  (unless (and conn-wincontrol (not conn-wincontrol-one-command))
+    (user-error "WinControl not active"))
+  (conn-wincontrol-exit)
+  (unwind-protect
+      (let ((conn--wincontrol-arg-sign 1)
+            conn--wincontrol-arg
+            conn--wincontrol-initial-window
+            conn--wincontrol-preserve-arg)
+        (conn-dispatch))
+    (conn-wincontrol)))
+
 (provide 'conn-wincontrol)

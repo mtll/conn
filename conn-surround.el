@@ -433,7 +433,9 @@
                    :prefix arg)
       ((`(,thing ,arg ,subregions)
         (conn-thing-with-subregions-argument-dwim t))
-       (transform (conn-transform-argument '(conn-bounds-trim))))
+       (transform (conn-transform-argument
+                   (unless (use-region-p)
+                     '(conn-bounds-trim)))))
     (atomic-change-group
       (save-mark-and-excursion
         (pcase-let* ((`(,regions . ,prep-keys)

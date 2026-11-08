@@ -34,7 +34,6 @@
 (defvar conn--read-args-prefix-sign nil)
 
 (defvar conn--read-args-error-message nil)
-(defvar conn--read-args-error-flag nil)
 
 (defvar conn--read-args-message nil)
 (defvar conn--read-args-message-timeout nil)
@@ -104,8 +103,7 @@ The duration of the message display is controlled by
 
 (defun conn-read-args-error (format-string &rest args)
   "Print an error message of FORMAT-STRING with ARGS."
-  (setf conn--read-args-error-message (apply #'format format-string args)
-        conn--read-args-error-flag t)
+  (setf conn--read-args-error-message (apply #'format format-string args))
   (let ((message-log-max t))
     (apply #'message format-string args))
   (throw 'conn-read-args-error nil))
@@ -277,8 +275,7 @@ The duration of the message display is controlled by
        (conn-read-args-error (error-message-string err))))))
 
 (defun conn--read-args-set-error-message (cstr &rest args)
-  (setf conn--read-args-error-message
-        (apply #'format cstr args)))
+  (setf conn--read-args-error-message (apply #'format cstr args)))
 
 (defmacro conn-read-args-return (&rest body)
   "Evaluate body and return the result from the current `conn-read-args'.
@@ -315,12 +312,12 @@ This skips executing the body of the `conn-read-args' form entirely."
                            prompt
                            prefix
                            pre
-                           post)
+                           post
+                           error-message
+                           message)
   (let* ((conn-read-args-pre-function conn-read-args-pre-function)
          (conn-read-args-post-function conn-read-args-post-function)
-         (arguments (if command-handler
-                        (cons command-handler arglist)
-                      arglist))
+         (arguments (append (ensure-list command-handler) arglist))
          (prefix (when prefix (prefix-numeric-value prefix)))
          (prompt (or prompt "Read Args"))
          (quit-event (car (last (current-input-mode))))
@@ -339,8 +336,7 @@ This skips executing the body of the `conn-read-args' form entirely."
            `(let* ((conn--read-args-maps
                     `((,state
                        ,@(thread-last
-                           (mapcar #'conn-argument-keymap
-                                   arguments)
+                           (mapcar #'conn-argument-keymap arguments)
                            (cons overriding-map)
                            (delq nil)
                            (make-composed-keymap)))))
@@ -483,10 +479,9 @@ This skips executing the body of the `conn-read-args' form entirely."
              (conn-with-recursive-stack state
                (let ((conn--read-args-prefix-mag (when prefix (abs prefix)))
                      (conn--read-args-prefix-sign (when prefix (> 0 prefix)))
-                     (conn--read-args-error-message "")
-                     (conn--read-args-error-flag nil)
-                     (conn--read-args-message nil)
                      (conn--read-args-message-timeout nil)
+                     (conn--read-args-error-message (or error-message ""))
+                     (conn--read-args-message (or message nil))
                      (inhibit-message t)
                      (minibuffer-message-clear-timeout nil))
                  (while (continue-p)
@@ -1157,9 +1152,6 @@ method."
                                         value)
   (when (conn-argument-predicate arg value)
     " (command)"))
-
-(cl-defmethod conn-argument-keymap ((_arg conn-read-args-command-handler))
-  conn-read-args-map)
 
 (define-conn-argument-command ((arg conn-read-args-command-handler)
                                (cmd (eql recenter-top-bottom)))

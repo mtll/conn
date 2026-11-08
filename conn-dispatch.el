@@ -1624,10 +1624,14 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))
 
 ;;;;; Command Handler
 
-(defvar-keymap conn-dispatch-command-handler-map)
+(defvar-keymap conn-dispatch-previous-handler-map
+  "M-n" 'conn-dispatch-cycle-ring-next
+  "M-p" 'conn-dispatch-cycle-ring-previous
+  "M-f" 'conn-dispatch-ring-describe-head
+  "<return>" 'conn-repeat-last-dispatch)
 
 (conn-add-keymap-reference
- conn-dispatch-command-handler-map
+ conn-dispatch-previous-handler-map
  (conn-reference-page
    :name 'conn-dispatch-commands
    (((:heading "History:")
@@ -1635,21 +1639,17 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))
      ("next dispatch" conn-dispatch-cycle-ring-next))
     ((:heading "Last Dispatch:")
      ("repeat" conn-repeat-last-dispatch)
-     ("describe" conn-dispatch-ring-describe-head)))
-   (((:heading "Select")
-     ("toggle repeat" repeat-dispatch)
-     ("toggle other end" other-end)
-     ("restrict matches to the selected window" restrict-windows)))))
+     ("describe" conn-dispatch-ring-describe-head)))))
 
-(cl-defstruct (conn-dispatch-command-handler
+(cl-defstruct (conn-dispatch-previous-handler
                (:include conn-read-args-command-handler)
-               ( :constructor conn-dispatch-command-handler
+               ( :constructor conn-dispatch-previous-handler
                  (&aux
-                  (keymap conn-dispatch-command-handler-map)))))
+                  (keymap conn-dispatch-previous-handler-map)))))
 
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 
-(define-conn-argument-command ((arg conn-dispatch-command-handler)
+(define-conn-argument-command ((arg conn-dispatch-previous-handler)
                                (cmd (eql conn-dispatch-cycle-ring-next)))
   "Cycle the dispatch ring to the next most recent dispatch."
   ( :update (break)
@@ -1664,7 +1664,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))
       (user-error
        (conn-read-args-error (error-message-string err))))))
 
-(define-conn-argument-command ((arg conn-dispatch-command-handler)
+(define-conn-argument-command ((arg conn-dispatch-previous-handler)
                                (cmd (eql conn-dispatch-cycle-ring-previous)))
   "Cycle the dispatch ring to the least recent dispatch."
   ( :update (break)
@@ -1679,7 +1679,7 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))
       (user-error
        (conn-read-args-error (error-message-string err))))))
 
-(define-conn-argument-command ((arg conn-dispatch-command-handler)
+(define-conn-argument-command ((arg conn-dispatch-previous-handler)
                                (cmd (eql conn-dispatch-ring-describe-head)))
   "Print a description of the dispatch at the head of the dispatch ring."
   ( :update (break)
@@ -1695,6 +1695,20 @@ Abort the loop and undo all changes with \\[keyboard-quit].")))
             (conn-read-args-error "Dispatch ring empty")))
       (user-error
        (conn-read-args-error (error-message-string err))))))
+
+(define-conn-dispatch-handler-command ((arg conn-dispatch-previous-handler)
+                                       (cmd (eql conn-repeat-last-dispatch)))
+  "Cycle the dispatch ring to the next most recent dispatch."
+  ( :update (_break)
+    (cond* ((bind* (prev (conn-ring-extract-head conn-dispatch-ring))))
+           ((null prev) (conn-read-args-error "Dispatch ring empty"))
+           ((conn-action-stale-p (conn-previous-dispatch-action prev))
+            (conn-dispatch-ring-remove-stale)
+            (conn-read-args-error "Last dispatch action stale"))
+           (t
+            (conn-read-args-return
+              (conn-dispatch-setup-previous
+               prev (conn-read-args-consume-prefix-arg)))))))
 
 ;;;;; Bounds of Dispatch
 
@@ -2624,6 +2638,8 @@ evaluating LABELS to VAR.
 
 ;;;;; Loop
 
+(defvar conn--dispatch-error-message nil)
+
 (defun conn--dispatch-push-undo-case (depth body)
   (push (cons depth body)
         (car conn--dispatch-change-groups))
@@ -2708,7 +2724,8 @@ dispatch point history."
   (let ((success nil)
         (owconf (current-window-configuration))
         (oframe (selected-frame))
-        (opoint (point)))
+        (opoint (point))
+        (conn--dispatch-error-message nil))
     (setf (gethash (current-buffer) conn--dispatch-buffer-opoints)
           (point-marker))
     (conn--unwind-protect-all
@@ -2758,7 +2775,7 @@ dispatch point history."
                  (funcall undo-fn :undo))
                (let ((message-log-max t))
                  (message (error-message-string err)))
-               (setf conn--read-args-error-message
+               (setf conn--dispatch-error-message
                      (error-message-string err))))))
         (setf success t))
       (setf conn-dispatch-quit-flag (not success))
@@ -2962,16 +2979,16 @@ end of the prompt."
   (declare (important-return-value t))
   (cond*
    ((null seconds)
-    (let ((message-fn (lambda (prompt arguments &optional _elide)
-                        (conn--dispatch-read-char-message
-                         arguments
-                         prompt
-                         prompt-suffix)))
-          conn-read-args-message-delay)
+    (let (conn-read-args-message-delay)
       (conn-read-args (conn-dispatch-read-char-state
                        :prompt prompt
                        :command-handler (conn-dispatch-read-char-handlers)
-                       :display-handler message-fn
+                       :display-handler (lambda (prompt arguments &optional _elide)
+                                          (conn--dispatch-read-char-message
+                                           arguments
+                                           prompt
+                                           prompt-suffix))
+                       :error-message (cl-shiftf conn--dispatch-error-message nil)
                        :pre (lambda (cmd)
                               (run-hook-with-args
                                'conn-dispatch-read-char-pre-functions
@@ -5147,20 +5164,6 @@ it.")
                   :cleanup 'conn-dispatch-ring--cleanup)
   "Ring of previous dispatches.")
 
-(define-conn-dispatch-handler-command ((arg conn-dispatch-command-handler)
-                                       (cmd (eql conn-repeat-last-dispatch)))
-  "Cycle the dispatch ring to the next most recent dispatch."
-  ( :update (_break)
-    (cond* ((bind* (prev (conn-ring-extract-head conn-dispatch-ring))))
-           ((null prev) (conn-read-args-error "Dispatch ring empty"))
-           ((conn-action-stale-p (conn-previous-dispatch-action prev))
-            (conn-dispatch-ring-remove-stale)
-            (conn-read-args-error "Last dispatch action stale"))
-           (t
-            (conn-read-args-return
-              (conn-dispatch-setup-previous
-               prev (conn-read-args-consume-prefix-arg)))))))
-
 (defun conn-previous-dispatch-copy (dispatch)
   (declare (important-return-value t))
   (let ((copy (conn--copy-previous-dispatch dispatch)))
@@ -5324,8 +5327,8 @@ INITIAL-ARG is the initial value of the prefix argument during
 `conn-read-args'.  Interactively the current prefix argument."
   (interactive)
   (conn-read-args (conn-dispatch-state
-                   :command-handler (conn-dispatch-command-handler)
                    :prompt "Dispatch"
+                   :command-handler (conn-dispatch-previous-handler)
                    :display-handler (conn-read-args-display-columns 5 3))
       ((`(,action ,repeat) (conn-dispatch-action-argument))
        (`(,thing ,arg) (conn-dispatch-target-argument))
@@ -5356,7 +5359,6 @@ INITIAL-ARG is the initial value of the prefix argument during
   (interactive)
   (let ((conn-dispatch-always-prompt t))
     (conn-read-args (conn-dispatch-thingatpt-state
-                     :command-handler (conn-dispatch-command-handler)
                      :prompt "Dispatch")
         ((`(,action ,repeat) (conn-dispatch-action-argument))
          (`(,thing ,arg) (conn-dispatch-target-argument))

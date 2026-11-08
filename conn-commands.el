@@ -799,6 +799,13 @@ The region to be replaced is defined with THING, ARG, and TRANSFORM."
 
 ;;;;; Misc Commands
 
+(defun conn-self-insert-after (n c)
+  (interactive
+   (list (prefix-numeric-value current-prefix-arg)
+         (event-basic-type last-command-event)))
+  (save-excursion
+    (self-insert-command n c)))
+
 ;; Create aliases so we do not overwrite the default repeat map
 ;; property for these commands
 (defalias 'conn-next-error #'next-error)

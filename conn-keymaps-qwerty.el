@@ -559,11 +559,6 @@
   "t" 'conn-dispatch-transpose
   "." 'conn-dispatch-register-load
   "b" 'conn-dispatch-repeat-command
-  "RET" 'conn-repeat-last-dispatch
-  "<return>" 'conn-repeat-last-dispatch
-  "M-n" 'conn-dispatch-cycle-ring-next
-  "M-p" 'conn-dispatch-cycle-ring-previous
-  "M-f" 'conn-dispatch-ring-describe-head
   "p" (conn-anonymous-thing
         '(point)
         :pretty-print ( :method (_) "prev-emacs-state")
@@ -1148,7 +1143,7 @@
   "d" #'conn-delete-window
   "e" #'conn-wincontrol-exit
   "f" #'conn-goto-window
-  "w" #'conn-dispatch
+  "w" #'conn-wincontrol-dispatch
   "g" conn-goto-remap
   "x" (conn-remap-key "C-x" t)
   "n" #'conn-wincontrol-scroll-down
